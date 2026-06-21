@@ -1,12 +1,18 @@
 # Poimi — Development Guidelines
 
-*Companion to [product-plan.md](./product-plan.md) and [architecture.md](./architecture.md). The code author is an AI agent, so every guideline here optimizes for **machine-verifiable correctness**: deterministic, headless, fast feedback.*
+*Companion to [product-plan.md](./product-plan.md) and [architecture.md](./architecture.md). The code author is an AI agent, so every guideline here optimizes for verifiable correctness: deterministic, headless, fast feedback — while being honest about what a machine cannot verify.*
+
+> Revised after the four-perspective plan review — see [plan-review-decisions.md](./plan-review-decisions.md) for the decisions referenced below as (D#). Committed sequencing: **spike-first, grow machinery** (D1).
 
 ---
 
-## Guiding principle
+## Guiding principle (D22)
 
-**If it can't be verified automatically, it isn't done.** The developer is an AI agent. Every change must be provable by something a machine can run — a test, a linter, a format check, a CI gate — without a human eyeballing a simulator. Designs are the one human-approved input, and even those get pinned to snapshot tests.
+**Pure logic must be tested; UX is validated by using the app on a real library, plus design sign-off.** Most correctness is machine-provable — and we make it so. But the make-or-break moments (does the zoom transition *feel* right, is curating a year pleasant, how does it behave against real iCloud) are *not* unit-testable. For those we test **post-conditions** (e.g. after dismiss: correct scroll position, selection preserved) and rely on a human using a real build for the *feel*. We do not pretend a green snapshot proves good UX.
+
+## Sequencing (D1)
+
+Build the risky UX before the scaffolding. **Phase 0** is a throwaway spike on a real photo library — no tests, no design gate — to prove the review loop and eyeball the quality heuristic. **Phase 1** is the v1 critical path with the lean test/CI setup below. Heavier machinery (snapshot tier, full E2E, release pipeline) grows in *after* there's something worth shipping.
 
 ---
 
@@ -14,12 +20,18 @@
 
 PhotoKit can't be mocked directly (it talks to a real, device-bound photo library) and can't be controlled in CI. So:
 
-- **All PhotoKit access sits behind protocols**, defined in the `PhotoLibrary` package — e.g. `PhotoLibraryProviding`, `ImageLoading`, `AlbumExporting`. Application and UI code depend only on the protocols, never on `PHAsset`/`PHPhotoLibrary` directly.
-- **Two implementations of each protocol:**
-  - `SystemPhotoLibrary` — the real PhotoKit-backed impl. Thin; holds no logic worth testing beyond the wrapping.
-  - `FakePhotoLibrary` — an in-memory, seedable library. Holds synthetic assets with controllable capture dates, locations, pixel sizes, subtypes, file sizes, and album membership.
-- **The fake is the linchpin of the whole test strategy.** It makes integration *and* E2E runnable headless, deterministic, with no device and no real photos. Seed it from fixtures to reproduce any scenario (a year of mixed HEIC/JPEG/screenshots/WhatsApp saves, iCloud-only originals, no-GPS images, etc.).
-- The provider is swapped at launch via a launch argument / environment flag so E2E can run the *real app* against the fake library.
+- **All PhotoKit access sits behind protocols**, defined in `Curation` (the domain — D14). Start with a single `PhotoLibraryProviding`; split `ImageLoading` / `AlbumExporting` out only when a consumer needs just one (D21). Application and UI code depend only on the protocols, never on `PHAsset`/`PHPhotoLibrary` directly.
+- **Two implementations:**
+  - `SystemPhotoLibrary` — the real PhotoKit-backed impl. Thin — but *not* assumed correct (see the conformance suite below; the "thin so untested" assumption is exactly how fakes drift undetected).
+  - `FakePhotoLibrary` — an in-memory, seedable library, an `actor` honoring the same isolation as the real one.
+- **The fake's API surface is a first-class design item, not just seed data (D25).** It must model:
+  - **Dual size fields** — local-cache size *vs* recorded-original size — or the quality-heuristic's core bug class (Optimize-Storage trap) is untestable.
+  - **Mutate-and-notify** — insert/delete/modify an asset mid-test and fire the change observer, so change-tracking is actually exercised.
+  - **Deterministic progressive image delivery** — emit degraded-then-final on demand, with injectable iCloud delay/failure, so the lazy/progressive load path (otherwise the flakiest thing in the app) is testable.
+  - **Permission states** — `.authorized` / `.limited` / `.denied` / `.notDetermined`. Limited access is a first-class state that changes the visible asset set; almost always forgotten.
+  - **Canonical named seeds:** `YearMixed2025`, `AllICloudOptimized`, `LimitedAccess`, `EmptyLibrary`, via a fixture-builder DSL.
+- **Conformance suite (D24):** one shared test suite run against *both* impls (`FakePhotoLibrary` in CI, `SystemPhotoLibrary` in a manual/nightly real-device job) so the fake can't quietly lie.
+- The fake is swapped in via a launch argument / environment flag for E2E — **compiled only under a test/debug configuration**, and the flag is inert in release builds (D30). It must never ship.
 
 Because the heavy logic lives in the pure `Curation` package (no PhotoKit at all), most correctness is provable with plain unit tests — the fake only matters at the integration boundary and above.
 
@@ -27,14 +39,19 @@ Because the heavy logic lives in the pure `Curation` package (no PhotoKit at all
 
 ## Test tiers
 
-| Tier | Framework | Runs against | What it proves |
-|---|---|---|---|
-| **Unit** | Swift Testing (`@Test`/`#expect`) | `Curation` pure functions, value types | Filtering predicates, bytes-per-megapixel heuristic, per-month target math, selection-set logic. No simulator — `swift test`. |
-| **Integration** | Swift Testing | Stores + `FakePhotoLibrary` | Fetch → filter → select → export round-trips; re-run dedupe; change-tracking updates. Deterministic, headless. |
-| **E2E** | XCUITest | Real app + `FakePhotoLibrary` (launch flag) | Full review flow: scroll, tap-to-expand-and-return, select, hit target, export. Runs in simulator in CI. |
-| **Snapshot** | swift-snapshot-testing | SwiftUI views | UI matches the approved Paper design. The verifiable target for "does this look right." |
+**v1 PR gate = Unit + Integration + one E2E smoke test** (D23). Snapshot and a full E2E suite are deferred (D26).
 
-**Coverage expectation:** `Curation` (pure logic) held to high coverage — it's where bugs hide and it's free to test. UI/integration coverage is judged by scenario completeness, not a percentage.
+| Tier | Status | Framework | Runs against | What it proves |
+|---|---|---|---|---|
+| **Unit** | v1 gate | Swift Testing (`@Test`/`#expect`), incl. **parameterized/property-based** for the math (D24) | `Curation` pure functions, value types | Filtering predicates, per-month target math (off-by-one / divide-by-zero edges), selection-set logic, location distance math. No simulator — `swift test`. |
+| **Integration** | v1 gate | Swift Testing | Stores + `FakePhotoLibrary` | Fetch → filter → select → export round-trips; re-run idempotence/dedupe; change-tracking mid-session; permission-state branches; progressive-load sequencing. Deterministic, headless. |
+| **E2E smoke** | v1 gate (one test) | XCUITest | Real app + `FakePhotoLibrary` (launch flag) | One happy path as a tripwire: launch → scroll → tap-expand-**and-return-to-same-position-still-selected** → select → hit target → export. Asserts the transition's *post-conditions*, not its animation. |
+| **Quality-heuristic metrics** | when filter ships (D3/D24) | Swift Testing over a **labeled corpus** | Tagged camera-original vs recompressed fixtures (HEIC/JPEG × megapixels) | Confusion-matrix assertions: precision/recall thresholds, **zero clean-HEIC false positives**. Not example-by-example. |
+| **Performance / scale** | named test, not initial gate (D29) | XCTest `measure` / metrics | 10k-asset fake | Seed/fetch + heavy-pass budgets; an **access-counting guard** that fails if the whole fetch result is materialized (enforces "lazy"). |
+| **Snapshot** | deferred (D26) | swift-snapshot-testing | SwiftUI views | Added once UI stabilizes; then pin exact simulator OS/device, decide Dynamic-Type/Dark-Mode/locale axes, and **ban committed record-mode**. |
+| **Accessibility** | cheap add | XCUITest `performAccessibilityAudit()` | Key screens | Labels/contrast/hit-targets headlessly; also enforces stable a11y identifiers for E2E selectors. |
+
+**Coverage:** `Curation` held to high coverage — where bugs hide, free to test. For integration, "scenario completeness" is made concrete as an enumerated, DoD-checked fixture/scenario checklist (not a vibe). Every fixed bug ships with a failing-then-passing regression test.
 
 ---
 
@@ -42,42 +59,40 @@ Because the heavy logic lives in the pure `Curation` package (no PhotoKit at all
 
 | Concern | Tool | Notes |
 |---|---|---|
-| Lint | **SwiftLint** | Checked-in config. CI fails on violations; no inline disables without a comment justifying them. |
-| Format | **swift-format** (Apple) | Format-check in CI (`--mode lint`); the agent runs the formatter before committing. Configure so it doesn't fight SwiftLint. |
+| Lint + format | **SwiftLint only** (with autocorrect) for v1 (D28) | Checked-in config; CI fails on violations; no inline disables without a justifying comment. Skip running swift-format alongside it — the reconciliation is friction we don't need yet; revisit later. |
 | Test runner | `swift test` (packages) + `xcodebuild test` (app) | Pure packages run fast without a simulator; app/E2E in simulator. |
-| Snapshot | swift-snapshot-testing | Recorded against approved designs; re-record only with design sign-off. |
+| Snapshot | swift-snapshot-testing | **Deferred (D26);** when added, pin OS/device and ban committed record-mode. |
 
 **Dependency-minimalism policy:** SPM only. Every new third-party dependency requires explicit justification in the PR and a note in this doc's appendix. An unattended agent does not add libraries freely.
 
 ---
 
-## Design workflow (Paper + MCP)
+## Design workflow (Paper + MCP) — spike then document (D27)
 
-- The design is authored in **Paper**. The agent reads and reasons about designs through the **Paper MCP connection**.
-- **Design-freeze gate:** the full design must be approved *before* UI development starts. No UI PR merges until the relevant design is approved.
-- The agent transcribes each approved screen into a **UI spec** committed under `docs/design/` (states, gestures, transitions, copy) so the design intent lives in the repo and survives even if the Paper doc moves.
-- Snapshot tests are written against the approved design; they are the regression guard.
+- The design is authored in **Paper**; the agent reads and reasons about designs through the **Paper MCP connection**.
+- **No design-freeze gate.** You can't freeze a UX you haven't validated, and a freeze gate serializes the whole project behind a human approval bottleneck. Instead: validate the interaction with the rough Phase-0 build, *then* commit a design.
+- The agent transcribes each settled screen into a **UI spec** under `docs/design/` (states, gestures, transitions, copy) — documentation *following* validation, not a gate *preceding* code.
+- Snapshot tests (deferred, D26) become the regression guard once the UI stabilizes.
 
-Pre-UI (data, PhotoKit, filtering, export) work is **not** gated on design and can proceed in parallel.
+Pre-UI (data, PhotoKit, filtering, export) work proceeds independently.
 
 ---
 
 ## CI / CD (GitHub Actions)
 
-**On every PR (gates — all must be green to merge):**
-1. Build (all packages + app).
+**On every PR (v1 gates — all must be green to merge):**
+1. Build (package + app).
 2. SwiftLint — zero violations.
-3. swift-format check — no diff.
-4. Unit + integration tests.
-5. E2E + snapshot tests (simulator).
-6. No new compiler warnings.
+3. Unit + integration tests.
+4. One E2E smoke test (simulator).
+5. No new compiler warnings — **advisory early, a hard gate once the codebase settles** (D28).
 
-**Deploy to App Store Connect:**
+**Deploy to App Store Connect — deferred (D26).** Until there's something worth a TestFlight build, **ship manually from Xcode**; building out fastlane is pre-investment with no user value yet. When automated:
 - GitHub Actions → **fastlane** (`pilot` for TestFlight, `deliver`/`upload_to_app_store` for release).
 - Signing via **fastlane `match`** (or App Store Connect API key + automatic signing).
-- **App Store Connect API key** stored in GitHub Actions secrets — never in the repo.
+- **App Store Connect API key** in GitHub Actions secrets — never in the repo.
 - Build/version numbers auto-incremented in CI.
-- Triggered on tagged releases (TestFlight builds may trigger on merge to the main line — decide in open items).
+- TestFlight trigger (merge vs tag) decided then.
 
 ---
 
@@ -91,17 +106,18 @@ Pre-UI (data, PhotoKit, filtering, export) work is **not** gated on design and c
 ### Definition of Done (every agent PR)
 
 - [ ] Linked to an issue.
-- [ ] If UI: references the approved design and adds/updates snapshot tests.
-- [ ] New behavior covered by tests at the appropriate tier(s).
-- [ ] All CI gates green (build, lint, format, all test tiers, no new warnings).
-- [ ] No new third-party dependency without justification.
+- [ ] If UI: references the settled design / `docs/design/` UI spec.
+- [ ] New behavior covered by tests at the appropriate tier(s); the integration scenario checklist updated if a new scenario applies.
+- [ ] Every bug fix ships with a failing-then-passing regression test.
+- [ ] All CI gates green (build, SwiftLint, unit + integration, E2E smoke; warnings per D28).
+- [ ] No new third-party dependency without justification (logged below).
 - [ ] Public types/functions documented where intent isn't obvious.
 
 ---
 
-## Open decisions
+## Open decisions (revisit when the relevant machinery lands)
 
-- **Format tool:** swift-format (recommended) vs SwiftFormat (nicklockwood) — pick one, avoid running both.
-- **Signing strategy:** fastlane `match` vs App Store Connect API key with automatic signing.
-- **TestFlight trigger:** auto-build on merge to main line, or only on tagged releases.
-- **Snapshot device matrix:** which simulators/sizes are the canonical snapshot targets.
+- **Signing strategy:** fastlane `match` vs App Store Connect API key with automatic signing — decide when deploy is automated (D26).
+- **TestFlight trigger:** merge to main line vs tagged releases — decide then.
+- **Snapshot device matrix / axes:** canonical simulators, OS pin, Dynamic-Type/Dark-Mode/locale coverage — decide when snapshot testing lands (D26).
+- **Mutation testing:** optional, nightly on `Curation` only if ever (immature Swift tooling) — not a gate.
