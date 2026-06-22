@@ -121,6 +121,51 @@ Phase 4  Post-v1          quality filter, location, grow machinery
 
 ---
 
+## Design inventory — views & interactions to design
+
+The full list of screens and interactions that need a Paper design, tagged by the phase/version they ship in. This is the checklist the design work (spike-then-document, D27) is measured against; the `docs/design/` UI spec transcribes each one as it's settled. Anything here that's **v1 (Phase 2)** should have a settled design *before or as* its screen is built; deferred items can be designed later.
+
+### Onboarding & permissions *(v1)*
+1. **First-run intro** — what the app does ("you pick every photo, not an algorithm"); orients before the access ask (the name is opaque, so this carries weight).
+2. **Permission rationale** — shown *before* the system prompt; explains why full library access is needed.
+3. **Limited-access recovery** — explains the year can't be scanned in limited mode; Settings deep-link with expectation-setting copy.
+4. **Denied recovery** — non-dead-end screen with the Settings path.
+
+### Source setup *(v1)*
+5. **Range & target setup** — date-interval picker + target count + opt-in filter toggles (exclude screenshots, exclude album(s)).
+6. **Album picker** — pick the album(s) to exclude (WhatsApp, Downloads, etc.).
+
+### Review — the core loop *(v1)*
+7. **Review grid** — month-sectioned thumbnail grid; the make-or-break screen.
+8. **Per-month section header** — month label + soft per-month target ("March: 4 / 15").
+9. **Selection affordances** — quick-select badge per cell; selected-state encoding (checkmark + dim, ≥44pt, never colour-alone).
+10. **Running tally / target progress** — always-visible total ("147 / 200") in chrome that doesn't eat the grid (material bar, safe-area aware).
+11. **Expand / full-screen inspection** — the zoom-destination detail view; progressive thumbnail→full-res.
+12. **Fetch / load indicator (minimal)** — simple determinate/indeterminate state while fetching the range and loading thumbnails. *(The full curate-while-scanning surface is v1.1, item 22.)*
+
+### Export *(v1)*
+13. **Export in-progress** — writing the album.
+14. **Export result / confirmation** — success + idempotence ("Updated 2025 Yearbook: added 12, now 187"); re-run communicated.
+
+### States *(v1 — easy to forget, design explicitly)*
+15. **Empty states** — no photos in range, everything filtered out, empty month, empty library; each actionable (e.g. relax filters), never a void grid.
+16. **Error states** — iCloud fetch failure, export failure (incl. partial), authorization revoked mid-session; each recoverable.
+17. **Session resume** — "Resume your 2025 Yearbook (147 / 200)?" on relaunch.
+
+### Cross-cutting interactions & behaviors *(v1)*
+18. **Tap-to-expand → return-to-position** — zoom transition out and back to the source cell, scroll position + selection preserved (D10/D22); handle a recycled/off-screen source cell.
+19. **Drag-to-multi-select** — pan across cells to batch-toggle (the speed-maker at scale, D9).
+20. **Within-overlay swipe** — left/right between photos in the expand view, and which photo we land back on (resolve the open item).
+21. **Accessibility & motion** — Dynamic Type reflow of all chrome, VoiceOver labels + a custom select action on cells, contrast/scrim over bright thumbnails, Reduce-Motion cross-fade substitute for the zoom; designed into each screen, not bolted on.
+
+### Deferred *(design when the feature lands)*
+22. **Full long-scan progress** *(Phase 4, with the quality filter)* — determinate count, cancelable, curate-while-scanning (D12).
+23. **Quality filter toggle + inspectable hidden set** *(Phase 4)* — off-by-default toggle in setup; a browsable "Hidden: 312 — review" view so nothing is silently lost (D11).
+24. **Named-locations management** *(v1.1)* — list/create/edit named locations.
+25. **Map pin + radius editor** *(v1.1)* — drop a pin, adjust radius (`MKCircle`), name it; EXIF-based, no location permission (D7).
+26. **Cluster-suggestion confirmation** *(v1.1)* — "name this frequent cluster?", human-confirmed, dismissible.
+27. **Location buckets + "no location" bucket** *(v1.1)* — bucketed review entry points, always including no-GPS.
+
 ## Ordering at a glance
 
 | Phase | Depends on | Produces |
