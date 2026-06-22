@@ -48,10 +48,17 @@ Because the heavy logic lives in the pure `Curation` package (no PhotoKit at all
 | **E2E smoke** | v1 gate (one test) | XCUITest | Real app + `FakePhotoLibrary` (launch flag) | One happy path as a tripwire: launch → scroll → tap-expand-**and-return-to-same-position-still-selected** → select → hit target → export. Asserts the transition's *post-conditions*, not its animation. |
 | **Quality-heuristic metrics** | when filter ships (D3/D24) | Swift Testing over a **labeled corpus** | Tagged camera-original vs recompressed fixtures (HEIC/JPEG × megapixels) | Confusion-matrix assertions: precision/recall thresholds, **zero clean-HEIC false positives**. Not example-by-example. |
 | **Performance / scale** | named test, not initial gate (D29) | XCTest `measure` / metrics | 10k-asset fake | Seed/fetch + heavy-pass budgets; an **access-counting guard** that fails if the whole fetch result is materialized (enforces "lazy"). |
-| **Snapshot** | deferred (D26) | swift-snapshot-testing | SwiftUI views | Added once UI stabilizes; then pin exact simulator OS/device, decide Dynamic-Type/Dark-Mode/locale axes, and **ban committed record-mode**. |
-| **Accessibility** | cheap add | XCUITest `performAccessibilityAudit()` | Key screens | Labels/contrast/hit-targets headlessly; also enforces stable a11y identifiers for E2E selectors. |
+| **Snapshot** | deferred (D26) | swift-snapshot-testing | SwiftUI views — **opaque content & layout/reflow only** | Added once UI stabilizes; pin exact simulator OS/device, decide Dynamic-Type/Dark-Mode/locale axes, **ban committed record-mode**. **Liquid Glass surfaces are excluded from pixel assertions** — translucent/refractive rendering isn't byte-stable across Xcode point releases; glass *appearance* is a design-signoff concern, not a snapshot. |
+| **Accessibility** | cheap add | XCUITest `performAccessibilityAudit()` | Key screens | Labels/contrast/hit-targets headlessly; also enforces stable a11y identifiers for E2E selectors. *Known blind spot:* glass-chrome contrast over arbitrary photo content is content-dependent — the tally's legibility over the brightest seeded thumbnail needs an explicit assertion, not just the static audit. |
 
 **Coverage:** `Curation` held to high coverage — where bugs hide, free to test. For integration, "scenario completeness" is made concrete as an enumerated, DoD-checked fixture/scenario checklist (not a vibe). Every fixed bug ships with a failing-then-passing regression test.
+
+### iOS 26 / iPadOS testing implications
+
+- **CI runtime is a pinned dependency.** The simulator-bound tiers (E2E, accessibility) need a GitHub-hosted runner image with an Xcode that ships the **iOS 26 simulator runtime** — pin it explicitly (Phase 1). The pure `Curation` unit tier runs via `swift test` and is *insulated* from this.
+- **Select by accessibility identifier, never coordinate/screenshot** in E2E — Liquid Glass chrome floats over content and changes hit-testing/layering.
+- **`performAccessibilityAudit()` on a new OS is itself unproven** and runs on static screens; pair it with the explicit glass-over-photo contrast assertion above.
+- **Bound the iPad matrix:** one compact + one regular (split-view) layout each get an integration path; the v1.1 keyboard shortcuts are unit-tested where they map to pure actions; Stage Manager / live window resize / drag-and-drop are **human-verified only**, not gated.
 
 ---
 

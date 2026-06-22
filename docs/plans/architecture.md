@@ -10,7 +10,7 @@
 
 | Choice | Pick | Why |
 |---|---|---|
-| Min target | **iOS 18+** | Unlocks `@Observable`, SwiftData, and `.navigationTransition(.zoom)` — the API that *is* the tap-to-expand-land-back interaction. In 2026 this excludes almost no one. |
+| Min target | **iOS 26 / iPadOS 26** | A new app with no install base to protect: target the latest for **pure Liquid Glass with no fallback code** and the newest SwiftUI/PhotoKit APIs. Reach isn't the lever for a niche audience; polish is. (The `.navigationTransition(.zoom)` interaction predates 26 — it's not the reason; pure Liquid Glass is.) |
 | UI | **SwiftUI only** | No UIKit unless forced (none expected). |
 | State | **Observation (`@Observable`)** | No Combine, no `ObservableObject` boilerplate. |
 | Concurrency | **Swift 6 language mode, strict concurrency** | PhotoKit isn't Sendable-friendly; isolate it behind an actor, keep UI on `@MainActor`. |
@@ -29,7 +29,7 @@ PoimiApp            (app target: real + fake PhotoKit impls, UI, navigation, @ma
                      ← no PhotoKit, no SwiftData, no @MainActor; fully unit-testable
 ```
 
-The win: `Curation` is plain Swift value types and pure functions — the filtering pipeline, per-month target math, selection-set logic, the (deferred) bytes-per-megapixel scoring, and location distance math (no need for a separate `LocationKit` package). It runs in fast unit tests with synthetic data: no simulator, no real library.
+The win: `Curation` is plain Swift value types and pure functions — the filtering pipeline, the **adaptive day-grouping** of the timeline (a deterministic function of capture dates + a threshold; see the grouping spec), the running-total/target math, selection-set logic, the (deferred) bytes-per-megapixel scoring, and location distance math (no need for a separate `LocationKit` package). It runs in fast unit/property tests with synthetic data: no simulator, no real library.
 
 **Dependency direction (D14):** the domain value model `AssetRef`/`AssetMetadata` *and* the PhotoKit-facing protocols (`PhotoLibraryProviding`, etc.) live in `Curation`. The PhotoKit implementation in the app target depends *on* `Curation`. Dependencies point toward the domain, never away from it — `Curation` must not import Photos. Later extractions (`PhotoLibrary`, `PoimiUI`) keep this direction.
 
@@ -99,7 +99,11 @@ Selection is an in-memory `Set<String>` held in `SelectionStore` — **the sourc
 
 `LazyVGrid` in a `ScrollView`, `.scrollPosition` for restore. **In-grid selection is first-class** (D9): a quick-select badge per cell plus drag-to-multi-select, so the expand view is for inspection, not the only way to pick. Selection toggle is just `Set` membership — instant. Selected state uses redundant encoding (checkmark + dim), ≥44pt hit targets, and accessibility labels/actions for VoiceOver on a dense grid.
 
-Tap opens a **navigation destination** (not a `.fullScreenCover`/overlay — D10) using iOS 18's **`.matchedTransitionSource` + `.navigationTransition(.zoom)`**, keyed by `localIdentifier`, so the thumbnail expands and animates back toward its source cell on dismiss. The transition's *feel* is not machine-verifiable; we verify its **post-conditions** — correct destination, scroll position restored, selection preserved (D22). Reduce Motion must substitute a cross-fade (verify; don't layer extra motion). Handle the case where the source cell scrolled out of view or was recycled.
+Tap opens a **navigation destination** (not a `.fullScreenCover`/overlay — D10) using **`.matchedTransitionSource` + `.navigationTransition(.zoom)`**, keyed by `localIdentifier`, so the thumbnail expands and animates back toward its source cell on dismiss. The transition's *feel* is not machine-verifiable; we verify its **post-conditions** — correct destination, scroll position restored, selection preserved (D22). Reduce Motion must substitute a cross-fade (verify; don't layer extra motion). Handle the case where the source cell scrolled out of view or was recycled.
+
+**Adaptive navigation (iOS + iPadOS).** Compact width uses the typed `NavigationStack` above with the zoom push. Regular width (iPad) uses `NavigationSplitView` — sidebar · grid · detail — where the **detail column hosts its own `NavigationStack`** that carries the zoom destination, so the transition still applies (the expand is a push within the detail column, not a split selection). The `@MainActor @Observable` coordinator's typed path (§11) maps onto split-view selection + that nested stack; it is therefore *one logical path expressed in two containers*, not literally one stack on iPad. v1 ships this layout; iPad input polish (keyboard/hover/drag-and-drop) is v1.1.
+
+**Liquid Glass surfaces.** Chrome is glass over opaque photo content. Standard navigation/toolbars adopt it for free; the few custom surfaces — the **tally + export grouped into one `GlassEffectContainer`** (never glass-on-glass), legibility guaranteed by the scroll-edge effect — use `glassEffect`/`.buttonStyle(.glass)`. These are `@MainActor` view modifiers and fit the concurrency model. Two enforced invariants: **no SDK-version availability gates / `.regularMaterial` version fallbacks** (CI-checked, Phase 1), and **every custom glass surface defines a Reduce-Transparency opaque appearance** (an accessibility axis, distinct from version fallbacks).
 
 ### 7. Location bucketing *(v1.1 — deferred, D4)*
 
@@ -108,6 +112,8 @@ Tap opens a **navigation destination** (not a `.fullScreenCover`/overlay — D10
 ### 8. Album export
 
 Resolve selection → `PHAsset`s, create-or-find `PHAssetCollection` by stored album identifier, add only missing assets (dupe guard), let date sort happen naturally (capture date, oldest first). Membership only — **no sequencing**, per the plan.
+
+`PhotoLibraryProviding` also **enumerates albums** (`PHAssetCollection`s) — needed both for the exclude-album filter's picker and the export-album selection step — so the fake must model album listing and membership (D25).
 
 ### 9. Persistence (SwiftData)
 
