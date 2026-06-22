@@ -47,7 +47,7 @@ Phase 4  Post-v1          quality filter, location, grow machinery
 **Goal:** stand up just enough to make Phase 2 features real and testable. Deliberately small — avoid the infrastructure trough.
 
 **High-level tasks:**
-1. Repo scaffolding: `Curation` SPM package + the app target, Xcode `.gitignore`, SwiftLint config (D28), **lean CI: build + lint + unit + integration** (the E2E smoke arrives in Phase 2 when there's a flow to drive).
+1. Repo scaffolding: `Curation` SPM package + the app target, Xcode `.gitignore`, SwiftLint config (D28), **lean CI: build + lint + unit + integration** (the E2E smoke arrives in Phase 2 when there's a flow to drive). **Pin the CI runner's Xcode + iOS 26 simulator runtime explicitly** — the simulator-bound tiers depend on it (the pure `Curation` unit tier does not).
 2. Domain in `Curation` (pure): `AssetRef`/`Coordinate`/`AssetMetadata`, the `PhotoLibraryProviding` protocol, dependency direction (D14).
 3. A **minimal `FakePhotoLibrary`** (one seed, `.authorized`) honoring the actor isolation — *enough for the permission flow + first grid*. Its harder capabilities (dual sizes, mutate-and-notify, deterministic progressive delivery, the other permission states, access-counting, 10k-scale seeds) grow in Phase 2 with the features that consume them — each landing with a test that exercises it (D25).
 4. `SystemPhotoLibrary` actor skeleton + the `PHPhotoLibraryChangeObserver` shim (D16).
@@ -57,6 +57,7 @@ Phase 4  Post-v1          quality filter, location, grow machinery
 - `swift test` green headless against `Curation` + the minimal fake.
 - CI enforced on PRs (build + lint + unit + integration).
 - A build-time/CI check confirms **`Curation` imports neither Photos nor SwiftData** (the boundary invariant, D14/D21).
+- A CI check confirms **no SDK-version availability gates / `.regularMaterial` version fallbacks** for Liquid Glass (the "pure glass" invariant — parallels the `Curation` import check; accessibility fallbacks are exempt).
 - A check confirms `FakePhotoLibrary` is excluded from the release configuration and the swap flag is inert in release (D30).
 
 ---
@@ -67,22 +68,23 @@ Phase 4  Post-v1          quality filter, location, grow machinery
 
 **High-level tasks (in dependency order):**
 1. **Onboarding + Authorization flow (D6):** first-run explanation of what the app does (it earns the full-access grant; the name is opaque, so orientation matters) → rationale screen → system prompt → `.authorized`/`.limited`/`.denied`/`.notDetermined` branches; limited/denied recovery with `UIApplication.openSettingsURLString` deep-link (copy sets the right expectation: Settings → Poimi → Photos → All Photos). **Author the specific `NSPhotoLibrary*UsageDescription` strings here** — they are build-time and the app crashes on the auth call without them.
-2. **Navigation coordinator (D20):** `NavigationStack` + typed path on a `@MainActor @Observable` coordinator (onboarding → permission → setup → review → export); auth state drives the path.
+2. **Navigation coordinator (D20), adaptive:** a `@MainActor @Observable` coordinator with a typed path (onboarding → permission → setup → review → export); auth state drives it. Compact width = `NavigationStack` with the zoom push; regular width = `NavigationSplitView` (sidebar · grid · detail) whose **detail column hosts its own `NavigationStack`** so the zoom transition still applies. The typed path maps onto split-view selection + the nested stack (see the architecture's adaptive-navigation note).
 3. **Selection store + target math (D15, D5):** the in-memory `Set<String>` source of truth and the running-total / per-month tally — built *before* the grid that consumes them. *(Persistence is task 9, deliberately later.)*
 4. **Source range + fetch:** date-interval selection; fetch via the actor; land the **access-counting / scale named test** (D29) with the fetch tier so the "lazy" invariant can't regress silently.
-5. **Exact filters:** exclude screenshots (media subtype) + exclude selected album(s) (set difference); empty-result handling (no photos after filters / empty month) as an explicit state, not a void grid.
-6. **Review grid:** thumbnails with progressive loading (promoted from the spike); **in-grid selection** — quick-select badge + drag-to-multi-select (D9); selected-state encoding (checkmark + dim, ≥44pt); **Dynamic Type + contrast + VoiceOver labels/actions built in**, `performAccessibilityAudit()` per screen. A first **`docs/design/` UI-spec draft** is written here, before/with the grid (spike-then-document, D27).
-7. **Expand view:** zoom navigation destination (D10); Reduce Motion cross-fade; within-overlay swipe + which-photo-we-return-to resolved (was open); post-condition tests — destination correct, scroll restored, selection preserved (D22).
+5. **Exact filters + setup screens:** exclude screenshots (media subtype) + exclude selected album(s) (set difference — needs album *enumeration* on `PhotoLibraryProviding`); the **export-album naming/selection** step; empty-result handling (no photos after filters / empty month) as an explicit state, not a void grid.
+6. **Review grid:** thumbnails with progressive loading (promoted from the spike); **in-grid selection** — quick-select badge + drag-to-multi-select (D9) + a **Select-mode contextual toolbar** (select-all-month / clear); selected-state encoding (checkmark + dim, ≥44pt); the **tally + export grouped as one glass region** with scroll-edge legibility; **Dynamic Type + VoiceOver labels/actions/section-summary + Reduce-Transparency built in**, `performAccessibilityAudit()` per screen. A first **`docs/design/` UI-spec draft** is written here, before/with the grid (spike-then-document, D27).
+7. **Expand view:** zoom navigation destination (D10); Reduce Motion cross-fade; post-condition tests — destination correct, scroll restored, selection preserved (D22). *(Within-overlay swipe stays deferred until the open question is decided — design it then.)*
 8. **Long-scan indicator (minimal):** a simple determinate/indeterminate fetch+thumbnail-load indicator. *(The full cancelable curate-while-scanning surface, D12, moves to Phase 4 with the quality filter it actually serves.)*
 9. **Persistence + lifecycle:** debounced selection snapshot + SwiftData `CurationSession` (don't-lose-picks — essential); **establish a SwiftData migration/versioning approach here** since the schema evolves into Phase 4. Cross-launch scroll restoration + background flush + **library-change reconciliation** (prune selection when assets vanish, refresh fetch on resume, consuming the Phase 1 observer) land late in this phase — robustness, after the loop works.
 10. **Album export (D19):** create-or-find by stored id (recreate if deleted) + dupe guard + date sort; typed error model + partial-failure handling; a success/idempotence confirmation ("Updated 2025 Yearbook: added 12, now 187").
-11. **Grow test infrastructure here:** the fake's remaining capabilities + canonical seeds, the **conformance suite** (D24), and the **one E2E smoke** (D23) — each as its consuming feature lands. Include a **`localIdentifier`-churn** fixture scenario (the whole app rests on identifier stability).
+11. **iPad split-view layout:** the `NavigationSplitView` regular-width layout (sidebar · grid · detail) and reflow for Split View / Stage Manager / resize. *Layout only — keyboard shortcuts, hover, and drag-and-drop are v1.1 (per the "split-view yes, input later" decision).*
+12. **Grow test infrastructure here:** the fake's remaining capabilities + canonical seeds, the **conformance suite** (D24), and the **one E2E smoke** (D23) — each as its consuming feature lands. **E2E selects by accessibility identifier, never by coordinate/screenshot** (glass chrome floats over content). Include a **`localIdentifier`-churn** fixture scenario (the whole app rests on identifier stability).
 
 **Exit criteria (verifiable):**
 - Each permission-state branch has an integration test asserting the resulting destination/recovery, including the `.limited` reduced visible set and the Settings deep-link path.
 - Export correctness (create-or-find, dupe guard, date sort, partial-failure) asserted in the integration tier — not by eyeball.
 - Zoom post-conditions, session + scroll-position restoration, and selection flush-on-background each verified by tests.
-- The enumerated integration **scenario checklist** (defined in development-guidelines) is complete; E2E smoke green.
+- The enumerated integration **scenario checklist** (defined in development-guidelines) is complete; E2E smoke green. One compact + one regular (iPad split-view) layout each have an integration path; live resize / Stage Manager are human-verified.
 - **Conformance suite green against `SystemPhotoLibrary` on a real device** (the gate that proves the fake isn't lying — D24).
 - "No new compiler warnings" flips from advisory to a hard gate at this exit (D28).
 - End to end on a real device: pick a range, filter, hand-pick toward a target, export a correct native album; no blank/dead-end in any permission or empty-result state.
@@ -96,10 +98,11 @@ Phase 4  Post-v1          quality filter, location, grow machinery
 **High-level tasks:**
 1. Manual TestFlight build from Xcode; dogfood on a real year; fix what hurts.
 2. **Prepare the App Review submission for full-access** (the most likely rejection): written justification (no PHPicker — no persistent identifiers, no date-range fetch, no album writes), reviewer walkthrough, demo notes. **Decide the hard-gate-vs-degraded-limited-mode posture and a fallback *before* submitting**, not in response to rejection.
-3. App Store listing: accurate App Privacy label (on-device-only; iCloud is Apple's, not our servers — D8), description, subtitle, and the "yearbook"/"photo book" keyword placement (discoverability, given the opaque name).
-4. **Finalize** the `docs/design/` review-screen UI spec (drafted in Phase 2).
-5. Accessibility **final verification**: end-to-end VoiceOver flow walkthrough + a full audit (Dynamic Type / contrast / Reduce Motion were built per-screen in Phase 2; this confirms the holistic flow).
-6. Submit; address feedback.
+3. App Store listing: accurate App Privacy label (on-device-only; iCloud is Apple's, not our servers — D8), description, subtitle, and the "yearbook"/"photo book" keyword placement (discoverability, given the opaque name). Screenshots must reflect the Liquid Glass UI (built against the current SDK — the App Store gives legacy appearance otherwise).
+4. **App icon** — the layered iOS 26 deliverable (Icon Composer; light/dark/clear/tinted), distinctive given the opaque name.
+5. **Finalize** the `docs/design/` review-screen UI spec (drafted in Phase 2).
+6. Accessibility **final verification**: end-to-end VoiceOver flow walkthrough + a full audit (Dynamic Type / contrast / Reduce Motion / Reduce Transparency were built per-screen in Phase 2; this confirms the holistic flow, incl. tally legibility over bright photos).
+7. Submit; address feedback.
 
 **Exit criteria:**
 - Machine-checkable readiness met *before* submission: usage strings present, privacy-label fields populated, `performAccessibilityAudit()` green on review grid + expand + permission screens.
@@ -123,48 +126,56 @@ Phase 4  Post-v1          quality filter, location, grow machinery
 
 ## Design inventory — views & interactions to design
 
-The full list of screens and interactions that need a Paper design, tagged by the phase/version they ship in. This is the checklist the design work (spike-then-document, D27) is measured against; the `docs/design/` UI spec transcribes each one as it's settled. Anything here that's **v1 (Phase 2)** should have a settled design *before or as* its screen is built; deferred items can be designed later.
+The screens and interactions that need a Paper design, tagged by the phase/version they ship in, and doubling as the **design→test coverage checklist** (most items map to a planned test tier). The `docs/design/` UI spec transcribes each one as it's settled.
+
+> **This is a tracking checklist, not a batch to complete up front.** Each v1 item is designed **just-in-time, as its Phase 2 screen is built** (D27) — designing all of them before Phase 2 starts would reconstitute the design-freeze gate we deliberately removed.
 
 ### Onboarding & permissions *(v1)*
 1. **First-run intro** — what the app does ("you pick every photo, not an algorithm"); orients before the access ask (the name is opaque, so this carries weight).
 2. **Permission rationale** — shown *before* the system prompt; explains why full library access is needed.
-3. **Limited-access recovery** — explains the year can't be scanned in limited mode; Settings deep-link with expectation-setting copy.
-4. **Denied recovery** — non-dead-end screen with the Settings path.
+3. **Access-recovery screen** — *one parameterized screen* covering both `.limited` ("the year can't be scanned in limited mode") and `.denied`, with the `UIApplication.openSettingsURLString` deep-link and expectation-setting copy. (Don't design two near-identical screens.)
 
 ### Source setup *(v1)*
-5. **Range & target setup** — date-interval picker + target count + opt-in filter toggles (exclude screenshots, exclude album(s)).
-6. **Album picker** — pick the album(s) to exclude (WhatsApp, Downloads, etc.).
+4. **Range & target setup** — date-interval picker + target count + opt-in filter toggles (exclude screenshots, exclude album(s)).
+5. **Album picker** — pick the album(s) to exclude (WhatsApp, Downloads, etc.); requires album *enumeration* as a `PhotoLibraryProviding` capability (the fake must model it).
+6. **Export-album naming / selection** — name the new album ("2025 Yearbook") or pick an existing one to update. The album name is the only metadata that travels, so this is a real first-run step, not an afterthought.
 
 ### Review — the core loop *(v1)*
-7. **Review grid** — month-sectioned thumbnail grid; the make-or-break screen.
-8. **Per-month section header** — month label + soft per-month target ("March: 4 / 15").
-9. **Selection affordances** — quick-select badge per cell; selected-state encoding (checkmark + dim, ≥44pt, never colour-alone).
-10. **Running tally / target progress** — always-visible total ("147 / 200") in chrome that doesn't eat the grid (material bar, safe-area aware).
+7. **Review grid** — month-sectioned thumbnail grid; the make-or-break screen. The per-month section header (month label + soft target "March: 4 / 15") is part of this — a label, not a separate screen (D5).
+8. **Selection affordances** — quick-select badge per cell; selected-state encoding (checkmark + dim, ≥44pt, never colour-alone).
+9. **Select-mode contextual toolbar** — batch operators essential at year scale: Select-all-this-month, Deselect-month, Clear-selection, with a live count (Photos pattern).
+10. **Running tally / target progress** — always-visible total ("147 / 200"); **grouped with the export action into a single glass region** (no glass-on-glass), legibility over photos guaranteed by the scroll-edge effect, with a designed Dynamic-Type reflow at AX sizes.
 11. **Expand / full-screen inspection** — the zoom-destination detail view; progressive thumbnail→full-res.
-12. **Fetch / load indicator (minimal)** — simple determinate/indeterminate state while fetching the range and loading thumbnails. *(The full curate-while-scanning surface is v1.1, item 22.)*
+12. **Fetch / load indicator (minimal)** — simple determinate/indeterminate state while fetching the range and loading thumbnails. *(The full curate-while-scanning surface is deferred, item 23.)*
 
 ### Export *(v1)*
-13. **Export in-progress** — writing the album.
-14. **Export result / confirmation** — success + idempotence ("Updated 2025 Yearbook: added 12, now 187"); re-run communicated.
+13. **Export result / confirmation** — success + idempotence ("Updated 2025 Yearbook: added 12, now 187"); re-run communicated. (In-progress is a transient state of item 12, not its own screen.)
 
 ### States *(v1 — easy to forget, design explicitly)*
-15. **Empty states** — no photos in range, everything filtered out, empty month, empty library; each actionable (e.g. relax filters), never a void grid.
-16. **Error states** — iCloud fetch failure, export failure (incl. partial), authorization revoked mid-session; each recoverable.
-17. **Session resume** — "Resume your 2025 Yearbook (147 / 200)?" on relaunch.
+14. **Empty states** — no photos in range, everything filtered out, empty month, empty library; each actionable (e.g. relax filters), never a void grid.
+15. **Error states** — iCloud fetch failure, export failure (incl. partial), authorization revoked mid-session; each recoverable.
+16. **Session resume** — "Resume your 2025 Yearbook (147 / 200)?" on relaunch.
 
 ### Cross-cutting interactions & behaviors *(v1)*
-18. **Tap-to-expand → return-to-position** — zoom transition out and back to the source cell, scroll position + selection preserved (D10/D22); handle a recycled/off-screen source cell.
-19. **Drag-to-multi-select** — pan across cells to batch-toggle (the speed-maker at scale, D9).
-20. **Within-overlay swipe** — left/right between photos in the expand view, and which photo we land back on (resolve the open item).
-21. **Accessibility & motion** — Dynamic Type reflow of all chrome, VoiceOver labels + a custom select action on cells, contrast/scrim over bright thumbnails, Reduce-Motion cross-fade substitute for the zoom; designed into each screen, not bolted on.
+17. **Tap-to-expand → return-to-position** — zoom transition out and back to the source cell, scroll position + selection preserved (D10/D22); handle a recycled/off-screen source cell.
+18. **Drag-to-multi-select** — pan across cells to batch-toggle (the speed-maker at scale, D9).
+19. **Accessibility & motion** — Dynamic Type reflow of all chrome (incl. the tally at AX sizes), VoiceOver labels + a custom select action on cells + **section grouping/summary** ("March, 31 photos, 4 selected") so a thousands-cell grid is navigable, **focus-ring appearance** over photos, contrast/scroll-edge over bright thumbnails, and **Reduce-Motion** (cross-fade) + **Reduce-Transparency** (opaque glass) fallbacks; designed into each screen, not bolted on.
+
+### iPad *(layout in v1; input polish in v1.1 — per the "split-view yes, input later" decision)*
+20. **iPad split-view + sidebar** *(v1)* — `NavigationSplitView`: sidebar (session(s); location buckets join in v1.1) · grid · detail; the detail column hosts its own `NavigationStack` so the zoom transition applies. Reflows for Split View / Stage Manager / window resize.
+21. **iPad input polish** *(v1.1)* — keyboard-shortcut map + ⌘-hold discoverability overlay, pointer/hover states, drag-and-drop.
+
+### Identity & App Store *(v1, designed for Phase 3)*
+22. **App icon** — distinctive (the name is opaque); on iOS 26 a layered Icon Composer deliverable with light/dark/clear/tinted variants. App Store screenshots must reflect the Liquid Glass UI.
 
 ### Deferred *(design when the feature lands)*
-22. **Full long-scan progress** *(Phase 4, with the quality filter)* — determinate count, cancelable, curate-while-scanning (D12).
-23. **Quality filter toggle + inspectable hidden set** *(Phase 4)* — off-by-default toggle in setup; a browsable "Hidden: 312 — review" view so nothing is silently lost (D11).
-24. **Named-locations management** *(v1.1)* — list/create/edit named locations.
-25. **Map pin + radius editor** *(v1.1)* — drop a pin, adjust radius (`MKCircle`), name it; EXIF-based, no location permission (D7).
-26. **Cluster-suggestion confirmation** *(v1.1)* — "name this frequent cluster?", human-confirmed, dismissible.
-27. **Location buckets + "no location" bucket** *(v1.1)* — bucketed review entry points, always including no-GPS.
+23. **Within-overlay swipe** *(decision-blocked)* — left/right between photos in the expand view, and which photo we land back on. Currently an open question; **decide during the slice**, design then — the core loop works without it.
+24. **Full long-scan progress** *(Phase 4, with the quality filter)* — determinate count, cancelable, curate-while-scanning (D12).
+25. **Quality filter toggle + inspectable hidden set** *(Phase 4)* — off-by-default toggle in setup; a browsable "Hidden: 312 — review" view so nothing is silently lost (D11).
+26. **Named-locations management** *(v1.1)* — list/create/edit named locations.
+27. **Map pin + radius editor** *(v1.1)* — drop a pin, adjust radius (`MKCircle`), name it; EXIF-based, no location permission (D7).
+28. **Cluster-suggestion confirmation** *(v1.1)* — "name this frequent cluster?", human-confirmed, dismissible.
+29. **Location buckets + "no location" bucket** *(v1.1)* — bucketed review entry points, always including no-GPS.
 
 ## Ordering at a glance
 

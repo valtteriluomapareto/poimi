@@ -6,6 +6,13 @@
 
 > **Update — minimum target raised to iOS 26 / iPadOS 26.** The initial review set the floor at iOS 18+. With the design language committing to **Liquid Glass** ([design-language.md](../design/design-language.md)), we target iOS/iPadOS 26 so glass is native with no availability gates or material fallbacks — a new app has no install base to protect, and the latest SDK gives the cleanest SwiftUI. Architecture and product docs updated to match.
 
+> **Update — round-2 review (design language, design inventory, iOS 26).** A second four-perspective review of the phases/design docs landed these decisions:
+> - **iPad: split-view in v1, input polish in v1.1.** The adaptive layout (incl. `NavigationSplitView` + sidebar) ships in v1 — so the navigation architecture is settled now (compact = `NavigationStack`; regular = split-view whose detail column hosts its own stack for the zoom). Keyboard shortcuts, hover, and drag-and-drop are deferred to v1.1 to keep the input-mode test matrix small.
+> - **Liquid Glass legibility & accessibility:** chrome legibility over the photo grid is solved with the **scroll-edge effect** + a contrast acceptance criterion; **no glass-on-glass** (tally + export are one grouped `GlassEffectContainer`); **Reduce Transparency** is first-class (every custom glass surface defines an opaque appearance) — distinct from the "no version fallback" rule; the glass API bet is conscious (drop a surface to plain material if an API regresses).
+> - **Inventory:** added export-album naming, a Select-mode batch toolbar, the app icon (Phase 3, layered iOS 26), and an explicit **no widgets/extensions in v1**; folded per-month header + export-in-progress; collapsed limited/denied into one recovery screen; deferred within-overlay swipe (decision-blocked); made the inventory just-in-time (not a freeze gate).
+> - **Testing:** Liquid Glass excluded from pixel snapshots; pin the CI iOS 26 simulator runtime; E2E selects by a11y identifier; glass-over-photo contrast is an audit blind spot needing an explicit assertion; the "pure glass / no version fallback" rule is a CI invariant.
+> - **Feel-claims** ("calm/fast/120fps") are demoted to human design-signoff + the Phase 0 spike, tied to D22.
+
 ---
 
 ## The reviews in one line each
