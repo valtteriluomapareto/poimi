@@ -36,7 +36,8 @@ This is the make-or-break loop and the one decision a doc cannot settle — it m
 
 - **Tap mapping.** The plan is *tap badge → select; tap cell → open full-screen* (D9/D10). The spike must pressure-test this against the alternative *whole-cell tap → select; long-press/pinch → inspect*. The real question: **which action deserves the cheap whole-cell tap — select (the constant action, done hundreds of times) or inspect (occasional)?** Try both on a real year; record which is faster and less error-prone.
 - **Badge as a real target.** If the badge stays the select affordance, it must be a **≥44pt hit area** (small glyph, large touch target — effectively the whole corner). Validate it isn't fiddly at speed, and that it doesn't mis-fire while scrolling.
-- **Thumbnail density.** Default to **~3 columns on iPhone (~128pt)** — large enough to recognize the photo and make obvious calls — with **pinch-to-adjust** density (more columns on iPad). Confirm on a real library: can you make *most* calls from the grid at this size, opening full-screen only for fine ones (sharpness, burst disambiguation, eyes-open)? If you're constantly forced full-screen, the density (or the whole model) is wrong.
+- **Thumbnail density & cell shape.** Default to **~3 columns on iPhone (~128pt)** — large enough to recognize the photo and make obvious calls — with **pinch-to-adjust** density (more columns on iPad). Confirm on a real library: can you make *most* calls from the grid at this size, opening full-screen only for fine ones (sharpness, burst disambiguation, eyes-open)? If you're constantly forced full-screen, the density (or the whole model) is wrong. Also try **square vs aspect-ratio justified cells** (square scans faster but crops framing).
+- **Timeline grouping.** Validate the **adaptive day-grouping** (see the Timeline grouping spec) against plain months on a real year: do events pop out and quiet stretches stay compact? Is the **N≈10/day** threshold and the gap-break rule right? This is where the grouping model earns its place or doesn't.
 - **Full-screen swipe + select is part of this loop — test it in the spike.** Opening a photo must not be a dead-end: you swipe left/right between photos *and* select in place, so "open to decide" is itself a fast multi-select path. (This is why within-overlay swipe is promoted to v1 — see the design inventory.)
 
 **Record the answers** in `spike-findings.md`: the chosen tap mapping, the default column count, whether the badge target works, and whether grid-triage + full-screen-triage together feel fast over a real year. These seed the Phase 2 grid build and the UI spec.
@@ -50,7 +51,8 @@ This is the make-or-break loop and the one decision a doc cannot settle — it m
 **The salvageable render layer (D1, loosened):** the spike's image-loading, prefetch-window, `.scrollPosition` restore, and `.zoom` transition code is the fiddliest in the app — write it cleanly enough to **promote into Phase 2 behind the protocol seam**. Only the data/fetch/selection/export shortcuts are thrown away.
 
 **Exit criteria (go/no-go) — captured in a durable artifact:**
-- **The picking interaction is resolved** (tap mapping, thumbnail density, badge target, full-screen swipe+select) with evidence — this is the primary gate.
+- **The picking interaction is resolved** (tap mapping, thumbnail density, cell shape, badge target, full-screen swipe+select) with evidence — this is the primary gate.
+- **The timeline grouping is resolved** — adaptive day-groups vs months, the N threshold, and the gap rule — recorded with the real-year observations.
 - A `docs/plans/spike-findings.md` (or appended decision entries) recording: the picking-interaction answers above; the loop *feels* good at scale (or not); scroll-restore + recycled-cell behavior; progressive/iCloud timing; the adapter-vs-array numbers; the bytes/MP separation data; and UX/gesture observations to seed the Phase 2 UI spec. **The findings doc is the real Phase 0 output** — the code is disposable, the evidence is not.
 - The "Still open" items in the decisions log (picking interaction, adapter-vs-array, quality-filter go/no-go) resolved with reference to that evidence.
 
@@ -158,7 +160,7 @@ The screens and interactions that need a Paper design, tagged by the phase/versi
 
 > **The picking interaction is the make-or-break of the whole app and is validated first in the Phase 0 spike (see ★ there).** Model: two-tier triage — grid for obvious calls, full-screen for borderline. Items 7–11 below carry the resolved design; the spike settles the tap mapping, thumbnail density, badge target, and full-screen swipe+select before they're built.
 
-7. **Review grid** — month-sectioned thumbnail grid; the make-or-break screen. **Default ~3 columns on iPhone (~128pt — large enough to judge obvious calls), pinch-adjustable density** (more on iPad). The per-month section header (month label + soft target "March: 4 / 15") is part of this — a label, not a separate screen (D5).
+7. **Review grid** — chronological thumbnail grid grouped by **adaptive day-groups** (spec below), not by month; the make-or-break screen. **Default ~3 columns on iPhone (~128pt — large enough to judge obvious calls), pinch-adjustable density** (more on iPad). **Cell shape — square vs aspect-ratio justified — is a spike question** (square is scannable but crops the framing; Apple's Library tab uses justified aspect so you see the real shot). Group headers show the label + count (no quota — D5); they're a label, not a separate screen.
 8. **Selection affordances** — quick-select badge per cell, with a **≥44pt hit area** (small glyph, large touch target — effectively the whole corner) so selecting is fast and doesn't mis-fire while scrolling; selected-state encoding (checkmark + dim, never colour-alone). *(Tap mapping — badge-select + cell-opens vs whole-cell-select — is resolved by the spike.)*
 9. **Select-mode contextual toolbar** — batch operators essential at year scale: Select-all-this-month, Deselect-month, Clear-selection, with a live count (Photos pattern).
 10. **Running tally / target progress** — always-visible total ("147 / 200"); **grouped with the export action into a single glass region** (no glass-on-glass), legibility over photos guaranteed by the scroll-edge effect, with a designed Dynamic-Type reflow at AX sizes.
@@ -192,6 +194,25 @@ The screens and interactions that need a Paper design, tagged by the phase/versi
 26. **Map pin + radius editor** *(v1.1)* — drop a pin, adjust radius (`MKCircle`), name it; EXIF-based, no location permission (D7).
 27. **Cluster-suggestion confirmation** *(v1.1)* — "name this frequent cluster?", human-confirmed, dismissible.
 28. **Location buckets + "no location" bucket** *(v1.1)* — bucketed review entry points, always including no-GPS.
+
+## Timeline grouping *(v1)*
+
+The grid is one chronological flow (capture date, oldest → newest) split into **adaptive day-groups** — a deterministic, location-free heuristic that makes events stand out while keeping quiet stretches compact. It replaces month grouping (which models a family's year badly: life clusters by event, not calendar, and a flat monthly quota over-serves quiet months and under-serves the vacation).
+
+**The rule:**
+- Threshold **N = 10 photos/day** (a tunable constant; the spike confirms the value).
+- A calendar day with **≥ N** photos → **its own group** ("Sat 5 Jul · 53").
+- A maximal run of **consecutive days each with < N** photos → **merged into one group** ("16–18 Mar · 7").
+- A run breaks on (a) a busy day, or (b) a calendar gap with no photos beyond a small tolerance — so quiet runs stay tight (no "Days 2–40" spanning an empty month). The exact gap tolerance is spike-tunable.
+- **No per-group target/quota** — show the count only; the running **total** is the authoritative constraint (D5).
+- Labels are date-based for v1 (single day vs date range); event/place names arrive with the location feature.
+
+**Why this shape:**
+- **Pure & deterministic** — a function of (capture dates, N) with no ML and no fuzzy continuous gap-clustering. Lives in `Curation`; unit- and property-testable (the off-by-one/empty-day/gap edges are exactly what property tests catch).
+- **Events emerge for free** — a trip is a run of busy days, each its own section; a lazy week collapses into one. Better than months, with none of the cost.
+- **A clean stepping stone** — when location/event grouping lands (v1.1), consecutive busy days at one place collapse into a named "Italy trip"; the day-group is the fallback when there's no location.
+
+**Spike validates:** does the adaptive day-grouping feel right vs months on a real year, and is N≈10 (and the gap rule) the right default?
 
 ## Ordering at a glance
 

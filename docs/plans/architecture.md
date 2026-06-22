@@ -29,7 +29,7 @@ PoimiApp            (app target: real + fake PhotoKit impls, UI, navigation, @ma
                      ← no PhotoKit, no SwiftData, no @MainActor; fully unit-testable
 ```
 
-The win: `Curation` is plain Swift value types and pure functions — the filtering pipeline, per-month target math, selection-set logic, the (deferred) bytes-per-megapixel scoring, and location distance math (no need for a separate `LocationKit` package). It runs in fast unit tests with synthetic data: no simulator, no real library.
+The win: `Curation` is plain Swift value types and pure functions — the filtering pipeline, the **adaptive day-grouping** of the timeline (a deterministic function of capture dates + a threshold; see the grouping spec), the running-total/target math, selection-set logic, the (deferred) bytes-per-megapixel scoring, and location distance math (no need for a separate `LocationKit` package). It runs in fast unit/property tests with synthetic data: no simulator, no real library.
 
 **Dependency direction (D14):** the domain value model `AssetRef`/`AssetMetadata` *and* the PhotoKit-facing protocols (`PhotoLibraryProviding`, etc.) live in `Curation`. The PhotoKit implementation in the app target depends *on* `Curation`. Dependencies point toward the domain, never away from it — `Curation` must not import Photos. Later extractions (`PhotoLibrary`, `PoimiUI`) keep this direction.
 
