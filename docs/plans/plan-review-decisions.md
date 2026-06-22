@@ -4,6 +4,8 @@
 
 **Committed sequencing:** *spike-first, grow machinery* — prove the risky UX on a real library before building test/CI scaffolding; apply depth where it pays (pure `Curation` logic + fake fidelity), defer ceremony (snapshot tier, full E2E, release pipeline) until there's something worth shipping.
 
+> **Update — minimum target raised to iOS 26 / iPadOS 26.** The initial review set the floor at iOS 18+. With the design language committing to **Liquid Glass** ([design-language.md](../design/design-language.md)), we target iOS/iPadOS 26 so glass is native with no availability gates or material fallbacks — a new app has no install base to protect, and the latest SDK gives the cleanest SwiftUI. Architecture and product docs updated to match.
+
 ---
 
 ## The reviews in one line each

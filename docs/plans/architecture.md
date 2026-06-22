@@ -10,7 +10,7 @@
 
 | Choice | Pick | Why |
 |---|---|---|
-| Min target | **iOS 18+** | Unlocks `@Observable`, SwiftData, and `.navigationTransition(.zoom)` — the API that *is* the tap-to-expand-land-back interaction. In 2026 this excludes almost no one. |
+| Min target | **iOS 26 / iPadOS 26** | A new app with no install base to protect: target the latest for **pure Liquid Glass with no fallback code**, the newest SwiftUI/PhotoKit APIs, and `.navigationTransition(.zoom)` (the tap-to-expand-land-back interaction). Reach isn't the lever for a niche audience; polish is. |
 | UI | **SwiftUI only** | No UIKit unless forced (none expected). |
 | State | **Observation (`@Observable`)** | No Combine, no `ObservableObject` boilerplate. |
 | Concurrency | **Swift 6 language mode, strict concurrency** | PhotoKit isn't Sendable-friendly; isolate it behind an actor, keep UI on `@MainActor`. |
@@ -99,7 +99,7 @@ Selection is an in-memory `Set<String>` held in `SelectionStore` — **the sourc
 
 `LazyVGrid` in a `ScrollView`, `.scrollPosition` for restore. **In-grid selection is first-class** (D9): a quick-select badge per cell plus drag-to-multi-select, so the expand view is for inspection, not the only way to pick. Selection toggle is just `Set` membership — instant. Selected state uses redundant encoding (checkmark + dim), ≥44pt hit targets, and accessibility labels/actions for VoiceOver on a dense grid.
 
-Tap opens a **navigation destination** (not a `.fullScreenCover`/overlay — D10) using iOS 18's **`.matchedTransitionSource` + `.navigationTransition(.zoom)`**, keyed by `localIdentifier`, so the thumbnail expands and animates back toward its source cell on dismiss. The transition's *feel* is not machine-verifiable; we verify its **post-conditions** — correct destination, scroll position restored, selection preserved (D22). Reduce Motion must substitute a cross-fade (verify; don't layer extra motion). Handle the case where the source cell scrolled out of view or was recycled.
+Tap opens a **navigation destination** (not a `.fullScreenCover`/overlay — D10) using **`.matchedTransitionSource` + `.navigationTransition(.zoom)`**, keyed by `localIdentifier`, so the thumbnail expands and animates back toward its source cell on dismiss. The transition's *feel* is not machine-verifiable; we verify its **post-conditions** — correct destination, scroll position restored, selection preserved (D22). Reduce Motion must substitute a cross-fade (verify; don't layer extra motion). Handle the case where the source cell scrolled out of view or was recycled.
 
 ### 7. Location bucketing *(v1.1 — deferred, D4)*
 

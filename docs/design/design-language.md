@@ -46,9 +46,9 @@ Apple's Liquid Glass is the design language for iOS/iPadOS 26: a translucent, dy
 - **Lean on the system.** Standard navigation/toolbars/controls render Liquid Glass on 26 with no work. For the few custom surfaces (tally bar, floating export button), use the SwiftUI glass APIs (`glassEffect(...)`, `GlassEffectContainer`, `.buttonStyle(.glass)`) so they match — grouped in a container so concentric/adjacent glass blends correctly.
 - **Restraint.** Glass is for floating, functional chrome — not slathered everywhere. Large content surfaces stay solid for legibility over busy photos.
 
-### Target reconciliation *(open decision — see below)*
+### Minimum target: iOS 26 *(decided)*
 
-The decisions log sets the floor at **iOS 18+** (D-target), but Liquid Glass is iOS/iPadOS 26. Recommended path: **build against the latest SDK and keep the 18 floor** — standard components adapt to Liquid Glass on 26 and to the established look on 18 automatically; gate the custom glass APIs with `if #available(iOS 26, *)` and fall back to `.regularMaterial`/`.ultraThinMaterial`. This gives the modern language where it exists without dropping users. Alternatively, **raise the floor to iOS 26** for a pure Liquid Glass app with no fallbacks. Confirm before the UI phase — it changes both this doc and the architecture's target decision.
+We target **iOS 26 / iPadOS 26** — so Liquid Glass is the native, pure design language with **no availability gates and no `.regularMaterial` fallbacks**. As a new app with no install base to protect, the wider reach of an older floor buys us nothing, while the latest SDK gives the cleanest SwiftUI and the simplest code path (a real win for an AI author). The glass APIs above are used directly, not conditionally.
 
 ## Apple HIG
 
@@ -94,5 +94,4 @@ Photos are the hero. Maximize photo area, minimize chrome, edge-to-edge grid. Th
 
 ## Open decisions
 
-- **Minimum target: iOS 18+ (adaptive Liquid Glass) vs iOS 26+ (pure Liquid Glass).** Recommended: 18+ with SDK-adaptive glass and availability-gated custom surfaces. Resolve before the Phase 2 UI work; it touches the architecture target.
 - **Mac Catalyst / "Designed for iPad on Mac"** — out of scope for now; the adaptive layout keeps the door open.
