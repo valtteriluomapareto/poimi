@@ -26,10 +26,23 @@ Phase 4  Post-v1          quality filter, location, grow machinery
 
 ## Phase 0 — Spike *(de-risk)*
 
-**Goal:** answer the questions the fake structurally can't — does hand-curating a year *feel* good, and does the tech hold up on a real, large library — before committing to architecture.
+**Goal:** answer the questions the fake structurally can't — does hand-curating a year *feel* good, and does the tech hold up on a real, large library — before committing to architecture. **The single most important thing this spike resolves is the image-picking interaction** (below); everything else is secondary.
+
+### ★ The core thing to inspect and test: the picking interaction
+
+This is the make-or-break loop and the one decision a doc cannot settle — it must be *felt* on a real library. The spike exists primarily to answer it.
+
+**The model to validate (two-tier triage):** the grid handles the **obvious** keeps/skips; the full-screen view handles the **borderline** calls. For this to work:
+
+- **Tap mapping.** The plan is *tap badge → select; tap cell → open full-screen* (D9/D10). The spike must pressure-test this against the alternative *whole-cell tap → select; long-press/pinch → inspect*. The real question: **which action deserves the cheap whole-cell tap — select (the constant action, done hundreds of times) or inspect (occasional)?** Try both on a real year; record which is faster and less error-prone.
+- **Badge as a real target.** If the badge stays the select affordance, it must be a **≥44pt hit area** (small glyph, large touch target — effectively the whole corner). Validate it isn't fiddly at speed, and that it doesn't mis-fire while scrolling.
+- **Thumbnail density.** Default to **~3 columns on iPhone (~128pt)** — large enough to recognize the photo and make obvious calls — with **pinch-to-adjust** density (more columns on iPad). Confirm on a real library: can you make *most* calls from the grid at this size, opening full-screen only for fine ones (sharpness, burst disambiguation, eyes-open)? If you're constantly forced full-screen, the density (or the whole model) is wrong.
+- **Full-screen swipe + select is part of this loop — test it in the spike.** Opening a photo must not be a dead-end: you swipe left/right between photos *and* select in place, so "open to decide" is itself a fast multi-select path. (This is why within-overlay swipe is promoted to v1 — see the design inventory.)
+
+**Record the answers** in `spike-findings.md`: the chosen tap mapping, the default column count, whether the badge target works, and whether grid-triage + full-screen-triage together feel fast over a real year. These seed the Phase 2 grid build and the UI spec.
 
 **High-level tasks:**
-1. Throwaway vertical slice on the author's real library: date-range fetch → `LazyVGrid` thumbnails via `PHCachingImageManager` → `.navigationTransition(.zoom)` expand/return → toggle selection into a `Set` → dump to a Photos album. No tests, no design gate, no persistence.
+1. Throwaway vertical slice on the author's real library: date-range fetch → `LazyVGrid` thumbnails via `PHCachingImageManager` → `.navigationTransition(.zoom)` expand/return → toggle selection into a `Set` → dump to a Photos album. No tests, no design gate, no persistence. **Build it to exercise the picking interaction above** — both tap mappings, full-screen swipe+select, and adjustable density.
 2. Benchmark the **lazy `PHFetchResult` adapter vs a flat `[AssetRef]` array** over thousands of assets — record the *numbers* (D17).
 3. Exercise the **iCloud-only / optimized-storage** path explicitly (progressive degraded→final under real network latency), not just local assets — this is the make-or-break load case (and what the fake will later model, D25).
 4. 30-minute quality-heuristic eyeball: recorded-original sizes for ~100 real assets (incl. iCloud-only), checking whether bytes/megapixel separates re-saves from camera originals — record the observed distribution (informs D3).
@@ -37,8 +50,9 @@ Phase 4  Post-v1          quality filter, location, grow machinery
 **The salvageable render layer (D1, loosened):** the spike's image-loading, prefetch-window, `.scrollPosition` restore, and `.zoom` transition code is the fiddliest in the app — write it cleanly enough to **promote into Phase 2 behind the protocol seam**. Only the data/fetch/selection/export shortcuts are thrown away.
 
 **Exit criteria (go/no-go) — captured in a durable artifact:**
-- A `docs/plans/spike-findings.md` (or appended decision entries) recording: the loop *feels* good at scale (or not); scroll-restore + recycled-cell behavior; progressive/iCloud timing; the adapter-vs-array numbers; the bytes/MP separation data; and UX/gesture observations to seed the Phase 2 UI spec. **The findings doc is the real Phase 0 output** — the code is disposable, the evidence is not.
-- The "Still open" items in the decisions log (adapter-vs-array, quality-filter go/no-go) resolved with reference to that evidence.
+- **The picking interaction is resolved** (tap mapping, thumbnail density, badge target, full-screen swipe+select) with evidence — this is the primary gate.
+- A `docs/plans/spike-findings.md` (or appended decision entries) recording: the picking-interaction answers above; the loop *feels* good at scale (or not); scroll-restore + recycled-cell behavior; progressive/iCloud timing; the adapter-vs-array numbers; the bytes/MP separation data; and UX/gesture observations to seed the Phase 2 UI spec. **The findings doc is the real Phase 0 output** — the code is disposable, the evidence is not.
+- The "Still open" items in the decisions log (picking interaction, adapter-vs-array, quality-filter go/no-go) resolved with reference to that evidence.
 
 ---
 
@@ -73,7 +87,7 @@ Phase 4  Post-v1          quality filter, location, grow machinery
 4. **Source range + fetch:** date-interval selection; fetch via the actor; land the **access-counting / scale named test** (D29) with the fetch tier so the "lazy" invariant can't regress silently.
 5. **Exact filters + setup screens:** exclude screenshots (media subtype) + exclude selected album(s) (set difference — needs album *enumeration* on `PhotoLibraryProviding`); the **export-album naming/selection** step; empty-result handling (no photos after filters / empty month) as an explicit state, not a void grid.
 6. **Review grid:** thumbnails with progressive loading (promoted from the spike); **in-grid selection** — quick-select badge + drag-to-multi-select (D9) + a **Select-mode contextual toolbar** (select-all-month / clear); selected-state encoding (checkmark + dim, ≥44pt); the **tally + export grouped as one glass region** with scroll-edge legibility; **Dynamic Type + VoiceOver labels/actions/section-summary + Reduce-Transparency built in**, `performAccessibilityAudit()` per screen. A first **`docs/design/` UI-spec draft** is written here, before/with the grid (spike-then-document, D27).
-7. **Expand view:** zoom navigation destination (D10); Reduce Motion cross-fade; post-condition tests — destination correct, scroll restored, selection preserved (D22). *(Within-overlay swipe stays deferred until the open question is decided — design it then.)*
+7. **Expand view + swipe-and-select:** zoom navigation destination (D10); Reduce Motion cross-fade; **swipe left/right between photos and select in place** (load-bearing for the picking model; the spike settles which photo we return to); post-condition tests — destination correct, scroll restored, selection preserved (D22).
 8. **Long-scan indicator (minimal):** a simple determinate/indeterminate fetch+thumbnail-load indicator. *(The full cancelable curate-while-scanning surface, D12, moves to Phase 4 with the quality filter it actually serves.)*
 9. **Persistence + lifecycle:** debounced selection snapshot + SwiftData `CurationSession` (don't-lose-picks — essential); **establish a SwiftData migration/versioning approach here** since the schema evolves into Phase 4. Cross-launch scroll restoration + background flush + **library-change reconciliation** (prune selection when assets vanish, refresh fetch on resume, consuming the Phase 1 observer) land late in this phase — robustness, after the loop works.
 10. **Album export (D19):** create-or-find by stored id (recreate if deleted) + dupe guard + date sort; typed error model + partial-failure handling; a success/idempotence confirmation ("Updated 2025 Yearbook: added 12, now 187").
@@ -141,11 +155,14 @@ The screens and interactions that need a Paper design, tagged by the phase/versi
 6. **Export-album naming / selection** — name the new album ("2025 Yearbook") or pick an existing one to update. The album name is the only metadata that travels, so this is a real first-run step, not an afterthought.
 
 ### Review — the core loop *(v1)*
-7. **Review grid** — month-sectioned thumbnail grid; the make-or-break screen. The per-month section header (month label + soft target "March: 4 / 15") is part of this — a label, not a separate screen (D5).
-8. **Selection affordances** — quick-select badge per cell; selected-state encoding (checkmark + dim, ≥44pt, never colour-alone).
+
+> **The picking interaction is the make-or-break of the whole app and is validated first in the Phase 0 spike (see ★ there).** Model: two-tier triage — grid for obvious calls, full-screen for borderline. Items 7–11 below carry the resolved design; the spike settles the tap mapping, thumbnail density, badge target, and full-screen swipe+select before they're built.
+
+7. **Review grid** — month-sectioned thumbnail grid; the make-or-break screen. **Default ~3 columns on iPhone (~128pt — large enough to judge obvious calls), pinch-adjustable density** (more on iPad). The per-month section header (month label + soft target "March: 4 / 15") is part of this — a label, not a separate screen (D5).
+8. **Selection affordances** — quick-select badge per cell, with a **≥44pt hit area** (small glyph, large touch target — effectively the whole corner) so selecting is fast and doesn't mis-fire while scrolling; selected-state encoding (checkmark + dim, never colour-alone). *(Tap mapping — badge-select + cell-opens vs whole-cell-select — is resolved by the spike.)*
 9. **Select-mode contextual toolbar** — batch operators essential at year scale: Select-all-this-month, Deselect-month, Clear-selection, with a live count (Photos pattern).
 10. **Running tally / target progress** — always-visible total ("147 / 200"); **grouped with the export action into a single glass region** (no glass-on-glass), legibility over photos guaranteed by the scroll-edge effect, with a designed Dynamic-Type reflow at AX sizes.
-11. **Expand / full-screen inspection** — the zoom-destination detail view; progressive thumbnail→full-res.
+11. **Expand / full-screen inspection + swipe-and-select** — the zoom-destination detail view; progressive thumbnail→full-res; **swipe left/right between photos and select in place**, so "open to decide" is itself a fast multi-select path (load-bearing for the two-tier picking model, not a dead-end). *(Which photo we land back on is resolved in the spike.)*
 12. **Fetch / load indicator (minimal)** — simple determinate/indeterminate state while fetching the range and loading thumbnails. *(The full curate-while-scanning surface is deferred, item 23.)*
 
 ### Export *(v1)*
@@ -169,13 +186,12 @@ The screens and interactions that need a Paper design, tagged by the phase/versi
 22. **App icon** — distinctive (the name is opaque); on iOS 26 a layered Icon Composer deliverable with light/dark/clear/tinted variants. App Store screenshots must reflect the Liquid Glass UI.
 
 ### Deferred *(design when the feature lands)*
-23. **Within-overlay swipe** *(decision-blocked)* — left/right between photos in the expand view, and which photo we land back on. Currently an open question; **decide during the slice**, design then — the core loop works without it.
-24. **Full long-scan progress** *(Phase 4, with the quality filter)* — determinate count, cancelable, curate-while-scanning (D12).
-25. **Quality filter toggle + inspectable hidden set** *(Phase 4)* — off-by-default toggle in setup; a browsable "Hidden: 312 — review" view so nothing is silently lost (D11).
-26. **Named-locations management** *(v1.1)* — list/create/edit named locations.
-27. **Map pin + radius editor** *(v1.1)* — drop a pin, adjust radius (`MKCircle`), name it; EXIF-based, no location permission (D7).
-28. **Cluster-suggestion confirmation** *(v1.1)* — "name this frequent cluster?", human-confirmed, dismissible.
-29. **Location buckets + "no location" bucket** *(v1.1)* — bucketed review entry points, always including no-GPS.
+23. **Full long-scan progress** *(Phase 4, with the quality filter)* — determinate count, cancelable, curate-while-scanning (D12).
+24. **Quality filter toggle + inspectable hidden set** *(Phase 4)* — off-by-default toggle in setup; a browsable "Hidden: 312 — review" view so nothing is silently lost (D11).
+25. **Named-locations management** *(v1.1)* — list/create/edit named locations.
+26. **Map pin + radius editor** *(v1.1)* — drop a pin, adjust radius (`MKCircle`), name it; EXIF-based, no location permission (D7).
+27. **Cluster-suggestion confirmation** *(v1.1)* — "name this frequent cluster?", human-confirmed, dismissible.
+28. **Location buckets + "no location" bucket** *(v1.1)* — bucketed review entry points, always including no-GPS.
 
 ## Ordering at a glance
 
