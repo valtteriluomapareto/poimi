@@ -13,6 +13,7 @@
 
 import Observation
 import Photos
+import UIKit
 
 @MainActor
 @Observable
@@ -30,6 +31,15 @@ final class SpikeModel {
     /// The fetched slice (throwaway flat array — see SpikeLibrary).
     private(set) var assets: [PHAsset] = []
     private(set) var isFetching = false
+
+    /// `localIdentifier` → `PHAsset` index for the current slice. The render layer
+    /// is typed on `id: String` (never `PHAsset`, per D17/§2), so this throwaway
+    /// tier resolves ids back to live assets for the PhotoKit image loads. In the
+    /// real app the actor owns this resolution; here it's a plain dictionary.
+    private var assetsByID: [String: PHAsset] = [:]
+
+    /// Ordered ids of the slice — the value snapshot the grid/pager render over.
+    var assetIDs: [String] { assets.map(\.localIdentifier) }
 
     /// In-memory selection — the source of truth, mutated instantly on tap (D15).
     /// This `Set<String>` shape is the one piece of "data" the real app keeps.
@@ -65,20 +75,22 @@ final class SpikeModel {
         // it simple. (The real app does this off the main actor.)
         let fetched = SpikeLibrary.fetchImageAssets(from: start, to: end)
         assets = fetched
+        assetsByID = Dictionary(
+            fetched.map { ($0.localIdentifier, $0) },
+            uniquingKeysWith: { first, _ in first })
         // Drop any stale selection that isn't in the new slice.
         let validIDs = Set(fetched.map(\.localIdentifier))
         selection.formIntersection(validIDs)
         isFetching = false
     }
 
-    // MARK: - Selection
+    // MARK: - Selection (id-keyed, matching the render-layer closures)
 
-    func isSelected(_ asset: PHAsset) -> Bool {
-        selection.contains(asset.localIdentifier)
+    func isSelected(_ id: String) -> Bool {
+        selection.contains(id)
     }
 
-    func toggle(_ asset: PHAsset) {
-        let id = asset.localIdentifier
+    func toggle(_ id: String) {
         if selection.contains(id) {
             selection.remove(id)
         } else {
@@ -92,6 +104,23 @@ final class SpikeModel {
 
     var selectedAssets: [PHAsset] {
         assets.filter { selection.contains($0.localIdentifier) }
+    }
+
+    // MARK: - Image loads (resolve id → live PHAsset for the render layer)
+
+    /// Thumbnail for `id` via the caching manager. Resolves the id to the live
+    /// `PHAsset` here in the throwaway tier so the render views never touch one.
+    func thumbnail(id: String, using imageManager: ThumbnailImageManager) async -> UIImage? {
+        guard let asset = assetsByID[id] else { return nil }
+        return await imageManager.thumbnail(for: asset)
+    }
+
+    /// Progressive full-res stream for `id`, resolved to the live `PHAsset` here.
+    func fullImageStream(id: String) -> AsyncStream<UIImage> {
+        guard let asset = assetsByID[id] else {
+            return AsyncStream { $0.finish() }
+        }
+        return FullImageLoader.images(for: asset)
     }
 
     // MARK: - Export

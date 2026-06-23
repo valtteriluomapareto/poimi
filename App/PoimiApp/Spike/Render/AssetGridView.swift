@@ -9,24 +9,32 @@
 //  `ThumbnailImageManager` prefetch window from the visible range.
 //
 //  This is the salvageable tier (D1). It deliberately knows nothing about how the
-//  assets/selection are sourced — that's injected — so it promotes cleanly.
+//  assets/selection are sourced — that's injected as plain `id: String` values
+//  (localIdentifiers) plus closures, never a live `[PHAsset]` (D17/§2). So it is
+//  `Sendable`-value-shaped and promotes behind the protocol seam with no type
+//  substitution pass — the `assetIDs` become an `AssetRef`-id snapshot in Phase 1.
 //
 //  Tap mapping (spike): badge tap → toggle select; cell tap → open full-screen.
 //  This is one of the two mappings the ★ spike pressure-tests on a real library.
 
-import Photos
 import SwiftUI
+import UIKit
 
 struct AssetGridView: View {
-    let assets: [PHAsset]
-    let imageManager: ThumbnailImageManager
+    /// Ordered `localIdentifier`s of the slice — the value snapshot the grid
+    /// renders. No `PHAsset` crosses into the view tier.
+    let assetIDs: [String]
+
+    /// Thumbnail load by id. Backed by `ThumbnailImageManager` in the caller;
+    /// the closure owns the PhotoKit access so the view stays value-shaped.
+    let load: (String) async -> UIImage?
 
     /// Selection set membership and toggle, owned by the caller (in-memory `Set`).
-    let isSelected: (PHAsset) -> Bool
-    let toggleSelection: (PHAsset) -> Void
+    let isSelected: (String) -> Bool
+    let toggleSelection: (String) -> Void
 
     /// Opening a cell full-screen — the caller pushes the pager onto the stack.
-    let openAsset: (PHAsset) -> Void
+    let openAsset: (String) -> Void
 
     /// Namespace for the zoom matched-transition source/destination pairing.
     let zoomNamespace: Namespace.ID
@@ -51,9 +59,9 @@ struct AssetGridView: View {
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: spacing) {
-                ForEach(assets, id: \.localIdentifier) { asset in
-                    cell(for: asset)
-                        .id(asset.localIdentifier)
+                ForEach(assetIDs, id: \.self) { id in
+                    cell(for: id)
+                        .id(id)
                 }
             }
             .scrollTargetLayout()
@@ -76,19 +84,19 @@ struct AssetGridView: View {
     }
 
     @ViewBuilder
-    private func cell(for asset: PHAsset) -> some View {
+    private func cell(for id: String) -> some View {
         ThumbnailCell(
-            asset: asset,
-            isSelected: isSelected(asset),
-            imageManager: imageManager
+            id: id,
+            isSelected: isSelected(id),
+            load: load
         )
         // Source for the zoom transition, keyed by localIdentifier (D10).
-        .matchedTransitionSource(id: asset.localIdentifier, in: zoomNamespace)
+        .matchedTransitionSource(id: id, in: zoomNamespace)
         // Whole-cell tap → open full-screen (this mapping is one of the two the
         // ★ spike compares; the other is whole-cell-tap → select).
         .onTapGesture {
-            scrollAnchorID = asset.localIdentifier
-            openAsset(asset)
+            scrollAnchorID = id
+            openAsset(id)
         }
         // Badge corner tap → toggle selection. The 44pt badge sits bottom-trailing;
         // a high-priority tap there beats the cell-open tap so the badge wins.
@@ -96,7 +104,7 @@ struct AssetGridView: View {
             Color.clear
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
-                .onTapGesture { toggleSelection(asset) }
+                .onTapGesture { toggleSelection(id) }
         }
     }
 }

@@ -2,21 +2,30 @@
 //  ThumbnailCell.swift
 //  PoimiApp — Spike render layer
 //
-//  RENDER LAYER — promotable. A single grid cell: loads its thumbnail via the
-//  `ThumbnailImageManager`, cancels on recycle (`.task(id:)`), and renders the
-//  selection affordance (redundant encoding: checkmark badge + dim, per D9). The
-//  cell's *shape* (square) and the badge hit target (≥44pt) are spike-tunable.
+//  RENDER LAYER — promotable. A single grid cell: loads its thumbnail via an
+//  injected `load(id:)` closure, cancels on recycle (`.task(id:)`), and renders
+//  the selection affordance (redundant encoding: checkmark badge + dim, per D9).
+//  The cell's *shape* (square) and the badge hit target (≥44pt) are spike-tunable.
+//
+//  Typed on `id: String` (localIdentifier) + closures — never on `PHAsset` — so
+//  it stays `Sendable`-value-shaped and lifts behind the protocol seam in Phase 1
+//  with no type substitution (D17/§2: a live `PHAsset` never crosses to the view).
+//  Actual PhotoKit access lives inside `ThumbnailImageManager`.
 //
 //  Not throwaway: this is the salvageable tier.
 
-import Photos
 import SwiftUI
+import UIKit
 
 /// One photo cell in the review grid.
 struct ThumbnailCell: View {
-    let asset: PHAsset
+    /// The asset's `localIdentifier` — the only identity the view tier carries.
+    let id: String
     let isSelected: Bool
-    let imageManager: ThumbnailImageManager
+
+    /// Inject the thumbnail load. The closure owns the `PHAsset` / PhotoKit access
+    /// (it's backed by `ThumbnailImageManager`); the view stays value-shaped.
+    let load: (String) async -> UIImage?
 
     @State private var image: UIImage?
 
@@ -49,9 +58,9 @@ struct ThumbnailCell: View {
         .aspectRatio(1, contentMode: .fit)   // square cells — scan faster
         // `.task(id:)` reloads when the cell is recycled onto a new asset and
         // cancels the in-flight request for the previous asset.
-        .task(id: asset.localIdentifier) {
+        .task(id: id) {
             image = nil
-            image = await imageManager.thumbnail(for: asset)
+            image = await load(id)
         }
     }
 

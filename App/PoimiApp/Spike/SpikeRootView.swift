@@ -109,10 +109,24 @@ private struct DeniedView: View {
 private struct ReviewFlow: View {
     @Bindable var model: SpikeModel
 
-    // Default range: this calendar year so the sim's sample photos fall in it.
-    @State private var startDate = Calendar.current.date(
-        from: DateComponents(year: Calendar.current.component(.year, from: .now), month: 1, day: 1)) ?? .now
-    @State private var endDate = Date.now
+    // Default range: the prior full calendar year (Jan 1 – Dec 31 of last year),
+    // so Part B's first run lands on a real, complete year of photos rather than
+    // a few months of the current year-to-date. The author can still adjust the
+    // picker.
+    @State private var startDate = Self.priorYearStart
+    @State private var endDate = Self.priorYearEnd
+
+    private static var priorYearStart: Date {
+        let priorYear = Calendar.current.component(.year, from: .now) - 1
+        return Calendar.current.date(
+            from: DateComponents(year: priorYear, month: 1, day: 1)) ?? .now
+    }
+
+    private static var priorYearEnd: Date {
+        let priorYear = Calendar.current.component(.year, from: .now) - 1
+        return Calendar.current.date(
+            from: DateComponents(year: priorYear, month: 12, day: 31)) ?? .now
+    }
 
     @State private var path: [String] = []          // pushed asset localIdentifiers
     @State private var scrollAnchorID: String?       // scroll-restore anchor
@@ -184,11 +198,11 @@ private struct ReviewFlow: View {
             .frame(maxHeight: .infinity)
         } else {
             AssetGridView(
-                assets: model.assets,
-                imageManager: imageManager,
+                assetIDs: model.assetIDs,
+                load: { id in await model.thumbnail(id: id, using: imageManager) },
                 isSelected: { model.isSelected($0) },
                 toggleSelection: { model.toggle($0) },
-                openAsset: { asset in path.append(asset.localIdentifier) },
+                openAsset: { id in path.append(id) },
                 zoomNamespace: zoomNamespace,
                 scrollAnchorID: $scrollAnchorID
             )
@@ -212,9 +226,11 @@ private struct ReviewFlow: View {
             set: { scrollAnchorID = $0 }
         )
         AssetPagerView(
-            assets: model.assets,
+            assetIDs: model.assetIDs,
+            load: { id in model.fullImageStream(id: id) },
             isSelected: { model.isSelected($0) },
             toggleSelection: { model.toggle($0) },
+            dismiss: { if !path.isEmpty { path.removeLast() } },
             currentID: binding
         )
         .navigationTransition(.zoom(sourceID: scrollAnchorID ?? assetID, in: zoomNamespace))
