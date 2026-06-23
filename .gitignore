@@ -5,6 +5,14 @@
 ## User settings
 xcuserdata/
 
+## Xcode / SPM per-user state. The .xcodeproj, .xcworkspace, and Package.swift ARE
+## committed (they are the project spec); only per-user IDE state is ignored.
+*.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+.swiftpm/
+DerivedData/
+
 ## Obj-C/Swift specific
 *.hmap
 
