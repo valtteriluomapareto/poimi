@@ -209,9 +209,8 @@ private struct ReviewFlow: View {
             .frame(maxHeight: .infinity)
         } else {
             AssetGridView(
-                assetIDs: model.assetIDs,
+                dayGroups: model.dayGroups,
                 load: { id in await model.thumbnail(id: id, using: imageManager) },
-                aspectRatio: { model.aspectRatio(id: $0) },
                 isSelected: { model.isSelected($0) },
                 toggleSelection: { model.toggle($0) },
                 openAsset: { id in path.append(id) },

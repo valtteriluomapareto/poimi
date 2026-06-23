@@ -5,34 +5,26 @@
 //  RENDER LAYER — promotable. A single grid cell: loads its thumbnail via an
 //  injected `load(id:)` closure, cancels on recycle (`.task(id:)`), and renders
 //  the selection affordance (redundant encoding: checkmark badge + dim, per D9).
-//  The cell's *shape* (square vs aspect — Fix 3) and the badge hit target (≥44pt)
-//  are spike-tunable so the ★ "square scans faster vs aspect shows the real shot"
-//  question can be felt on a real library.
+//
+//  Cell shape is **square** (resolved by the spike, Part B — "square is good";
+//  square scans fastest). The earlier square/aspect A/B and its dead aspect path
+//  were removed once the question was settled.
 //
 //  Typed on `id: String` (localIdentifier) + closures — never on `PHAsset` — so
 //  it stays `Sendable`-value-shaped and lifts behind the protocol seam in Phase 1
 //  with no type substitution (D17/§2: a live `PHAsset` never crosses to the view).
-//  Actual PhotoKit access lives inside `ThumbnailImageManager`; the natural aspect
-//  ratio is injected as a plain `CGFloat?`.
+//  Actual PhotoKit access lives inside `ThumbnailImageManager`.
 //
 //  Not throwaway: this is the salvageable tier.
 
 import SwiftUI
 import UIKit
 
-/// One photo cell in the review grid.
+/// One photo cell in the review grid. Fixed 1:1 square.
 struct ThumbnailCell: View {
     /// The asset's `localIdentifier` — the only identity the view tier carries.
     let id: String
     let isSelected: Bool
-
-    /// Square (fixed 1:1) or aspect (the asset's natural ratio so framing isn't
-    /// cropped) — the ★ A/B (Fix 3).
-    let shape: CellShape
-
-    /// Natural aspect ratio (width / height). `nil` → fall back to square so an
-    /// unknown ratio never collapses the cell.
-    let aspectRatio: CGFloat?
 
     /// Inject the thumbnail load. The closure owns the `PHAsset` / PhotoKit access
     /// (it's backed by `ThumbnailImageManager`); the view stays value-shaped.
@@ -40,41 +32,19 @@ struct ThumbnailCell: View {
 
     @State private var image: UIImage?
 
-    /// The aspect ratio the cell lays out at: 1:1 for square, the natural ratio
-    /// (clamped to a sane range) for aspect.
-    private var layoutAspect: CGFloat {
-        switch shape {
-        case .square:
-            return 1
-        case .aspect:
-            guard let aspectRatio, aspectRatio.isFinite, aspectRatio > 0 else { return 1 }
-            // Clamp to keep extreme panoramas/strips from blowing out a grid row.
-            return min(2.2, max(0.45, aspectRatio))
-        }
-    }
-
-    /// Square crops to fill; aspect fits the whole frame (no crop — that's the point).
-    private var contentFill: Bool { shape == .square }
-
     var body: some View {
         ZStack {
             Color(.secondarySystemBackground)
             if let image {
-                if contentFill {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                }
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
             } else {
                 ProgressView()
                     .controlSize(.small)
             }
         }
-        .aspectRatio(layoutAspect, contentMode: .fit)
+        .aspectRatio(1, contentMode: .fit)   // fixed square (resolved)
         .clipped()
         .overlay {
             if isSelected {
