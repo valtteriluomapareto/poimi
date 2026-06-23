@@ -39,7 +39,10 @@ final class SpikeModel {
     private var assetsByID: [String: PHAsset] = [:]
 
     /// Ordered ids of the slice — the value snapshot the grid/pager render over.
-    var assetIDs: [String] { assets.map(\.localIdentifier) }
+    /// **Stored**, not computed: set once in `fetch(...)` so the render layer's
+    /// `.onChange(of: assetIDs)` and per-access reads don't re-`map` the whole
+    /// slice on every access / scroll tick (a per-event O(n) storm at scale).
+    private(set) var assetIDs: [String] = []
 
     /// In-memory selection — the source of truth, mutated instantly on tap (D15).
     /// This `Set<String>` shape is the one piece of "data" the real app keeps.
@@ -88,12 +91,15 @@ final class SpikeModel {
         // it simple. (The real app does this off the main actor.)
         let fetched = SpikeLibrary.fetchImageAssets(from: start, to: end)
         assets = fetched
+        // Materialize the id order + id → asset map once here, so the render layer
+        // reads a stable stored snapshot instead of re-mapping the slice per access.
+        let ids = fetched.map(\.localIdentifier)
+        assetIDs = ids
         assetsByID = Dictionary(
-            fetched.map { ($0.localIdentifier, $0) },
+            zip(ids, fetched),
             uniquingKeysWith: { first, _ in first })
         // Drop any stale selection that isn't in the new slice.
-        let validIDs = Set(fetched.map(\.localIdentifier))
-        selection.formIntersection(validIDs)
+        selection.formIntersection(Set(ids))
         isFetching = false
     }
 

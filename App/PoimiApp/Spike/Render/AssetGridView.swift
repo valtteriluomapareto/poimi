@@ -87,12 +87,30 @@ struct AssetGridView: View {
 
     /// ★ A/B controls (default to the plan's mapping + square shape).
     @State private var tapMapping: TapMapping = .badgeSelect
+    /// Cell shape (Fix 4). `square`/`aspect` is a plain parameter on `ThumbnailCell`,
+    /// so flipping it does **not** change any cell's identity (the cells stay keyed
+    /// by `.id(id)`) — no subtree teardown, no `onAppear`/`onDisappear` churn.
+    /// `aspect` does change row heights → a `LazyVGrid` relayout; any visibility
+    /// changes that produces are coalesced by `scheduleRecomputeWindow()` into one
+    /// window recompute per runloop turn, so the relayout can't re-trigger a churn
+    /// storm under `.scrollPosition(id:)`.
     @State private var cellShape: CellShape = .square
 
     /// Visible-id tracking for the scroll-driven prefetch window (Fix 2). Each cell
     /// reports its appear/disappear; the union is the visible set from which we
     /// compute the windowed slice (visible range ± `windowRowMargin` rows).
     @State private var visibleIDs: Set<String> = []
+
+    /// `id → index` map for the current slice, built **once** when `assetIDs`
+    /// changes (Fix 2). `recomputeWindow` reuses it instead of rebuilding an O(n)
+    /// dictionary over the whole slice on every visible-set change / scroll tick.
+    @State private var indexByID: [String: Int] = [:]
+
+    /// Coalescing flag for `recomputeWindow` (Fix 2). A burst of cell
+    /// appear/disappear (a toggle, a fast scroll) all flips this true; the first
+    /// flip schedules a single `Task { @MainActor }` that does one recompute per
+    /// runloop turn, instead of one recompute per individual mutation.
+    @State private var recomputeScheduled = false
 
     private let spacing: CGFloat = 2
     private let minColumns = 2
@@ -159,23 +177,46 @@ struct AssetGridView: View {
                 }
                 .onEnded { _ in pinchBaseline = columnCount }
         )
-        // Prime the head of the slice on first layout so the first screen is
-        // cached before any cell's `onAppear` has reported a visible id.
-        .onAppear { recomputeWindow() }
+        // Build the id → index map once for the initial slice, and prime the head
+        // of the slice on first layout so the first screen is cached before any
+        // cell's `onAppear` has reported a visible id.
+        .onAppear {
+            if indexByID.isEmpty { rebuildIndex() }
+            scheduleRecomputeWindow()
+        }
         // Recompute the prefetch window whenever the visible set or the column
         // count changes (column count changes how many rows the margin spans).
-        .onChange(of: visibleIDs) { recomputeWindow() }
-        .onChange(of: columnCount) { recomputeWindow() }
+        // Coalesced: a burst of appear/disappear (a toggle, a fast scroll) does at
+        // most one recompute per runloop turn (Fix 2).
+        .onChange(of: visibleIDs) { scheduleRecomputeWindow() }
+        .onChange(of: columnCount) { scheduleRecomputeWindow() }
         .onChange(of: assetIDs) {
-            // New slice: drop stale visibility and re-window from scratch.
-            visibleIDs = visibleIDs.intersection(assetIDs)
-            recomputeWindow()
+            // New slice: rebuild the id → index map once, drop stale visibility,
+            // and re-window from scratch.
+            rebuildIndex()
+            visibleIDs = visibleIDs.intersection(indexByID.keys)
+            scheduleRecomputeWindow()
         }
     }
 
-    @ViewBuilder
+    /// One stable cell structure for **both** tap mappings (Fix 1).
+    ///
+    /// The earlier version `switch`-ed on `tapMapping` and returned a different
+    /// modifier chain per case, which compiles to `_ConditionalContent`. Flipping
+    /// the toggle changed every visible cell's view identity, tearing the whole
+    /// subtree down and rebuilding it — so every cell's `.onAppear`/`.onDisappear`
+    /// (attached here, on `base`) fired, churning `visibleIDs`, which re-triggered
+    /// `.onChange(of: visibleIDs)` → `recomputeWindow()` for the entire visible
+    /// range. At thousands of assets that froze the toggle.
+    ///
+    /// Now the modifier chain is **structurally identical** regardless of
+    /// `tapMapping` — only the closures' behaviour branches. The tap gesture, the
+    /// long-press, and the badge tap zone are *always* attached; each is a no-op in
+    /// the mode where it doesn't apply. So toggling the tap mapping does not change
+    /// view identity, does not re-run `onAppear`/`onDisappear`, and does not churn
+    /// `visibleIDs`.
     private func cell(for id: String) -> some View {
-        let base = ThumbnailCell(
+        ThumbnailCell(
             id: id,
             isSelected: isSelected(id),
             shape: cellShape,
@@ -184,71 +225,96 @@ struct AssetGridView: View {
         )
         // Source for the zoom transition, keyed by localIdentifier (D10).
         .matchedTransitionSource(id: id, in: zoomNamespace)
+        // Whole-cell tap: opens in mapping (A), selects in mapping (B). Branching
+        // the action — not the view tree — keeps identity stable across the toggle.
+        .onTapGesture {
+            switch tapMapping {
+            case .badgeSelect:
+                scrollAnchorID = id
+                openAsset(id)
+            case .cellSelect:
+                toggleSelection(id)
+            }
+        }
+        // Long-press opens in mapping (B); inert in mapping (A) (the cell tap opens
+        // there). Always attached so the toggle doesn't add/remove a gesture.
+        .onLongPressGesture(minimumDuration: 0.3) {
+            guard tapMapping == .cellSelect else { return }
+            scrollAnchorID = id
+            openAsset(id)
+        }
+        // 44pt badge zone bottom-trailing — always present; a tap there beats the
+        // whole-cell tap so the badge wins. It always toggles selection: in mapping
+        // (A) that's the badge's job; in mapping (B) the whole cell selects too, so
+        // a corner tap selecting is consistent. (No identity swap on toggle.)
+        .overlay(alignment: .bottomTrailing) {
+            Color.clear
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+                .onTapGesture { toggleSelection(id) }
+        }
         // Track visibility for the scroll-driven prefetch window (Fix 2).
         .onAppear { visibleIDs.insert(id) }
         .onDisappear { visibleIDs.remove(id) }
-
-        switch tapMapping {
-        case .badgeSelect:
-            // (A) Whole-cell tap → open; badge corner tap → toggle selection.
-            base
-                .onTapGesture {
-                    scrollAnchorID = id
-                    openAsset(id)
-                }
-                // 44pt badge zone bottom-trailing; a high-priority tap there beats
-                // the cell-open tap so the badge wins.
-                .overlay(alignment: .bottomTrailing) {
-                    Color.clear
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                        .onTapGesture { toggleSelection(id) }
-                }
-        case .cellSelect:
-            // (B) Whole-cell tap → toggle selection; long-press → open full-screen
-            // (inspect via long-press, since pinch is taken by density). The badge
-            // still renders (redundant select encoding) but isn't its own tap zone
-            // here — the whole cell selects.
-            base
-                .onTapGesture { toggleSelection(id) }
-                .onLongPressGesture(minimumDuration: 0.3) {
-                    scrollAnchorID = id
-                    openAsset(id)
-                }
-        }
     }
 
     // MARK: Prefetch window (Fix 2)
 
+    /// Rebuild the `id → index` map for the current slice. Called once when
+    /// `assetIDs` changes (and on first appear) — not per scroll tick — so the
+    /// O(n) build happens once per slice instead of once per event.
+    private func rebuildIndex() {
+        indexByID = Dictionary(
+            uniqueKeysWithValues: assetIDs.enumerated().map { ($1, $0) })
+    }
+
+    /// Coalesce recompute requests: a burst of cell appear/disappear (a toggle, a
+    /// fast scroll) sets the flag once and schedules a single `recomputeWindow()`
+    /// on the next runloop turn, so we do at most one recompute per turn instead of
+    /// one per individual `visibleIDs` mutation.
+    private func scheduleRecomputeWindow() {
+        guard !recomputeScheduled else { return }
+        recomputeScheduled = true
+        Task { @MainActor in
+            recomputeScheduled = false
+            recomputeWindow()
+        }
+    }
+
     /// Compute the windowed slice — visible index range expanded by
     /// `windowRowMargin` rows on each side — and hand it to the caller to prefetch.
     /// Driven from the visible set, so it tracks the scroll and exercises the
-    /// `ThumbnailImageManager` windowing under load.
+    /// `ThumbnailImageManager` windowing under load. Reuses the cached `indexByID`
+    /// (built once per slice) so this is O(visible), not O(slice), per call.
     private func recomputeWindow() {
-        guard !assetIDs.isEmpty else {
+        let count = assetIDs.count
+        guard count > 0 else {
             updateWindow([])
             return
         }
         guard !visibleIDs.isEmpty else {
             // Before any cell has reported (first layout), prime the head of the
             // slice so the first screen is cached without waiting for `onAppear`.
-            let headCount = min(assetIDs.count, columnCount * (windowRowMargin + 1) * 2)
+            let headCount = min(count, columnCount * (windowRowMargin + 1) * 2)
             updateWindow(Array(assetIDs.prefix(headCount)))
             return
         }
 
-        // Map the visible ids to their indices, then expand by the row margin.
-        let indexByID = Dictionary(
-            uniqueKeysWithValues: assetIDs.enumerated().map { ($1, $0) })
-        let visibleIndices = visibleIDs.compactMap { indexByID[$0] }
-        guard let minVisible = visibleIndices.min(),
-              let maxVisible = visibleIndices.max() else {
+        // Reuse the cached id → index map; only the (small) visible set is scanned.
+        var minVisible = Int.max
+        var maxVisible = Int.min
+        for id in visibleIDs {
+            guard let idx = indexByID[id] else { continue }
+            if idx < minVisible { minVisible = idx }
+            if idx > maxVisible { maxVisible = idx }
+        }
+        guard minVisible <= maxVisible else {
             updateWindow([])
             return
         }
         let margin = columnCount * windowRowMargin
         let lower = max(0, minVisible - margin)
-        let upper = min(assetIDs.count - 1, maxVisible + margin)
+        let upper = min(count - 1, maxVisible + margin)
         updateWindow(Array(assetIDs[lower...upper]))
     }
 }
