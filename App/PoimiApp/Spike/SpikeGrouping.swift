@@ -212,7 +212,7 @@ enum SpikeGrouping {
 
     private static func singleDayTitle(_ day: Day, calendar: Calendar) -> String {
         guard day.isDated, let date = day.date(in: calendar) else { return "Unknown date" }
-        return Self.dayFormatter(calendar: calendar).string(from: date)   // "Sat 5 Jul"
+        return Self.dayFormatter.string(from: date)   // "Sat 5 Jul"
     }
 
     /// Range title: collapses to a single day when the run is one day, else
@@ -223,49 +223,36 @@ enum SpikeGrouping {
         }
         guard last.isDated, let lastDate = last.date(in: calendar) else {
             // Mixed/undated run — label by what we can.
-            return Self.dayFormatter(calendar: calendar).string(from: firstDate)
+            return Self.dayFormatter.string(from: firstDate)
         }
         if first == last {
-            return Self.dayFormatter(calendar: calendar).string(from: firstDate)
+            return Self.dayFormatter.string(from: firstDate)
         }
         if first.month == last.month && first.year == last.year {
             // "16–18 Mar": day-only start, day + month end.
-            let startDay = Self.dayNumberFormatter(calendar: calendar).string(from: firstDate)
-            let endDayMonth = Self.dayMonthFormatter(calendar: calendar).string(from: lastDate)
-            return "\(startDay)–\(endDayMonth)"
+            return "\(Self.dayNumberFormatter.string(from: firstDate))–\(Self.dayMonthFormatter.string(from: lastDate))"
         }
         // Crosses a month (or year) boundary: spell both ends ("29 Dec – 2 Jan").
-        let start = Self.dayMonthFormatter(calendar: calendar).string(from: firstDate)
-        let end = Self.dayMonthFormatter(calendar: calendar).string(from: lastDate)
-        return "\(start) – \(end)"
+        return "\(Self.dayMonthFormatter.string(from: firstDate)) – \(Self.dayMonthFormatter.string(from: lastDate))"
     }
 
-    // MARK: - Formatters (cached; the spike re-evaluates the label feel)
+    // MARK: - Formatters
+
+    // Built once (`DateFormatter` construction + template parsing is expensive). The
+    // spike groups with `.current`, so the formatters use the autoupdating
+    // locale/calendar; the `calendar` parameter still drives bucketing + gap math.
 
     /// "Sat 5 Jul" — weekday + day + abbreviated month, no quota.
-    private static func dayFormatter(calendar: Calendar) -> DateFormatter {
-        let f = DateFormatter()
-        f.calendar = calendar
-        f.locale = .autoupdatingCurrent
-        f.setLocalizedDateFormatFromTemplate("EEE d MMM")
-        return f
-    }
-
+    private static let dayFormatter = makeFormatter("EEE d MMM")
     /// "5 Jul" — day + abbreviated month.
-    private static func dayMonthFormatter(calendar: Calendar) -> DateFormatter {
-        let f = DateFormatter()
-        f.calendar = calendar
-        f.locale = .autoupdatingCurrent
-        f.setLocalizedDateFormatFromTemplate("d MMM")
-        return f
-    }
-
+    private static let dayMonthFormatter = makeFormatter("d MMM")
     /// "16" — day number only (start of a same-month range).
-    private static func dayNumberFormatter(calendar: Calendar) -> DateFormatter {
+    private static let dayNumberFormatter = makeFormatter("d")
+
+    private static func makeFormatter(_ template: String) -> DateFormatter {
         let f = DateFormatter()
-        f.calendar = calendar
         f.locale = .autoupdatingCurrent
-        f.setLocalizedDateFormatFromTemplate("d")
+        f.setLocalizedDateFormatFromTemplate(template)
         return f
     }
 }

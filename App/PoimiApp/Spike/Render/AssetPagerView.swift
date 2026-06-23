@@ -139,6 +139,7 @@ private struct AssetPage: View {
 
             if let image {
                 ZoomableImageView(
+                    pageID: id,
                     image: image,
                     onZoomChanged: { zoomed in
                         if isZoomed != zoomed { isZoomed = zoomed }
@@ -231,6 +232,10 @@ private struct AssetPage: View {
 /// predominantly-vertical-downward drags, so horizontal swipes fall through to the
 /// enclosing `TabView` pager and the photo keeps paging left/right.
 private struct ZoomableImageView: UIViewRepresentable {
+    /// The logical asset id of the page. Zoom resets only when *this* changes (the
+    /// page recycled onto a new asset) — never on a degraded→final upgrade of the
+    /// same asset, which delivers a larger image but must keep the user's zoom.
+    let pageID: String
     let image: UIImage
     /// `true` once zoomed past fit; lets the parent hide the select control + know
     /// the scroll view owns the pan.
@@ -265,7 +270,7 @@ private struct ZoomableImageView: UIViewRepresentable {
         scrollView.addSubview(imageView)
         context.coordinator.imageView = imageView
         context.coordinator.scrollView = scrollView
-        context.coordinator.lastImageSize = image.size
+        context.coordinator.pageID = pageID
 
         // Double-tap to toggle fit ↔ ~3×, centred on the tap point (native).
         let doubleTap = UITapGestureRecognizer(
@@ -287,14 +292,18 @@ private struct ZoomableImageView: UIViewRepresentable {
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
         guard context.coordinator.imageView?.image !== image else { return }
-        // A degraded→final upgrade of the *same* logical asset keeps the same pixel
-        // size; only a genuinely new asset changes it. Reset zoom + relayout only on
-        // a size change, so sharpening in place never throws away the user's zoom.
-        let sizeChanged = context.coordinator.lastImageSize != image.size
+        // A new *page* (the cell recycled onto a different asset) resets zoom + relays
+        // out; a degraded→final upgrade of the *same* page keeps the user's zoom even
+        // though PhotoKit's opportunistic delivery hands us a larger final image.
+        let pageChanged = context.coordinator.pageID != pageID
+        context.coordinator.pageID = pageID
         context.coordinator.imageView?.image = image
-        context.coordinator.lastImageSize = image.size
-        if sizeChanged {
+        if pageChanged {
             scrollView.setZoomScale(1, animated: false)
+            context.coordinator.layoutImage(in: scrollView)
+        } else if scrollView.zoomScale <= scrollView.minimumZoomScale + 0.01 {
+            // Same page, sharper image, user not zoomed: re-fit (a larger final image
+            // changes the aspect-fit content size) without touching their (absent) zoom.
             context.coordinator.layoutImage(in: scrollView)
         }
     }
@@ -308,7 +317,9 @@ private struct ZoomableImageView: UIViewRepresentable {
         weak var scrollView: UIScrollView?
         weak var imageView: UIImageView?
         weak var dismissPan: UIPanGestureRecognizer?
-        var lastImageSize: CGSize = .zero
+        /// The page id currently laid out, to distinguish a new asset (reset zoom)
+        /// from a degraded→final upgrade of the same asset (keep zoom).
+        var pageID: String?
 
         init(parent: ZoomableImageView) {
             self.parent = parent

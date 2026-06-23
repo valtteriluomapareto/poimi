@@ -163,8 +163,14 @@ struct AssetGridView: View {
 
     private func sectionHeader(_ group: AssetDayGroup) -> some View {
         HStack(spacing: 6) {
+            // Tint busy days (their own group, ≥ N) so the author can *see* the
+            // adaptive heuristic at work vs the merged quiet runs while re-evaluating.
+            if group.isBusyDay {
+                Circle().fill(.tint).frame(width: 6, height: 6)
+            }
             Text(group.title)
                 .font(.subheadline.weight(.semibold))
+                .foregroundStyle(group.isBusyDay ? Color.accentColor : Color.primary)
             Text("· \(group.count)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
