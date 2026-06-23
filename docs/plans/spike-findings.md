@@ -20,10 +20,10 @@
 - ✅ **Column density: good** — **3 columns** confirmed for iPhone.
 - ✅ **Scroll-restore: good** — returning from full-screen lands on the right photo, cleanly.
 - ✅ **Badge mis-fire: none** — the 44pt badge zone didn't mis-fire during triage.
-- ⚠️ **iCloud progressive load: too slow** — iCloud-only photos **stay blurry quite long** before sharpening. Phase-2: prefetch full-res for the current + neighbouring pages, and the determinate long-scan surface (D12); some latency is inherent to the iCloud download.
-- 🐞 **Zoomed pan lags badly** — double-tap zoom works, but *panning* the zoomed image has huge lag (unusable). Pager perf bug → **fix**.
-- 🐞 **Pull-down dismiss animation feels weird** → rework toward interactive (carried from session 1).
-- 🔑 **Grouping is needed (key finding).** Going through a whole year on the flat chronological grid is *harder than Apple Photos* — curating needs the **adaptive day-grouping** (busy days stand alone, quiet days merge; see project-phases "Timeline grouping", #6). A flat date slice isn't enough. → **add day-grouping to the spike and re-evaluate the feel.**
+- ⚠️ **iCloud progressive load: too slow** — iCloud-only photos **stay blurry quite long** before sharpening. **Now mitigated (session 3):** the pager prefetches full-res for the current ± 1 page, so a swipe lands on a sharper image sooner. **Some latency is inherent to the iCloud download** — Phase 2 adds the determinate long-scan surface (D12). → **re-feel on-device** (does the neighbour-prefetch take the edge off the blur on a real iCloud library?).
+- 🐞 **Zoomed pan lags badly** — double-tap zoom works, but *panning* the zoomed image had huge lag (unusable). **Now fixed (session 3):** the zoom/pan is rewritten onto a `UIScrollView`-backed zoomable image (native pinch + pan + double-tap at 60/120fps), replacing the SwiftUI `MagnifyGesture` + `offset` approach that caused the lag. → **re-feel on-device** (is the pan smooth now? does pinch still page cleanly at the zoom boundary?).
+- 🐞 **Pull-down dismiss animation feels weird** — **now reworked (session 3):** the dismiss is interactive — the photo tracks the finger downward and scales down, the backdrop fades with drag progress, and release past a threshold dismisses (else springs back). Coexists with the scroll-view zoom (only active at fit scale) and left/right paging. → **re-feel on-device.**
+- 🔑 **Grouping is needed (key finding).** Going through a whole year on the flat chronological grid is *harder than Apple Photos* — curating needs the **adaptive day-grouping** (busy days stand alone, quiet days merge; see project-phases "Timeline grouping", #6). A flat date slice isn't enough. **Now implemented in the spike (session 3):** the grid renders as sectioned day-groups with pinned headers, computed by a pure `SpikeGrouping` function (the precursor to Curation's grouping). → **re-evaluate the feel: does grouping make a year manageable (vs the flat grid / Apple Photos)? Is N = 10/day and the gap rule right?**
 
 ---
 
@@ -47,9 +47,11 @@ control) so both mappings can be felt on the **same real year in one session**:
 - **✅ RESOLVED (Part B, on-device) → (A) Badge select.** Author's verdict: *"the
   select with badge feels better."* Tap-the-badge → select, tap-the-rest → open is the
   chosen mapping. **The #5 primary gate is settled.** (Mapping (B) whole-cell-select +
-  long-press-to-open was tried on the same library and lost.) The runtime A/B toggle
-  has done its job and can be dropped from the harness; the design already carries (A)
-  as canonical (Paper Review grid + styleguide §6).
+  long-press-to-open was tried on the same library and lost.) The design already
+  carries (A) as canonical (Paper Review grid + styleguide §6).
+- **Session 3 cleanup:** the runtime A/B toggle has done its job and is **removed**;
+  badge-select is now **hard-coded** (tap badge → select, tap cell → open). The grid's
+  top "controls" bar is gone with it.
 
 ## Default column count
 
@@ -87,8 +89,9 @@ grid's top bar) to flip cells between:
 
 - **✅ RESOLVED (Part B, on-device) → Square.** Author's verdict: *"square is good."*
   Square is the chosen cell shape. ⚠️ The **Aspect toggle didn't work** on-device (a
-  harness bug — aspect path didn't take); not pursued since square is the decision, so
-  the aspect path can simply be dropped rather than fixed.
+  harness bug — aspect path didn't take); not pursued since square is the decision.
+- **Session 3 cleanup:** the cell-shape toggle **and the dead/broken aspect path are
+  removed**; cells are now **hard-coded square**.
 
 ## Scroll-restore feel
 
@@ -113,6 +116,40 @@ slice was primed once, so the windowing was never exercised under scroll; now it
   placeholders that never fill (window too tight) or memory balloon (window too wide)?
   Is ±2 rows the right margin? Do recycled cells flash the previous photo before the
   new one loads? This is the "tech holds up at scale" half of the gate.
+- Note: the prefetch window now indexes over the **flattened chronological order**
+  across the day-group sections, so windowing still spans section boundaries as you
+  scroll the one flow.
+
+## Timeline grouping (THE key finding)
+
+The headline Part B verdict: the **flat chronological grid makes curating a year
+*harder than Apple Photos*** — the plan's grouping has to be felt.
+
+**✅ Session 3: adaptive day-grouping is now implemented in the spike.**
+
+- **How it's computed** — a **pure function of (capture dates, N)** in the throwaway
+  tier (`SpikeGrouping.groups`), the deterministic precursor to Curation's grouping
+  (project-phases "Timeline grouping (v1)"). It buckets the slice by calendar day
+  (`PHAsset.creationDate`), then walks days in chronological order:
+  - a day with **≥ N = 10** photos → **its own group** ("Sat 5 Jul · 53");
+  - a maximal run of **consecutive days each < N** → **one merged group**
+    ("16–18 Mar · 7");
+  - a run **breaks** on a busy day or a **calendar gap** beyond a small tolerance
+    (default 1 day), so quiet runs stay tight (no "Days 2–40" over an empty month);
+  - label is a single day or a date range + count, **no quota**.
+  It's written PhotoKit-free / main-actor-free (takes `(id, Date?)`, returns value
+  `AssetDayGroup`s), so in Phase 1 it lifts into `Curation` almost verbatim (swap the
+  `(id, Date)` tuples for `AssetRef`s) and gets the property tests the boundary buys.
+- **How it's rendered** — the grid is a `LazyVGrid` with `Section { } header:` and
+  **pinned section headers**, scrolling as one chronological flow; concatenating the
+  groups reproduces the flat slice exactly. The render layer stays value-shaped (ids +
+  `AssetDayGroup` metadata, no `PHAsset`). The scroll-driven prefetch window keeps
+  working across sections (it indexes the flattened order).
+- **TODO (Part B, re-evaluate the feel):** does the day-grouping make a whole year
+  **manageable** (vs the flat grid, vs Apple Photos)? Do events pop out and quiet
+  stretches stay compact? Is **N = 10/day** the right threshold, and is the **1-day gap
+  tolerance** right (too tight → too many tiny runs; too loose → quiet runs span empty
+  stretches)? Are the date-range labels readable at a glance?
 
 ## Full-screen gestures (the open question)
 
@@ -127,13 +164,26 @@ slice was primed once, so the windowing was never exercised under scroll; now it
     left/right; the select control hides while zoomed so it doesn't fight the pan.
   - **Pinch-zoom** → magnify into the current photo (up to 4×), with pan when zoomed;
     releasing below 1× snaps back and re-centers.
-- _(Part B, on-device — author)_ **Pull-down-to-close animation looks a bit weird.**
-  The current fade + threshold dismiss doesn't feel right → rework toward the
-  interactive Photos-style dismiss (the photo tracks the finger and scales down,
-  springs back or dismisses on release). **TODO: rework + re-feel.**
-- TODO (Part B): the rest of the gestures — is 2.5× the right double-tap step? Does
-  pinch fight the page swipe at the zoom boundary? Should select stay visible while
-  zoomed? (Not yet commented.)
+- _(Part B, on-device — author)_ **Pull-down-to-close animation looks a bit weird**, and
+  **zoomed pan lags badly** (unusable). → reworked in session 3.
+- **✅ Session 3 rework (zoom/pan + pull-down).**
+  - **Zoom/pan rewritten to a `UIScrollView`-backed zoomable image**
+    (`ZoomableImageView`, a `UIViewRepresentable`: `UIScrollView` + `UIImageView`).
+    Native pinch + pan + double-tap-to-zoom (fit ↔ ~3×, centred on the tap), running at
+    60/120fps — replacing the SwiftUI `MagnifyGesture` + `offset` that caused the pan
+    lag. It coexists with the `TabView` left/right paging: at fit scale the scroll view
+    doesn't intercept horizontal swipes, so paging still works; once zoomed the scroll
+    view owns the pan.
+  - **Pull-down-to-dismiss is now interactive.** A `UIPanGestureRecognizer` inside the
+    scroll view (active only at fit scale, only for predominantly-vertical-downward
+    drags) drives it: the photo tracks the finger and scales down, the backdrop fades
+    with drag progress, and release past a threshold dismisses (else springs back).
+    Horizontal swipes fall through to the pager; the select control hides while zoomed
+    or mid-drag.
+- TODO (Part B, re-feel on-device): is the **pan smooth now**? Is **3×** the right
+  double-tap step? Does **pinch fight the page swipe** at the zoom boundary? Does the
+  **interactive pull-down feel right** (tracking + scale + spring-back)? Should select
+  stay visible while zoomed?
 
 ## Progressive / iCloud timing
 
@@ -143,9 +193,16 @@ make-or-break "does progressive full-res feel instant" path. The simulator can't
 exercise real iCloud/optimized-storage timing — this needs a device with optimized
 storage on.
 
-- TODO (Part B): does a degraded image appear instantly and sharpen in place? How long
-  to final on cellular vs Wi-Fi for an iCloud-only original? Any blank flashes on fast
-  swipe between photos?
+- **✅ Session 3 mitigation: neighbour-prefetch.** The pager now warms full-res for the
+  **current ± 1 page** (draining each neighbour's degraded→final stream in a cancellable
+  background task, so PhotoKit caches the downloaded original). A swipe should then land
+  on a sharper image sooner instead of starting the long blur from scratch. **Some
+  latency is inherent to the iCloud download** — Phase 2 adds the determinate long-scan
+  surface (D12) for the cases where the download genuinely takes a while.
+- TODO (Part B, re-feel on-device): does a degraded image appear instantly and sharpen
+  in place? With the neighbour-prefetch, **does swiping ± 1 now show a sharper image
+  sooner** on a real iCloud library? How long to final on cellular vs Wi-Fi for an
+  iCloud-only original? Any blank flashes on fast swipe?
 
 ## Lazy-adapter-vs-flat-array numbers (D17)
 
@@ -207,10 +264,15 @@ the gestures — Part B runs on the author's device against a real year.
    recovery is Phase 2). Without full access it stops on a "not granted" screen.
 6. **Exercise the loop:** the date range defaults to the **prior full calendar year**
    (Jan 1 – Dec 31 of last year) so the first run lands on a real, complete year — tap
-   **Fetch slice** (or adjust the picker), triage in the grid (pinch density, tap to
-   select/open), try the full-screen gestures (double-tap, pinch, pull-down, swipe
-   between), select, then **Dump to album** and confirm the album in Photos.
-   **A/B the two ★ toggles in the grid's top bar in the same session:** flip the
-   **tap mapping** (Badge select ↔ Tap select / long-press-to-open) and the **cell
-   shape** (Square ↔ Aspect), and scroll fast to feel the prefetch window at scale.
+   **Fetch slice** (or adjust the picker), triage in the **sectioned day-group grid**
+   (pinch density, tap the badge to select / tap the cell to open), try the full-screen
+   gestures (double-tap, pinch, pan-when-zoomed, interactive pull-down, swipe between),
+   select, then **Dump to album** and confirm the album in Photos.
+   **Re-evaluate the session-3 work in the same session:** (a) does the **day-grouping**
+   make the year manageable (events pop, quiet runs merge — is N = 10 and the gap rule
+   right)? (b) is the **zoom/pan smooth** and does the **interactive pull-down** feel
+   right? (c) does **neighbour-prefetch** show a sharper image sooner on a swipe? Scroll
+   fast to feel the prefetch window at scale across sections.
+   _(The tap-mapping and cell-shape A/B toggles are resolved and removed — badge-select
+   + square are now hard-coded.)_
 7. **Record** the answers above as you go — this doc, not the code, is the Phase-0 output.
