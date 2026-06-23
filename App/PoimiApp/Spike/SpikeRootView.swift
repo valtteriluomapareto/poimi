@@ -33,12 +33,21 @@ struct SpikeRootView: View {
         .task {
             model.refreshCurrentStatus()
             #if DEBUG
-            // Smoke-test affordance: when launched with `-PoimiSpikeAutoAuth`
-            // (used by the simulator smoke check), drive the real
-            // requestAuthorization path automatically so the grid can render
-            // without a synthetic tap. Inert without the flag and in release.
+            let args = ProcessInfo.processInfo.arguments
+            // Smoke-test affordance: when launched with `-PoimiSpikeForceAuthorized`
+            // (the simulator smoke check), skip straight to the authorized phase so
+            // the grid + its ★ toggles + the scroll-driven prefetch window can be
+            // verified headlessly. The iOS 26 full-access prompt can't be tapped via
+            // `simctl`, so the live `requestAuthorization` path stalls on the system
+            // dialog; this forces past it for the render check only. Inert without
+            // the flag and in release.
             if model.phase == .needsAuth,
-               ProcessInfo.processInfo.arguments.contains("-PoimiSpikeAutoAuth") {
+               args.contains("-PoimiSpikeForceAuthorized") {
+                model.forceAuthorizedForSmokeTest()
+            } else if model.phase == .needsAuth,
+                      args.contains("-PoimiSpikeAutoAuth") {
+                // Drive the *real* requestAuthorization path (proves usage strings +
+                // the auth call); the system dialog still needs a human tap.
                 await model.requestAuthorization()
             }
             #endif
@@ -154,7 +163,9 @@ private struct ReviewFlow: View {
             #if DEBUG
             // Smoke-test affordance: auto-fetch the default range so the grid
             // populates without a tap. Inert without the launch flag / in release.
-            if ProcessInfo.processInfo.arguments.contains("-PoimiSpikeAutoAuth"),
+            let smokeArgs = ProcessInfo.processInfo.arguments
+            if (smokeArgs.contains("-PoimiSpikeAutoAuth")
+                || smokeArgs.contains("-PoimiSpikeForceAuthorized")),
                model.assets.isEmpty {
                 let end = Calendar.current.date(byAdding: .day, value: 1,
                     to: Calendar.current.startOfDay(for: endDate)) ?? endDate
@@ -200,18 +211,19 @@ private struct ReviewFlow: View {
             AssetGridView(
                 assetIDs: model.assetIDs,
                 load: { id in await model.thumbnail(id: id, using: imageManager) },
+                aspectRatio: { model.aspectRatio(id: $0) },
                 isSelected: { model.isSelected($0) },
                 toggleSelection: { model.toggle($0) },
                 openAsset: { id in path.append(id) },
+                // Prefetch window driven by the grid's visible range (Fix 2): the
+                // grid reports a windowed slice (visible ± a row margin) as the
+                // user scrolls; we resolve those ids to live assets and feed the
+                // caching manager, so its windowing is exercised under scroll
+                // rather than primed once with the whole slice.
+                updateWindow: { ids in model.updateCachingWindow(ids: ids, using: imageManager) },
                 zoomNamespace: zoomNamespace,
                 scrollAnchorID: $scrollAnchorID
             )
-            // Prefetch window: cache the whole fetched slice for the spike (a
-            // single date range is bounded; the real grid windows by visible
-            // range — that windowing lives in ThumbnailImageManager already).
-            .task(id: model.assets.map(\.localIdentifier)) {
-                imageManager.updateCachingWindow(to: model.assets)
-            }
         }
     }
 

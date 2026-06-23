@@ -67,6 +67,19 @@ final class SpikeModel {
         }
     }
 
+    #if DEBUG
+    /// Smoke-test only: jump to the authorized phase without the live full-access
+    /// prompt, so the grid render path can be verified headlessly (the iOS 26
+    /// system dialog can't be tapped via `simctl`). Gated behind the
+    /// `-PoimiSpikeForceAuthorized` launch arg by the caller; never reached in
+    /// release. PhotoKit fetches still require the OS to have actually granted
+    /// access (the seeded simulator library), so this only bypasses the UI prompt.
+    func forceAuthorizedForSmokeTest() {
+        rawStatus = .authorized
+        phase = .authorized
+    }
+    #endif
+
     // MARK: - Fetch
 
     func fetch(from start: Date, to end: Date) {
@@ -104,6 +117,25 @@ final class SpikeModel {
 
     var selectedAssets: [PHAsset] {
         assets.filter { selection.contains($0.localIdentifier) }
+    }
+
+    // MARK: - Asset metadata (id → value, for the value-shaped render layer)
+
+    /// Natural aspect ratio (width / height) for `id`, read off the live `PHAsset`
+    /// here so the render layer (which only carries `id: String`) can lay out the
+    /// aspect cell shape without touching PhotoKit. `nil` if unknown / unresolvable.
+    func aspectRatio(id: String) -> CGFloat? {
+        guard let asset = assetsByID[id], asset.pixelHeight > 0 else { return nil }
+        return CGFloat(asset.pixelWidth) / CGFloat(asset.pixelHeight)
+    }
+
+    /// Resolve a window of ids (from the grid's visible range) back to live
+    /// `PHAsset`s and update the caching manager's prefetch window (Fix 2). The
+    /// render layer hands us only ids; the id → live-asset resolution stays here in
+    /// the throwaway tier (the real app's actor owns it).
+    func updateCachingWindow(ids: [String], using imageManager: ThumbnailImageManager) {
+        let window = ids.compactMap { assetsByID[$0] }
+        imageManager.updateCachingWindow(to: window)
     }
 
     // MARK: - Image loads (resolve id → live PHAsset for the render layer)
