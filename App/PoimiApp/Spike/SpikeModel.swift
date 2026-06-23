@@ -44,6 +44,15 @@ final class SpikeModel {
     /// slice on every access / scroll tick (a per-event O(n) storm at scale).
     private(set) var assetIDs: [String] = []
 
+    /// The slice split into adaptive day-groups (THE headline finding — see
+    /// `SpikeGrouping`). **Stored**, computed once in `fetch(...)` from the capture
+    /// dates + threshold `N`, so the sectioned grid reads a stable snapshot rather
+    /// than re-running the grouping on every render/scroll tick. Concatenating the
+    /// groups' `assetIDs` reproduces `assetIDs` exactly, so the grid still scrolls as
+    /// one chronological flow. In Phase 1 the actor owns this and the precursor
+    /// `SpikeGrouping` function lifts into `Curation` (operating on `AssetRef`s).
+    private(set) var dayGroups: [AssetDayGroup] = []
+
     /// In-memory selection — the source of truth, mutated instantly on tap (D15).
     /// This `Set<String>` shape is the one piece of "data" the real app keeps.
     private(set) var selection: Set<String> = []
@@ -98,6 +107,11 @@ final class SpikeModel {
         assetsByID = Dictionary(
             zip(ids, fetched),
             uniquingKeysWith: { first, _ in first })
+        // Compute the adaptive day-grouping once, as a pure function of the slice's
+        // capture dates + N (the precursor to Curation's grouping). The fetch sorts
+        // oldest → newest, which is the chronological order `SpikeGrouping` expects.
+        dayGroups = SpikeGrouping.groups(
+            for: fetched.map { (id: $0.localIdentifier, captureDate: $0.creationDate) })
         // Drop any stale selection that isn't in the new slice.
         selection.formIntersection(Set(ids))
         isFetching = false
@@ -126,14 +140,6 @@ final class SpikeModel {
     }
 
     // MARK: - Asset metadata (id → value, for the value-shaped render layer)
-
-    /// Natural aspect ratio (width / height) for `id`, read off the live `PHAsset`
-    /// here so the render layer (which only carries `id: String`) can lay out the
-    /// aspect cell shape without touching PhotoKit. `nil` if unknown / unresolvable.
-    func aspectRatio(id: String) -> CGFloat? {
-        guard let asset = assetsByID[id], asset.pixelHeight > 0 else { return nil }
-        return CGFloat(asset.pixelWidth) / CGFloat(asset.pixelHeight)
-    }
 
     /// Resolve a window of ids (from the grid's visible range) back to live
     /// `PHAsset`s and update the caching manager's prefetch window (Fix 2). The
