@@ -48,7 +48,10 @@ This is the make-or-break loop and the one decision a doc cannot settle — it m
 3. Exercise the **iCloud-only / optimized-storage** path explicitly (progressive degraded→final under real network latency), not just local assets — this is the make-or-break load case (and what the fake will later model, D25).
 4. 30-minute quality-heuristic eyeball: recorded-original sizes for ~100 real assets (incl. iCloud-only), checking whether bytes/megapixel separates re-saves from camera originals — record the observed distribution (informs D3).
 
-**The salvageable render layer (D1, loosened):** the spike's image-loading, prefetch-window, `.scrollPosition` restore, and `.zoom` transition code is the fiddliest in the app — write it cleanly enough to **promote into Phase 2 behind the protocol seam**. Only the data/fetch/selection/export shortcuts are thrown away.
+**Three tiers of code (D1, refined):**
+- **Persists** — the repo bootstrap (Xcode project, app target, folder structure, a stubbed `Curation` package) is created *before* the spike and carried into Phase 1; it is not throwaway.
+- **Salvaged behind the protocol seam in Phase 1** — the spike's image-loading, prefetch-window, `.scrollPosition` restore, and `.zoom` transition code is the fiddliest in the app; write it cleanly enough to promote.
+- **Thrown away** — the spike's data/fetch/selection/export shortcuts.
 
 **Exit criteria (go/no-go) — captured in a durable artifact:**
 - **The picking interaction is resolved** (tap mapping, thumbnail density, cell shape, badge target, full-screen swipe+select) with evidence — this is the primary gate.
@@ -63,7 +66,7 @@ This is the make-or-break loop and the one decision a doc cannot settle — it m
 **Goal:** stand up just enough to make Phase 2 features real and testable. Deliberately small — avoid the infrastructure trough.
 
 **High-level tasks:**
-1. Repo scaffolding: `Curation` SPM package + the app target, Xcode `.gitignore`, SwiftLint config (D28), **lean CI: build + lint + unit + integration** (the E2E smoke arrives in Phase 2 when there's a flow to drive). **Pin the CI runner's Xcode + iOS 26 simulator runtime explicitly** — the simulator-bound tiers depend on it (the pure `Curation` unit tier does not).
+1. Flesh out the scaffolding the bootstrap began (the Xcode project, app target, and stubbed `Curation` package already exist from Phase 0): wire `Curation` as a real dependency of the app target, add SwiftLint config (D28), and **lean CI: build + lint + unit + integration** (the E2E smoke arrives in Phase 2 when there's a flow to drive). **Pin the CI runner's Xcode + iOS 26 simulator runtime explicitly** — the simulator-bound tiers depend on it (the pure `Curation` unit tier does not).
 2. Domain in `Curation` (pure): `AssetRef`/`Coordinate`/`AssetMetadata`, the `PhotoLibraryProviding` protocol, dependency direction (D14).
 3. A **minimal `FakePhotoLibrary`** (one seed, `.authorized`) honoring the actor isolation — *enough for the permission flow + first grid*. Its harder capabilities (dual sizes, mutate-and-notify, deterministic progressive delivery, the other permission states, access-counting, 10k-scale seeds) grow in Phase 2 with the features that consume them — each landing with a test that exercises it (D25).
 4. `SystemPhotoLibrary` actor skeleton + the `PHPhotoLibraryChangeObserver` shim (D16).
