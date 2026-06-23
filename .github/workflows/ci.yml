@@ -1,0 +1,106 @@
+name: CI
+
+# Phase 1 "lean CI" gate (see docs/plans/project-phases.md, Phase 1 task 1 and
+# docs/plans/development-guidelines.md "CI / CD"). Scope is deliberately small:
+# build validation only. SwiftLint, integration/E2E tests, signing, and deploy
+# are later phases and are intentionally NOT here yet.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & validate
+    # GitHub-hosted macOS 26 image: ships Xcode 26.x and iOS 26 simulator
+    # runtimes, which the project requires (deployment target iOS 26.0,
+    # swift-tools 6.2, Swift 6 strict concurrency). The Phase 1 note asks to
+    # "pin the CI runner's Xcode + iOS 26 simulator runtime explicitly" — we
+    # pin the runner image here and the exact Xcode below.
+    runs-on: macos-26
+
+    # The iOS-26 SDK is what makes the app build; the pure Curation unit tier
+    # does not need a simulator at all.
+    env:
+      # Pin Xcode explicitly rather than relying on the image default, so a
+      # future image bump can't silently change the toolchain. macos-26 ships
+      # several Xcode 26.x versions under /Applications/Xcode_<ver>.app; the
+      # selection step below picks this one (with a graceful fallback).
+      XCODE_VERSION: "26.3"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: |
+          # Prefer the pinned Xcode if the image provides it; otherwise fall
+          # back to the latest installed Xcode 26.x so the run stays green if
+          # the image drops a specific point release. Fail only if no 26.x
+          # Xcode is present at all (the project cannot build on older Xcode).
+          APP="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [ ! -d "$APP" ]; then
+            # Surface this as a GitHub warning so a toolchain drift away from the
+            # pinned version is visible in the run summary, not silent.
+            APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)"
+            echo "::warning::Pinned Xcode ${XCODE_VERSION} not found on the runner; falling back to ${APP:-<none>}. Update XCODE_VERSION to track the image."
+          fi
+          if [ -z "$APP" ] || [ ! -d "$APP" ]; then
+            echo "::error::No Xcode 26.x found on the runner. Available:"
+            ls -d /Applications/Xcode*.app 2>/dev/null || true
+            exit 1
+          fi
+          echo "Using $APP"
+          sudo xcode-select -s "$APP/Contents/Developer"
+          xcodebuild -version
+
+      # --- Build validation (the actual gate) ----------------------------------
+
+      - name: Build PoimiApp
+        run: |
+          # Build the app for a *generic* iOS Simulator destination: this
+          # compiles + links against the iOS 26 SDK without booting a
+          # simulator, which is faster and avoids runtime flakiness. Signing is
+          # off — CI only validates that the project compiles and links.
+          xcodebuild build \
+            -project App/PoimiApp.xcodeproj \
+            -scheme PoimiApp \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Test Curation package
+        # Pure domain unit tests (Swift Testing). No simulator needed — runs on
+        # the host toolchain, fast.
+        working-directory: Curation
+        run: |
+          set -o pipefail
+          # Capture output so we can both stream it and guard against an empty
+          # suite passing green (e.g. if the only test is deleted/renamed away).
+          # `set -o pipefail` makes a `swift test` failure here a step failure.
+          swift test 2>&1 | tee test-output.log
+
+          # Swift Testing prints a summary like:
+          #   ✔ Test run with 1 test in 1 suite passed after 0.001 seconds.
+          #   ✘ Test run with 0 tests ... (when nothing ran)
+          # Extract the test count from that line and require at least one.
+          count="$(grep -oE 'Test run with [0-9]+ test' test-output.log \
+                   | grep -oE '[0-9]+' | head -n 1)"
+          if [ -z "${count}" ]; then
+            echo "::error::Could not find a Swift Testing run summary; refusing to pass."
+            exit 1
+          fi
+          if [ "${count}" -lt 1 ]; then
+            echo "::error::Curation test suite executed ${count} tests; an empty suite must not pass."
+            exit 1
+          fi
+          echo "Curation executed ${count} test(s)."
+
+      - name: Check Curation domain boundary
+        # Enforce the D14/D21 boundary invariant: Curation imports no platform
+        # frameworks and uses no @MainActor.
+        run: ./Scripts/check-curation-boundary.sh
