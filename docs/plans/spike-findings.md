@@ -31,10 +31,12 @@ control) so both mappings can be felt on the **same real year in one session**:
 - _(seeded — author, PR #13)_ The grid selection works as wired in (A): tapping the
   badge marked the photo selected; tapping the rest of the image opened it larger.
   **The mapping "reads well so far"** — badge = select, rest = open.
-- TODO (Part B): flip to (B) and run it over a real year; record which is faster and
-  less error-prone, whether long-press-to-open feels natural for the occasional
-  inspect, and whether the badge ever mis-fires while scrolling in (A). **Record the
-  chosen mapping here** — this is the primary gate's resolution.
+- **✅ RESOLVED (Part B, on-device) → (A) Badge select.** Author's verdict: *"the
+  select with badge feels better."* Tap-the-badge → select, tap-the-rest → open is the
+  chosen mapping. **The #5 primary gate is settled.** (Mapping (B) whole-cell-select +
+  long-press-to-open was tried on the same library and lost.) The runtime A/B toggle
+  has done its job and can be dropped from the harness; the design already carries (A)
+  as canonical (Paper Review grid + styleguide §6).
 
 ## Default column count
 
@@ -70,9 +72,10 @@ grid's top bar) to flip cells between:
 - **Aspect** — the asset's natural ratio (clamped to ~0.45–2.2 so panoramas don't blow
   out a row), fit whole so framing isn't cropped.
 
-- TODO (Part B): does square cost you real calls (framing/horizon/crop decisions) you
-  can't make without opening? Does aspect read better for those at the expense of scan
-  speed? **Record the chosen cell shape here.**
+- **✅ RESOLVED (Part B, on-device) → Square.** Author's verdict: *"square is good."*
+  Square is the chosen cell shape. ⚠️ The **Aspect toggle didn't work** on-device (a
+  harness bug — aspect path didn't take); not pursued since square is the decision, so
+  the aspect path can simply be dropped rather than fixed.
 
 ## Scroll-restore feel
 
@@ -111,10 +114,13 @@ slice was primed once, so the windowing was never exercised under scroll; now it
     left/right; the select control hides while zoomed so it doesn't fight the pan.
   - **Pinch-zoom** → magnify into the current photo (up to 4×), with pan when zoomed;
     releasing below 1× snaps back and re-centers.
-- TODO (Part B): do these *feel* right? Is 2.5× the right double-tap step? Is the
-  pull-down threshold/curve good, and should it be fully interactive (track the finger
-  to the grid) rather than a threshold dismiss? Does pinch fight the page swipe at the
-  zoom boundary? Should select stay visible while zoomed?
+- _(Part B, on-device — author)_ **Pull-down-to-close animation looks a bit weird.**
+  The current fade + threshold dismiss doesn't feel right → rework toward the
+  interactive Photos-style dismiss (the photo tracks the finger and scales down,
+  springs back or dismisses on release). **TODO: rework + re-feel.**
+- TODO (Part B): the rest of the gestures — is 2.5× the right double-tap step? Does
+  pinch fight the page swipe at the zoom boundary? Should select stay visible while
+  zoomed? (Not yet commented.)
 
 ## Progressive / iCloud timing
 
