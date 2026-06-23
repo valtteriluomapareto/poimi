@@ -45,8 +45,10 @@ jobs:
           # Xcode is present at all (the project cannot build on older Xcode).
           APP="/Applications/Xcode_${XCODE_VERSION}.app"
           if [ ! -d "$APP" ]; then
-            echo "Xcode ${XCODE_VERSION} not found; looking for any Xcode 26.x ..."
+            # Surface this as a GitHub warning so a toolchain drift away from the
+            # pinned version is visible in the run summary, not silent.
             APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)"
+            echo "::warning::Pinned Xcode ${XCODE_VERSION} not found on the runner; falling back to ${APP:-<none>}. Update XCODE_VERSION to track the image."
           fi
           if [ -z "$APP" ] || [ ! -d "$APP" ]; then
             echo "::error::No Xcode 26.x found on the runner. Available:"
@@ -75,7 +77,28 @@ jobs:
         # Pure domain unit tests (Swift Testing). No simulator needed — runs on
         # the host toolchain, fast.
         working-directory: Curation
-        run: swift test
+        run: |
+          set -o pipefail
+          # Capture output so we can both stream it and guard against an empty
+          # suite passing green (e.g. if the only test is deleted/renamed away).
+          # `set -o pipefail` makes a `swift test` failure here a step failure.
+          swift test 2>&1 | tee test-output.log
+
+          # Swift Testing prints a summary like:
+          #   ✔ Test run with 1 test in 1 suite passed after 0.001 seconds.
+          #   ✘ Test run with 0 tests ... (when nothing ran)
+          # Extract the test count from that line and require at least one.
+          count="$(grep -oE 'Test run with [0-9]+ test' test-output.log \
+                   | grep -oE '[0-9]+' | head -n 1)"
+          if [ -z "${count}" ]; then
+            echo "::error::Could not find a Swift Testing run summary; refusing to pass."
+            exit 1
+          fi
+          if [ "${count}" -lt 1 ]; then
+            echo "::error::Curation test suite executed ${count} tests; an empty suite must not pass."
+            exit 1
+          fi
+          echo "Curation executed ${count} test(s)."
 
       - name: Check Curation domain boundary
         # Enforce the D14/D21 boundary invariant: Curation imports no platform
