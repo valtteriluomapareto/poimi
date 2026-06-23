@@ -59,6 +59,21 @@ This is the make-or-break loop and the one decision a doc cannot settle — it m
 - A `docs/plans/spike-findings.md` (or appended decision entries) recording: the picking-interaction answers above; the loop *feels* good at scale (or not); scroll-restore + recycled-cell behavior; progressive/iCloud timing; the adapter-vs-array numbers; the bytes/MP separation data; and UX/gesture observations to seed the Phase 2 UI spec. **The findings doc is the real Phase 0 output** — the code is disposable, the evidence is not.
 - The "Still open" items in the decisions log (picking interaction, adapter-vs-array, quality-filter go/no-go) resolved with reference to that evidence.
 
+### Phase 0 issues (GitHub)
+
+| Issue | Scope | Depends on |
+|---|---|---|
+| [#3](https://github.com/valtteriluomapareto/poimi/issues/3) | Repo bootstrap — runnable iOS 26 project + stubbed `Curation` package *(persists; pre-spike infra)* | — |
+| [#4](https://github.com/valtteriluomapareto/poimi/issues/4) | Spike harness — throwaway review-loop slice on a real library | #3 |
+| [#5](https://github.com/valtteriluomapareto/poimi/issues/5) | ★ Resolve the picking interaction *(primary gate)* | #4 |
+| [#6](https://github.com/valtteriluomapareto/poimi/issues/6) | Resolve timeline grouping + thumbnail density & cell shape | #4 |
+| [#7](https://github.com/valtteriluomapareto/poimi/issues/7) | Benchmark: lazy adapter vs flat `[AssetRef]` array (D17) | #4 |
+| [#8](https://github.com/valtteriluomapareto/poimi/issues/8) | Validate the iCloud-only / optimized-storage path | #4 |
+| [#9](https://github.com/valtteriluomapareto/poimi/issues/9) | Quality-heuristic eyeball — bytes-per-megapixel (D3) *(standalone)* | — |
+| [#10](https://github.com/valtteriluomapareto/poimi/issues/10) | Close out → `spike-findings.md` + resolve open items | #5–#9 |
+
+**Flow:** #3 → #4 → (#5★, #6, #7, #8) → #10; #9 runs in parallel.
+
 ---
 
 ## Phase 1 — Core spine *(irreducible foundation)*
