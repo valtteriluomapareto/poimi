@@ -14,6 +14,19 @@
 
 ---
 
+## Part B — on-device verdicts (session 2)
+
+- ✅ **Scroll smoothness at scale: good** — freeze fix + windowed prefetch hold up on a real year.
+- ✅ **Column density: good** — **3 columns** confirmed for iPhone.
+- ✅ **Scroll-restore: good** — returning from full-screen lands on the right photo, cleanly.
+- ✅ **Badge mis-fire: none** — the 44pt badge zone didn't mis-fire during triage.
+- ⚠️ **iCloud progressive load: too slow** — iCloud-only photos **stay blurry quite long** before sharpening. Phase-2: prefetch full-res for the current + neighbouring pages, and the determinate long-scan surface (D12); some latency is inherent to the iCloud download.
+- 🐞 **Zoomed pan lags badly** — double-tap zoom works, but *panning* the zoomed image has huge lag (unusable). Pager perf bug → **fix**.
+- 🐞 **Pull-down dismiss animation feels weird** → rework toward interactive (carried from session 1).
+- 🔑 **Grouping is needed (key finding).** Going through a whole year on the flat chronological grid is *harder than Apple Photos* — curating needs the **adaptive day-grouping** (busy days stand alone, quiet days merge; see project-phases "Timeline grouping", #6). A flat date slice isn't enough. → **add day-grouping to the spike and re-evaluate the feel.**
+
+---
+
 ## Tap mapping
 
 The make-or-break decision (D9/D10, ★ primary gate). The real question: which action
