@@ -16,18 +16,25 @@
 
 ## Tap mapping
 
-The make-or-break decision (D9/D10, ★ primary gate). The harness ships the plan's
-mapping — **tap the badge → select; tap the rest of the cell → open full-screen** —
-and is built to also let the alternative (**whole-cell tap → select; open via a
-different affordance**) be felt. The real question: which action deserves the cheap
-whole-cell tap — *select* (the constant action, done hundreds of times) or *inspect*
-(occasional)?
+The make-or-break decision (D9/D10, ★ primary gate). The real question: which action
+deserves the cheap whole-cell tap — *select* (the constant action, done hundreds of
+times) or *inspect* (occasional)?
 
-- _(seeded — author, PR #13)_ The grid selection works as wired: tapping the badge
-  marked the photo selected; tapping the rest of the image opened it larger. **The
-  mapping "reads well so far"** — badge = select, rest = open.
-- TODO (Part B): run the alternative mapping over a real year; record which is faster
-  and less error-prone, and whether the badge ever mis-fires while scrolling.
+The harness now ships a **runtime A/B toggle** in the grid's top bar (segmented
+control) so both mappings can be felt on the **same real year in one session**:
+
+- **(A) Badge select** _[default]_ — tap the badge → select; tap the rest of the cell
+  → open full-screen.
+- **(B) Tap select** — whole-cell tap → select; **long-press → open** full-screen
+  (inspect via long-press, since pinch is taken by column density).
+
+- _(seeded — author, PR #13)_ The grid selection works as wired in (A): tapping the
+  badge marked the photo selected; tapping the rest of the image opened it larger.
+  **The mapping "reads well so far"** — badge = select, rest = open.
+- TODO (Part B): flip to (B) and run it over a real year; record which is faster and
+  less error-prone, whether long-press-to-open feels natural for the occasional
+  inspect, and whether the badge ever mis-fires while scrolling in (A). **Record the
+  chosen mapping here** — this is the primary gate's resolution.
 
 ## Default column count
 
@@ -54,11 +61,18 @@ open-cell tap).
 ## Cell shape (square vs aspect)
 
 Spike question (project-phases item 7): **square** scans faster but crops framing;
-Apple's Library tab uses justified aspect so you see the real shot. The harness ships
-**square** cells (`ThumbnailCell` `.aspectRatio(1, contentMode: .fit)` + `scaledToFill`).
+Apple's Library tab uses justified aspect so you see the real shot.
+
+The harness now ships a **runtime toggle** alongside the tap-mapping control (the
+grid's top bar) to flip cells between:
+
+- **Square** _[default]_ — fixed 1:1, fills the cell (crops framing) — scans fastest.
+- **Aspect** — the asset's natural ratio (clamped to ~0.45–2.2 so panoramas don't blow
+  out a row), fit whole so framing isn't cropped.
 
 - TODO (Part B): does square cost you real calls (framing/horizon/crop decisions) you
-  can't make without opening? Worth prototyping justified aspect if so.
+  can't make without opening? Does aspect read better for those at the expense of scan
+  speed? **Record the chosen cell shape here.**
 
 ## Scroll-restore feel
 
@@ -69,6 +83,20 @@ Apple's Library tab uses justified aspect so you see the real shot. The harness 
 
 - TODO (Part B): on return, do you land on the photo you ended on, centered and with
   the zoom transition reading cleanly? Any jump/flicker with recycled cells?
+
+## Smoothness at scale (scroll-driven prefetch window)
+
+Explicit Phase-0 exit criterion: does it stay smooth over **thousands** of assets, and
+do recycled cells behave? The harness now drives the `PHCachingImageManager` prefetch
+window from the grid's **visible range** (`AssetGridView` tracks visible cell ids via
+per-cell `onAppear`/`onDisappear` and passes a windowed slice — visible ± 2 rows —
+to `ThumbnailImageManager.updateCachingWindow` as you scroll). Previously the whole
+slice was primed once, so the windowing was never exercised under scroll; now it is.
+
+- TODO (Part B): scroll a full year fast — does it stay at 60/120fps, or do cells show
+  placeholders that never fill (window too tight) or memory balloon (window too wide)?
+  Is ±2 rows the right margin? Do recycled cells flash the previous photo before the
+  new one loads? This is the "tech holds up at scale" half of the gate.
 
 ## Full-screen gestures (the open question)
 
@@ -163,4 +191,7 @@ the gestures — Part B runs on the author's device against a real year.
    **Fetch slice** (or adjust the picker), triage in the grid (pinch density, tap to
    select/open), try the full-screen gestures (double-tap, pinch, pull-down, swipe
    between), select, then **Dump to album** and confirm the album in Photos.
+   **A/B the two ★ toggles in the grid's top bar in the same session:** flip the
+   **tap mapping** (Badge select ↔ Tap select / long-press-to-open) and the **cell
+   shape** (Square ↔ Aspect), and scroll fast to feel the prefetch window at scale.
 7. **Record** the answers above as you go — this doc, not the code, is the Phase-0 output.
