@@ -32,6 +32,10 @@ enum DebugScreen: String, CaseIterable {
     /// The adaptive navigation shell (`AppRootView`) against an authorized fake — shows the
     /// album-library root + stub destinations (#30).
     case shell
+    /// The first-run onboarding flow (`AppRootView` with a `.notDetermined` fake, #31).
+    case onboarding
+    /// The access-recovery screen (`AppRootView` with a `.denied` fake, #31).
+    case recovery
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -58,15 +62,18 @@ struct DebugScreenHost: View {
     var body: some View {
         switch screen {
         case .library: DebugLibraryView()
-        case .shell: DebugShellView()
+        case .shell: DebugShellView(screen: .shell, authorization: .authorized)
+        case .onboarding: DebugShellView(screen: .onboarding, authorization: .notDetermined)
+        case .recovery: DebugShellView(screen: .recovery, authorization: .denied)
         }
     }
 }
 
-/// Hosts `AppRootView` with a coordinator resolved against the injected (fake) library, so the
-/// navigation shell can be screenshotted deterministically (#30).
+/// Hosts `AppRootView` with a coordinator seeded to a chosen authorization, so each root phase
+/// (onboarding / recovery / albums) can be screenshotted deterministically (#30/#31).
 struct DebugShellView: View {
-    @Environment(\.photoLibrary) private var library
+    let screen: DebugScreen
+    let authorization: LibraryAuthorization
     @State private var coordinator: AppCoordinator?
 
     var body: some View {
@@ -78,10 +85,12 @@ struct DebugShellView: View {
             }
         }
         .task {
-            let resolved = AppCoordinator(library: library)
+            // A dedicated fake at the chosen status — independent of the global `\.photoLibrary`,
+            // so onboarding/recovery/albums each render their phase regardless of the launch flag.
+            let resolved = AppCoordinator(library: FakePhotoLibrary(status: authorization))
             await resolved.refreshAuthorization()
             coordinator = resolved
-            Log.app.notice("screenshot-ready: \(DebugScreen.shell.rawValue, privacy: .public)")
+            Log.app.notice("screenshot-ready: \(screen.rawValue, privacy: .public)")
         }
     }
 }

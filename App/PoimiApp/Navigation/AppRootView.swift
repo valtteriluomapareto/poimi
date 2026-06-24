@@ -23,11 +23,9 @@ struct AppRootView: View {
         Group {
             switch coordinator.rootPhase {
             case .onboarding:
-                RoutePlaceholder(symbol: "hand.wave", title: "Onboarding",
-                                 detail: "First-run intro + permission rationale → system prompt (#31)")
+                OnboardingView()
             case .recovery:
-                RoutePlaceholder(symbol: "lock", title: "Access needed",
-                                 detail: "Limited/denied recovery + Settings deep-link (#31)")
+                AccessRecoveryView(authorization: coordinator.authorization)
             case .albums:
                 // Test compact positively so an unknown/`nil` size class (iPad mid-scene-setup)
                 // defaults to the regular split layout, not the iPhone stack. Mid-flip reflow
