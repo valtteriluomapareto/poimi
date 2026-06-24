@@ -17,11 +17,18 @@ import UIKit
 /// pager can show something instantly and sharpen in place.
 @MainActor
 enum FullImageLoader {
+    /// Bounded full-screen decode target. `PHImageManagerMaximumSize` would decode
+    /// the asset's entire 12–48 MP original — several of those at once (the pager's
+    /// neighbours + `TabView`'s mounted pages) floods `CMPhotoDecompressionSession`
+    /// (`err -16990`) and saturates the main actor (gesture-gate timeouts). A
+    /// ~2048pt target covers the screen with zoom headroom and decodes far cheaper.
+    static let target = CGSize(width: 2048, height: 2048)
+
     /// Stream of images for `asset`: a fast degraded image first (if PhotoKit
-    /// has one), then the full-quality image. Network access is allowed so
+    /// has one), then the bounded full-screen image. Network access is allowed so
     /// iCloud-optimized originals download. Cancels the underlying request when
     /// the consuming task is cancelled.
-    static func images(for asset: PHAsset) -> AsyncStream<UIImage> {
+    static func images(for asset: PHAsset, targetSize: CGSize = target) -> AsyncStream<UIImage> {
         AsyncStream { continuation in
             let options = PHImageRequestOptions()
             options.deliveryMode = .opportunistic   // degraded → final
@@ -32,7 +39,7 @@ enum FullImageLoader {
             let manager = PHImageManager.default()
             let id = manager.requestImage(
                 for: asset,
-                targetSize: PHImageManagerMaximumSize,
+                targetSize: targetSize,
                 contentMode: .aspectFit,
                 options: options
             ) { image, info in

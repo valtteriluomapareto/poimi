@@ -23,9 +23,9 @@
 //      and only for predominantly-vertical drags, so left/right `TabView` paging and
 //      the scroll view's own pan-when-zoomed both keep working.
 //
-//  Neighbour-prefetch: the pager warms the full-res load for the current ± 1 page so
-//  swiping lands on a sharper image sooner (the iCloud-too-slow Part B finding;
-//  remaining latency is inherent to the iCloud download — Phase 2 D12).
+//  Each page loads a bounded screen-size image (see `FullImageLoader`); there is no
+//  neighbour-prefetch — warming neighbours at full-res was the decode storm the
+//  on-device Part-B run hit. iCloud latency on landing is inherent (Phase 2 D12).
 
 import SwiftUI
 import UIKit
@@ -58,10 +58,7 @@ struct AssetPagerView: View {
                     isSelected: isSelected(id),
                     toggle: { toggleSelection(id) },
                     load: load,
-                    dismiss: dismiss,
-                    // Warm full-res for this page's immediate neighbours so a swipe
-                    // lands on a sharper image sooner (see neighbour-prefetch note).
-                    neighbourIDs: neighbours(of: id)
+                    dismiss: dismiss
                 )
                 .tag(Optional(id))
             }
@@ -84,15 +81,6 @@ struct AssetPagerView: View {
             }
         }
     }
-
-    /// The current ± 1 ids (the swipe neighbours), excluding the page itself.
-    private func neighbours(of id: String) -> [String] {
-        guard let i = assetIDs.firstIndex(of: id) else { return [] }
-        var out: [String] = []
-        if i > 0 { out.append(assetIDs[i - 1]) }
-        if i + 1 < assetIDs.count { out.append(assetIDs[i + 1]) }
-        return out
-    }
 }
 
 /// A single full-screen page: progressive full-res image in a `UIScrollView`-backed
@@ -104,8 +92,6 @@ private struct AssetPage: View {
     let toggle: () -> Void
     let load: (String) -> AsyncStream<UIImage>
     let dismiss: () -> Void
-    /// Immediate swipe neighbours (current ± 1) to warm in the background.
-    let neighbourIDs: [String]
 
     @State private var image: UIImage?
 
@@ -171,33 +157,17 @@ private struct AssetPage: View {
             }
         }
         .overlay(alignment: .bottom) { selectButton }
-        // Progressive: degraded → final, cancels on page recycle.
+        // Progressive: degraded → final at a bounded screen-size target, cancels on
+        // page recycle. No neighbour-prefetch — warming current ± 1 at full-res was
+        // the decode storm (CMPhotoDecompressionSession -16990 + main-actor stalls);
+        // `TabView` already mounts the adjacent pages, so each loads its own bounded
+        // image as it's swiped to. iCloud download latency on landing is inherent
+        // (Phase 2 D12 adds the determinate progress surface).
         .task(id: id) {
             image = nil
             dragTranslation = .zero
             for await delivered in load(id) {
                 image = delivered
-            }
-        }
-        // Neighbour-prefetch: warm current ± 1 full-res so a swipe lands on a sharper
-        // image sooner. Each neighbour's stream is drained to drive the PhotoKit
-        // load; the downloaded original is cached, so the neighbour's own `.task`
-        // then resolves fast (degraded → final without the long blur). The `load`
-        // closure is main-actor isolated, so the warmers run as main-actor child
-        // tasks; they're cancelled when this page recycles so we never warm pages the
-        // user swiped away from.
-        .task(id: id) {
-            let warmers = neighbourIDs.map { neighbour in
-                Task { @MainActor in
-                    for await _ in load(neighbour) {
-                        if Task.isCancelled { break }
-                    }
-                }
-            }
-            await withTaskCancellationHandler {
-                for warmer in warmers { _ = await warmer.value }
-            } onCancel: {
-                for warmer in warmers { warmer.cancel() }
             }
         }
     }

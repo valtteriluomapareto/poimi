@@ -94,27 +94,45 @@ final class SpikeModel {
 
     // MARK: - Fetch
 
-    func fetch(from start: Date, to end: Date) {
+    func fetch(from start: Date, to end: Date) async {
         isFetching = true
-        // Synchronous PhotoKit fetch is fast for one date slice; the spike keeps
-        // it simple. (The real app does this off the main actor.)
-        let fetched = SpikeLibrary.fetchImageAssets(from: start, to: end)
-        assets = fetched
-        // Materialize the id order + id → asset map once here, so the render layer
-        // reads a stable stored snapshot instead of re-mapping the slice per access.
-        let ids = fetched.map(\.localIdentifier)
-        assetIDs = ids
-        assetsByID = Dictionary(
-            zip(ids, fetched),
-            uniquingKeysWith: { first, _ in first })
-        // Compute the adaptive day-grouping once, as a pure function of the slice's
-        // capture dates + N (the precursor to Curation's grouping). The fetch sorts
-        // oldest → newest, which is the chronological order `SpikeGrouping` expects.
-        dayGroups = SpikeGrouping.groups(
-            for: fetched.map { (id: $0.localIdentifier, captureDate: $0.creationDate) })
+        defer { isFetching = false }
+        // Run the PhotoKit fetch + the O(n) transforms (id map, id→asset dictionary,
+        // and the per-asset day-grouping with its `Calendar` work) **off the main
+        // actor** so the UI and the "Fetching…" progress stay responsive on a real
+        // year — running them inline on `@MainActor` froze the main thread at fetch
+        // time. The real app does this inside the `PhotoLibrary` actor (architecture
+        // §2 / D17); here a detached task is the throwaway-tier equivalent.
+        let result = await Task.detached(priority: .userInitiated) {
+            let fetched = SpikeLibrary.fetchImageAssets(from: start, to: end)
+            let ids = fetched.map(\.localIdentifier)
+            let byID = Dictionary(zip(ids, fetched), uniquingKeysWith: { first, _ in first })
+            // Adaptive day-grouping — a pure function of capture dates + N (the
+            // precursor to Curation's grouping); fetch is oldest → newest, the order
+            // `SpikeGrouping` expects.
+            let groups = SpikeGrouping.groups(
+                for: fetched.map { (id: $0.localIdentifier, captureDate: $0.creationDate) })
+            return FetchResult(assets: fetched, ids: ids, byID: byID, groups: groups)
+        }.value
+
+        assets = result.assets
+        // Materialized stored snapshots so the render layer reads stable values
+        // instead of re-mapping the slice per access (a per-event O(n) storm at scale).
+        assetIDs = result.ids
+        assetsByID = result.byID
+        dayGroups = result.groups
         // Drop any stale selection that isn't in the new slice.
-        selection.formIntersection(Set(ids))
-        isFetching = false
+        selection.formIntersection(Set(result.ids))
+    }
+
+    /// Carries the fetch results across the detached-task → main-actor hop. `PHAsset`
+    /// is non-`Sendable` but is thread-safe to hand over here; this throwaway-tier box
+    /// makes the crossing explicit. The real app keeps assets inside the actor (D17).
+    private struct FetchResult: @unchecked Sendable {
+        let assets: [PHAsset]
+        let ids: [String]
+        let byID: [String: PHAsset]
+        let groups: [AssetDayGroup]
     }
 
     // MARK: - Selection (id-keyed, matching the render-layer closures)

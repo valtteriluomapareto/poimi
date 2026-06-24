@@ -169,7 +169,7 @@ private struct ReviewFlow: View {
                model.assets.isEmpty {
                 let end = Calendar.current.date(byAdding: .day, value: 1,
                     to: Calendar.current.startOfDay(for: endDate)) ?? endDate
-                model.fetch(from: Calendar.current.startOfDay(for: startDate), to: end)
+                await model.fetch(from: Calendar.current.startOfDay(for: startDate), to: end)
             }
             #endif
         }
@@ -185,7 +185,7 @@ private struct ReviewFlow: View {
                 // End-exclusive: include the whole "to" day.
                 let end = Calendar.current.date(byAdding: .day, value: 1,
                     to: Calendar.current.startOfDay(for: endDate)) ?? endDate
-                model.fetch(from: Calendar.current.startOfDay(for: startDate), to: end)
+                Task { await model.fetch(from: Calendar.current.startOfDay(for: startDate), to: end) }
             } label: {
                 Label("Fetch slice", systemImage: "arrow.down.circle")
                     .frame(maxWidth: .infinity)
