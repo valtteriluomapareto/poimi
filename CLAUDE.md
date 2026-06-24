@@ -52,7 +52,7 @@ docs/                          the durable record — plans + design
 These are enforced by CI guards and/or are load-bearing decisions. Breaking one should fail a
 guard or a reviewer.
 
-- **Domain boundary (D14/D21):** `Curation` is pure — it must **not** import Photos, PhotoKit,
+- **Domain boundary (D14/D21):** `Curation` is pure — it must **not** import Photos, PhotoKit, PhotosUI,
   SwiftData, UIKit, SwiftUI, AppKit, Combine, or CoreLocation, and must not use `@MainActor`.
   Dependencies point *toward* `Curation`. Guard: `Scripts/check-curation-boundary.sh`.
 - **Pure Liquid Glass:** no SDK-version availability gates / `.regularMaterial` version
@@ -76,13 +76,13 @@ swift test --package-path Curation
 
 # App + integration tier — needs an iOS 26 simulator (e.g. "iPhone 17 Pro"):
 xcodebuild test -project App/PoimiApp.xcodeproj -scheme PoimiApp -configuration Debug \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0'
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'   # any iOS 26 runtime
 
 # Release build (proves DEBUG-only harness compiles out):
 xcodebuild build -project App/PoimiApp.xcodeproj -scheme PoimiApp -configuration Release \
-  -destination 'generic/platform=iOS'
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 
-# Lint (zero violations; no inline disables without a justifying comment):
+# Lint — warnings advisory, errors gate (not --strict yet, per D28); no unjustified disables:
 swiftlint lint --quiet
 
 # CI guards (all three must pass):

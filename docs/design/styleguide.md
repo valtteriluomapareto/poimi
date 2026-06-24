@@ -93,7 +93,7 @@ Where green appears (colour only — no motifs):
 |---|---|---|
 | Base unit | **8pt** | Multiples for padding/stacks (4 for fine, 8/16/24 for layout). |
 | Grid gutter (inter-item + line) | **0 (gapless)** *(provisional)* | Tested in Paper — gapless reads as one immersive photo wall (Photos *Library* feel); selection borders carry cell separation. May revisit a 1–2pt gutter; fine-tune later. |
-| Default columns — iPhone | **3 (~128pt cell)** | Large enough to make obvious calls; **pinch-adjustable 2–5** (more on iPad). *(Spike confirms — issue #6.)* |
+| Default columns — iPhone | **3 (~128pt cell)** | Large enough to make obvious calls; **pinch-adjustable 2–5** (more on iPad). *(3 confirmed in the spike, #6 — [spike-findings](../plans/spike-findings.md).)* |
 | Columns — iPad / regular width | adaptive `LazyVGrid` | Scales with available width; more columns. |
 | Setup/list padding | system `Form`/`List` insets + generous section spacing | Notes-calm. |
 | Min hit target | **≥44pt** | Every interactive element (HIG). |

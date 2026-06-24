@@ -54,8 +54,8 @@ adopted later, the spec can be regenerated; until then the committed `.xcodeproj
 the spec.
 
 Because it's hand-maintained: new files/targets are added by hand-editing
-`project.pbxproj` (stable sequential IDs, e.g. the `…A301` PhotoKit block, the `…0041`
-test target), and **avoid committing Xcode's incidental reformatting churn** — keep the
+`project.pbxproj` using the structured ID blocks documented in [CLAUDE.md](CLAUDE.md) →
+Conventions, and **avoid committing Xcode's incidental reformatting churn** — keep the
 diff to the intended change so the file stays reviewable. If targets grow past a handful,
 adopt a generator.
 
@@ -80,7 +80,7 @@ Or from the command line (no signing needed for the simulator):
 xcodebuild \
   -project App/PoimiApp.xcodeproj \
   -scheme PoimiApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   build CODE_SIGNING_ALLOWED=NO
 ```
 
@@ -101,7 +101,7 @@ simulator via Swift Testing:
 
 ```sh
 xcodebuild test -project App/PoimiApp.xcodeproj -scheme PoimiApp -configuration Debug \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0'
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'   # any iOS 26 simulator
 ```
 
 ## CI guards

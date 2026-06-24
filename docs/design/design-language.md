@@ -1,6 +1,6 @@
 # Poimi — Design Language
 
-*The visual and interaction north star. Guides the Paper design work and the `docs/design/` UI specs that transcribe each screen from the [design inventory](../plans/project-phases.md#design-inventory--views--interactions-to-design). Companion to the [product plan](../plans/product-plan.md), [architecture](../plans/architecture.md), and [decisions log](../plans/plan-review-decisions.md).*
+*The visual and interaction north star. Guides the Paper design work and the `docs/design/` UI specs that transcribe each screen from the [design inventory](../plans/project-phases.md#design-inventory-views-interactions-to-design). Companion to the [product plan](../plans/product-plan.md), [architecture](../plans/architecture.md), and [decisions log](../plans/plan-review-decisions.md).*
 
 ---
 
