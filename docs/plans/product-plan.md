@@ -96,8 +96,13 @@ All filters are opt-in.
 
 ## Open items / next steps
 
-- Run the spike (D1) and decide whether the quality heuristic is worth building (D3).
-- Run the formal trademark-register check (PRH, EUIPO).
-- Settle the few items still open in the decisions log (limited-mode support, App Store keywords, within-overlay swipe).
-- Define the review-screen interaction in detail post-spike, then capture it as a `docs/design/` UI spec (D27).
-- Build.
+- *(done)* The Phase-0 spike validated the curation loop on a real year — picking interaction,
+  grouping, and the need for a coarser overview level all resolved ([spike-findings.md](./spike-findings.md)).
+- *(in progress)* **Building the v1 critical path** (Phase 2) — see [project-phases.md](./project-phases.md).
+- Run the formal **trademark-register check** (PRH for Finland, EUIPO) before launch.
+- Decide whether the **quality / camera-originals heuristic** (D3) is worth building — its
+  bytes-per-megapixel separation was *not* measured in the spike, so that measurement gates it
+  (Phase 4, if at all).
+- Settle the items still open in the [decisions log](./plan-review-decisions.md#still-open):
+  hard-gate vs degraded limited mode (at onboarding, #31) and the App Store subtitle keywords (Phase 3).
+- The review-screen UI spec is written just-in-time with the grid (#35/#43), per spike-then-document (D27).

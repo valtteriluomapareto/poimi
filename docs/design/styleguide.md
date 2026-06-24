@@ -58,7 +58,7 @@ Rationale & guardrails:
 
 Where green appears (colour only — no motifs):
 - **Onboarding / first-run** — a quiet green colour accent (e.g. a kicker rule) warming the calm light screens.
-- **Sidebar / sessions** — a subtle green status dot for the active session.
+- **Sidebar / albums** — a subtle green status dot for the active album.
 - **Empty & complete states** — the optional "target reached / album ready" affirmation (gold counts *up*; green marks the *finish*).
 - **App icon** — **deferred (iterate later).** The icon may draw on the gold/green palette, but the mark itself is an open question — and it is **not** berry/nature.
 - **Selection border — one deliberate exception:** a **narrow ~1.5px green hairline** outlines a selected grid cell (§6). It's a structural accent only; the **gold check remains the affordance** and the tally/Export stay gold. Apart from this hairline, green stays out of the review-grid chrome so the photos lead.
@@ -93,7 +93,7 @@ Where green appears (colour only — no motifs):
 |---|---|---|
 | Base unit | **8pt** | Multiples for padding/stacks (4 for fine, 8/16/24 for layout). |
 | Grid gutter (inter-item + line) | **0 (gapless)** *(provisional)* | Tested in Paper — gapless reads as one immersive photo wall (Photos *Library* feel); selection borders carry cell separation. May revisit a 1–2pt gutter; fine-tune later. |
-| Default columns — iPhone | **3 (~128pt cell)** | Large enough to make obvious calls; **pinch-adjustable 2–5** (more on iPad). *(Spike confirms — issue #6.)* |
+| Default columns — iPhone | **3 (~128pt cell)** | Large enough to make obvious calls; **pinch-adjustable 2–5** (more on iPad). *(3 confirmed in the spike, #6 — [spike-findings](../plans/spike-findings.md).)* |
 | Columns — iPad / regular width | adaptive `LazyVGrid` | Scales with available width; more columns. |
 | Setup/list padding | system `Form`/`List` insets + generous section spacing | Notes-calm. |
 | Min hit target | **≥44pt** | Every interactive element (HIG). |
@@ -206,4 +206,4 @@ The atoms/molecules to build first in Paper, each with its states (this is what 
 - **Tally numerals** (§2): plain SF + `monospacedDigit` vs `design: .rounded` for the Oura-friendly tone — try both in Paper.
 - **Selection treatment** (§6): exact "dim" recipe — scrim % vs inset border vs slight scale — pick what reads most unmistakably without color.
 - **Light vs dark first** for the Paper exploration (the review grid arguably shines in **dark**, where photos pop; setup screens read calmer in light). Suggest building the grid in dark, setup in light.
-- *(Carried from the plans — spike-owned, not styleguide-owned: cell shape square vs aspect (#6), tap mapping (#5), default column count confirmation (#6).)*
+- *(Spike-owned items — now **resolved** and reflected above: cell shape → **square** (§4/§6), tap mapping → **badge-select** (§6), default columns → **3 on iPhone** (§3). See [spike-findings.md](../plans/spike-findings.md).)*

@@ -55,12 +55,12 @@
 
 - **D13 — `AssetRef` stores `latitude`/`longitude` as `Double?`** (a small `Coordinate: Sendable`), not `CLLocation` (reference type, not `Sendable`). Reconstruct `CLLocation` only where a CoreLocation API needs it. *(Architect #1.)*
 - **D14 — Fix the dependency direction.** `AssetRef`/`AssetMetadata` and the PhotoKit-facing protocols live in `Curation` (the domain); the PhotoKit implementation depends *on* `Curation`. Dependencies point toward the domain. *(Architect, module section.)*
-- **D15 — Selection: in-memory `Set<String>` is the source of truth; persist a debounced/coalesced snapshot** (Codable blob on the session, or throttled child rows, flushed on `scenePhase` → background). Do not back per-tap mutations with a SwiftData write. *(Architect #2.)*
+- **D15 — Selection: in-memory `Set<String>` is the source of truth; persist a debounced/coalesced snapshot** (Codable blob on the project, or throttled child rows, flushed on `scenePhase` → background). Do not back per-tap mutations with a SwiftData write. *(Architect #2.)*
 - **D16 — Change-observer shim.** A small `NSObject` conforms to `PHPhotoLibraryChangeObserver` and immediately hops into the `PhotoLibrary` actor with only `Sendable` change results. The observer callback is not guaranteed main-thread. *(Architect #4.)*
 - **D17 — Grid data source = main-actor snapshot of `AssetRef` for the visible/prefetch window**, served from the actor; the live `PHFetchResult` adapter never leaves the actor. Benchmark a flat `[AssetRef]` array against the lazy adapter during the spike before committing — "don't materialize" needs a number, not a reflex. *(Architect #3.)*
 - **D18 — Persist a resource-size cache** keyed by `localIdentifier` + modification date — a deliberate exception to "never store re-fetchable metadata," because the cost (iCloud-touching reads over a year) is the whole point of caching. *(Architect #5.)*
 - **D19 — Add an error model** (`PhotoLibraryError` / `ExportError`) and a partial-failure channel for the quality pass and export (iCloud download failure, asset deleted under a selection, revoked authorization, album deleted between runs → recreate). *(Architect #7; HIG #6.)*
-- **D20 — State the navigation + lifecycle model:** `NavigationStack` + typed path on a `@MainActor @Observable` coordinator; restore active session + scroll position across launches; flush selection on background; reconcile library mutations on resume. *(Architect #8/#9.)*
+- **D20 — State the navigation + lifecycle model:** `NavigationStack` + typed path on a `@MainActor @Observable` coordinator; restore the active project (renamed from "session" per D31) + scroll position across launches; flush selection on background; reconcile library mutations on resume. *(Architect #8/#9.)*
 - **D21 — Packages: start lean, keep the seam.** v1 = one `Curation` package (pure: models, protocols, filtering, target math, location distance math) + the app target (real & fake PhotoKit impls, UI). Extract `PhotoLibrary`/`PoimiUI` later if they grow. One `PhotoLibraryProviding` protocol to start; split `ImageLoading`/`AlbumExporting` only when a consumer needs just one. *(Pragmatist §1, reconciled with Architect's boundary direction.)*
 
 ### Testing & verification
@@ -95,10 +95,19 @@
 
 ---
 
-## Still open (decide during the spike / slice)
+## Still open
 
-- Lazy adapter vs flat `[AssetRef]` array — settle with the D17 benchmark.
-- Whether to support a degraded `.limited` mode at all, or hard-gate (D6 leans hard-gate).
-- Which keywords belong in the App Store subtitle (discoverability, given the opaque name). *(HIG #9.)*
-- Within-overlay swipe-between-photos behavior and which photo we land back on.
-- *(resolved)* Section-completion identity → **D32 (d)**; v1 scope → **D34 (full)**.
+- **Degraded `.limited` mode vs hard-gate** (D6 leans hard-gate) — settle when the onboarding /
+  authorization flow is built (#31). The fake already models `.limited`.
+- **App Store subtitle keywords** (discoverability, given the opaque name) — Phase 3. *(HIG #9.)*
+
+### Resolved since the review
+
+- **Within-overlay swipe + which photo we land back on** → **resolved by the Phase-0 spike**:
+  swipe-and-select is promoted to v1 (load-bearing), and dismiss returns to the photo you swiped to
+  ([spike-findings.md](./spike-findings.md)).
+- **Lazy adapter vs flat `[AssetRef]` array (D17)** → **resolved by decision** (not a recorded
+  spike number): a main-actor windowed snapshot served from the actor (architecture §2), with the
+  "don't materialize" claim enforced by the access-counting / scale guard (D29) at the real fetch
+  tier (#34).
+- **Section-completion identity** → **D32 (d)**; **v1 scope** → **D34 (full)**.
