@@ -14,7 +14,9 @@ import Curation
 @testable import PoimiApp
 
 extension DateInterval {
-    /// All representable time — for "fetch everything" assertions.
+    /// All representable time — for "fetch everything" assertions against the fake. Note:
+    /// `.distantPast`/`.distantFuture` bridged into an `NSPredicate` is a PhotoKit sharp edge,
+    /// so the on-device System conformance run (#46) should use a bounded interval, not this.
     static let everything = DateInterval(start: .distantPast, end: .distantFuture)
     /// Calendar year 2025 (UTC), end-exclusive.
     static let year2025 = DateInterval(
@@ -54,11 +56,18 @@ struct PhotoLibraryConformanceTests {
         #expect(assets.isEmpty)
     }
 
-    @Test("SystemPhotoLibrary satisfies the contract shape (content-agnostic)")
-    func systemFetchContractShape() async throws {
-        // In CI/simulator with no authorized library this returns []; the invariants must
-        // still hold. The content-bearing conformance run against the real library is
-        // on-device (D24) — this proves the real impl honors the same contract shape.
-        try await assertFetchContract(SystemPhotoLibrary(), in: .year2025)
+    @Test("SystemPhotoLibrary: unauthorized simulator returns empty, contract still holds")
+    func systemUnauthorizedContract() async throws {
+        // CI precondition: a fresh simulator is unauthorized, so the real fetch returns [] and
+        // the invariants hold (the predicate/sort path runs, but over an empty set). We ASSERT
+        // that precondition so this can't silently become content-bearing — a seeded sim would
+        // fail these and force a conscious update. The real fake↔real *content* equivalence is
+        // the on-device conformance run (#46, D24).
+        let library = SystemPhotoLibrary()
+        let status = await library.authorizationStatus()
+        #expect(status != .authorized)
+        let assets = try await library.fetchAssets(in: .year2025)
+        #expect(assets.isEmpty)
+        try await assertFetchContract(library, in: .year2025)
     }
 }

@@ -69,28 +69,7 @@ jobs:
           swiftlint version
           swiftlint lint
 
-      # --- Build + integration tests (the actual gate) -------------------------
-
-      - name: Build & test PoimiApp
-        run: |
-          # Build the app + run the PoimiAppTests integration tier on an iOS 26
-          # simulator (deployment target iOS 26.0). Pick whatever iOS 26 device the
-          # runner image ships, so an image bump can't break us on a hard-coded device
-          # name. Signing is off — CI validates compile / link / test.
-          DEST_ID="$(xcrun simctl list devices available \
-            | grep -A40 -- '-- iOS 26' \
-            | grep -oE '\(([0-9A-Fa-f-]{36})\)' | head -1 | tr -d '()')"
-          if [ -z "$DEST_ID" ]; then
-            echo "::error::No iOS 26 simulator available on the runner."
-            xcrun simctl list runtimes
-            exit 1
-          fi
-          echo "Testing on simulator $DEST_ID"
-          xcodebuild test \
-            -project App/PoimiApp.xcodeproj \
-            -scheme PoimiApp \
-            -destination "platform=iOS Simulator,id=$DEST_ID" \
-            CODE_SIGNING_ALLOWED=NO
+      # --- Fast checks first (no simulator) — fail red builds quickly ----------
 
       - name: Test Curation package
         # Pure domain unit tests (Swift Testing). No simulator needed — runs on
@@ -131,3 +110,37 @@ jobs:
       - name: Check fake release isolation
         # D30: any Fake* test double must be #if DEBUG-gated (inert in release).
         run: ./Scripts/check-fake-release-isolation.sh
+
+      # --- App build + integration tests (slowest; after the fast checks) ------
+
+      - name: Build PoimiApp (Release)
+        run: |
+          # Validate the Release build too: the fake is #if DEBUG and the DI seam has
+          # Release-only branches (D30), so a Debug-only test run wouldn't catch a Release
+          # compile regression. Generic destination (no sim boot), signing off.
+          xcodebuild build \
+            -project App/PoimiApp.xcodeproj \
+            -scheme PoimiApp \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build & test PoimiApp
+        run: |
+          # Build the app (Debug) + run the PoimiAppTests integration tier on an iOS 26
+          # simulator (deployment target iOS 26.0). Pick whatever iOS 26 device the runner
+          # image ships, so an image bump can't break us on a hard-coded device name.
+          DEST_ID="$(xcrun simctl list devices available \
+            | grep -A40 -- '-- iOS 26' \
+            | grep -oE '\(([0-9A-Fa-f-]{36})\)' | head -1 | tr -d '()')"
+          if [ -z "$DEST_ID" ]; then
+            echo "::error::No iOS 26 simulator available on the runner."
+            xcrun simctl list runtimes
+            exit 1
+          fi
+          echo "Testing on simulator $DEST_ID"
+          xcodebuild test \
+            -project App/PoimiApp.xcodeproj \
+            -scheme PoimiApp \
+            -destination "platform=iOS Simulator,id=$DEST_ID" \
+            CODE_SIGNING_ALLOWED=NO
