@@ -12,7 +12,7 @@
 //  This is the screenshot *harness*, distinct from pixel-snapshot *testing* (deferred, D26).
 //
 //  Real Phase-2 screens register a `case` here as they land. Each screen logs
-//  `screenshot-ready: <id>` once its content is on screen (see `screenshotReady(_:)`); the
+//  `Log.app.notice("screenshot-ready: <id>")` once its content is on screen; the
 //  capture script waits for that signal instead of a blind sleep, so the PNG never races the
 //  screen's async load. A screen catalogued here MUST render against `\.photoLibrary` (the
 //  fake) — never real PhotoKit — or its screenshot is no longer deterministic.
@@ -29,6 +29,9 @@ import Curation
 enum DebugScreen: String, CaseIterable {
     /// Inspector over whatever `\.photoLibrary` vends — proves the fake → UI → screenshot path.
     case library
+    /// The adaptive navigation shell (`AppRootView`) against an authorized fake — shows the
+    /// album-library root + stub destinations (#30).
+    case shell
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -55,6 +58,30 @@ struct DebugScreenHost: View {
     var body: some View {
         switch screen {
         case .library: DebugLibraryView()
+        case .shell: DebugShellView()
+        }
+    }
+}
+
+/// Hosts `AppRootView` with a coordinator resolved against the injected (fake) library, so the
+/// navigation shell can be screenshotted deterministically (#30).
+struct DebugShellView: View {
+    @Environment(\.photoLibrary) private var library
+    @State private var coordinator: AppCoordinator?
+
+    var body: some View {
+        Group {
+            if let coordinator {
+                AppRootView().environment(coordinator)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            let resolved = AppCoordinator(library: library)
+            await resolved.refreshAuthorization()
+            coordinator = resolved
+            Log.app.notice("screenshot-ready: \(DebugScreen.shell.rawValue, privacy: .public)")
         }
     }
 }

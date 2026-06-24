@@ -22,7 +22,7 @@ import Curation
 actor FakePhotoLibrary: PhotoLibraryProviding {
     private let seededAssets: [AssetRef]
     private let seededAlbums: [AlbumRef]
-    private let status: LibraryAuthorization
+    private var status: LibraryAuthorization
 
     init(
         assets: [AssetRef] = FakePhotoLibrary.yearMixedSeed(),
@@ -37,6 +37,12 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     func authorizationStatus() async -> LibraryAuthorization { status }
 
     func requestAuthorization() async -> LibraryAuthorization { status }
+
+    /// Change the reported authorization mid-test — to exercise a transition (e.g. the user
+    /// granting access at the system prompt: `.notDetermined` → `.authorized`).
+    func setAuthorization(_ newStatus: LibraryAuthorization) {
+        status = newStatus
+    }
 
     func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {
         // SHARED CONTRACT with SystemPhotoLibrary (the conformance invariant, D24): a bounded
