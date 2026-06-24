@@ -8,16 +8,32 @@
 
 /* Begin PBXBuildFile section */
 		000000001000000000000010 /* PoimiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000001000000000000001 /* PoimiApp.swift */; };
-		000000001000000000000011 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000001000000000000002 /* ContentView.swift */; };
 		000000001000000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000001000000000000003 /* Assets.xcassets */; };
 		000000001000000000000013 /* Curation in Frameworks */ = {isa = PBXBuildFile; productRef = 000000001000000000000030 /* Curation */; };
+		00000000200000000000B001 /* SpikeRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A001 /* SpikeRootView.swift */; };
+		00000000200000000000B002 /* SpikeModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A002 /* SpikeModel.swift */; };
+		00000000200000000000B003 /* SpikeLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A003 /* SpikeLibrary.swift */; };
+		00000000200000000000B009 /* SpikeGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A009 /* SpikeGrouping.swift */; };
+		00000000200000000000B004 /* ThumbnailImageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A004 /* ThumbnailImageManager.swift */; };
+		00000000200000000000B005 /* FullImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A005 /* FullImageLoader.swift */; };
+		00000000200000000000B006 /* ThumbnailCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A006 /* ThumbnailCell.swift */; };
+		00000000200000000000B007 /* AssetGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A007 /* AssetGridView.swift */; };
+		00000000200000000000B008 /* AssetPagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A008 /* AssetPagerView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		000000001000000000000001 /* PoimiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoimiApp.swift; sourceTree = "<group>"; };
-		000000001000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		000000001000000000000003 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		000000001000000000000004 /* PoimiApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PoimiApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		00000000200000000000A001 /* SpikeRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpikeRootView.swift; sourceTree = "<group>"; };
+		00000000200000000000A002 /* SpikeModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpikeModel.swift; sourceTree = "<group>"; };
+		00000000200000000000A003 /* SpikeLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpikeLibrary.swift; sourceTree = "<group>"; };
+		00000000200000000000A009 /* SpikeGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpikeGrouping.swift; sourceTree = "<group>"; };
+		00000000200000000000A004 /* ThumbnailImageManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailImageManager.swift; sourceTree = "<group>"; };
+		00000000200000000000A005 /* FullImageLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageLoader.swift; sourceTree = "<group>"; };
+		00000000200000000000A006 /* ThumbnailCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCell.swift; sourceTree = "<group>"; };
+		00000000200000000000A007 /* AssetGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetGridView.swift; sourceTree = "<group>"; };
+		00000000200000000000A008 /* AssetPagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetPagerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -44,9 +60,34 @@
 			isa = PBXGroup;
 			children = (
 				000000001000000000000008 /* Sources */,
+				00000000200000000000C001 /* Spike */,
 				000000001000000000000009 /* Resources */,
 			);
 			path = PoimiApp;
+			sourceTree = "<group>";
+		};
+		00000000200000000000C001 /* Spike */ = {
+			isa = PBXGroup;
+			children = (
+				00000000200000000000A001 /* SpikeRootView.swift */,
+				00000000200000000000A002 /* SpikeModel.swift */,
+				00000000200000000000A003 /* SpikeLibrary.swift */,
+				00000000200000000000A009 /* SpikeGrouping.swift */,
+				00000000200000000000C002 /* Render */,
+			);
+			path = Spike;
+			sourceTree = "<group>";
+		};
+		00000000200000000000C002 /* Render */ = {
+			isa = PBXGroup;
+			children = (
+				00000000200000000000A004 /* ThumbnailImageManager.swift */,
+				00000000200000000000A005 /* FullImageLoader.swift */,
+				00000000200000000000A006 /* ThumbnailCell.swift */,
+				00000000200000000000A007 /* AssetGridView.swift */,
+				00000000200000000000A008 /* AssetPagerView.swift */,
+			);
+			path = Render;
 			sourceTree = "<group>";
 		};
 		000000001000000000000007 /* Products */ = {
@@ -61,7 +102,6 @@
 			isa = PBXGroup;
 			children = (
 				000000001000000000000001 /* PoimiApp.swift */,
-				000000001000000000000002 /* ContentView.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -150,7 +190,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				000000001000000000000010 /* PoimiApp.swift in Sources */,
-				000000001000000000000011 /* ContentView.swift in Sources */,
+				00000000200000000000B001 /* SpikeRootView.swift in Sources */,
+				00000000200000000000B002 /* SpikeModel.swift in Sources */,
+				00000000200000000000B003 /* SpikeLibrary.swift in Sources */,
+				00000000200000000000B009 /* SpikeGrouping.swift in Sources */,
+				00000000200000000000B004 /* ThumbnailImageManager.swift in Sources */,
+				00000000200000000000B005 /* FullImageLoader.swift in Sources */,
+				00000000200000000000B006 /* ThumbnailCell.swift in Sources */,
+				00000000200000000000B007 /* AssetGridView.swift in Sources */,
+				00000000200000000000B008 /* AssetPagerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -282,8 +330,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = N4FKQHR5AC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Poimi (spike) adds your selected photos to an album in your library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Poimi (spike) needs full access to your photo library to fetch a date range, show thumbnails, and add a selection to an album.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -309,8 +360,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = N4FKQHR5AC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Poimi (spike) adds your selected photos to an album in your library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Poimi (spike) needs full access to your photo library to fetch a date range, show thumbnails, and add a selection to an album.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

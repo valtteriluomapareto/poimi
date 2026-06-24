@@ -2,9 +2,12 @@
 //  PoimiApp.swift
 //  PoimiApp
 //
-//  The SwiftUI app entry point. Bootstrap skeleton only (GitHub issue #3): a single
-//  `@main` App showing a placeholder. Navigation, the permission flow, and the
-//  review loop arrive in later phases (see docs/plans/project-phases.md).
+//  The SwiftUI app entry point. During Phase 0 it hosts the THROWAWAY spike
+//  harness (`SpikeRootView`, under `Spike/`) that de-risks the make-or-break
+//  review loop on a real library (GitHub issue #4 Part A / D1). The real
+//  navigation coordinator, onboarding, and permission flow replace this in
+//  Phase 2 (see docs/plans/project-phases.md); the spike is then deleted while
+//  the `Spike/Render/*` views are promoted behind the protocol seam.
 //
 //  This target owns the impure layers — PhotoKit, SwiftData, UI, navigation — and
 //  depends on the pure `Curation` package. Dependencies point toward `Curation`,
@@ -16,7 +19,7 @@ import SwiftUI
 struct PoimiApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            SpikeRootView()
         }
     }
 }
