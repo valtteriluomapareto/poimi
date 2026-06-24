@@ -27,6 +27,14 @@
 
 ---
 
+## Part B — on-device re-test (the session-3 build: grouping + new pager)
+
+- 🔑 **We need another zoom level above this grid (key navigation finding).** Day-grouping helps, but one grid level still isn't enough to scan a whole *year*: the author wants a **higher-level overview** above this grid (à la Apple Photos' Years / Months / Days), then **drill into this grid, where selection happens**. So this review grid is the *selection* level; a coarser *overview* level sits above it for navigating scale. Informs the navigation model (D20) and #6 — likely a pinch / level-switch between an overview and the selection grid.
+- 🐞 **Super sluggish on device** after the session-3 build (sectioned grid + `UIScrollView` pager + neighbour prefetch). Console: `Gesture: System gesture gate timed out` (main-thread stall), `CMPhotoDecompressionSession err=-16990` (decode pressure), and a zoom-transition fallback (`matchedTransitionSource` source cell not in the hierarchy on dismiss, with the new sections). **Under root-cause review (4 perspectives incl. Codex); fix next.** The sluggishness currently *masks* the grouping feel — re-judge grouping once it's smooth.
+- ⚠️ **Cells not square after grouping** — cosmetic, **deprioritized** for now ("don't care").
+
+---
+
 ## Tap mapping
 
 The make-or-break decision (D9/D10, ★ primary gate). The real question: which action
