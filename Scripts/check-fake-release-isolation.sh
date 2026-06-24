@@ -2,15 +2,15 @@
 #
 # check-fake-release-isolation.sh
 #
-# Enforces D30: the test-double photo library (`FakePhotoLibrary` and any sibling
-# `Fake*` doubles) must be compiled ONLY under Debug and be inert in Release — it
-# must never ship. The language-level, build-config-agnostic way to guarantee that
-# is to wrap each such source in `#if DEBUG … #endif`. This guard asserts exactly
-# that for every app source whose name marks it a fake double.
+# Enforces D30 (both halves of the Phase-1 exit criterion):
+#   1. The test-double photo library (`FakePhotoLibrary` and any sibling `Fake*` doubles)
+#      is compiled ONLY under Debug and inert in Release — guaranteed by wrapping each such
+#      source in `#if DEBUG … #endif`.
+#   2. The fake-swap launch flag (`-PoimiUseFakeLibrary`) is itself referenced only behind
+#      `#if DEBUG`, so a release build neither compiles the fake nor honors the flag.
 #
-# No fakes exist yet (they arrive with issue #21); the check passes trivially now and
-# becomes load-bearing the moment a `Fake*.swift` lands. The composition-root swap
-# flag's release-inertness (issue #23) is verified the same way once it exists.
+# Language-level, build-config-agnostic, and checkable with grep. Inert before the fake /
+# flag exist; load-bearing the moment they land.
 #
 set -euo pipefail
 
@@ -23,28 +23,34 @@ if [ ! -d "${APP_DIR}" ]; then
     exit 0
 fi
 
-# Files whose name marks them a test double (case-insensitive 'fake'). Built with a
-# read loop, not `mapfile` (absent in macOS's stock bash 3.2).
-fake_files=()
-while IFS= read -r f; do
-    [ -n "${f}" ] && fake_files+=("${f}")
-done < <(find "${APP_DIR}" -name '*.swift' | grep -iE '/[^/]*fake[^/]*\.swift$' || true)
-
-if [ "${#fake_files[@]}" -eq 0 ]; then
-    echo "OK: no Fake* sources present yet (guard is inert until issue #21)."
-    exit 0
-fi
-
 violations=0
-for file in "${fake_files[@]}"; do
-    if ! grep -Eq '^[[:space:]]*#if[[:space:]]+DEBUG' "${file}"; then
-        echo "::error file=${file}::Fake double must be wrapped in '#if DEBUG' so it cannot ship in Release (D30)."
+
+requires_debug_gate() {
+    # $1 = file, $2 = human reason
+    if ! grep -Eq '^[[:space:]]*#if[[:space:]]+DEBUG' "$1"; then
+        echo "::error file=$1::$2 (D30)."
         violations=$((violations + 1))
     fi
-done
+}
+
+# 1. Fake double sources (name contains 'fake', case-insensitive) must be #if DEBUG-gated.
+fake_count=0
+while IFS= read -r file; do
+    [ -z "${file}" ] && continue
+    fake_count=$((fake_count + 1))
+    requires_debug_gate "${file}" "Fake double must be wrapped in '#if DEBUG' so it cannot ship in Release"
+done < <(find "${APP_DIR}" -name '*.swift' | grep -iE '/[^/]*fake[^/]*\.swift$' || true)
+
+# 2. Any source referencing the fake-swap launch flag must be #if DEBUG-gated.
+flag_count=0
+while IFS= read -r file; do
+    [ -z "${file}" ] && continue
+    flag_count=$((flag_count + 1))
+    requires_debug_gate "${file}" "-PoimiUseFakeLibrary must be referenced only behind '#if DEBUG' so the flag is inert in Release"
+done < <(grep -rlE 'PoimiUseFakeLibrary' "${APP_DIR}" --include='*.swift' 2>/dev/null || true)
 
 if [ "${violations}" -gt 0 ]; then
-    echo "FAIL: ${violations} fake double(s) not Debug-gated."
+    echo "FAIL: ${violations} release-isolation violation(s)."
     exit 1
 fi
-echo "OK: all ${#fake_files[@]} Fake* source(s) are #if DEBUG-gated (release-inert, D30)."
+echo "OK: ${fake_count} Fake* source(s) and ${flag_count} flag reference(s) are #if DEBUG-gated (release-inert, D30)."

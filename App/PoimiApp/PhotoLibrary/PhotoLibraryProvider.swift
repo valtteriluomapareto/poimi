@@ -28,7 +28,14 @@ enum PhotoLibraryProvider {
 
 extension EnvironmentValues {
     /// The injected photo-library seam. Phase 2's navigation coordinator / stores read this
-    /// via `@Environment(\.photoLibrary)`; today it's wired through so the seam is live and
-    /// the composition root has a consumer.
+    /// via `@Environment(\.photoLibrary)`; `@main` injects the composition-root instance, so
+    /// this default is only ever hit by an un-injected reader (e.g. a SwiftUI preview). In
+    /// DEBUG that default is the deterministic fake — never a real-PhotoKit instance that
+    /// would trip authorization inside a preview. Release keeps `SystemPhotoLibrary` (there
+    /// are no previews, and `@main` always injects, so the default isn't reached at runtime).
+    #if DEBUG
+    @Entry var photoLibrary: any PhotoLibraryProviding = FakePhotoLibrary()
+    #else
     @Entry var photoLibrary: any PhotoLibraryProviding = SystemPhotoLibrary()
+    #endif
 }

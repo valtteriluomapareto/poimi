@@ -39,10 +39,15 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     func requestAuthorization() async -> LibraryAuthorization { status }
 
     func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {
+        // SHARED CONTRACT with SystemPhotoLibrary (the conformance invariant, D24): a bounded
+        // interval fetch returns only **dated** assets in `[start, end)`, oldest → newest.
+        // A nil-`creationDate` (undated) asset is NOT matched by PhotoKit's range predicate,
+        // so it isn't returned here either — undated assets reach the "Undated" section via a
+        // separate path in Phase 2, never through a range fetch.
         seededAssets
             .filter { asset in
-                guard let date = asset.captureDate else { return true }   // undated always included
-                return interval.contains(date)
+                guard let date = asset.captureDate else { return false }
+                return date >= interval.start && date < interval.end
             }
             .sorted { ($0.captureDate ?? .distantPast) < ($1.captureDate ?? .distantPast) }
     }

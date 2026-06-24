@@ -9,8 +9,9 @@
 //  Phase-1 skeleton: authorization is real (it drives the permission flow), and a basic
 //  date-range fetch + album enumeration are in place. Deferred to Phase 2: the exclude
 //  filters, the windowed `AssetRef` snapshot by index range (D17, vs. the whole-result
-//  materialization here), image loading, album export, and the change reconciliation that
-//  the observer (below) will drive.
+//  materialization here), image loading, album export, and registering + reconciling the
+//  change-observer shim (`PhotoLibraryChangeObserver`) — that wiring lands in Phase 2 with
+//  the actor-owned fetch result (so there's no register/unregister lifecycle to leak yet).
 //
 
 import CoreLocation
@@ -19,10 +20,6 @@ import Photos
 import Curation
 
 actor SystemPhotoLibrary: PhotoLibraryProviding {
-    /// Retained so PhotoKit keeps delivering change notifications (D16). Registered lazily
-    /// via `startObserving`.
-    private var changeObserver: PhotoLibraryChangeObserver?
-
     func authorizationStatus() async -> LibraryAuthorization {
         Self.map(PHPhotoLibrary.authorizationStatus(for: .readWrite))
     }
@@ -32,6 +29,10 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
     }
 
     func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {
+        // SHARED CONTRACT with FakePhotoLibrary (the conformance invariant, D24): dated assets
+        // in [start, end), oldest → newest. PhotoKit's predicate does not match a nil
+        // creationDate, so undated assets are excluded from a range fetch — they reach the
+        // "Undated" section via a separate Phase-2 path, never through this method.
         let options = PHFetchOptions()
         options.predicate = NSPredicate(
             format: "creationDate >= %@ AND creationDate < %@",
@@ -49,7 +50,10 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
 
     func albums() async throws -> [AlbumRef] {
         var albums: [AlbumRef] = []
-        let collections = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
+        // User albums only (.albumRegular): the exclude-album picker shouldn't surface smart /
+        // system collections the user can't meaningfully exclude (architecture §8).
+        let collections = PHAssetCollection.fetchAssetCollections(
+            with: .album, subtype: .albumRegular, options: nil)
         collections.enumerateObjects { collection, _, _ in
             albums.append(AlbumRef(
                 id: collection.localIdentifier,
@@ -57,15 +61,6 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
                 count: nil))
         }
         return albums
-    }
-
-    /// Register the change-observer shim (D16). `onChange` is invoked (off the main thread)
-    /// whenever the library changes; Phase 2 turns this into the `apply(change:)`
-    /// reconciliation against the actor-owned fetch result.
-    func startObserving(onChange: @escaping @Sendable () -> Void) {
-        let observer = PhotoLibraryChangeObserver(onChange: onChange)
-        PHPhotoLibrary.shared().register(observer)
-        changeObserver = observer
     }
 
     // MARK: - Value mapping (PHAsset never escapes the actor)

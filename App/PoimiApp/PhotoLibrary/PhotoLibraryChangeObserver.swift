@@ -7,7 +7,8 @@
 //  `NSObject` receives the callback and hops a `Sendable` signal into the actor. In Phase 2
 //  it carries the `Sendable` results of `changeDetails(for:)` (computed against the
 //  actor-owned fetch result); the Phase-1 skeleton forwards a bare "something changed"
-//  signal, which is the seam the reconciliation plugs into.
+//  signal, which is the seam the reconciliation plugs into. Registration (and its
+//  symmetric teardown) is wired by `SystemPhotoLibrary` in Phase 2, alongside `apply(change:)`.
 //
 
 import Foundation
