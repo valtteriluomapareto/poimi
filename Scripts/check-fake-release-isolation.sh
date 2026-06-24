@@ -39,7 +39,7 @@ while IFS= read -r file; do
     [ -z "${file}" ] && continue
     fake_count=$((fake_count + 1))
     requires_debug_gate "${file}" "Fake double must be wrapped in '#if DEBUG' so it cannot ship in Release"
-done < <(find "${APP_DIR}" -name '*.swift' | grep -iE '/[^/]*fake[^/]*\.swift$' || true)
+done < <(find "${APP_DIR}" -path '*/PoimiAppTests/*' -prune -o -name '*.swift' -print | grep -iE '/[^/]*fake[^/]*\.swift$' || true)
 
 # 2. Any source referencing the fake-swap launch flag must be #if DEBUG-gated.
 flag_count=0
@@ -47,7 +47,7 @@ while IFS= read -r file; do
     [ -z "${file}" ] && continue
     flag_count=$((flag_count + 1))
     requires_debug_gate "${file}" "-PoimiUseFakeLibrary must be referenced only behind '#if DEBUG' so the flag is inert in Release"
-done < <(grep -rlE 'PoimiUseFakeLibrary' "${APP_DIR}" --include='*.swift' 2>/dev/null || true)
+done < <(grep -rlE 'PoimiUseFakeLibrary' "${APP_DIR}" --include='*.swift' --exclude-dir=PoimiAppTests 2>/dev/null || true)
 
 if [ "${violations}" -gt 0 ]; then
     echo "FAIL: ${violations} release-isolation violation(s)."

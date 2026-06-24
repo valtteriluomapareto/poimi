@@ -23,7 +23,27 @@
 		00000000300000000000B302 /* SystemPhotoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A302 /* SystemPhotoLibrary.swift */; };
 		00000000300000000000B303 /* PhotoLibraryChangeObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A303 /* PhotoLibraryChangeObserver.swift */; };
 		00000000300000000000B304 /* PhotoLibraryProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A304 /* PhotoLibraryProvider.swift */; };
+		000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000043 /* PhotoLibraryConformanceTests.swift */; };
+		000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		00000000400000000000004C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000001000000000000024 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000001000000000000021;
+			remoteInfo = PoimiApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		00000000400000000000004B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 000000001000000000000021 /* PoimiApp */;
+			targetProxy = 00000000400000000000004C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXFileReference section */
 		000000001000000000000001 /* PoimiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoimiApp.swift; sourceTree = "<group>"; };
@@ -42,6 +62,9 @@
 		00000000300000000000A302 /* SystemPhotoLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPhotoLibrary.swift; sourceTree = "<group>"; };
 		00000000300000000000A303 /* PhotoLibraryChangeObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryChangeObserver.swift; sourceTree = "<group>"; };
 		00000000300000000000A304 /* PhotoLibraryProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryProvider.swift; sourceTree = "<group>"; };
+		000000004000000000000042 /* PoimiAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PoimiAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000004000000000000043 /* PhotoLibraryConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryConformanceTests.swift; sourceTree = "<group>"; };
+		000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrarySeedTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,6 +83,7 @@
 			isa = PBXGroup;
 			children = (
 				000000001000000000000006 /* PoimiApp */,
+				00000000400000000000C401 /* PoimiAppTests */,
 				000000001000000000000007 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -103,6 +127,7 @@
 			isa = PBXGroup;
 			children = (
 				000000001000000000000004 /* PoimiApp.app */,
+				000000004000000000000042 /* PoimiAppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -134,6 +159,15 @@
 			path = PhotoLibrary;
 			sourceTree = "<group>";
 		};
+		00000000400000000000C401 /* PoimiAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				000000004000000000000043 /* PhotoLibraryConformanceTests.swift */,
+				000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */,
+			);
+			path = PoimiAppTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -157,6 +191,22 @@
 			productReference = 000000001000000000000004 /* PoimiApp.app */;
 			productType = "com.apple.product-type.application";
 		};
+		000000004000000000000041 /* PoimiAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000004000000000000048 /* Build configuration list for PBXNativeTarget "PoimiAppTests" */;
+			buildPhases = (
+				000000004000000000000047 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				00000000400000000000004B /* PBXTargetDependency */,
+			);
+			name = PoimiAppTests;
+			productName = PoimiAppTests;
+			productReference = 000000004000000000000042 /* PoimiAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -169,6 +219,10 @@
 				TargetAttributes = {
 					000000001000000000000021 = {
 						CreatedOnToolsVersion = 26.3;
+					};
+					000000004000000000000041 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = 000000001000000000000021;
 					};
 				};
 			};
@@ -189,6 +243,7 @@
 			projectRoot = "";
 			targets = (
 				000000001000000000000021 /* PoimiApp */,
+				000000004000000000000041 /* PoimiAppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -223,6 +278,15 @@
 				00000000300000000000B302 /* SystemPhotoLibrary.swift in Sources */,
 				00000000300000000000B303 /* PhotoLibraryChangeObserver.swift in Sources */,
 				00000000300000000000B304 /* PhotoLibraryProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000004000000000000047 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */,
+				000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -406,6 +470,48 @@
 			};
 			name = Release;
 		};
+		000000004000000000000049 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = N4FKQHR5AC;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = fi.paretosoftware.poimi.PoimiAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PoimiApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PoimiApp";
+			};
+			name = Debug;
+		};
+		00000000400000000000004A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = N4FKQHR5AC;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = fi.paretosoftware.poimi.PoimiAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PoimiApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PoimiApp";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -423,6 +529,15 @@
 			buildConfigurations = (
 				000000001000000000000029 /* Debug */,
 				00000000100000000000002A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		000000004000000000000048 /* Build configuration list for PBXNativeTarget "PoimiAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000004000000000000049 /* Debug */,
+				00000000400000000000004A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

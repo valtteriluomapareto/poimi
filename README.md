@@ -40,6 +40,12 @@ project as an `XCLocalSwiftPackageReference` at `../Curation`. If XcodeGen/Tuist
 adopted later, the spec can be regenerated; until then the committed `.xcodeproj` *is*
 the spec.
 
+Because it's hand-maintained: new files/targets are added by hand-editing
+`project.pbxproj` (stable sequential IDs, e.g. the `…A301` PhotoKit block, the `…0041`
+test target), and **avoid committing Xcode's incidental reformatting churn** — keep the
+diff to the intended change so the file stays reviewable. If targets grow past a handful,
+adopt a generator.
+
 ## Requirements
 
 - **Xcode 26.x** with the **iOS 26 SDK** and an **iOS 26 simulator runtime** installed.
