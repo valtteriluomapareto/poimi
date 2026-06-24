@@ -33,8 +33,9 @@ struct AppRootView: View {
                 if sizeClass == .compact { stack } else { splitView }
             }
         }
-        // The launch/resume authorization read (D6). #31 adds scenePhase re-refresh + the real
-        // onboarding/recovery screens; until then this drives the stub root phase.
+        // The cold-launch authorization read (D6): `.onChange(of: scenePhase)` doesn't fire for
+        // the initial `.active`, so this `.task` is the launch read; @main's scenePhase handler
+        // covers the resume re-read (the Settings round-trip).
         .task { await coordinator.refreshAuthorization() }
     }
 

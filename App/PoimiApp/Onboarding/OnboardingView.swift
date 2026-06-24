@@ -22,6 +22,7 @@ struct OnboardingView: View {
         case .intro:
             OnboardingScaffold(
                 symbol: "hand.tap",
+                symbolTint: .brandGreen,   // first-run identity uses the green brand accent (§1)
                 title: "Poimi",
                 headline: "Hand-pick your year.",
                 message: "Go through a whole year of photos and choose the best into one album — "
@@ -31,6 +32,7 @@ struct OnboardingView: View {
         case .rationale:
             OnboardingScaffold(
                 symbol: "photo.stack",
+                symbolTint: .brandGreen,
                 title: "Full library access",
                 headline: "Poimi works across your whole library.",
                 message: "It needs full access to browse a date range, show your photos, and save the album "
@@ -45,9 +47,11 @@ struct OnboardingView: View {
 
 /// A calm, centered onboarding/recovery layout: symbol · title · headline · supporting copy, with
 /// a thumb-reachable prominent action at the bottom (design-language: Notes-calm, one clear
-/// primary action, ≥44pt targets, system components).
+/// primary action, ≥44pt targets). Scrolls and the symbol scales with Dynamic Type so AX sizes
+/// reflow instead of clipping.
 struct OnboardingScaffold: View {
     let symbol: String
+    var symbolTint: Color = .accentColor
     let title: String
     let headline: String
     let message: String
@@ -55,34 +59,59 @@ struct OnboardingScaffold: View {
     let primaryAction: () -> Void
     var footnote: String?
 
+    @ScaledMetric(relativeTo: .largeTitle) private var symbolSize: CGFloat = 56
+
     var body: some View {
         VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: symbol)
-                .font(.system(size: 56))
-                .foregroundStyle(.tint)
-                .accessibilityHidden(true)
-            Text(title)
-                .font(.largeTitle.bold())
-            Text(headline)
-                .font(.title3)
-                .multilineTextAlignment(.center)
-            Text(message)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Spacer()
+            ScrollView {
+                VStack(spacing: 16) {
+                    Image(systemName: symbol)
+                        .font(.system(size: symbolSize))
+                        .foregroundStyle(symbolTint)
+                        .accessibilityHidden(true)
+                    Text(title)
+                        .font(.largeTitle.bold())
+                        .accessibilityAddTraits(.isHeader)
+                    Text(headline)
+                        .font(.title3)
+                        .multilineTextAlignment(.center)
+                    Text(message)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 48)
+            }
             if let footnote {
                 Text(footnote)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
             Button(primaryTitle, action: primaryAction)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .frame(maxWidth: .infinity)
+                .buttonStyle(PrimaryActionButtonStyle())
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
+
+/// The primary action: the cloudberry-gold accent fill with a **dark** on-accent label (§1 — the
+/// gold is light in both modes, so white-on-gold fails contrast; the label is `#1C1C1E`).
+/// `.borderedProminent` forces a white label, so we style it explicitly. ≥44pt tall, full-width.
+struct PrimaryActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline)
+            .foregroundStyle(Color.onAccent)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .background(Color.accentColor, in: .capsule)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .contentShape(.capsule)
+    }
+}
+
+// `Color.brandGreen` (Leaf green, brand/identity — styleguide §1) and `Color.onAccent` (the dark
+// foreground for the light gold accent — §1) are the asset-catalog symbols Xcode generates from
+// BrandGreen.colorset / OnAccent.colorset; no hand-written extension needed.

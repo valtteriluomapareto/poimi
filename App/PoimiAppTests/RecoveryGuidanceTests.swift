@@ -20,7 +20,9 @@ struct RecoveryGuidanceTests {
         #expect(limited != denied)
         #expect(limited.title == "Full access needed")
         #expect(denied.title == "Photo access is off")
-        // Restricted shares the "access is off" framing.
+        // Intentional contract: `.restricted` and `.denied` share one "access is off" screen
+        // (the `case .denied, .restricted` grouping). If they ever need distinct copy, split the
+        // mapping AND this assertion together.
         #expect(restricted == denied)
         // The limited copy must speak to the "hides most of your year" trap specifically.
         #expect(limited.message.localizedCaseInsensitiveContains("limited"))

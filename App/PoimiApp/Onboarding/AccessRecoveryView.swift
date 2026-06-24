@@ -50,7 +50,7 @@ struct AccessRecoveryView: View {
             symbol: "lock.open",
             title: guidance.title,
             headline: guidance.message,
-            message: "Open Settings → Poimi → Photos → All Photos, then come back.",
+            message: "Set Poimi's Photos access to full access in Settings, then come back.",
             primaryTitle: "Open Settings",
             primaryAction: openSettings)
     }
