@@ -137,6 +137,33 @@ This is the make-or-break loop and the one decision a doc cannot settle — it m
 - "No new compiler warnings" flips from advisory to a hard gate at this exit (D28).
 - End to end on a real device: pick a range, filter, hand-pick toward a target, export a correct native album; no blank/dead-end in any permission or empty-result state.
 
+### Phase 2 issues (GitHub)
+
+Folds the original task list together with the design/architecture additions — the album library, Overview, mark-as-done, completion, and settings (D31–D34).
+
+| Issue | Scope | Depends on |
+|---|---|---|
+| [#28](https://github.com/valtteriluomapareto/poimi/issues/28) | Test target + integration tier + fake growth + conformance suite (D23/D24/D25/D29) | Phase 1 |
+| [#29](https://github.com/valtteriluomapareto/poimi/issues/29) | State foundation: `CurationProject` + `ProjectStore` + `SelectionStore` + target math (D15/D31/D34) | #28 |
+| [#30](https://github.com/valtteriluomapareto/poimi/issues/30) | Navigation coordinator, adaptive (D20) | #29 |
+| [#31](https://github.com/valtteriluomapareto/poimi/issues/31) | Onboarding + authorization flow (D6) — Welcome, Limited fallback | #30 |
+| [#32](https://github.com/valtteriluomapareto/poimi/issues/32) | Albums home (D31) — Project list | #29, #30 |
+| [#33](https://github.com/valtteriluomapareto/poimi/issues/33) | New-album setup + album picker — Project setup, Album picker | #32 |
+| [#34](https://github.com/valtteriluomapareto/poimi/issues/34) | Fetch + exact filters + long-scan surface (D2/D12/D17) — Scanning | #29, #33 |
+| [#35](https://github.com/valtteriluomapareto/poimi/issues/35) | ★ Review grid + in-grid selection (D9) — Review grid, Select mode | #34 |
+| [#36](https://github.com/valtteriluomapareto/poimi/issues/36) | Expand viewer + swipe-and-select (D10/D22) — Photo viewer | #35 |
+| [#37](https://github.com/valtteriluomapareto/poimi/issues/37) | Overview (zoom-out level) — Overview | #35 |
+| [#38](https://github.com/valtteriluomapareto/poimi/issues/38) | Mark-as-done + resume (D32(d)) — Mark as done | #37, #29 |
+| [#39](https://github.com/valtteriluomapareto/poimi/issues/39) | Album export + completion (D19) — Completion | #29, #35 |
+| [#40](https://github.com/valtteriluomapareto/poimi/issues/40) | Empty + error states | #34, #39 |
+| [#41](https://github.com/valtteriluomapareto/poimi/issues/41) | Album settings (D31) — Album settings | #32, #33 |
+| [#42](https://github.com/valtteriluomapareto/poimi/issues/42) | iPad split-view layout (D20) | #30, #35 |
+| [#43](https://github.com/valtteriluomapareto/poimi/issues/43) | E2E smoke + UI spec (D23/D27) | most of the above |
+
+**Flow:** #28 → #29 → #30 → onboarding/home/setup (#31/#32/#33) → fetch (#34) → **★#35 review grid** → #36 viewer ∥ #37 overview → #38 mark-as-done ; export #39 ; states #40 ; settings #41 ; iPad #42 ; close-out #43.
+
+**Build order:** stand up the spine (#28→#30), then drive a thin path to **#34 + #35** to re-validate the picking *feel* on a real library *before* spreading into breadth — the spike validated the concept; #35 is where the real implementation holds up or doesn't.
+
 ---
 
 ## Phase 3 — Ship v1 *(TestFlight → App Store)*
