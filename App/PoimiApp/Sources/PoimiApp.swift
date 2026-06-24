@@ -24,9 +24,10 @@ struct PoimiApp: App {
     private let photoLibrary = PhotoLibraryProvider.make()
 
     init() {
-        // Hoist out of the log autoclosure: it escapes, and capturing `self` mid-init is illegal.
-        let libraryType = String(describing: type(of: photoLibrary))
-        Log.app.notice("Poimi launched (library: \(libraryType, privacy: .public))")
+        // The composition root logs which concrete library it resolved; this is just the
+        // launch marker. (The `notice` literal escapes into an autoclosure, so keep it
+        // capture-free — no `self`.)
+        Log.app.notice("Poimi launched")
     }
 
     var body: some Scene {
@@ -40,8 +41,13 @@ struct PoimiApp: App {
     private var rootView: some View {
         #if DEBUG
         // Screenshot harness (#48): `-PoimiScreen <id>` boots straight to a catalog screen.
-        if let screen = DebugLaunch.requestedScreen {
-            DebugScreenHost(screen: screen)
+        // An unknown id fails loud (never a silent fallback that mis-captures the spike root).
+        if let id = DebugLaunch.screenArgument {
+            if let screen = DebugLaunch.requestedScreen {
+                DebugScreenHost(screen: screen)
+            } else {
+                DebugUnknownScreenView(id: id)
+            }
         } else {
             SpikeRootView()
         }

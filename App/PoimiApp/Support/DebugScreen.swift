@@ -11,8 +11,11 @@
 //  flag are absent from release (D30, enforced by Scripts/check-fake-release-isolation.sh).
 //  This is the screenshot *harness*, distinct from pixel-snapshot *testing* (deferred, D26).
 //
-//  Real Phase-2 screens register a `case` here as they land; today the catalog hosts the
-//  fake-library inspector (which proves the fake → UI → screenshot path) and the spike root.
+//  Real Phase-2 screens register a `case` here as they land. Each screen logs
+//  `screenshot-ready: <id>` once its content is on screen (see `screenshotReady(_:)`); the
+//  capture script waits for that signal instead of a blind sleep, so the PNG never races the
+//  screen's async load. A screen catalogued here MUST render against `\.photoLibrary` (the
+//  fake) — never real PhotoKit — or its screenshot is no longer deterministic.
 //
 #if DEBUG
 
@@ -21,23 +24,27 @@ import SwiftUI
 import Curation
 
 /// The screenshot-harness catalog. Each raw value is a `-PoimiScreen <id>` argument and the
-/// name of the PNG `Scripts/screenshots.sh` writes. `CaseIterable` so the script can discover
-/// every screen without a hand-maintained list.
+/// name of the PNG `Scripts/screenshots.sh` writes. Keep cases simple — one per line, the
+/// raw value identical to the case name — so the script can discover ids by parsing this enum.
 enum DebugScreen: String, CaseIterable {
     /// Inspector over whatever `\.photoLibrary` vends — proves the fake → UI → screenshot path.
     case library
-    /// The Phase-0/1 throwaway spike root (removed with the spike in Phase 2).
-    case spike
 }
 
-/// Resolves the `-PoimiScreen <id>` launch override. `nil` (the default) → the normal app.
+/// Resolves the `-PoimiScreen` launch override.
 enum DebugLaunch {
-    static var requestedScreen: DebugScreen? {
+    /// The raw value passed to `-PoimiScreen`, if the flag is present (even if it doesn't
+    /// resolve to a catalog case). `nil` → the flag was not passed → run the normal app.
+    static var screenArgument: String? {
         let args = ProcessInfo.processInfo.arguments
         guard let flag = args.firstIndex(of: "-PoimiScreen") else { return nil }
         let valueIndex = args.index(after: flag)
-        guard valueIndex < args.endIndex else { return nil }
-        return DebugScreen(rawValue: args[valueIndex])
+        return valueIndex < args.endIndex ? args[valueIndex] : nil
+    }
+
+    /// The resolved catalog screen, or `nil` if the flag is absent or names an unknown screen.
+    static var requestedScreen: DebugScreen? {
+        screenArgument.flatMap(DebugScreen.init(rawValue:))
     }
 }
 
@@ -48,8 +55,28 @@ struct DebugScreenHost: View {
     var body: some View {
         switch screen {
         case .library: DebugLibraryView()
-        case .spike: SpikeRootView()
         }
+    }
+}
+
+/// Shown when `-PoimiScreen` names a screen the catalog doesn't have. A loud, unmistakable
+/// failure so a typo (`-PoimiScreen libary`) can never masquerade as a real capture — the
+/// harness's whole value is honest, comparable screenshots.
+struct DebugUnknownScreenView: View {
+    let id: String
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 48))
+            Text("Unknown screen").font(.title.bold())
+            Text("“\(id)” is not in the DebugScreen catalog.").multilineTextAlignment(.center)
+            Text("Valid: \(DebugScreen.allCases.map(\.rawValue).joined(separator: ", "))")
+                .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.red)
+        .foregroundStyle(.white)
     }
 }
 
@@ -95,13 +122,17 @@ struct DebugLibraryView: View {
         status = await library.authorizationStatus()
         do {
             assets = try await library.fetchAssets(in: DateInterval(start: .distantPast, end: .distantFuture))
-            albums = try await library.albums()
+            // Sort by id so the captured order is self-evidently stable, not reliant on the
+            // seed's array order.
+            albums = try await library.albums().sorted { $0.id < $1.id }
             // Integer counts are not redacted by the unified log, so no `privacy:` needed.
             Log.app.debug("DebugLibraryView loaded \(assets.count) assets, \(albums.count) albums")
         } catch {
             loadError = String(describing: error)
             Log.photoLibrary.error("DebugLibraryView load failed: \(String(describing: error), privacy: .public)")
         }
+        // The content is now on screen — tell the capture script it's safe to snapshot.
+        Log.app.notice("screenshot-ready: \(DebugScreen.library.rawValue, privacy: .public)")
     }
 
     private static let dayFormatter: DateFormatter = {

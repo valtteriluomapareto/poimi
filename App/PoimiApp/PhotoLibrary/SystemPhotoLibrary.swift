@@ -48,7 +48,9 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
         result.enumerateObjects { asset, _, _ in
             refs.append(Self.ref(from: asset))
         }
-        Log.photoLibrary.info("fetchAssets returned \(refs.count) assets in the requested interval")
+        // `.notice` (not `.info`) so it persists to the store and `log show` surfaces it after
+        // the run — fetch counts are the main diagnostic here and are infrequent.
+        Log.photoLibrary.notice("fetchAssets returned \(refs.count) assets in the requested interval")
         return refs
     }
 

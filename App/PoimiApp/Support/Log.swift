@@ -25,10 +25,9 @@ enum Log {
 
     /// PhotoKit access / fetch / export (the `PhotoLibrary` actor + seam).
     static let photoLibrary = Logger(subsystem: subsystem, category: "PhotoLibrary")
-    /// Selection + target/running-total state.
-    static let selection = Logger(subsystem: subsystem, category: "Selection")
-    /// Navigation coordinator + lifecycle.
-    static let navigation = Logger(subsystem: subsystem, category: "Navigation")
     /// App-level / composition root / catch-all.
     static let app = Logger(subsystem: subsystem, category: "App")
+
+    // Further categories (Selection, Navigation, …) are added alongside the first code that
+    // logs to them — not pre-declared, so every category here has a live caller.
 }
