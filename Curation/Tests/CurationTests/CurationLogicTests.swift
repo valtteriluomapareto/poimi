@@ -128,7 +128,7 @@ struct CompletionTests {
             asset("a", 2025, 3, 16, calendar: calendar),
             asset("a2", 2025, 3, 16, calendar: calendar),
             asset("b", 2025, 3, 17, calendar: calendar),
-            asset("c", 2025, 3, 18, calendar: calendar),   // NOT done
+            asset("c", 2025, 3, 18, calendar: calendar)   // NOT done
         ]
         let doneDays: Set<DayKey> = [day(2025, 3, 16), day(2025, 3, 17)]
         // Select one done asset + the not-done one (c). The not-done pick must NOT inflate %.

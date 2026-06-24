@@ -73,35 +73,12 @@ public enum DayGrouping {
     ) -> [DayGroup] {
         guard !assets.isEmpty else { return [] }
 
-        // Sort defensively into chronological order (oldest → newest, undated last), stable
-        // within a day via the original index — so callers need not pre-sort, and a
-        // descending or interleaved slice can't yield a negative gap or backwards days.
-        let sorted = assets.enumerated().sorted { lhs, rhs in
-            switch (lhs.element.captureDate, rhs.element.captureDate) {
-            case let (left?, right?): return left != right ? left < right : lhs.offset < rhs.offset
-            case (nil, _?): return false          // undated sorts after every dated asset
-            case (_?, nil): return true
-            case (nil, nil): return lhs.offset < rhs.offset
-            }
-        }.map(\.element)
-
-        // Bucket by day in chronological order; collect undated assets separately for one
-        // trailing group.
-        var dayOrder: [DayKey] = []
-        var idsByDay: [DayKey: [String]] = [:]
-        var undatedIDs: [String] = []
-        for asset in sorted {
-            let key = asset.dayKey(in: calendar)
-            if key == .undated {
-                undatedIDs.append(asset.id)
-                continue
-            }
-            if idsByDay[key] == nil {
-                idsByDay[key] = []
-                dayOrder.append(key)
-            }
-            idsByDay[key]?.append(asset.id)
-        }
+        // Sort defensively (oldest → newest, undated last) then bucket by day, so callers
+        // need not pre-sort and an out-of-order slice can't yield a negative gap.
+        let buckets = bucketByDay(chronological(assets), calendar: calendar)
+        let dayOrder = buckets.order
+        let idsByDay = buckets.idsByDay
+        let undatedIDs = buckets.undated
 
         var groups: [DayGroup] = []
         var quietRun: [DayKey] = []
@@ -151,6 +128,47 @@ public enum DayGrouping {
             ))
         }
         return groups
+    }
+
+    /// Defensive chronological sort: oldest → newest, undated (nil capture date) last,
+    /// stable within equal dates via the original index.
+    private static func chronological(_ assets: [AssetRef]) -> [AssetRef] {
+        assets.enumerated().sorted { lhs, rhs in
+            switch (lhs.element.captureDate, rhs.element.captureDate) {
+            case let (left?, right?): return left != right ? left < right : lhs.offset < rhs.offset
+            case (nil, _?): return false          // undated sorts after every dated asset
+            case (_?, nil): return true
+            case (nil, nil): return lhs.offset < rhs.offset
+            }
+        }.map(\.element)
+    }
+
+    /// The day-bucketing result (a named type rather than a wide tuple).
+    private struct DayBuckets {
+        let order: [DayKey]
+        let idsByDay: [DayKey: [String]]
+        let undated: [String]
+    }
+
+    /// Bucket pre-sorted assets by calendar day, preserving first-seen order; undated assets
+    /// are collected separately for the single trailing group.
+    private static func bucketByDay(_ assets: [AssetRef], calendar: Calendar) -> DayBuckets {
+        var order: [DayKey] = []
+        var idsByDay: [DayKey: [String]] = [:]
+        var undated: [String] = []
+        for asset in assets {
+            let key = asset.dayKey(in: calendar)
+            if key == .undated {
+                undated.append(asset.id)
+                continue
+            }
+            if idsByDay[key] == nil {
+                idsByDay[key] = []
+                order.append(key)
+            }
+            idsByDay[key]?.append(asset.id)
+        }
+        return DayBuckets(order: order, idsByDay: idsByDay, undated: undated)
     }
 
     /// Whole-day gap from an earlier day to a later one, computed through the calendar so a
