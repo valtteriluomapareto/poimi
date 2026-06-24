@@ -107,7 +107,7 @@ Tap opens a **navigation destination** (not a `.fullScreenCover`/overlay — D10
 
 ### 7. Location bucketing *(v1.1 — deferred, D4)*
 
-`NamedLocation` (center coordinate, radius, name) in SwiftData. Bucketing is a pure distance check in `Curation` (folded in; no separate `LocationKit` package for now). Optional cluster *suggestion* via simple grid/greedy clustering on capture coordinates — suggest a name, human confirms. Always a "no location" bucket. Coordinates come from `PHAsset.location` (EXIF), so **no CoreLocation permission is requested** (D7); MapKit is used only for pin/radius UI.
+`NamedLocation` (center coordinate, radius, name) in SwiftData. Bucketing is a pure distance check in `Curation` (folded in; no separate `LocationKit` package for now). Optional cluster *suggestion* via simple grid/greedy clustering on capture coordinates — suggest a name, human confirms. Always a "no location" bucket. Coordinates come from `PHAsset.location` (EXIF), so **no CoreLocation permission is requested** (D7); MapKit is used only for pin/radius UI. **v1 scope (D33):** v1 sections stay **date-only** adaptive day-groups (§13); the design's by-location overview and trip names ("Italy", "Summer cabin") are an *additive view* over those same day-groups once location lands — not a rework.
 
 ### 8. Album export
 
@@ -117,7 +117,7 @@ Resolve selection → `PHAsset`s, create-or-find `PHAssetCollection` by stored a
 
 ### 9. Persistence (SwiftData)
 
-We persist `CurationSession` (date range, target count, chosen filters, exported album id), `NamedLocation`, and the selection snapshot (D15). Never photo bytes — with **one deliberate exception** (D18): a **resource-size cache** keyed by `localIdentifier` + modification date, because re-reading recorded original sizes for a year of photos is iCloud-touching and expensive — caching it *is* the point.
+We persist **many `CurationProject`s** (the album library, §12 — date range, target count, chosen filters, exported album id, done-days, resume pointer), `NamedLocation` (v1.1), and each project's debounced selection snapshot (D15). Never photo bytes — with **one deliberate exception** (D18): a **resource-size cache** keyed by `localIdentifier` + modification date, because re-reading recorded original sizes for a year of photos is iCloud-touching and expensive — caching it *is* the point.
 
 `@Model` instances are not `Sendable`; never pass them across the actor boundary — pass `PersistentIdentifier` and re-fetch. Autosave policy is set explicitly (not relying on per-mutation autosave). If we ever persist off-main, use a `ModelActor` — but the debounced main-actor snapshot (D15) should avoid needing a background context at all.
 
@@ -128,8 +128,62 @@ We persist `CurationSession` (date range, target count, chosen filters, exported
 ### 11. Errors, navigation, lifecycle
 
 - **Error model (D19):** typed `PhotoLibraryError` / `ExportError`. The quality pass and export are inherently partially-failing (iCloud download failure, asset deleted under a selection, revoked authorization, album deleted between runs → recreate); progress reporting carries an error channel, not just a percentage.
-- **Navigation (D20):** `NavigationStack` + a typed path on a `@MainActor @Observable` app coordinator (onboarding → permission → session setup → review → export). The `.zoom` destination lives on this stack.
-- **Lifecycle / restoration (D20):** restore the active `CurationSession` and scroll position across launches, flush the selection snapshot on background, and reconcile library mutations that happened while backgrounded.
+- **Navigation (D20, updated for the album library):** `NavigationStack` + a typed path on a `@MainActor @Observable` app coordinator. The path now **roots at the albums library** and inserts the zoom-out **album overview** above the grid: `onboarding → permission → albums → albumOverview(projectID) → review(sectionID?) → photo(zoom) → export`. The `.zoom` destination lives on the review→photo step; overview→review is a plain push. On regular width the albums list is the split-view sidebar (§6).
+- **Lifecycle / restoration (D20):** restore the **last-opened project**, its resume pointer (§13), and scroll position across launches; flush the selection snapshot on background; reconcile library mutations on resume — prune vanished assets from the selection, and re-derive day-groups + section-done from the stable per-day flags (§13).
+
+---
+
+## Key subsystem designs (cont. — added after the design pass)
+
+### 12. Projects — the album library (D31)
+
+The original model assumed a single active `CurationSession`. The design makes the **album library the home**: many named projects, each its own curation toward one Photos album. So the persisted aggregate is plural.
+
+- A **`CurationProject`** (the user-facing "album") owns: title, date range, target count, exclusion settings (excluded album ids + screenshots flag), the **target Photos-album id** (`nil` until first export creates it, D19), the debounced selection snapshot, the done-day set + resume pointer (§13), and `createdAt` / `lastOpenedAt`.
+- The **Albums list** (the new nav root) shows projects ordered by `lastOpenedAt`, each with **derived status** — *not started* (empty selection, nothing done), *in progress*, or *done* (`markedDoneAt` set). Progress (`picked / target`) and the cover are cheap derivations, not stored.
+- Operations: **new** (setup flow), **open** (→ overview), **duplicate**, **reset picks** (clear the selection set; keep range/album/exclusions), **delete** (remove the project + its progress — the Photos album and originals are never touched; the copy is one-way).
+- Two albums = two projects; nothing global is shared except app-level Photos access and the resource-size cache (keyed by asset, so it's reused across projects).
+
+> Naming: internally `CurationProject` to avoid colliding with PhotoKit's album; the UI word stays "album."
+
+### 13. Section completion & resume — "mark as done" (D32, **open: pick the identity strategy**)
+
+The design lets the user mark **days / trips / months done** and **resume where they left off**, so a long curation stays oriented across sittings. This is new since the original plans, and it needs persisted completion with a **stable identity** — the catch being that the adaptive day-groups are a *computed view* (a pure function of capture dates + threshold) that can shift when the library changes underneath it.
+
+**The identity problem — pick one (D32):**
+- **(a) Span key** — key completion on the group's calendar-day span (`2025-06-20..2025-06-26`). Human-meaningful, but one added/removed photo can split or merge a group, shifting the span and orphaning its done-state.
+- **(b) Anchor-day key** — key on the group's first day. More stable to in-span additions; merges/splits still move the anchor.
+- **(c) Member content-hash** — exact, but *any* membership change invalidates "done" — far too brittle for a feature whose whole point is durability across a long edit.
+- **(d) — RECOMMENDED — persist at day granularity, derive section-done.** The atomic, stable unit is a **calendar day**; store a sparse set of `doneDay` flags. "Mark this section done" writes the flag for every calendar day the section spans (one day for a busy day; the whole run for a merged quiet stretch). A section renders *done* iff all the days it currently spans are done. Re-grouping is then a pure **view over a stable per-day truth** — boundary shifts never lose progress, because progress lives on days, not group spans. **Resume = the earliest in-range day with photos that isn't done.**
+
+Completion is **both** explicit (tap the section's circle) and automatic (auto-completes when every photo in a section has been viewed) — the design shows both; the store is the same. **Derived stats** (completion screen): *reviewed* = photos on done days within range; *kept* = selection count; *% kept* = kept / reviewed — no extra counters.
+
+## Data model — v1 SwiftData entities
+
+Persist *our* state only; never photo bytes (one exception — the resource-size cache, D18).
+
+```
+CurationProject            @Model
+  id: UUID
+  title: String                    // "Best of 2025" (the user-facing "album")
+  rangeStart / rangeEnd: Date
+  targetCount: Int
+  excludeScreenshots: Bool
+  excludedAlbumIDs: [String]       // PHAssetCollection localIdentifiers
+  targetAlbumID: String?           // created on first export (create-or-find, D19)
+  selectionSnapshot: Data          // Codable Set<String>, debounced (D15) — never per-tap
+  doneDays: [Date]                 // sparse done-day flags (D32(d))
+  lastViewedAssetID: String?       // resume pointer (§13)
+  markedDoneAt: Date?              // user finalized → status .done
+  createdAt / lastOpenedAt: Date
+
+NamedLocation              @Model  // v1.1 (D4) — unchanged
+ResourceSizeCacheEntry     @Model  // D18 — keyed by localIdentifier + modificationDate
+```
+
+- Selection lives in memory as a `Set<String>` (`SelectionStore`); `selectionSnapshot` is the debounced durable copy (D15).
+- `@Model` instances aren't `Sendable`: pass `PersistentIdentifier` across the actor boundary and re-fetch.
+- `doneDays` as a stored `[Date]` is fine at v1 scale (≤366 entries/project); promote to a `DayProgress` child table only if finer per-asset review tracking is ever needed.
 
 ---
 

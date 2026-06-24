@@ -78,6 +78,14 @@
 - **D29 — Add a performance/scale check** (against the fake): seed/fetch 10k assets, the heavy pass over 10k, and an access-counting guard that fails if the whole fetch result is materialized. Not a per-PR gate initially; a named test that backs the "lazy" claim. *(Tester 1.4.)*
 - **D30 — Guard the fake out of release builds** — compile it only under a test/debug configuration; a launch flag that swaps it in must be inert in release. *(Tester §5.)*
 
+### Post-design decisions (album library + mark-as-done)
+
+*Landed after the Paper design pass surfaced the albums home and the "mark sections done / resume" feature — folded into [architecture.md](./architecture.md) §12–§13 + the data-model section.*
+
+- **D31 — The model is a plural album library, not one session.** Promote `CurationSession` → many **`CurationProject`** records (internal name; the UI word is "album"); the **Albums list is the new nav root**, ordered by `lastOpenedAt`, with derived status (not-started / in-progress / done). Operations: new, open, duplicate, **reset picks** (clear selection, keep config), **delete** (project + progress only — the Photos album and originals are never touched; copies are one-way). *(Design round; `CurationSession` fields already fit.)*
+- **D32 — Section completion + resume; persist at day granularity. ⚠️ OPEN — pick the identity strategy.** Adaptive day-groups are a *computed view*, so persisted "done" needs a stable key. Options: (a) span key, (b) anchor-day key, (c) member content-hash, (d) **persist per calendar-day, derive section-done — RECOMMENDED** (the day is the stable atom; re-grouping is a pure view over a per-day truth, so boundary shifts never lose progress; resume = earliest in-range undone day). Completion is both explicit (tap) and automatic (all photos viewed). **Decision needed before building the overview/mark-as-done; default to (d) unless there's reason otherwise.** *(Design round.)*
+- **D33 — v1 sections stay date-only; location/trip labeling remains v1.1 (reinforces D4).** The design's "by-location" overview and trip names are an **additive view** over the same date day-groups once location bucketing lands — not a rework. The only real choice is whether to pull a lightweight EXIF trip-detection into v1; **recommendation: no** — keep v1 scope to chronological day-groups. *(Design round; reinforces D4.)*
+
 ### Deferred / explicitly not now
 
 - Mutation testing (immature Swift tooling) — optional, nightly on `Curation` only if ever. *(Tester §7.)*
@@ -92,3 +100,4 @@
 - Whether to support a degraded `.limited` mode at all, or hard-gate (D6 leans hard-gate).
 - Which keywords belong in the App Store subtitle (discoverability, given the opaque name). *(HIG #9.)*
 - Within-overlay swipe-between-photos behavior and which photo we land back on.
+- **Section-completion identity strategy (D32)** — recommend per-day granularity (d); confirm before building mark-as-done.
