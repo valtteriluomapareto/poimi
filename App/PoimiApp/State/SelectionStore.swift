@@ -96,6 +96,14 @@ final class SelectionStore {
         write(to: activeProject)
     }
 
+    /// Await the in-flight debounced flush (the `scheduleFlush` task) to completion, if any.
+    /// Lets tests assert the debounce actually fired + persisted by awaiting the real task —
+    /// no fixed `Task.sleep` guess, so it can't flake on a slow/loaded CI runner. No-op if
+    /// nothing is pending.
+    func awaitPendingFlush() async {
+        await flushTask?.value
+    }
+
     private func scheduleFlush() {
         flushTask?.cancel()
         let project = activeProject
