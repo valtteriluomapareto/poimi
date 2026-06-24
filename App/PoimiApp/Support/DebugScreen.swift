@@ -12,7 +12,7 @@
 //  This is the screenshot *harness*, distinct from pixel-snapshot *testing* (deferred, D26).
 //
 //  Real Phase-2 screens register a `case` here as they land. Each screen logs
-//  `screenshot-ready: <id>` once its content is on screen (see `screenshotReady(_:)`); the
+//  `Log.app.notice("screenshot-ready: <id>")` once its content is on screen; the
 //  capture script waits for that signal instead of a blind sleep, so the PNG never races the
 //  screen's async load. A screen catalogued here MUST render against `\.photoLibrary` (the
 //  fake) — never real PhotoKit — or its screenshot is no longer deterministic.

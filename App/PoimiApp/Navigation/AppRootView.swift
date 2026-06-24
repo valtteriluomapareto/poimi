@@ -20,16 +20,24 @@ struct AppRootView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        switch coordinator.rootPhase {
-        case .onboarding:
-            RoutePlaceholder(symbol: "hand.wave", title: "Onboarding",
-                             detail: "First-run intro + permission rationale → system prompt (#31)")
-        case .recovery:
-            RoutePlaceholder(symbol: "lock", title: "Access needed",
-                             detail: "Limited/denied recovery + Settings deep-link (#31)")
-        case .albums:
-            if sizeClass == .regular { splitView } else { stack }
+        Group {
+            switch coordinator.rootPhase {
+            case .onboarding:
+                RoutePlaceholder(symbol: "hand.wave", title: "Onboarding",
+                                 detail: "First-run intro + permission rationale → system prompt (#31)")
+            case .recovery:
+                RoutePlaceholder(symbol: "lock", title: "Access needed",
+                                 detail: "Limited/denied recovery + Settings deep-link (#31)")
+            case .albums:
+                // Test compact positively so an unknown/`nil` size class (iPad mid-scene-setup)
+                // defaults to the regular split layout, not the iPhone stack. Mid-flip reflow
+                // polish (push/scroll state across a size-class change) is #42.
+                if sizeClass == .compact { stack } else { splitView }
+            }
         }
+        // The launch/resume authorization read (D6). #31 adds scenePhase re-refresh + the real
+        // onboarding/recovery screens; until then this drives the stub root phase.
+        .task { await coordinator.refreshAuthorization() }
     }
 
     // Compact (iPhone): one NavigationStack rooted at the album library.

@@ -5,7 +5,7 @@
 //  The navigation stack roots at the album library and pushes through:
 //      albums → albumOverview(projectID) → review(dayKey?) → photo(zoom) → export
 //  Review routes by `DayKey`, never a section id (sections are a computed view, §13). Routes
-//  key by the project's stable `id: UUID` (Hashable/Codable) — not its SwiftData
+//  key by the project's stable `id: UUID` (itself `Hashable`/`Codable`) — not its SwiftData
 //  `PersistentIdentifier` — so a path stays valid across re-fetches and could be persisted.
 //
 
