@@ -6,8 +6,9 @@
 #   1. The test-double photo library (`FakePhotoLibrary` and any sibling `Fake*` doubles)
 #      is compiled ONLY under Debug and inert in Release — guaranteed by wrapping each such
 #      source in `#if DEBUG … #endif`.
-#   2. The fake-swap launch flag (`-PoimiUseFakeLibrary`) is itself referenced only behind
-#      `#if DEBUG`, so a release build neither compiles the fake nor honors the flag.
+#   2. The debug-only launch flags (`-PoimiUseFakeLibrary`, `-PoimiScreen`) are themselves
+#      referenced only behind `#if DEBUG`, so a release build neither compiles the fake/harness
+#      nor honors the flags.
 #
 # Language-level, build-config-agnostic, and checkable with grep. Inert before the fake /
 # flag exist; load-bearing the moment they land.
@@ -41,13 +42,14 @@ while IFS= read -r file; do
     requires_debug_gate "${file}" "Fake double must be wrapped in '#if DEBUG' so it cannot ship in Release"
 done < <(find "${APP_DIR}" -path '*/PoimiAppTests/*' -prune -o -name '*.swift' -print | grep -iE '/[^/]*fake[^/]*\.swift$' || true)
 
-# 2. Any source referencing the fake-swap launch flag must be #if DEBUG-gated.
+# 2. Any source referencing a debug-only launch flag must be #if DEBUG-gated. New debug flags
+#    (the screenshot harness's `-PoimiScreen`, etc.) join this alternation as they land.
 flag_count=0
 while IFS= read -r file; do
     [ -z "${file}" ] && continue
     flag_count=$((flag_count + 1))
-    requires_debug_gate "${file}" "-PoimiUseFakeLibrary must be referenced only behind '#if DEBUG' so the flag is inert in Release"
-done < <(grep -rlE 'PoimiUseFakeLibrary' "${APP_DIR}" --include='*.swift' --exclude-dir=PoimiAppTests 2>/dev/null || true)
+    requires_debug_gate "${file}" "a debug launch flag (-PoimiUseFakeLibrary / -PoimiScreen) must be referenced only behind '#if DEBUG' so it is inert in Release"
+done < <(grep -rlE '\-Poimi(UseFakeLibrary|Screen)' "${APP_DIR}" --include='*.swift' --exclude-dir=PoimiAppTests 2>/dev/null || true)
 
 if [ "${violations}" -gt 0 ]; then
     echo "FAIL: ${violations} release-isolation violation(s)."

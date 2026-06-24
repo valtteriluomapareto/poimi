@@ -94,3 +94,53 @@ platform/UI frameworks) and uses no main-actor isolation:
 
 (This is the precursor to the build-time/CI check formalized in Phase 1, per the
 project-phases exit criteria.)
+
+## Screenshots (eyeball a screen against its design)
+
+`Scripts/screenshots.sh` boots an iOS 26 simulator, builds + installs the app, and launches
+it straight to a named screen against the deterministic `FakePhotoLibrary` — then captures a
+PNG. No tapping, reproducible run-to-run:
+
+```sh
+./Scripts/screenshots.sh                # every screen in the catalog
+./Scripts/screenshots.sh library        # only the named screens (validated against the catalog)
+./Scripts/screenshots.sh --list         # print the catalog screen ids and exit (no sim)
+SIM_NAME="iPhone 17 Pro" ./Scripts/screenshots.sh
+FRESH=1 ./Scripts/screenshots.sh        # clean boot first (clears a stuck system alert)
+READY_TIMEOUT=30 ./Scripts/screenshots.sh   # wait longer for the ready signal on slow machines
+```
+
+Output lands in `screenshots/<id>.png` (git-ignored). The catalog of screens is the
+`DebugScreen` enum in `App/PoimiApp/Support/DebugScreen.swift` — each `case` is a
+`-PoimiScreen <id>` launch target; new screens register a case as they land (and must render
+against the injected `\.photoLibrary` fake, never real PhotoKit, to stay deterministic). A
+mistyped id fails loud — the script validates against the catalog, and the app shows a red
+"unknown screen" page rather than silently capturing the wrong screen. Each screen logs
+`screenshot-ready: <id>` once its content is on screen, and the script waits for that signal
+before snapshotting (no blind sleep). This is the screenshot *harness* (eyeball against the
+Paper designs), distinct from pixel-snapshot *testing*, which stays deferred (D26). Everything
+it drives is `#if DEBUG` and absent from Release (D30).
+
+## Debugging (logs)
+
+The app logs at its impure seams via `os.Logger` under the `fi.paretosoftware.poimi`
+subsystem (see `App/PoimiApp/Support/Log.swift`). Pull a run's `.notice`+ logs (composition
+root, launch, fetch counts) off a booted simulator after the fact:
+
+```sh
+xcrun simctl spawn booted log show \
+  --predicate 'subsystem == "fi.paretosoftware.poimi"' \
+  --last 2m --style compact
+```
+
+`.info` and `.debug` messages are **not** persisted to the log store by default, so `log show`
+won't surface them retroactively — stream live to see everything (start this, *then* launch):
+
+```sh
+xcrun simctl spawn booted log stream \
+  --predicate 'subsystem == "fi.paretosoftware.poimi"' \
+  --level debug --style compact
+```
+
+Narrow to one area with `category == "PhotoLibrary"` (or `App`). Logging lives in the app
+target only — the pure `Curation` package stays side-effect-free.

@@ -23,6 +23,8 @@
 		00000000300000000000B302 /* SystemPhotoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A302 /* SystemPhotoLibrary.swift */; };
 		00000000300000000000B303 /* PhotoLibraryChangeObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A303 /* PhotoLibraryChangeObserver.swift */; };
 		00000000300000000000B304 /* PhotoLibraryProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A304 /* PhotoLibraryProvider.swift */; };
+		00000000500000000000B501 /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000500000000000A501 /* Log.swift */; };
+		00000000500000000000B502 /* DebugScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000500000000000A502 /* DebugScreen.swift */; };
 		000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000043 /* PhotoLibraryConformanceTests.swift */; };
 		000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */; };
 /* End PBXBuildFile section */
@@ -62,6 +64,8 @@
 		00000000300000000000A302 /* SystemPhotoLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPhotoLibrary.swift; sourceTree = "<group>"; };
 		00000000300000000000A303 /* PhotoLibraryChangeObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryChangeObserver.swift; sourceTree = "<group>"; };
 		00000000300000000000A304 /* PhotoLibraryProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryProvider.swift; sourceTree = "<group>"; };
+		00000000500000000000A501 /* Log.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
+		00000000500000000000A502 /* DebugScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugScreen.swift; sourceTree = "<group>"; };
 		000000004000000000000042 /* PoimiAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PoimiAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000004000000000000043 /* PhotoLibraryConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryConformanceTests.swift; sourceTree = "<group>"; };
 		000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrarySeedTests.swift; sourceTree = "<group>"; };
@@ -93,6 +97,7 @@
 			children = (
 				000000001000000000000008 /* Sources */,
 				00000000300000000000C301 /* PhotoLibrary */,
+				00000000500000000000C501 /* Support */,
 				00000000200000000000C001 /* Spike */,
 				000000001000000000000009 /* Resources */,
 			);
@@ -157,6 +162,15 @@
 				00000000300000000000A304 /* PhotoLibraryProvider.swift */,
 			);
 			path = PhotoLibrary;
+			sourceTree = "<group>";
+		};
+		00000000500000000000C501 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				00000000500000000000A501 /* Log.swift */,
+				00000000500000000000A502 /* DebugScreen.swift */,
+			);
+			path = Support;
 			sourceTree = "<group>";
 		};
 		00000000400000000000C401 /* PoimiAppTests */ = {
@@ -278,6 +292,8 @@
 				00000000300000000000B302 /* SystemPhotoLibrary.swift in Sources */,
 				00000000300000000000B303 /* PhotoLibraryChangeObserver.swift in Sources */,
 				00000000300000000000B304 /* PhotoLibraryProvider.swift in Sources */,
+				00000000500000000000B501 /* Log.swift in Sources */,
+				00000000500000000000B502 /* DebugScreen.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
