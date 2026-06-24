@@ -14,19 +14,32 @@
 //  never away from it (D14/D21).
 
 import OSLog
+import SwiftData
 import SwiftUI
 
 @main
 struct PoimiApp: App {
-    // Composition root (#23): resolve the photo-library dependency once at launch and inject
-    // it into the environment. The Spike still drives the UI in Phase 0/1; Phase 2's
-    // coordinator reads `\.photoLibrary` instead of touching PhotoKit directly.
+    // Composition root (#23/#29): resolve the app's dependencies once at launch and inject them
+    // into the environment. The Spike still drives the UI in Phase 0/1; Phase 2's coordinator
+    // reads `\.photoLibrary` and the stores instead of touching PhotoKit / SwiftData directly.
     private let photoLibrary = PhotoLibraryProvider.make()
+    private let modelContainer: ModelContainer
+    @State private var projectStore: ProjectStore
+    @State private var selectionStore: SelectionStore
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        // The composition root logs which concrete library it resolved; this is just the
-        // launch marker. (The `notice` literal escapes into an autoclosure, so keep it
-        // capture-free — no `self`.)
+        let container: ModelContainer
+        do {
+            container = try AppModelContainer.make()
+        } catch {
+            // The data store is unrecoverable at launch — there is no sensible degraded mode.
+            Log.app.fault("Failed to open the data store: \(String(describing: error), privacy: .public)")
+            fatalError("Poimi could not open its data store: \(error)")
+        }
+        modelContainer = container
+        _projectStore = State(initialValue: ProjectStore(container: container))
+        _selectionStore = State(initialValue: SelectionStore(container: container))
         Log.app.notice("Poimi launched")
     }
 
@@ -34,7 +47,14 @@ struct PoimiApp: App {
         WindowGroup {
             rootView
                 .environment(\.photoLibrary, photoLibrary)
+                .environment(projectStore)
+                .environment(selectionStore)
+                .onChange(of: scenePhase) { _, phase in
+                    // Durability point (D15/§12): persist the live selection when we background.
+                    if phase == .background { selectionStore.flushNow() }
+                }
         }
+        .modelContainer(modelContainer)
     }
 
     @ViewBuilder

@@ -25,8 +25,14 @@
 		00000000300000000000B304 /* PhotoLibraryProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A304 /* PhotoLibraryProvider.swift */; };
 		00000000500000000000B501 /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000500000000000A501 /* Log.swift */; };
 		00000000500000000000B502 /* DebugScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000500000000000A502 /* DebugScreen.swift */; };
+		00000000600000000000B601 /* CurationProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000600000000000A601 /* CurationProject.swift */; };
+		00000000600000000000B602 /* AppSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000600000000000A602 /* AppSchema.swift */; };
+		00000000700000000000B701 /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000700000000000A701 /* ProjectStore.swift */; };
+		00000000700000000000B702 /* SelectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000700000000000A702 /* SelectionStore.swift */; };
 		000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000043 /* PhotoLibraryConformanceTests.swift */; };
 		000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */; };
+		00000000400000000000004E /* ProjectStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000004D /* ProjectStoreTests.swift */; };
+		000000004000000000000050 /* SelectionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000004F /* SelectionStoreTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,9 +72,15 @@
 		00000000300000000000A304 /* PhotoLibraryProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryProvider.swift; sourceTree = "<group>"; };
 		00000000500000000000A501 /* Log.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
 		00000000500000000000A502 /* DebugScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugScreen.swift; sourceTree = "<group>"; };
+		00000000600000000000A601 /* CurationProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurationProject.swift; sourceTree = "<group>"; };
+		00000000600000000000A602 /* AppSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSchema.swift; sourceTree = "<group>"; };
+		00000000700000000000A701 /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
+		00000000700000000000A702 /* SelectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionStore.swift; sourceTree = "<group>"; };
 		000000004000000000000042 /* PoimiAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PoimiAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000004000000000000043 /* PhotoLibraryConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryConformanceTests.swift; sourceTree = "<group>"; };
 		000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrarySeedTests.swift; sourceTree = "<group>"; };
+		00000000400000000000004D /* ProjectStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStoreTests.swift; sourceTree = "<group>"; };
+		00000000400000000000004F /* SelectionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,6 +110,8 @@
 				000000001000000000000008 /* Sources */,
 				00000000300000000000C301 /* PhotoLibrary */,
 				00000000500000000000C501 /* Support */,
+				00000000600000000000C601 /* Persistence */,
+				00000000700000000000C701 /* State */,
 				00000000200000000000C001 /* Spike */,
 				000000001000000000000009 /* Resources */,
 			);
@@ -173,11 +187,31 @@
 			path = Support;
 			sourceTree = "<group>";
 		};
+		00000000600000000000C601 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				00000000600000000000A601 /* CurationProject.swift */,
+				00000000600000000000A602 /* AppSchema.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		00000000700000000000C701 /* State */ = {
+			isa = PBXGroup;
+			children = (
+				00000000700000000000A701 /* ProjectStore.swift */,
+				00000000700000000000A702 /* SelectionStore.swift */,
+			);
+			path = State;
+			sourceTree = "<group>";
+		};
 		00000000400000000000C401 /* PoimiAppTests */ = {
 			isa = PBXGroup;
 			children = (
 				000000004000000000000043 /* PhotoLibraryConformanceTests.swift */,
 				000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */,
+				00000000400000000000004D /* ProjectStoreTests.swift */,
+				00000000400000000000004F /* SelectionStoreTests.swift */,
 			);
 			path = PoimiAppTests;
 			sourceTree = "<group>";
@@ -294,6 +328,10 @@
 				00000000300000000000B304 /* PhotoLibraryProvider.swift in Sources */,
 				00000000500000000000B501 /* Log.swift in Sources */,
 				00000000500000000000B502 /* DebugScreen.swift in Sources */,
+				00000000600000000000B601 /* CurationProject.swift in Sources */,
+				00000000600000000000B602 /* AppSchema.swift in Sources */,
+				00000000700000000000B701 /* ProjectStore.swift in Sources */,
+				00000000700000000000B702 /* SelectionStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -303,6 +341,8 @@
 			files = (
 				000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */,
 				000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */,
+				00000000400000000000004E /* ProjectStoreTests.swift in Sources */,
+				000000004000000000000050 /* SelectionStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -449,7 +489,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "fi.paretosoftware.poimi";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.valtteriluoma.poimi";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -479,7 +519,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "fi.paretosoftware.poimi";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.valtteriluoma.poimi";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -496,7 +536,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = fi.paretosoftware.poimi.PoimiAppTests;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.valtteriluoma.poimiTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -517,7 +557,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = fi.paretosoftware.poimi.PoimiAppTests;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.valtteriluoma.poimiTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = NO;
