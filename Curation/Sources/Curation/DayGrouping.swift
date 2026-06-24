@@ -55,14 +55,16 @@ public enum DayGrouping {
     /// Group a chronological slice into adaptive day-groups.
     ///
     /// - Parameters:
-    ///   - assets: asset value models, **sorted oldest → newest** (the fetch order).
+    ///   - assets: asset value models in any order — sorted internally (oldest → newest,
+    ///     undated last), stable within a day.
     ///   - threshold: busy-day cutoff `N` (≥ N photos in a day → its own group).
     ///   - gapToleranceDays: max calendar gap before a quiet run breaks.
     ///   - calendar: injected so day bucketing + gap math use one explicit calendar /
     ///     timezone policy (the same one §20 completion uses). DST-safe — bucketing keys on
     ///     day components and gaps use `dateComponents(_:from:to:)`, never 24h arithmetic.
     /// - Returns: groups in chronological order (dated first, then one "Undated" group if
-    ///   any). Concatenating their `assetIDs` reproduces the input order exactly.
+    ///   any). Concatenating their `assetIDs` yields every asset id in that chronological
+    ///   order (undated last) — a partition of the input ids, regardless of input order.
     public static func groups(
         for assets: [AssetRef],
         threshold: Int = defaultThreshold,
@@ -71,13 +73,25 @@ public enum DayGrouping {
     ) -> [DayGroup] {
         guard !assets.isEmpty else { return [] }
 
-        // Bucket by day, preserving first-seen (chronological, given sorted input) order;
-        // collect undated assets separately for one trailing group.
+        // Sort defensively into chronological order (oldest → newest, undated last), stable
+        // within a day via the original index — so callers need not pre-sort, and a
+        // descending or interleaved slice can't yield a negative gap or backwards days.
+        let sorted = assets.enumerated().sorted { lhs, rhs in
+            switch (lhs.element.captureDate, rhs.element.captureDate) {
+            case let (left?, right?): return left != right ? left < right : lhs.offset < rhs.offset
+            case (nil, _?): return false          // undated sorts after every dated asset
+            case (_?, nil): return true
+            case (nil, nil): return lhs.offset < rhs.offset
+            }
+        }.map(\.element)
+
+        // Bucket by day in chronological order; collect undated assets separately for one
+        // trailing group.
         var dayOrder: [DayKey] = []
         var idsByDay: [DayKey: [String]] = [:]
         var undatedIDs: [String] = []
-        for asset in assets {
-            let key = DayKey(date: asset.captureDate, calendar: calendar)
+        for asset in sorted {
+            let key = asset.dayKey(in: calendar)
             if key == .undated {
                 undatedIDs.append(asset.id)
                 continue

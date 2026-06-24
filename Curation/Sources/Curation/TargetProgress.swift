@@ -22,10 +22,10 @@ public struct TargetProgress: Sendable, Equatable {
     /// Whether the target has been reached.
     public var isComplete: Bool { target > 0 && picked >= target }
 
-    /// Progress in `0...1` (clamped); `0` when the target is non-positive.
+    /// Progress in `0...1` (clamped at both ends); `0` when the target is non-positive.
     public var fraction: Double {
         guard target > 0 else { return 0 }
-        return min(1, Double(picked) / Double(target))
+        return max(0, min(1, Double(picked) / Double(target)))
     }
 }
 

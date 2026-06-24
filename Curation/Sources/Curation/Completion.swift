@@ -32,7 +32,7 @@ public enum Completion {
         var seen = Set<DayKey>()
         var ordered: [DayKey] = []
         for asset in assets {
-            let key = DayKey(date: asset.captureDate, calendar: calendar)
+            let key = asset.dayKey(in: calendar)
             if seen.insert(key).inserted {
                 ordered.append(key)
             }
@@ -48,6 +48,31 @@ public enum Completion {
         calendar: Calendar
     ) -> DayKey? {
         daysWithPhotos(in: assets, calendar: calendar).first { !doneDays.contains($0) }
+    }
+
+    /// "Done but changed" reconcile (D32(d) / architecture §13): when the library changes
+    /// under a curation, a done day whose photo count **grew** re-opens (its flag clears),
+    /// so a newly-added photo isn't silently skipped by resume/stats; a day that only lost
+    /// photos stays done. Pure and day-level — pass the asset slices from before and after
+    /// the change. Returns the reconciled `doneDays`.
+    public static func reopening(
+        doneDays: Set<DayKey>,
+        from previous: [AssetRef],
+        to current: [AssetRef],
+        calendar: Calendar
+    ) -> Set<DayKey> {
+        let before = countsByDay(previous, calendar: calendar)
+        let after = countsByDay(current, calendar: calendar)
+        let grew = doneDays.filter { (after[$0] ?? 0) > (before[$0] ?? 0) }
+        return doneDays.subtracting(grew)
+    }
+
+    private static func countsByDay(_ assets: [AssetRef], calendar: Calendar) -> [DayKey: Int] {
+        var counts: [DayKey: Int] = [:]
+        for asset in assets {
+            counts[asset.dayKey(in: calendar), default: 0] += 1
+        }
+        return counts
     }
 }
 
@@ -83,7 +108,7 @@ public struct CompletionStats: Sendable, Equatable {
         for asset in assets {
             let isSelected = selection.contains(asset.id)
             if isSelected { totalPicked += 1 }
-            let onDoneDay = doneDays.contains(DayKey(date: asset.captureDate, calendar: calendar))
+            let onDoneDay = doneDays.contains(asset.dayKey(in: calendar))
             if onDoneDay {
                 markedDone += 1
                 if isSelected { kept += 1 }

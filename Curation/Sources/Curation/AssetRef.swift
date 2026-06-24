@@ -102,3 +102,12 @@ public struct AssetMetadata: Sendable, Equatable, Codable {
         self.recordedByteSize = recordedByteSize
     }
 }
+
+public extension AssetRef {
+    /// The asset's calendar day under `calendar` — the single day-projection used by both
+    /// grouping (#19) and completion (#20), so their keys always line up (architecture §13
+    /// requires the identical projection). Defining it once keeps that contract in one place.
+    func dayKey(in calendar: Calendar) -> DayKey {
+        DayKey(date: captureDate, calendar: calendar)
+    }
+}

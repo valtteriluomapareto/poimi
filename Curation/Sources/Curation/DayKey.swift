@@ -15,7 +15,7 @@
 
 import Foundation
 
-public enum DayKey: Sendable, Equatable, Hashable, Codable, Comparable, CustomStringConvertible {
+public enum DayKey: Sendable, Equatable, Hashable, Comparable, CustomStringConvertible, LosslessStringConvertible, Codable {
     /// A real calendar day.
     case day(year: Int, month: Int, day: Int)
     /// Assets with no capture date — collected into one trailing "Undated" section so
@@ -46,7 +46,43 @@ public enum DayKey: Sendable, Equatable, Hashable, Codable, Comparable, CustomSt
         return calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12))
     }
 
-    /// Chronological order; `.undated` sorts after every real day.
+    /// Parse the canonical persisted form (mirror of `description`): `"2025-06-20"` or
+    /// `"undated"`. Returns `nil` for any other shape. Makes `DayKey` `LosslessStringConvertible`
+    /// so the SwiftData layer can round-trip `doneDays: [String]` / `resumeDayKey` (architecture
+    /// data model) without a second representation drifting from `description`.
+    public init?(_ string: String) {
+        if string == "undated" {
+            self = .undated
+            return
+        }
+        let parts = string.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]) else {
+            return nil
+        }
+        self = .day(year: year, month: month, day: day)
+    }
+
+    // Encode as the single canonical string (`description`), so the Codable form and the
+    // persisted-string form are one and the same — no enum-tagged JSON to surprise callers.
+    public init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        guard let key = DayKey(raw) else {
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: decoder.codingPath,
+                debugDescription: "Invalid DayKey string: \(raw)"))
+        }
+        self = key
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(description)
+    }
+
+    /// Chronological order; `.undated` is an ordering **sentinel** that sorts after every
+    /// real day (so it's reviewed last and is never `resumeDay` while a real day remains —
+    /// architecture §13). Do not rely on `min()`/`first` treating it as a real "earliest day".
     public static func < (lhs: DayKey, rhs: DayKey) -> Bool {
         switch (lhs, rhs) {
         case let (.day(y1, m1, d1), .day(y2, m2, d2)):
