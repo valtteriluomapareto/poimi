@@ -12,6 +12,7 @@
 //    • PhotoLibrary.swift   — PhotoLibraryProviding seam + LibraryAuthorization / errors (#18)
 //    • DayKey.swift         — calendar-day key + adaptive day-grouping (#19)
 //    • …target math / selection / section-done / stats (#20)
+//    • SelectionSnapshot.swift — versioned durable selection envelope (#29)
 //
 //  Dependency direction (D14/D21): dependencies point *toward* this package, never away
 //  from it. The PhotoKit implementation in the app target depends on `Curation`; this

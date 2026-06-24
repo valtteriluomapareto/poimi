@@ -32,7 +32,10 @@ enum AppModelContainer {
     /// Build the app's `ModelContainer`. `inMemory` backs the integration tests (a fresh,
     /// disposable store per test) and is never used in the running app.
     static func make(inMemory: Bool = false) throws -> ModelContainer {
-        let configuration = ModelConfiguration(isStoredInMemoryOnly: inMemory)
-        return try ModelContainer(for: CurationProject.self, configurations: configuration)
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
+        // Route through the versioned schema so the v1 version stamp is bound (the whole point
+        // of VersionedSchema). The migration plan is NOT passed yet — an empty-`stages` plan
+        // traps; add `migrationPlan: AppMigrationPlan.self` here once v2's first stage lands.
+        return try ModelContainer(for: schema, configurations: configuration)
     }
 }

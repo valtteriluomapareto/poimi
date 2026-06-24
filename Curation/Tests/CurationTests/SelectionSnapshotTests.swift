@@ -36,6 +36,17 @@ struct SelectionSnapshotTests {
         #expect(SelectionSnapshot.decode(Data("{\"unrelated\":true}".utf8)) == .empty)
     }
 
+    @Test("a same-shape future-version blob decodes as-is — picks are not wiped")
+    func futureVersionDecodesAsIs() {
+        // A newer build wrote version 2 with the same shape; an older build must keep the ids,
+        // not silently drop them (the version field is the future migration hook). Pins the
+        // documented behavior so the comment and code can't drift.
+        let data = Data("{\"version\":2,\"assetIDs\":[\"x\",\"y\"]}".utf8)
+        let decoded = SelectionSnapshot.decode(data)
+        #expect(decoded.assetIDs == ["x", "y"])
+        #expect(decoded.version == 2)
+    }
+
     @Test("decoding ignores duplicate ids (it's a Set)")
     func setSemantics() throws {
         // Hand-rolled JSON array with a duplicate — the Set drops it.

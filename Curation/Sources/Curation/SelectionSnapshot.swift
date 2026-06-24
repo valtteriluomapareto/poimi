@@ -39,10 +39,14 @@ extension SelectionSnapshot {
         try JSONEncoder().encode(self)
     }
 
-    /// Decode a stored blob **tolerantly**: a nil/empty/corrupt or future-versioned blob yields
-    /// `.empty` rather than throwing. The whole point of the envelope (D15) is that a decode
-    /// miss degrades to "no picks yet", never a hard failure on the load path; the caller logs
-    /// the miss. A known older version would migrate here as versions accrue.
+    /// Decode a stored blob **tolerantly**: a nil/empty/corrupt/wrong-shape blob yields `.empty`
+    /// rather than throwing. The whole point of the envelope (D15) is that a decode miss degrades
+    /// to "no picks yet", never a hard failure on the load path; the caller logs the miss.
+    ///
+    /// A *same-shape* future-version blob (`{"version": 2, "assetIDs": [...]}`) decodes as-is —
+    /// `version` is preserved, the ids are kept — so a newer build's picks are never wiped by an
+    /// older one. The `version` field is the hook a future build branches on to migrate; until
+    /// then there is intentionally no `version > currentVersion → .empty` quarantine.
     public static func decode(_ data: Data?) -> SelectionSnapshot {
         guard let data, !data.isEmpty else { return .empty }
         guard let decoded = try? JSONDecoder().decode(SelectionSnapshot.self, from: data) else {

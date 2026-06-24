@@ -93,6 +93,9 @@ enum ProjectStatus: Sendable, Equatable {
 extension CurationProject {
     /// The picked-asset count from the *persisted* snapshot. For the active project the live
     /// count lives in `SelectionStore`; this is the durable value the library list reads.
+    /// Decodes the blob on each access — fine at v1 scale (a handful of projects, read once per
+    /// library render). If the album-list cell ever decodes large snapshots every frame, cache
+    /// this (or store a cheap `pickedCount: Int` column alongside the blob).
     var persistedPickedCount: Int {
         SelectionSnapshot.decode(selectionSnapshot).assetIDs.count
     }

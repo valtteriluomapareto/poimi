@@ -272,10 +272,9 @@ the gestures — Part B runs on the author's device against a real year.
    `Automatic` signing (already set in the project for Debug + Release).
 3. **Pick the device** as the run destination (a real iPhone — the spike's value is
    real-library scale + iCloud, which the simulator can't give).
-4. **Bundle-id fallback** — the project ships `com.valtteriluoma.poimi`. If automatic
-   provisioning rejects it for the device/team, switch the bundle id to
-   **`com.valtteriluoma.poimi`** (the team's proven namespace — photo-export ships
-   `com.valtteriluoma.photo-export`). _Signing change only; nothing else depends on the id._
+4. **Bundle id** — the project ships `com.valtteriluoma.poimi`, the team's proven
+   reverse-DNS namespace (photo-export ships `com.valtteriluoma.photo-export`), so
+   automatic provisioning should accept it without a change.
 5. **Run.** On first launch the app asks for Photos access — choose **Allow Full
    Access** (the spike only exercises the `.authorized` path; `.limited`/`.denied`
    recovery is Phase 2). Without full access it stops on a "not granted" screen.

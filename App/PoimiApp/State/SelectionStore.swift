@@ -110,7 +110,10 @@ final class SelectionStore {
     private func write(to project: CurationProject?) {
         guard let project else { return }
         // Only the active project is ever written — a stale debounce captured from a previous
-        // project is a no-op (the multi-project trap, §12).
+        // project is a no-op (the multi-project trap, §12). This guard also makes the next line
+        // safe: we encode the *live* `selected`, and the guard guarantees `project` IS the
+        // active project, whose set `selected` always is. (`project` is a key-check, not the
+        // data source — never relax this guard without also passing the set explicitly.)
         guard project.persistentModelID == activeProjectID else { return }
         do {
             project.selectionSnapshot = try SelectionSnapshot(assetIDs: selected).encoded()

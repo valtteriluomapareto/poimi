@@ -81,24 +81,68 @@ struct SelectionStoreTests {
         selection.deactivate()
     }
 
-    @Test("a stale debounce never writes one project's picks onto another")
-    func staleDebounceIsInert() throws {
-        // Short debounce so the scheduled write actually fires; the switch must have cancelled it.
-        let (projects, selection) = try makeStores(debounce: .milliseconds(20))
+    @Test("the debounced flush actually fires after the window and persists — no manual flush")
+    func debouncedFlushFires() async throws {
+        let (projects, selection) = try makeStores(debounce: .milliseconds(50))
+        let a = project(projects, "A")
+
+        selection.activate(a)
+        selection.toggle("x")
+        // Not flushing manually — await past the window so the scheduled MainActor task runs.
+        try await Task.sleep(for: .milliseconds(500))
+        await Task.yield()
+        #expect(SelectionSnapshot.decode(a.selectionSnapshot).assetIDs == ["x"])
+
+        selection.deactivate()
+    }
+
+    @Test("switching cancels the outgoing project's pending debounce; the incoming one fires on its own")
+    func switchCancelsStaleDebounceAndIncomingFires() async throws {
+        let (projects, selection) = try makeStores(debounce: .milliseconds(50))
         let a = project(projects, "A")
         let b = project(projects, "B")
 
         selection.activate(a)
-        selection.toggle("a/1")    // schedules a write targeting A
-        selection.activate(b)      // flushes + cancels A's timer, hydrates B
-        selection.toggle("b/1")
+        selection.toggle("a/1")        // schedules A's debounce
+        selection.activate(b)          // flushes A synchronously + cancels A's timer
+        selection.toggle("b/1")        // schedules B's debounce
 
-        // A keeps exactly its own pick; B's pick never bled into A even if a timer fired.
+        // Wait past the window: A's cancelled timer must NOT re-fire (and could never write B's
+        // pick onto A); B's own timer fires and persists its set.
+        try await Task.sleep(for: .milliseconds(500))
+        await Task.yield()
         #expect(SelectionSnapshot.decode(a.selectionSnapshot).assetIDs == ["a/1"])
-        selection.flushNow()
         #expect(SelectionSnapshot.decode(b.selectionSnapshot).assetIDs == ["b/1"])
 
         selection.deactivate()
+    }
+
+    @Test("re-activating the already-active project keeps the unflushed live selection")
+    func reactivateSameProjectPreservesLiveSelection() throws {
+        let (projects, selection) = try makeStores()    // 60s debounce — nothing flushed yet
+        let a = project(projects, "A")
+
+        selection.activate(a)
+        selection.toggle("x")
+        selection.activate(a)   // same project: must early-return, NOT reload the (empty) snapshot
+        #expect(selection.selected == ["x"])
+
+        selection.deactivate()
+    }
+
+    @Test("deactivate flushes the live selection and clears active state")
+    func deactivateFlushesAndClears() throws {
+        let (projects, selection) = try makeStores()
+        let a = project(projects, "A", target: 10)
+
+        selection.activate(a)
+        selection.toggle("x")
+        selection.deactivate()
+        #expect(SelectionSnapshot.decode(a.selectionSnapshot).assetIDs == ["x"])   // flushed
+        #expect(selection.selected.isEmpty)
+        #expect(selection.isActive == false)
+        #expect(selection.activeProjectID == nil)
+        #expect(selection.progress.target == 0)
     }
 
     @Test("running total tracks picks against the project's target")

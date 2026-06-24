@@ -50,8 +50,12 @@ struct PoimiApp: App {
                 .environment(projectStore)
                 .environment(selectionStore)
                 .onChange(of: scenePhase) { _, phase in
-                    // Durability point (D15/§12): persist the live selection when we background.
-                    if phase == .background { selectionStore.flushNow() }
+                    // Durability point (D15/§12): persist the live selection as soon as we stop
+                    // being active. `.inactive` fires on the app-switcher gesture — before
+                    // `.background` — so picks survive a force-quit, which delivers no
+                    // `.background`. (A jetsam kill mid-foreground still loses the last
+                    // `debounce` window; acceptable at v1.)
+                    if phase != .active { selectionStore.flushNow() }
                 }
         }
         .modelContainer(modelContainer)

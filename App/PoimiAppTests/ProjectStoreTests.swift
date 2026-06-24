@@ -55,6 +55,19 @@ struct ProjectStoreTests {
         #expect(store.projects.map(\.title) == ["A", "B"])
     }
 
+    @Test("open bumps a middle project to the top, preserving the relative order of the rest")
+    func openReordersMiddle() throws {
+        let store = try makeStore()
+        makeProject(store, title: "A")
+        let b = makeProject(store, title: "B")
+        makeProject(store, title: "C")
+        // Created A, B, C with increasing lastOpenedAt → newest first.
+        #expect(store.projects.map(\.title) == ["C", "B", "A"])
+
+        store.open(b)   // middle → top; C and A keep their relative order
+        #expect(store.projects.map(\.title) == ["B", "C", "A"])
+    }
+
     @Test("duplicate copies configuration but none of the progress or export link")
     func duplicate() throws {
         let store = try makeStore()

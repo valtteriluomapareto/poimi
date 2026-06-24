@@ -114,6 +114,9 @@ final class ProjectStore {
     }
 
     /// Delete the project record. NEVER deletes the exported Photos album (D31, §12).
+    /// NOTE (#30): when the navigation coordinator can have a project *active* in `SelectionStore`,
+    /// deleting or resetting the active project must `deactivate()` it first — otherwise the
+    /// selection store holds a stale/dangling project. Harmless today (nothing activates yet).
     func delete(_ project: CurationProject) {
         context.delete(project)
         save("delete")
