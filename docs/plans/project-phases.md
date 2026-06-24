@@ -110,7 +110,7 @@ This is the make-or-break loop and the one decision a doc cannot settle — it m
 7. **Expand view + swipe-and-select:** zoom navigation destination (D10); Reduce Motion cross-fade; **swipe left/right between photos and select in place** (load-bearing for the picking model; the spike settles which photo we return to); post-condition tests — destination correct, scroll restored, selection preserved (D22).
 8. **Long-scan indicator (minimal):** a simple determinate/indeterminate fetch+thumbnail-load indicator. *(The full cancelable curate-while-scanning surface, D12, moves to Phase 4 with the quality filter it actually serves.)*
 9. **Persistence + lifecycle:** debounced selection snapshot + SwiftData `CurationSession` (don't-lose-picks — essential); **establish a SwiftData migration/versioning approach here** since the schema evolves into Phase 4. Cross-launch scroll restoration + background flush + **library-change reconciliation** (prune selection when assets vanish, refresh fetch on resume, consuming the Phase 1 observer) land late in this phase — robustness, after the loop works.
-10. **Album export (D19):** create-or-find by stored id (recreate if deleted) + dupe guard + date sort; typed error model + partial-failure handling; a success/idempotence confirmation ("Updated 2025 Yearbook: added 12, now 187").
+10. **Album export (D19):** create-or-find by stored id (recreate if deleted) + dupe guard + date sort; typed error model + partial-failure handling; a success/idempotence confirmation ("Updated Best of 2025: added 12, now 187").
 11. **iPad split-view layout:** the `NavigationSplitView` regular-width layout (sidebar · grid · detail) and reflow for Split View / Stage Manager / resize. *Layout only — keyboard shortcuts, hover, and drag-and-drop are v1.1 (per the "split-view yes, input later" decision).*
 12. **Grow test infrastructure here:** the fake's remaining capabilities + canonical seeds, the **conformance suite** (D24), and the **one E2E smoke** (D23) — each as its consuming feature lands. **E2E selects by accessibility identifier, never by coordinate/screenshot** (glass chrome floats over content). Include a **`localIdentifier`-churn** fixture scenario (the whole app rests on identifier stability).
 
@@ -132,7 +132,7 @@ This is the make-or-break loop and the one decision a doc cannot settle — it m
 **High-level tasks:**
 1. Manual TestFlight build from Xcode; dogfood on a real year; fix what hurts.
 2. **Prepare the App Review submission for full-access** (the most likely rejection): written justification (no PHPicker — no persistent identifiers, no date-range fetch, no album writes), reviewer walkthrough, demo notes. **Decide the hard-gate-vs-degraded-limited-mode posture and a fallback *before* submitting**, not in response to rejection.
-3. App Store listing: accurate App Privacy label (on-device-only; iCloud is Apple's, not our servers — D8), description, subtitle, and the "yearbook"/"photo book" keyword placement (discoverability, given the opaque name). Screenshots must reflect the Liquid Glass UI (built against the current SDK — the App Store gives legacy appearance otherwise).
+3. App Store listing: accurate App Privacy label (on-device-only; iCloud is Apple's, not our servers — D8), description, subtitle, and the album/curation keyword placement (discoverability, given the opaque name). Screenshots must reflect the Liquid Glass UI (built against the current SDK — the App Store gives legacy appearance otherwise).
 4. **App icon** — the layered iOS 26 deliverable (Icon Composer; light/dark/clear/tinted), distinctive given the opaque name.
 5. **Finalize** the `docs/design/` review-screen UI spec (drafted in Phase 2).
 6. Accessibility **final verification**: end-to-end VoiceOver flow walkthrough + a full audit (Dynamic Type / contrast / Reduce Motion / Reduce Transparency were built per-screen in Phase 2; this confirms the holistic flow, incl. tally legibility over bright photos).
@@ -172,7 +172,7 @@ The screens and interactions that need a Paper design, tagged by the phase/versi
 ### Source setup *(v1)*
 4. **Range & target setup** — date-interval picker + target count + opt-in filter toggles (exclude screenshots, exclude album(s)).
 5. **Album picker** — pick the album(s) to exclude (WhatsApp, Downloads, etc.); requires album *enumeration* as a `PhotoLibraryProviding` capability (the fake must model it).
-6. **Export-album naming / selection** — name the new album ("2025 Yearbook") or pick an existing one to update. The album name is the only metadata that travels, so this is a real first-run step, not an afterthought.
+6. **Export-album naming / selection** — name the new album ("Best of 2025") or pick an existing one to update. The album name is the only metadata that travels, so this is a real first-run step, not an afterthought.
 
 ### Review — the core loop *(v1)*
 
@@ -186,12 +186,12 @@ The screens and interactions that need a Paper design, tagged by the phase/versi
 12. **Fetch / load indicator (minimal)** — simple determinate/indeterminate state while fetching the range and loading thumbnails. *(The full curate-while-scanning surface is deferred, item 23.)*
 
 ### Export *(v1)*
-13. **Export result / confirmation** — success + idempotence ("Updated 2025 Yearbook: added 12, now 187"); re-run communicated. (In-progress is a transient state of item 12, not its own screen.)
+13. **Export result / confirmation** — success + idempotence ("Updated Best of 2025: added 12, now 187"); re-run communicated. (In-progress is a transient state of item 12, not its own screen.)
 
 ### States *(v1 — easy to forget, design explicitly)*
 14. **Empty states** — no photos in range, everything filtered out, empty month, empty library; each actionable (e.g. relax filters), never a void grid.
 15. **Error states** — iCloud fetch failure, export failure (incl. partial), authorization revoked mid-session; each recoverable.
-16. **Session resume** — "Resume your 2025 Yearbook (147 / 200)?" on relaunch.
+16. **Session resume** — "Resume your Best of 2025 (147 / 200)?" on relaunch.
 
 ### Cross-cutting interactions & behaviors *(v1)*
 17. **Tap-to-expand → return-to-position** — zoom transition out and back to the source cell, scroll position + selection preserved (D10/D22); handle a recycled/off-screen source cell.

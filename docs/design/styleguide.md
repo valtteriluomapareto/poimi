@@ -33,7 +33,7 @@
 | **Secondary** — **Leaf green** | `--color-secondary` (`#3F5E37` / `#7DA164`) | **Brand/identity only:** app icon, onboarding, empty/complete states. **Never review-grid chrome.** See below. |
 | Destructive / clear | `.red` (system) | "Clear selection" and the like, sparingly. |
 
-**Accent — decided: Cloudberry / *lakka* (warm golden berry).** A photo grid is already maximally colorful, so the accent stays *quiet* and earns its few appearances (the selection check, the running-tally progress, the export button). We chose a warm golden berry tone because it is doubly on-concept: **Poimi means "pick!"** and in Finland that means **berries** — *lakka* (cloudberry) is "Finnish gold." It carries the warm, characterful identity (the original clay/print instinct) while tying the colour straight to the name. *(Explored across three boards in Paper: a warm-clay family, cool/neutral directions — system blue, teal, indigo, graphite — and a berry set — lingonberry, raspberry, bilberry, blackcurrant, cloudberry.)*
+**Accent — decided: Cloudberry / *lakka* (warm golden berry).** A photo grid is already maximally colorful, so the accent stays *quiet* and earns its few appearances (the selection check, the running-tally progress, the export button). We chose a warm golden berry tone because it is doubly on-concept: **Poimi means "pick!"** and in Finland that means **berries** — *lakka* (cloudberry) is "Finnish gold." It carries the warm, characterful identity (the original warm-clay instinct) while tying the colour straight to the name. *(Explored across three boards in Paper: a warm-clay family, cool/neutral directions — system blue, teal, indigo, graphite — and a berry set — lingonberry, raspberry, bilberry, blackcurrant, cloudberry.)*
 
 | Appearance | Hex | sRGB |
 |---|---|---|
@@ -59,7 +59,7 @@ Rationale & guardrails:
 Where green appears (colour only — no motifs):
 - **Onboarding / first-run** — a quiet green colour accent (e.g. a kicker rule) warming the calm light screens.
 - **Sidebar / sessions** — a subtle green status dot for the active session.
-- **Empty & complete states** — the optional "target reached / Yearbook ready" affirmation (gold counts *up*; green marks the *finish*).
+- **Empty & complete states** — the optional "target reached / album ready" affirmation (gold counts *up*; green marks the *finish*).
 - **App icon** — **deferred (iterate later).** The icon may draw on the gold/green palette, but the mark itself is an open question — and it is **not** berry/nature.
 - **Selection border — one deliberate exception:** a **narrow ~1.5px green hairline** outlines a selected grid cell (§6). It's a structural accent only; the **gold check remains the affordance** and the tally/Export stay gold. Apart from this hairline, green stays out of the review-grid chrome so the photos lead.
 - **No nature imagery anywhere** — colour as a hint, nothing literal.

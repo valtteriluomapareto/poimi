@@ -90,5 +90,5 @@
 
 - Lazy adapter vs flat `[AssetRef]` array — settle with the D17 benchmark.
 - Whether to support a degraded `.limited` mode at all, or hard-gate (D6 leans hard-gate).
-- Whether "yearbook"/"photo book" belongs in the App Store subtitle/keywords (discoverability, given the opaque name). *(HIG #9.)*
+- Which keywords belong in the App Store subtitle (discoverability, given the opaque name). *(HIG #9.)*
 - Within-overlay swipe-between-photos behavior and which photo we land back on.

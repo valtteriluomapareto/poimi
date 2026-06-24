@@ -1,6 +1,6 @@
 # Poimi — Product Plan
 
-*Working brief. A power tool for hand-curating a year of photos into a printable album.*
+*Working brief. A power tool for hand-curating your best photos into an album.*
 
 > Revised after the four-perspective plan review — see [plan-review-decisions.md](./plan-review-decisions.md) for the decisions referenced below as (D#).
 
@@ -8,19 +8,19 @@
 
 ## Concept
 
-An iOS helper app that lets you go through a whole year (or any date range) of your photo library and **hand-pick** the best shots into a single album — efficiently, toward a target count. The output is a native Apple Photos album you can feed into any photo-book tool.
+An iOS helper app that lets you go through a whole year (or any date range) of your photo library and **hand-pick** the best shots into a single album — efficiently, toward a target count. The output is a native Apple Photos album — yours to keep, share, or feed into any other photo app.
 
 The key idea is that **the human picks every photo**. No algorithm chooses for you. The app's job is to make manual curation at scale fast and pleasant, and to keep you oriented (count, coverage, comparisons) while you decide.
 
 ## Target user
 
-A parent making **one photo yearbook per year**, occasionally a second for a special trip.
+A parent making **one photo album per year**, occasionally a second for a special trip.
 
 ## Positioning
 
 - **Don't compete on grouping.** Apple Photos already auto-groups by People, Trips/Places, and Memories (including text-prompt collections). Rebuilding that adds nothing.
 - **The market splits into two camps, and neither fits this user:** cleanup/declutter apps (swipe to *delete* junk) and photographer culling tools (pick keepers to push into Lightroom).
-- **The wedge is additive curation toward a finished artifact** — assembling "the best 200 of 2025" for a printed book. The closest competitor, *Dewp*, leans on AI auto-selection; the opposite of this app.
+- **The wedge is additive curation toward a finished artifact** — assembling "the best 200 of 2025" into one album. The closest competitor, *Dewp*, leans on AI auto-selection; the opposite of this app.
 - **One-line differentiator:** *you choose every photo, not an algorithm.*
 
 ---
@@ -36,7 +36,7 @@ A rationale screen precedes the system prompt, usage strings are specific, and t
 
 ## Core workflow
 
-1. **Pick a source range.** Limit candidate photos by date interval (e.g. 1 Jan – 31 Dec 2025). A second book for a trip is just a shorter interval — same control.
+1. **Pick a source range.** Limit candidate photos by date interval (e.g. 1 Jan – 31 Dec 2025). A second album for a trip is just a shorter interval — same control.
 2. **Work through a chronological timeline grouped by activity, not by month.** The grid is one chronological flow (oldest → newest) broken into **adaptive day-based groups**: a busy day stands on its own; runs of quiet days merge together (see the grouping spec in [project-phases.md](./project-phases.md)). So the timeline reads like *"15 Mar (15 photos) · 16–18 Mar (7) · 19 Mar (53)"* — events naturally pop out as their own sections. The authoritative constraint is the running **total**; groups are orientation, not quotas (D5 — no per-group target). This approximates events with no location data and is the stepping stone to event/trip grouping later.
 3. **Fast review — selection must be fast at scale.** The grid carries a per-thumbnail **quick-select badge** and supports **drag-to-multi-select** (Photos-style); the full-screen view is for *inspection*, not the only way to pick (D9). Tap a thumbnail to expand it (a navigation destination using the zoom transition, D10), dismiss, and land back on the same scroll position with that photo still selected/highlighted. Show the thumbnail instantly, sharpen to full-res as it loads (lazy/progressive, since a year of photos won't all be local). Selected state uses redundant encoding (checkmark + dim, never colour alone).
 4. **Long scans are a designed surface.** Fetching and any heavy scoring over a year — with iCloud-only originals pulled over the network — shows a determinate, cancelable progress count, and the cheap-filtered set is curatable *while* the heavy pass runs (D12).
@@ -44,11 +44,11 @@ A rationale screen precedes the system prompt, usage strings are specific, and t
 
 ## Output
 
-- **Just a native Apple Photos album** (e.g. "2025 Yearbook"). Every major photo-book tool can import from one, so this gives every print path for free with zero print-service integration.
-- **Two books = two albums.** The album name is the only metadata that travels, so name it well.
-- **Sorted by date (capture date, oldest first).** Date is the one ordering that's stable everywhere and survives handoff; book tools default to it anyway.
-- **Don't build sequencing as a deliverable.** Manual album order is fragile and doesn't reliably carry to other tools — let the book tool own layout and order. Album *membership* (which photos) is rock-solid.
-- **Re-run behaviour:** if the selection is refined and run again, update the existing album rather than creating "2025 Yearbook 2"; guard against duplicate adds.
+- **Just a native Apple Photos album** (e.g. "Best of 2025"). It lives in the user's own library and works anywhere a Photos album does, with zero extra integration.
+- **One curation = one album.** The album name is the only metadata that travels, so name it well.
+- **Sorted by date (capture date, oldest first).** Date is the one ordering that's stable everywhere and survives handoff; most photo apps default to it anyway.
+- **Don't build sequencing as a deliverable.** Manual album order is fragile and doesn't reliably carry to other tools — let other apps own layout and order. Album *membership* (which photos) is rock-solid.
+- **Re-run behaviour:** if the selection is refined and run again, update the existing album rather than creating "Best of 2025 2"; guard against duplicate adds.
 
 ---
 

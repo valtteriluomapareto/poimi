@@ -144,4 +144,4 @@ We persist `CurationSession` (date range, target count, chosen filters, exported
 
 ## Explicitly out of scope (v1)
 
-No Vision/face clustering, no print-service integration, no manual sequencing, no Combine, no UIKit. **Deferred to later:** the quality/camera-originals filter (D3) and location bucketing (D4).
+No Vision/face clustering, no manual sequencing, no Combine, no UIKit. **Deferred to later:** the quality/camera-originals filter (D3) and location bucketing (D4).
