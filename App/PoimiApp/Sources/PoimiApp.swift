@@ -17,9 +17,15 @@ import SwiftUI
 
 @main
 struct PoimiApp: App {
+    // Composition root (#23): resolve the photo-library dependency once at launch and inject
+    // it into the environment. The Spike still drives the UI in Phase 0/1; Phase 2's
+    // coordinator reads `\.photoLibrary` instead of touching PhotoKit directly.
+    private let photoLibrary = PhotoLibraryProvider.make()
+
     var body: some Scene {
         WindowGroup {
             SpikeRootView()
+                .environment(\.photoLibrary, photoLibrary)
         }
     }
 }

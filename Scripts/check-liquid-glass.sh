@@ -25,8 +25,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Real app UI only. The throwaway Phase-0 Spike is not held to the glass invariant.
-SCAN_DIR="${REPO_ROOT}/App/PoimiApp/Sources"
+# Real app code only. The throwaway Phase-0 Spike is not held to the glass invariant
+# (pruned from the scan below).
+SCAN_DIR="${REPO_ROOT}/App/PoimiApp"
 
 # Forbidden: iOS version-availability gates, and the pre-glass material APIs used as a
 # version fallback.
@@ -58,7 +59,7 @@ while IFS= read -r -d '' file; do
             violations=$((violations + 1))
         fi
     done < "${file}"
-done < <(find "${SCAN_DIR}" -name '*.swift' -print0)
+done < <(find "${SCAN_DIR}" -path '*/Spike/*' -prune -o -name '*.swift' -print0)
 
 if [ "${violations}" -gt 0 ]; then
     echo "FAIL: ${violations} Liquid Glass invariant violation(s)."

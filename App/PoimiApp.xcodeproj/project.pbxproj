@@ -19,6 +19,10 @@
 		00000000200000000000B006 /* ThumbnailCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A006 /* ThumbnailCell.swift */; };
 		00000000200000000000B007 /* AssetGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A007 /* AssetGridView.swift */; };
 		00000000200000000000B008 /* AssetPagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000200000000000A008 /* AssetPagerView.swift */; };
+		00000000300000000000B301 /* FakePhotoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A301 /* FakePhotoLibrary.swift */; };
+		00000000300000000000B302 /* SystemPhotoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A302 /* SystemPhotoLibrary.swift */; };
+		00000000300000000000B303 /* PhotoLibraryChangeObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A303 /* PhotoLibraryChangeObserver.swift */; };
+		00000000300000000000B304 /* PhotoLibraryProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A304 /* PhotoLibraryProvider.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +38,10 @@
 		00000000200000000000A006 /* ThumbnailCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCell.swift; sourceTree = "<group>"; };
 		00000000200000000000A007 /* AssetGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetGridView.swift; sourceTree = "<group>"; };
 		00000000200000000000A008 /* AssetPagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetPagerView.swift; sourceTree = "<group>"; };
+		00000000300000000000A301 /* FakePhotoLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrary.swift; sourceTree = "<group>"; };
+		00000000300000000000A302 /* SystemPhotoLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPhotoLibrary.swift; sourceTree = "<group>"; };
+		00000000300000000000A303 /* PhotoLibraryChangeObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryChangeObserver.swift; sourceTree = "<group>"; };
+		00000000300000000000A304 /* PhotoLibraryProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryProvider.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,6 +68,7 @@
 			isa = PBXGroup;
 			children = (
 				000000001000000000000008 /* Sources */,
+				00000000300000000000C301 /* PhotoLibrary */,
 				00000000200000000000C001 /* Spike */,
 				000000001000000000000009 /* Resources */,
 			);
@@ -112,6 +121,17 @@
 				000000001000000000000003 /* Assets.xcassets */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		00000000300000000000C301 /* PhotoLibrary */ = {
+			isa = PBXGroup;
+			children = (
+				00000000300000000000A301 /* FakePhotoLibrary.swift */,
+				00000000300000000000A302 /* SystemPhotoLibrary.swift */,
+				00000000300000000000A303 /* PhotoLibraryChangeObserver.swift */,
+				00000000300000000000A304 /* PhotoLibraryProvider.swift */,
+			);
+			path = PhotoLibrary;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -199,6 +219,10 @@
 				00000000200000000000B006 /* ThumbnailCell.swift in Sources */,
 				00000000200000000000B007 /* AssetGridView.swift in Sources */,
 				00000000200000000000B008 /* AssetPagerView.swift in Sources */,
+				00000000300000000000B301 /* FakePhotoLibrary.swift in Sources */,
+				00000000300000000000B302 /* SystemPhotoLibrary.swift in Sources */,
+				00000000300000000000B303 /* PhotoLibraryChangeObserver.swift in Sources */,
+				00000000300000000000B304 /* PhotoLibraryProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
