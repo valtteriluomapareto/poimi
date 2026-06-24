@@ -1,0 +1,143 @@
+//
+//  ProjectStoreTests.swift
+//  PoimiAppTests — the album-library CRUD + status derivation (#29, D31).
+//
+
+import Testing
+import Foundation
+import SwiftData
+import Curation
+@testable import PoimiApp
+
+@MainActor
+@Suite("ProjectStore CRUD (#29)")
+struct ProjectStoreTests {
+
+    // A fresh in-memory store with a deterministic, strictly-increasing clock so created /
+    // opened ordering is assertable.
+    private func makeStore() throws -> ProjectStore {
+        let container = try AppModelContainer.make(inMemory: true)
+        var tick = Date(timeIntervalSince1970: 1_000_000_000)
+        let clock: () -> Date = { defer { tick += 1 }; return tick }
+        return ProjectStore(container: container, now: clock)   // store retains the container
+    }
+
+    private static let rangeStart = Date(timeIntervalSince1970: 1_735_689_600) // 2025-01-01Z
+    private static let rangeEnd = Date(timeIntervalSince1970: 1_767_225_600)   // 2026-01-01Z
+
+    @discardableResult
+    private func makeProject(_ store: ProjectStore, title: String, target: Int = 50) -> CurationProject {
+        store.create(title: title, rangeStart: Self.rangeStart, rangeEnd: Self.rangeEnd, targetCount: target)
+    }
+
+    @Test("create inserts a fresh, empty, unexported project")
+    func create() throws {
+        let store = try makeStore()
+        #expect(store.projects.isEmpty)
+
+        let project = makeProject(store, title: "Best of 2025")
+        #expect(store.projects.count == 1)
+        #expect(store.projects.first?.id == project.id)
+        #expect(project.targetAlbumID == nil)        // unexported until first export (D19)
+        #expect(project.status == .empty)
+        #expect(project.persistedPickedCount == 0)
+    }
+
+    @Test("library is ordered most-recently-opened first; open bumps to the top")
+    func openOrder() throws {
+        let store = try makeStore()
+        let a = makeProject(store, title: "A")
+        makeProject(store, title: "B")
+        // B was created after A → newer lastOpenedAt → on top.
+        #expect(store.projects.map(\.title) == ["B", "A"])
+
+        store.open(a)
+        #expect(store.projects.map(\.title) == ["A", "B"])
+    }
+
+    @Test("open bumps a middle project to the top, preserving the relative order of the rest")
+    func openReordersMiddle() throws {
+        let store = try makeStore()
+        makeProject(store, title: "A")
+        let b = makeProject(store, title: "B")
+        makeProject(store, title: "C")
+        // Created A, B, C with increasing lastOpenedAt → newest first.
+        #expect(store.projects.map(\.title) == ["C", "B", "A"])
+
+        store.open(b)   // middle → top; C and A keep their relative order
+        #expect(store.projects.map(\.title) == ["B", "C", "A"])
+    }
+
+    @Test("duplicate copies configuration but none of the progress or export link")
+    func duplicate() throws {
+        let store = try makeStore()
+        let original = makeProject(store, title: "A", target: 40)
+        original.targetAlbumID = "album/123"
+        original.doneDays = ["2025-07-05"]
+        original.markedDoneAt = Date(timeIntervalSince1970: 1_750_000_000)
+        original.selectionSnapshot = try SelectionSnapshot(assetIDs: ["x", "y"]).encoded()
+
+        let copy = store.duplicate(original)
+        #expect(copy.title == "A copy")
+        #expect(copy.targetCount == 40)
+        #expect(copy.rangeStart == original.rangeStart && copy.rangeEnd == original.rangeEnd)
+        // Progress + export are NOT carried over.
+        #expect(copy.targetAlbumID == nil)
+        #expect(copy.doneDays.isEmpty)
+        #expect(copy.markedDoneAt == nil)
+        #expect(copy.persistedPickedCount == 0)
+        #expect(copy.id != original.id)
+    }
+
+    @Test("reset clears progress but keeps configuration (and the export link, D31)")
+    func reset() throws {
+        let store = try makeStore()
+        let project = makeProject(store, title: "A")
+        project.targetAlbumID = "album/123"
+        project.doneDays = ["2025-07-05", "2025-07-06"]
+        project.resumeDayKey = "2025-07-06"
+        project.lastViewedAssetID = "asset/9"
+        project.markedDoneAt = Date(timeIntervalSince1970: 1_750_000_000)
+        project.selectionSnapshot = try SelectionSnapshot(assetIDs: ["x"]).encoded()
+
+        store.reset(project)
+        #expect(project.persistedPickedCount == 0)
+        #expect(project.doneDays.isEmpty)
+        #expect(project.resumeDayKey == nil)
+        #expect(project.lastViewedAssetID == nil)
+        #expect(project.markedDoneAt == nil)
+        // Config + the exported album stay — resetting progress is not un-exporting.
+        #expect(project.targetAlbumID == "album/123")
+        #expect(project.status == .empty)
+    }
+
+    @Test("delete removes the project record (and only that)")
+    func delete() throws {
+        let store = try makeStore()
+        let project = makeProject(store, title: "A")
+        #expect(store.projects.count == 1)
+
+        store.delete(project)
+        #expect(store.projects.isEmpty)
+    }
+
+    @Test("status derives from persisted state: empty → inProgress → done")
+    func statusDerivation() throws {
+        let store = try makeStore()
+        let project = makeProject(store, title: "A")
+        #expect(project.status == .empty)
+
+        // Any marked day → in progress.
+        project.doneDays = ["2025-07-05"]
+        #expect(project.status == .inProgress)
+
+        // Picks (with no done days) also count as in progress.
+        project.doneDays = []
+        project.selectionSnapshot = try SelectionSnapshot(assetIDs: ["x"]).encoded()
+        #expect(project.status == .inProgress)
+
+        // Finalized wins regardless.
+        project.markedDoneAt = Date(timeIntervalSince1970: 1_750_000_000)
+        #expect(project.status == .done)
+    }
+}

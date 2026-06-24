@@ -73,7 +73,7 @@ xcodebuild \
 
 For a **physical device**, open the workspace, pick the `PoimiApp` target, and set a
 development team under *Signing & Capabilities* (the bundle id is
-`fi.paretosoftware.poimi`); automatic signing is enabled.
+`com.valtteriluoma.poimi`); automatic signing is enabled.
 
 ## Test the domain package
 
@@ -123,13 +123,13 @@ it drives is `#if DEBUG` and absent from Release (D30).
 
 ## Debugging (logs)
 
-The app logs at its impure seams via `os.Logger` under the `fi.paretosoftware.poimi`
+The app logs at its impure seams via `os.Logger` under the `com.valtteriluoma.poimi`
 subsystem (see `App/PoimiApp/Support/Log.swift`). Pull a run's `.notice`+ logs (composition
 root, launch, fetch counts) off a booted simulator after the fact:
 
 ```sh
 xcrun simctl spawn booted log show \
-  --predicate 'subsystem == "fi.paretosoftware.poimi"' \
+  --predicate 'subsystem == "com.valtteriluoma.poimi"' \
   --last 2m --style compact
 ```
 
@@ -138,7 +138,7 @@ won't surface them retroactively — stream live to see everything (start this, 
 
 ```sh
 xcrun simctl spawn booted log stream \
-  --predicate 'subsystem == "fi.paretosoftware.poimi"' \
+  --predicate 'subsystem == "com.valtteriluoma.poimi"' \
   --level debug --style compact
 ```
 

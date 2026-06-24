@@ -30,7 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PROJECT="${REPO_ROOT}/App/PoimiApp.xcodeproj"
 SCHEME="PoimiApp"
-BUNDLE_ID="fi.paretosoftware.poimi"
+BUNDLE_ID="com.valtteriluoma.poimi"
 CATALOG_FILE="${REPO_ROOT}/App/PoimiApp/Support/DebugScreen.swift"
 OUT_DIR="${REPO_ROOT}/screenshots"
 DERIVED="${REPO_ROOT}/build/screenshots-dd"
@@ -130,7 +130,7 @@ wait_for_ready() {
     local screen="$1" since="$2" waited=0
     while [ "${waited}" -lt "${READY_TIMEOUT}" ]; do
         if xcrun simctl spawn "${SIM_ID}" log show --start "${since}" \
-                --predicate 'subsystem == "fi.paretosoftware.poimi"' 2>/dev/null \
+                --predicate 'subsystem == "com.valtteriluoma.poimi"' 2>/dev/null \
                 | grep -q "screenshot-ready: ${screen}"; then
             return 0
         fi
