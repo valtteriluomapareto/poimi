@@ -11,6 +11,7 @@
 //
 
 import Foundation
+import OSLog
 import SwiftUI
 import Curation
 
@@ -19,9 +20,11 @@ enum PhotoLibraryProvider {
     static func make() -> any PhotoLibraryProviding {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-PoimiUseFakeLibrary") {
+            Log.photoLibrary.notice("Composition root: using FakePhotoLibrary (-PoimiUseFakeLibrary)")
             return FakePhotoLibrary()
         }
         #endif
+        Log.photoLibrary.notice("Composition root: using SystemPhotoLibrary")
         return SystemPhotoLibrary()
     }
 }

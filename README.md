@@ -94,3 +94,45 @@ platform/UI frameworks) and uses no main-actor isolation:
 
 (This is the precursor to the build-time/CI check formalized in Phase 1, per the
 project-phases exit criteria.)
+
+## Screenshots (eyeball a screen against its design)
+
+`Scripts/screenshots.sh` boots an iOS 26 simulator, builds + installs the app, and launches
+it straight to a named screen against the deterministic `FakePhotoLibrary` — then captures a
+PNG. No tapping, reproducible run-to-run:
+
+```sh
+./Scripts/screenshots.sh                # every screen in the catalog
+./Scripts/screenshots.sh library spike  # only the named screens
+SIM_NAME="iPhone 17 Pro" ./Scripts/screenshots.sh
+FRESH=1 ./Scripts/screenshots.sh        # clean boot first (clears a stuck system alert)
+```
+
+Output lands in `screenshots/<id>.png` (git-ignored). The catalog of screens is the
+`DebugScreen` enum in `App/PoimiApp/Support/DebugScreen.swift` — each `case` is a
+`-PoimiScreen <id>` launch target; new screens register a case as they land. This is the
+screenshot *harness* (eyeball against the Paper designs), distinct from pixel-snapshot
+*testing*, which stays deferred (D26). Everything it drives is `#if DEBUG` and absent from
+Release (D30).
+
+## Debugging (logs)
+
+The app logs at its impure seams via `os.Logger` under the `fi.paretosoftware.poimi`
+subsystem (see `App/PoimiApp/Support/Log.swift`). Pull a run's logs off a booted simulator:
+
+```sh
+xcrun simctl spawn booted log show \
+  --predicate 'subsystem == "fi.paretosoftware.poimi"' \
+  --last 2m --info --debug --style compact
+```
+
+…or stream live (run this, then launch the app):
+
+```sh
+xcrun simctl spawn booted log stream \
+  --predicate 'subsystem == "fi.paretosoftware.poimi"' \
+  --level debug --style compact
+```
+
+Narrow to one area with `category == "PhotoLibrary"` (or `Selection` / `Navigation` / `App`).
+Logging lives in the app target only — the pure `Curation` package stays side-effect-free.

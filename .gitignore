@@ -68,3 +68,7 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Poimi screenshot harness (Scripts/screenshots.sh) — regenerated on demand, not committed.
+/screenshots/
+/build/

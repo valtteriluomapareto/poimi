@@ -16,6 +16,7 @@
 
 import CoreLocation
 import Foundation
+import OSLog
 import Photos
 import Curation
 
@@ -25,7 +26,9 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
     }
 
     func requestAuthorization() async -> LibraryAuthorization {
-        Self.map(await PHPhotoLibrary.requestAuthorization(for: .readWrite))
+        let status = Self.map(await PHPhotoLibrary.requestAuthorization(for: .readWrite))
+        Log.photoLibrary.notice("requestAuthorization resolved: \(String(describing: status), privacy: .public)")
+        return status
     }
 
     func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {
@@ -45,6 +48,7 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
         result.enumerateObjects { asset, _, _ in
             refs.append(Self.ref(from: asset))
         }
+        Log.photoLibrary.info("fetchAssets returned \(refs.count) assets in the requested interval")
         return refs
     }
 

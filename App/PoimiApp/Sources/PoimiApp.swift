@@ -13,6 +13,7 @@
 //  depends on the pure `Curation` package. Dependencies point toward `Curation`,
 //  never away from it (D14/D21).
 
+import OSLog
 import SwiftUI
 
 @main
@@ -22,10 +23,30 @@ struct PoimiApp: App {
     // coordinator reads `\.photoLibrary` instead of touching PhotoKit directly.
     private let photoLibrary = PhotoLibraryProvider.make()
 
+    init() {
+        // Hoist out of the log autoclosure: it escapes, and capturing `self` mid-init is illegal.
+        let libraryType = String(describing: type(of: photoLibrary))
+        Log.app.notice("Poimi launched (library: \(libraryType, privacy: .public))")
+    }
+
     var body: some Scene {
         WindowGroup {
-            SpikeRootView()
+            rootView
                 .environment(\.photoLibrary, photoLibrary)
         }
+    }
+
+    @ViewBuilder
+    private var rootView: some View {
+        #if DEBUG
+        // Screenshot harness (#48): `-PoimiScreen <id>` boots straight to a catalog screen.
+        if let screen = DebugLaunch.requestedScreen {
+            DebugScreenHost(screen: screen)
+        } else {
+            SpikeRootView()
+        }
+        #else
+        SpikeRootView()
+        #endif
     }
 }
