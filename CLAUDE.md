@@ -19,10 +19,13 @@ feature** — do not add print/PDF/export-to-print language anywhere.
 
 **Phase 2 (the v1 critical path) is in progress.** Built so far: the pure `Curation` domain,
 the PhotoKit seam (`PhotoLibraryProviding` + `System`/`Fake` impls), the integration test tier,
-dev tooling (OSLog + screenshot harness), and the state foundation (`CurationProject` +
-`ProjectStore`/`SelectionStore`). The live UI is still the throwaway **Spike** until the real
-screens land (#30 nav coordinator → #31+ screens). Phase/issue plan:
-[docs/plans/project-phases.md](docs/plans/project-phases.md).
+dev tooling (OSLog + screenshot harness), the state foundation (`CurationProject` +
+`ProjectStore`/`SelectionStore`), the **navigation coordinator** (#30), and the **onboarding +
+authorization flow** (#31). `@main` now launches the real coordinator-driven `AppRootView`
+(onboarding → permission → albums); the screens below `albums` are labeled stubs until their
+issues land (#32 albums list, #35 review grid, …). The throwaway **Spike** is no longer the
+launch path — it remains only as the reference for the real review grid (#35), then is deleted.
+Phase/issue plan: [docs/plans/project-phases.md](docs/plans/project-phases.md).
 
 ## Repo map
 
@@ -35,9 +38,11 @@ App/
     PhotoLibrary/              System/FakePhotoLibrary, PhotoLibraryProvider (DI seam)
     Persistence/               CurationProject @Model, AppSchema (SwiftData)
     State/                     ProjectStore, SelectionStore (@MainActor @Observable)
+    Navigation/                Route, AppCoordinator, AppRootView (the adaptive spine, #30)
+    Onboarding/                OnboardingView, AccessRecoveryView (first-run + auth, #31)
     Support/                   Log (OSLog), DebugScreen (screenshot harness)
-    Spike/                     THROWAWAY Phase-0 spike (deleted when real screens land)
-    Resources/                 Assets.xcassets
+    Spike/                     THROWAWAY Phase-0 spike (no longer launched; deleted at #35)
+    Resources/                 Assets.xcassets (AccentColor, BrandGreen, OnAccent, AppIcon)
   PoimiAppTests/               integration tier (Swift Testing, runs on a sim)
 Curation/                      pure-domain SPM package — NO Photos/SwiftData/UIKit/SwiftUI
   Sources/Curation/            AssetRef, DayKey, DayGrouping, Completion, TargetProgress,
@@ -129,7 +134,8 @@ build + integration tests on an iOS 26 sim. Defined in `.github/workflows/ci.yml
   + a note in development-guidelines. An agent does not add libraries freely.
 - **The `.xcodeproj` is hand-authored** (no XcodeGen/Tuist). Add files by editing `project.pbxproj`
   with the structured ID blocks (app=1, Spike=2, PhotoLibrary=3, tests=4, Support=5, Persistence=6,
-  State=7); `plutil -lint` after, and `xcodebuild -list` to confirm it still reads. Keep diffs to
+  State=7, Navigation=8, Onboarding=9; next new group = 10); `plutil -lint` after, and
+  `xcodebuild -list` to confirm it still reads. Keep diffs to
   the intended change — no Xcode reformatting churn.
 - **Tests with fixes:** every bug fix ships with a failing-then-passing regression test.
 

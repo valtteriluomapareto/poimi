@@ -14,7 +14,6 @@
 //  the actor-owned fetch result (so there's no register/unregister lifecycle to leak yet).
 //
 
-import CoreLocation
 import Foundation
 import OSLog
 import Photos

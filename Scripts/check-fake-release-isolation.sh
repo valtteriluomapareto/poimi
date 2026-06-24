@@ -42,14 +42,15 @@ while IFS= read -r file; do
     requires_debug_gate "${file}" "Fake double must be wrapped in '#if DEBUG' so it cannot ship in Release"
 done < <(find "${APP_DIR}" -path '*/PoimiAppTests/*' -prune -o -name '*.swift' -print | grep -iE '/[^/]*fake[^/]*\.swift$' || true)
 
-# 2. Any source referencing a debug-only launch flag must be #if DEBUG-gated. New debug flags
-#    (the screenshot harness's `-PoimiScreen`, etc.) join this alternation as they land.
+# 2. Any source referencing a `-Poimi*` launch flag must be #if DEBUG-gated. The pattern matches
+#    every such flag (the fake swap, the screenshot harness's `-PoimiScreen`, the spike's
+#    `-PoimiSpike*`, and any added later) so the guard can't fall behind a new flag.
 flag_count=0
 while IFS= read -r file; do
     [ -z "${file}" ] && continue
     flag_count=$((flag_count + 1))
-    requires_debug_gate "${file}" "a debug launch flag (-PoimiUseFakeLibrary / -PoimiScreen) must be referenced only behind '#if DEBUG' so it is inert in Release"
-done < <(grep -rlE '\-Poimi(UseFakeLibrary|Screen)' "${APP_DIR}" --include='*.swift' --exclude-dir=PoimiAppTests 2>/dev/null || true)
+    requires_debug_gate "${file}" "a -Poimi* debug launch flag must be referenced only behind '#if DEBUG' so it is inert in Release"
+done < <(grep -rlE '\-Poimi[A-Za-z]+' "${APP_DIR}" --include='*.swift' --exclude-dir=PoimiAppTests 2>/dev/null || true)
 
 if [ "${violations}" -gt 0 ]; then
     echo "FAIL: ${violations} release-isolation violation(s)."

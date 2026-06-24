@@ -50,29 +50,34 @@ public enum Completion {
         daysWithPhotos(in: assets, calendar: calendar).first { !doneDays.contains($0) }
     }
 
-    /// "Done but changed" reconcile (D32(d) / architecture §13): when the library changes
-    /// under a curation, a done day whose photo count **grew** re-opens (its flag clears),
-    /// so a newly-added photo isn't silently skipped by resume/stats; a day that only lost
-    /// photos stays done. Pure and day-level — pass the asset slices from before and after
-    /// the change. Returns the reconciled `doneDays`.
+    /// "Done but changed" reconcile (D32(d) / architecture §13): when the library changes under a
+    /// curation, a done day that **gained any asset not previously present** re-opens (its flag
+    /// clears), so a newly-added photo is never silently skipped by resume/stats; a day that only
+    /// lost photos stays done (D34). Pure and day-level — pass the asset slices from before and
+    /// after the change. Returns the reconciled `doneDays`.
     public static func reopening(
         doneDays: Set<DayKey>,
         from previous: [AssetRef],
         to current: [AssetRef],
         calendar: Calendar
     ) -> Set<DayKey> {
-        let before = countsByDay(previous, calendar: calendar)
-        let after = countsByDay(current, calendar: calendar)
-        let grew = doneDays.filter { (after[$0] ?? 0) > (before[$0] ?? 0) }
-        return doneDays.subtracting(grew)
+        let before = idsByDay(previous, calendar: calendar)
+        let after = idsByDay(current, calendar: calendar)
+        // Compare *id sets*, not counts: a count delta misses add-and-delete churn — a day that
+        // both gains and loses photos can keep an equal/smaller count while containing brand-new,
+        // unreviewed assets. Re-open iff the day gained an id it didn't have before.
+        let reopened = doneDays.filter { day in
+            !(after[day] ?? []).subtracting(before[day] ?? []).isEmpty
+        }
+        return doneDays.subtracting(reopened)
     }
 
-    private static func countsByDay(_ assets: [AssetRef], calendar: Calendar) -> [DayKey: Int] {
-        var counts: [DayKey: Int] = [:]
+    private static func idsByDay(_ assets: [AssetRef], calendar: Calendar) -> [DayKey: Set<String>] {
+        var ids: [DayKey: Set<String>] = [:]
         for asset in assets {
-            counts[asset.dayKey(in: calendar), default: 0] += 1
+            ids[asset.dayKey(in: calendar), default: []].insert(asset.id)
         }
-        return counts
+        return ids
     }
 }
 

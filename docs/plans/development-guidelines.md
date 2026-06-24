@@ -51,7 +51,29 @@ Because the heavy logic lives in the pure `Curation` package (no PhotoKit at all
 | **Snapshot** | deferred (D26) | swift-snapshot-testing | SwiftUI views — **opaque content & layout/reflow only** | Added once UI stabilizes; pin exact simulator OS/device, decide Dynamic-Type/Dark-Mode/locale axes, **ban committed record-mode**. **Liquid Glass surfaces are excluded from pixel assertions** — translucent/refractive rendering isn't byte-stable across Xcode point releases; glass *appearance* is a design-signoff concern, not a snapshot. |
 | **Accessibility** | cheap add | XCUITest `performAccessibilityAudit()` | Key screens | Labels/contrast/hit-targets headlessly; also enforces stable a11y identifiers for E2E selectors. *Known blind spot:* glass-chrome contrast over arbitrary photo content is content-dependent — the tally's legibility over the brightest seeded thumbnail needs an explicit assertion, not just the static audit. |
 
-**Coverage:** `Curation` held to high coverage — where bugs hide, free to test. For integration, "scenario completeness" is made concrete as an enumerated, DoD-checked fixture/scenario checklist (not a vibe). Every fixed bug ships with a failing-then-passing regression test.
+**Coverage:** `Curation` held to high coverage — where bugs hide, free to test. Every fixed bug ships with a failing-then-passing regression test.
+
+#### Integration scenario checklist
+
+"Scenario completeness" made concrete (not a vibe) — the enumerated list the integration tier is measured against, with current status. Phase-2 exit (project-phases) requires the v1-path rows green.
+
+| Scenario | Status |
+|---|---|
+| Fetch contract (dated-in-range, sorted, unique ids) — fake **and** unauthorized system | ✅ done |
+| Per-project selection isolation across switches | ✅ done |
+| Debounce: no per-tap write; flush-on-switch; flush actually fires; stale-debounce inert | ✅ done |
+| Project CRUD + derived status (empty / inProgress / done) | ✅ done |
+| Auth → root-phase per `LibraryAuthorization` branch; notDetermined→authorized transition | ✅ done |
+| Recovery copy mapping (limited vs denied/restricted) | ✅ done |
+| **Fetch → filter → select round-trip** (fetched fake set → `Filtering.included` → `SelectionStore`) | ⬜ todo (#34/#35 — no new fake capability needed) |
+| **`localIdentifier`-churn** (assets vanish → selection pruned; done-day reconcile) | ⬜ todo (needs fake mutate-and-notify, D25) |
+| **Limited-access reduced visible set** (fetch returns fewer under `.limited`) | ⬜ todo (#55) |
+| Mutate-and-notify change reconciliation mid-session | ⬜ todo (Phase 2, D25) |
+| Progressive image-load sequencing (degraded → final) | ⬜ todo (image-loading surface) |
+| Album export: create-or-find, dupe guard, date sort, partial-failure | ⬜ todo (#39) |
+| E2E happy-path smoke (launch → … → export) | ⬜ todo (#43, D23) |
+
+Add a row when a new scenario is identified; flip to ✅ only with a test that exercises it end-to-end (not a unit stand-in).
 
 ### iOS 26 / iPadOS testing implications
 
