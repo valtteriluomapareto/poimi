@@ -29,6 +29,9 @@ import Curation
 enum DebugScreen: String, CaseIterable {
     /// Inspector over whatever `\.photoLibrary` vends — proves the fake → UI → screenshot path.
     case library
+    /// The adaptive navigation shell (`AppRootView`) against an authorized fake — shows the
+    /// album-library root + stub destinations (#30).
+    case shell
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -55,6 +58,30 @@ struct DebugScreenHost: View {
     var body: some View {
         switch screen {
         case .library: DebugLibraryView()
+        case .shell: DebugShellView()
+        }
+    }
+}
+
+/// Hosts `AppRootView` with a coordinator resolved against the injected (fake) library, so the
+/// navigation shell can be screenshotted deterministically (#30).
+struct DebugShellView: View {
+    @Environment(\.photoLibrary) private var library
+    @State private var coordinator: AppCoordinator?
+
+    var body: some View {
+        Group {
+            if let coordinator {
+                AppRootView().environment(coordinator)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            let resolved = AppCoordinator(library: library)
+            await resolved.refreshAuthorization()
+            coordinator = resolved
+            Log.app.notice("screenshot-ready: \(DebugScreen.shell.rawValue, privacy: .public)")
         }
     }
 }
