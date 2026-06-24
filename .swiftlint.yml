@@ -10,6 +10,7 @@ included:
   - Curation/Sources
   - Curation/Tests
   - App/PoimiApp        # Sources + PhotoLibrary + future app code (Spike excluded below)
+  - App/PoimiAppTests
 
 excluded:
   - App/PoimiApp/Spike        # throwaway (deleted in Phase 2)

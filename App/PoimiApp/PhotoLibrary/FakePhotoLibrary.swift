@@ -61,6 +61,30 @@ extension FakePhotoLibrary {
         AlbumRef(id: "album/whatsapp", title: "WhatsApp", count: 120)
     ]
 
+    // MARK: - Canonical named seeds (D25)
+
+    /// The default year-shaped, authorized library.
+    static func yearMixed() -> FakePhotoLibrary {
+        FakePhotoLibrary(assets: yearMixedSeed(), albums: defaultAlbums, status: .authorized)
+    }
+
+    /// An authorized but empty library (drives the empty states).
+    static func empty() -> FakePhotoLibrary {
+        FakePhotoLibrary(assets: [], albums: [], status: .authorized)
+    }
+
+    /// Limited-access state (drives the limited recovery flow).
+    static func limited() -> FakePhotoLibrary {
+        FakePhotoLibrary(assets: yearMixedSeed(), albums: defaultAlbums, status: .limited)
+    }
+
+    /// A scale seed: `count` dated assets spread across the year — for the D29 scale check.
+    /// (`AllICloudOptimized` and progressive-delivery seeds arrive with the image-loading
+    /// surface in a later Phase-2 issue, D25.)
+    static func scale(_ count: Int = 10_000) -> FakePhotoLibrary {
+        FakePhotoLibrary(assets: scaleSeed(count), albums: defaultAlbums, status: .authorized)
+    }
+
     /// A tiny year-shaped seed: a busy day (12 photos), a 3-day quiet run, a screenshot, and
     /// one undated asset — enough to exercise grouping, the screenshot filter, and the
     /// undated bucket. The full `YearMixed2025` / scale seeds arrive in Phase 2 (D25).
@@ -84,6 +108,20 @@ extension FakePhotoLibrary {
         assets.append(AssetRef(id: "fake/shot", captureDate: date(2025, 4, 1), isScreenshot: true))
         assets.append(AssetRef(id: "fake/undated", captureDate: nil))
         return assets
+    }
+
+    /// `count` dated assets spread evenly across 2025, oldest → newest (all within the year,
+    /// so a year-range fetch returns the whole set).
+    static func scaleSeed(_ count: Int) -> [AssetRef] {
+        let start = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01T00:00:00Z
+        let secondsInYear: TimeInterval = 365 * 24 * 3600
+        let spacing = count > 1 ? secondsInYear / Double(count) : 0
+        return (0..<count).map { index in
+            AssetRef(
+                id: "fake/scale/\(index)",
+                captureDate: start.addingTimeInterval(Double(index) * spacing),
+                pixelSize: PixelSize(width: 4032, height: 3024))
+        }
     }
 }
 

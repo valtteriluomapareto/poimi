@@ -2,8 +2,8 @@ name: CI
 
 # Phase 1 "lean CI" gate (see docs/plans/project-phases.md, Phase 1 task 1 and
 # docs/plans/development-guidelines.md "CI / CD"). Scope: build + lint + unit +
-# the boundary / pure-glass / fake-isolation guards. The integration tier joins
-# when integration tests exist (Phase 2); E2E, signing, and deploy are later.
+# the boundary / pure-glass / fake-isolation guards + the PoimiAppTests integration
+# tier (on an iOS 26 simulator). E2E, signing, and deploy are later phases.
 on:
   pull_request:
   push:
@@ -69,18 +69,27 @@ jobs:
           swiftlint version
           swiftlint lint
 
-      # --- Build validation (the actual gate) ----------------------------------
+      # --- Build + integration tests (the actual gate) -------------------------
 
-      - name: Build PoimiApp
+      - name: Build & test PoimiApp
         run: |
-          # Build the app for a *generic* iOS Simulator destination: this
-          # compiles + links against the iOS 26 SDK without booting a
-          # simulator, which is faster and avoids runtime flakiness. Signing is
-          # off — CI only validates that the project compiles and links.
-          xcodebuild build \
+          # Build the app + run the PoimiAppTests integration tier on an iOS 26
+          # simulator (deployment target iOS 26.0). Pick whatever iOS 26 device the
+          # runner image ships, so an image bump can't break us on a hard-coded device
+          # name. Signing is off — CI validates compile / link / test.
+          DEST_ID="$(xcrun simctl list devices available \
+            | grep -A40 -- '-- iOS 26' \
+            | grep -oE '\(([0-9A-Fa-f-]{36})\)' | head -1 | tr -d '()')"
+          if [ -z "$DEST_ID" ]; then
+            echo "::error::No iOS 26 simulator available on the runner."
+            xcrun simctl list runtimes
+            exit 1
+          fi
+          echo "Testing on simulator $DEST_ID"
+          xcodebuild test \
             -project App/PoimiApp.xcodeproj \
             -scheme PoimiApp \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination "platform=iOS Simulator,id=$DEST_ID" \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Test Curation package
