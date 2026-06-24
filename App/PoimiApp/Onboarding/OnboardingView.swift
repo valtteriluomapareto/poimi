@@ -80,21 +80,31 @@ struct OnboardingScaffold: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: readableWidth)   // cap the measure on iPad/regular width
+                .frame(maxWidth: .infinity)        // …centered in the wider container
                 .padding(.top, 48)
             }
-            if let footnote {
-                Text(footnote)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+            VStack(spacing: 16) {
+                if let footnote {
+                    Text(footnote)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                Button(primaryTitle, action: primaryAction)
+                    .buttonStyle(PrimaryActionButtonStyle())
+                    // VoiceOver hears the consequence (the visual footnote) when on the button.
+                    .accessibilityHint(footnote ?? "")
             }
-            Button(primaryTitle, action: primaryAction)
-                .buttonStyle(PrimaryActionButtonStyle())
+            .frame(maxWidth: readableWidth)
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+
+    /// A comfortable reading measure — full-bleed on iPhone, capped so copy + button don't
+    /// stretch across an iPad.
+    private let readableWidth: CGFloat = 480
 }
 
 /// The primary action: the cloudberry-gold accent fill with a **dark** on-accent label (§1 — the

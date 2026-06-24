@@ -4,8 +4,10 @@ Hand-pick a year of photos into an album — *you choose every photo, not an alg
 iOS 26 / iPadOS 26, SwiftUI. The output is a native Apple Photos album.
 
 **Status: Phase 2 (the v1 critical path) is in progress** — the pure domain, the PhotoKit
-seam, the test tier, dev tooling, and the persisted state foundation are in; the real screens
-are landing on top of the throwaway spike. See
+seam, the test tier, dev tooling, the persisted state foundation, the navigation coordinator,
+and the onboarding/authorization flow are in. The app now launches the real flow (onboarding →
+permission → albums); the remaining screens (albums list, review grid, …) are landing on top.
+See
 [`docs/plans/project-phases.md`](docs/plans/project-phases.md) for the build sequence and
 [`CLAUDE.md`](CLAUDE.md) for an agent/contributor orientation.
 
@@ -22,9 +24,11 @@ are landing on top of the throwaway spike. See
 │   │   ├── PhotoLibrary/       # System/FakePhotoLibrary + the DI seam
 │   │   ├── Persistence/        # CurationProject @Model + SwiftData schema
 │   │   ├── State/              # ProjectStore / SelectionStore (@Observable)
+│   │   ├── Navigation/         # Route, AppCoordinator, AppRootView (the adaptive spine)
+│   │   ├── Onboarding/         # OnboardingView, AccessRecoveryView (first-run + auth)
 │   │   ├── Support/            # Log (OSLog) + DebugScreen (screenshot harness)
-│   │   ├── Spike/              # THROWAWAY Phase-0 spike (until real screens land)
-│   │   └── Resources/          # Assets.xcassets (AppIcon, AccentColor)
+│   │   ├── Spike/              # THROWAWAY Phase-0 spike (no longer launched; deleted at #35)
+│   │   └── Resources/          # Assets.xcassets (AppIcon, AccentColor, BrandGreen, OnAccent)
 │   └── PoimiAppTests/          # integration tier (Swift Testing, runs on a sim)
 ├── Curation/                   # local Swift package — pure domain (no Photos/SwiftData)
 │   ├── Package.swift

@@ -152,6 +152,36 @@ struct ReconcileTests {
         let reconciled = Completion.reopening(doneDays: [dk(2025, 3, 16)], from: previous, to: current, calendar: c)
         #expect(reconciled == [dk(2025, 3, 16)])
     }
+
+    // Regression (whole-repo review): add-and-delete churn must re-open even when the count is
+    // equal or smaller, because the day gained brand-new, unreviewed ids. Count-based reconcile
+    // (the old impl) wrongly kept these days "done".
+    @Test("equal-count replacement (all ids new) re-opens the done day")
+    func equalCountReplacementReopens() {
+        let previous = [asset("a", 2025, 3, 16, calendar: c), asset("b", 2025, 3, 16, calendar: c)]
+        let current = [asset("c", 2025, 3, 16, calendar: c), asset("d", 2025, 3, 16, calendar: c)]  // 2 → 2, new ids
+        let reconciled = Completion.reopening(doneDays: [dk(2025, 3, 16)], from: previous, to: current, calendar: c)
+        #expect(!reconciled.contains(dk(2025, 3, 16)))
+    }
+
+    @Test("net-shrink with an addition re-opens the done day")
+    func shrinkWithAdditionReopens() {
+        let previous = [asset("a", 2025, 3, 16, calendar: c),
+                        asset("b", 2025, 3, 16, calendar: c),
+                        asset("e", 2025, 3, 16, calendar: c)]
+        let current = [asset("e", 2025, 3, 16, calendar: c), asset("d", 2025, 3, 16, calendar: c)]  // 3 → 2, "d" is new
+        let reconciled = Completion.reopening(doneDays: [dk(2025, 3, 16)], from: previous, to: current, calendar: c)
+        #expect(!reconciled.contains(dk(2025, 3, 16)))
+    }
+
+    @Test("a pure-deletion that lands on an .undated done section keeps it done")
+    func undatedDeletionKeepsDone() {
+        // covers the .undated bucket in reconcile (previously only dated days were tested)
+        let previous = [asset("a", 2025, 3, 16, calendar: c), AssetRef(id: "u1", captureDate: nil)]
+        let current = [asset("a", 2025, 3, 16, calendar: c)]   // undated section lost its only asset
+        let reconciled = Completion.reopening(doneDays: [.undated], from: previous, to: current, calendar: c)
+        #expect(reconciled.contains(.undated))                 // deletion never re-opens
+    }
 }
 
 // MARK: - Bounds & filters as properties (Codex + Tester / D24)

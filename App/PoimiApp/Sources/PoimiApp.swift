@@ -16,9 +16,10 @@ import SwiftUI
 
 @main
 struct PoimiApp: App {
-    // Composition root (#23/#29): resolve the app's dependencies once at launch and inject them
-    // into the environment. The Spike still drives the UI in Phase 0/1; Phase 2's coordinator
-    // reads `\.photoLibrary` and the stores instead of touching PhotoKit / SwiftData directly.
+    // Composition root (#23/#29/#30): resolve the app's dependencies once at launch and inject
+    // them into the environment. `AppRootView` + `AppCoordinator` drive the UI (onboarding →
+    // permission → albums), reading `\.photoLibrary` and the stores — never PhotoKit/SwiftData
+    // directly.
     private let photoLibrary = PhotoLibraryProvider.make()
     private let modelContainer: ModelContainer
     @State private var projectStore: ProjectStore

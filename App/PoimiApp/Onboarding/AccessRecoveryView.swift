@@ -47,7 +47,8 @@ struct AccessRecoveryView: View {
 
     var body: some View {
         OnboardingScaffold(
-            symbol: "lock.open",
+            symbol: "lock.slash",
+            symbolTint: .brandGreen,   // same first-run identity accent as onboarding (§1)
             title: guidance.title,
             headline: guidance.message,
             message: "Set Poimi's Photos access to full access in Settings, then come back.",
