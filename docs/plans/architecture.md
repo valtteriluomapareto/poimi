@@ -147,7 +147,7 @@ The original model assumed a single active `CurationSession`. The design makes t
 
 > Naming: internally `CurationProject` to avoid colliding with PhotoKit's album; the UI word stays "album."
 
-### 13. Section completion & resume — "mark as done" (D32 → **(d), pending ratification**)
+### 13. Section completion & resume — "mark as done" (D32 → **(d), decided**)
 
 The design lets the user mark **days / trips / months done** and **resume where they left off**. Completion needs persisted state with a **stable identity**, but adaptive day-groups are a *computed view* (pure function of capture dates + threshold) that shifts when the library changes. All four reviewers (Architect, Tester, Pragmatist, Codex) converged on **option (d)**: (a) span-key and (b) anchor-key orphan progress on a merge/split; (c) content-hash breaks on any membership change.
 
