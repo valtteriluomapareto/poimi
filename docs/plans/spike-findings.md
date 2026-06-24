@@ -35,6 +35,15 @@
 
 ---
 
+## Part B — on-device re-test (after the performance fix)
+
+- ✅ **Perf fix worked — ran smoothly.** Bounding the pager decode (~2048pt vs `MaximumSize`) + dropping the neighbour-prefetch + moving fetch/grouping off-main cleared the sluggishness. **⚠️ But it "got stuck" again after a while** — an intermittent stall remains (suspect: decoded-image / memory growth over a long session, or a specific path). Needs a repro detail (what action preceded the freeze) to pin down.
+- ✅ **Zoom / pan now works and "makes sense"** (the `UIScrollView` rewrite); **the interaction workflow is validated** ("works for now") — the two-tier picking loop holds.
+- ⚠️ **Square cells would improve the grid** (non-square crept back with the sections) — minor; tidy when convenient.
+- 🔑 **Overview zoom level — confirmed, designing now.** Above the selection grid, a high-level view of *"how many photos I have of this month / trip / summer"* so you can see where the volume is and aim the curation. Navigation: overview → drill into the day-group selection grid.
+
+---
+
 ## Tap mapping
 
 The make-or-break decision (D9/D10, ★ primary gate). The real question: which action
