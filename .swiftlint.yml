@@ -1,0 +1,52 @@
+# SwiftLint — Poimi (D28: SwiftLint only for v1, with autocorrect; "no new
+# warnings" is advisory early and a gate once the codebase settles, so this run
+# is intentionally NOT --strict — warnings inform, errors gate).
+#
+# Lints the pure domain and the real app sources. The throwaway Phase-0 Spike is
+# excluded: it is disposable (deleted in Phase 2) and holds itself to a different
+# bar than shippable code.
+
+included:
+  - Curation/Sources
+  - Curation/Tests
+  - App/PoimiApp/Sources
+
+excluded:
+  - App/PoimiApp/Spike        # throwaway (deleted in Phase 2)
+  - .build
+  - Curation/.build
+  - DerivedData
+
+# A small, deliberate rule set — not a wall of opt-ins. Keep it boring.
+opt_in_rules:
+  - empty_count
+  - first_where
+  - contains_over_first_not_nil
+  - closure_spacing
+  - explicit_init
+  - sorted_first_last
+  - toggle_bool
+
+line_length:
+  warning: 120
+  error: 200
+  ignores_comments: true       # the domain files are doc-comment heavy by design
+  ignores_urls: true
+
+identifier_name:
+  # Short names are fine for math/loop locals and the conventional `id`.
+  min_length:
+    warning: 2
+    error: 1
+  excluded: [id, x, y, a, b, c, d, m, n, i, j]
+
+type_name:
+  min_length:
+    warning: 3
+    error: 2
+
+function_parameter_count:
+  warning: 6                     # test date-fixture helpers take (id, y, m, d, hour, calendar)
+  error: 8
+
+todo: warning                  # TODO/FIXME inform; they don't fail the build

@@ -183,10 +183,10 @@ struct BoundsTests {
             asset("a", 2025, 3, 16, calendar: c),
             asset("b", 2025, 3, 16, calendar: c),
             asset("c", 2025, 3, 17, calendar: c),
-            AssetRef(id: "u", captureDate: nil),
+            AssetRef(id: "u", captureDate: nil)
         ]
         let dayCombos: [Set<DayKey>] = [
-            [], [dk(2025, 3, 16)], [dk(2025, 3, 16), dk(2025, 3, 17)], [.undated], [dk(2025, 3, 16), .undated],
+            [], [dk(2025, 3, 16)], [dk(2025, 3, 16), dk(2025, 3, 17)], [.undated], [dk(2025, 3, 16), .undated]
         ]
         let selectionCombos: [Set<String>] = [[], ["a"], ["a", "c"], ["a", "b", "c", "u"], ["u"]]
         for days in dayCombos {

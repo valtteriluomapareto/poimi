@@ -15,7 +15,9 @@
 
 import Foundation
 
-public enum DayKey: Sendable, Equatable, Hashable, Comparable, CustomStringConvertible, LosslessStringConvertible, Codable {
+public enum DayKey:
+    Sendable, Equatable, Hashable, Comparable,
+    CustomStringConvertible, LosslessStringConvertible, Codable {
     /// A real calendar day.
     case day(year: Int, month: Int, day: Int)
     /// Assets with no capture date — collected into one trailing "Undated" section so

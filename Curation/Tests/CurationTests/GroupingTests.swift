@@ -82,7 +82,7 @@ struct DayGroupingTests {
         let input = [
             asset("a", 2025, 3, 16, calendar: cal),
             asset("b", 2025, 3, 17, calendar: cal),
-            asset("c", 2025, 3, 18, calendar: cal),
+            asset("c", 2025, 3, 18, calendar: cal)
         ]
         let groups = DayGrouping.groups(for: input, calendar: cal)
         #expect(groups.count == 1)
@@ -95,7 +95,7 @@ struct DayGroupingTests {
     func gapBreaksRun() {
         let input = [
             asset("a", 2025, 3, 1, calendar: cal),
-            asset("b", 2025, 3, 10, calendar: cal),   // 9-day gap > tolerance(1)
+            asset("b", 2025, 3, 10, calendar: cal)   // 9-day gap > tolerance(1)
         ]
         let groups = DayGrouping.groups(for: input, calendar: cal)
         #expect(groups.count == 2)
@@ -126,7 +126,7 @@ struct DayGroupingTests {
     func thresholdTuning() {
         let input = [
             asset("a", 2025, 3, 16, calendar: cal),
-            asset("b", 2025, 3, 17, calendar: cal),
+            asset("b", 2025, 3, 17, calendar: cal)
         ]
         let groups = DayGrouping.groups(for: input, threshold: 1, calendar: cal)
         #expect(groups.count == 2)
