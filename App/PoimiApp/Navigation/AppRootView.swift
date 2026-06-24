@@ -23,11 +23,9 @@ struct AppRootView: View {
         Group {
             switch coordinator.rootPhase {
             case .onboarding:
-                RoutePlaceholder(symbol: "hand.wave", title: "Onboarding",
-                                 detail: "First-run intro + permission rationale → system prompt (#31)")
+                OnboardingView()
             case .recovery:
-                RoutePlaceholder(symbol: "lock", title: "Access needed",
-                                 detail: "Limited/denied recovery + Settings deep-link (#31)")
+                AccessRecoveryView(authorization: coordinator.authorization)
             case .albums:
                 // Test compact positively so an unknown/`nil` size class (iPad mid-scene-setup)
                 // defaults to the regular split layout, not the iPhone stack. Mid-flip reflow
@@ -35,8 +33,9 @@ struct AppRootView: View {
                 if sizeClass == .compact { stack } else { splitView }
             }
         }
-        // The launch/resume authorization read (D6). #31 adds scenePhase re-refresh + the real
-        // onboarding/recovery screens; until then this drives the stub root phase.
+        // The cold-launch authorization read (D6): `.onChange(of: scenePhase)` doesn't fire for
+        // the initial `.active`, so this `.task` is the launch read; @main's scenePhase handler
+        // covers the resume re-read (the Settings round-trip).
         .task { await coordinator.refreshAuthorization() }
     }
 

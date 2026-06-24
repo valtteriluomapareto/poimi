@@ -38,7 +38,7 @@
 2. **Standard components adopt Liquid Glass automatically** when built against the current SDK — the look comes for free and stays current.
 3. Less custom code is less to test and less to maintain (aligns with the AI-author guidelines).
 
-**Build custom only where the product genuinely needs it:** the grid cell + its selection affordance, the zoom detail view, the tally chrome. Never reimplement a system control. No UIKit; Observation, not Combine.
+**Build custom only where the product genuinely needs it:** the grid cell + its selection affordance, the zoom detail view, the tally chrome. Never reimplement a system control. No UIKit *views/controllers*; Observation, not Combine. *(Narrow exception: UIKit constants with no SwiftUI equivalent — e.g. `UIApplication.openSettingsURLString` for the recovery deep-link, D6 — are fine; opening still goes through the SwiftUI `openURL` environment.)*
 
 ## Liquid Glass (the "liquid design")
 
