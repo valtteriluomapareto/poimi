@@ -94,6 +94,20 @@ This is the make-or-break loop and the one decision a doc cannot settle — it m
 - A CI check confirms **no SDK-version availability gates / `.regularMaterial` version fallbacks** for Liquid Glass (the "pure glass" invariant — parallels the `Curation` import check; accessibility fallbacks are exempt).
 - A check confirms `FakePhotoLibrary` is excluded from the release configuration and the swap flag is inert in release (D30).
 
+### Phase 1 issues (GitHub)
+
+| Issue | Scope | Depends on |
+|---|---|---|
+| [#17](https://github.com/valtteriluomapareto/poimi/issues/17) | Scaffolding & lean CI — wire `Curation` dep, SwiftLint, CI (build + lint + unit + integration), pinned Xcode/iOS-26 runtime, the boundary / pure-glass / release-exclusion guards | #3 |
+| [#18](https://github.com/valtteriluomapareto/poimi/issues/18) | `Curation` value model (`AssetRef` / `Coordinate` / `AssetMetadata`) + `PhotoLibraryProviding` protocol (D13/D14) | #17 |
+| [#19](https://github.com/valtteriluomapareto/poimi/issues/19) | `Curation`: `DayKey` + adaptive day-grouping *(pure, property-tested)* | #18 |
+| [#20](https://github.com/valtteriluomapareto/poimi/issues/20) | `Curation`: target math + selection + section-done + stats *(pure, property-tested; D32(d))* | #18, #19 |
+| [#21](https://github.com/valtteriluomapareto/poimi/issues/21) | Minimal `FakePhotoLibrary` (one seed, `.authorized`) | #18 |
+| [#22](https://github.com/valtteriluomapareto/poimi/issues/22) | `SystemPhotoLibrary` actor skeleton + change-observer shim (D16) | #18 |
+| [#23](https://github.com/valtteriluomapareto/poimi/issues/23) | Composition root / DI seam (D30) | #21, #22 |
+
+**Flow:** #17 → #18 → (#19 → #20) ∥ (#21, #22) → #23. The two `Curation` "testable core" issues (#19, #20) realize the pure parts of D32(d)/D34 — no PhotoKit, no SwiftData.
+
 ---
 
 ## Phase 2 — v1 critical path *(the shippable app)*
