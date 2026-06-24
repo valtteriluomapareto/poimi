@@ -1,27 +1,40 @@
 # Poimi
 
-Album Curator — hand-pick photos into an album. iOS 26 / iPadOS 26, SwiftUI.
+Hand-pick a year of photos into an album — *you choose every photo, not an algorithm.*
+iOS 26 / iPadOS 26, SwiftUI. The output is a native Apple Photos album.
 
-This is the **repo bootstrap** (Phase 0, issue #3): a runnable, empty app skeleton
-with the domain module seam in place. No features yet — see
-[`docs/plans/project-phases.md`](docs/plans/project-phases.md) for what lands when.
+**Status: Phase 2 (the v1 critical path) is in progress** — the pure domain, the PhotoKit
+seam, the test tier, dev tooling, and the persisted state foundation are in; the real screens
+are landing on top of the throwaway spike. See
+[`docs/plans/project-phases.md`](docs/plans/project-phases.md) for the build sequence and
+[`CLAUDE.md`](CLAUDE.md) for an agent/contributor orientation.
 
 ## Layout
 
 ```
 .
 ├── Poimi.xcworkspace          # open this in Xcode (app + package together)
+├── CLAUDE.md                  # start-here orientation for agents + contributors
 ├── App/
 │   ├── PoimiApp.xcodeproj      # the iOS app target (hand-authored project spec)
-│   └── PoimiApp/
-│       ├── Sources/            # @main App + placeholder ContentView
-│       └── Resources/          # Assets.xcassets (AppIcon, AccentColor)
+│   ├── PoimiApp/
+│   │   ├── Sources/            # @main PoimiApp (composition root)
+│   │   ├── PhotoLibrary/       # System/FakePhotoLibrary + the DI seam
+│   │   ├── Persistence/        # CurationProject @Model + SwiftData schema
+│   │   ├── State/              # ProjectStore / SelectionStore (@Observable)
+│   │   ├── Support/            # Log (OSLog) + DebugScreen (screenshot harness)
+│   │   ├── Spike/              # THROWAWAY Phase-0 spike (until real screens land)
+│   │   └── Resources/          # Assets.xcassets (AppIcon, AccentColor)
+│   └── PoimiAppTests/          # integration tier (Swift Testing, runs on a sim)
 ├── Curation/                   # local Swift package — pure domain (no Photos/SwiftData)
 │   ├── Package.swift
-│   ├── Sources/Curation/       # CurationPlaceholder stub
-│   └── Tests/CurationTests/    # Swift Testing
-├── Scripts/
-│   └── check-curation-boundary.sh   # enforces the domain-boundary invariant
+│   ├── Sources/Curation/       # AssetRef, DayKey/DayGrouping, target math, …
+│   └── Tests/CurationTests/    # pure unit/property tests (Swift Testing)
+├── Scripts/                    # CI guards + the screenshot harness
+│   ├── check-curation-boundary.sh       # the domain-boundary invariant (D14/D21)
+│   ├── check-liquid-glass.sh            # the pure-Liquid-Glass invariant
+│   ├── check-fake-release-isolation.sh  # the release-isolation invariant (D30)
+│   └── screenshots.sh                   # deterministic screen captures
 └── docs/                       # plans + design (the durable record)
 ```
 
@@ -75,25 +88,35 @@ For a **physical device**, open the workspace, pick the `PoimiApp` target, and s
 development team under *Signing & Capabilities* (the bundle id is
 `com.valtteriluoma.poimi`); automatic signing is enabled.
 
-## Test the domain package
+## Test
 
 The pure `Curation` package runs headlessly — no simulator required:
 
 ```sh
-cd Curation && swift test
+swift test --package-path Curation
 ```
 
-## Check the domain boundary
-
-Verifies the invariant that `Curation` imports neither Photos nor SwiftData (nor other
-platform/UI frameworks) and uses no main-actor isolation:
+The app's integration tier (stores + the deterministic `FakePhotoLibrary`) runs on an iOS 26
+simulator via Swift Testing:
 
 ```sh
-./Scripts/check-curation-boundary.sh
+xcodebuild test -project App/PoimiApp.xcodeproj -scheme PoimiApp -configuration Debug \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0'
 ```
 
-(This is the precursor to the build-time/CI check formalized in Phase 1, per the
-project-phases exit criteria.)
+## CI guards
+
+Three language-level invariants are enforced on every PR (and runnable locally). They fail
+the build if violated:
+
+```sh
+./Scripts/check-curation-boundary.sh        # Curation imports no Photos/SwiftData/UI (D14/D21)
+./Scripts/check-liquid-glass.sh             # no SDK-version gates / material fallbacks (pure glass)
+./Scripts/check-fake-release-isolation.sh   # fakes + debug flags are absent from Release (D30)
+```
+
+The full pipeline (lint → `Curation` tests → guards → Release build → app tests on an iOS 26
+sim) is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ## Screenshots (eyeball a screen against its design)
 

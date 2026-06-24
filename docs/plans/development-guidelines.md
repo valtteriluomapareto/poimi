@@ -12,7 +12,7 @@
 
 ## Sequencing (D1)
 
-Build the risky UX before the scaffolding. **Phase 0** is a throwaway spike on a real photo library — no tests, no design gate — to prove the review loop and eyeball the quality heuristic. **Phase 1** is the v1 critical path with the lean test/CI setup below. Heavier machinery (snapshot tier, full E2E, release pipeline) grows in *after* there's something worth shipping.
+Build the risky UX before the scaffolding. **Phase 0** is a throwaway spike on a real photo library — no tests, no design gate — to prove the review loop and eyeball the quality heuristic. **Phase 1** stands up the lean spine (the `Curation` domain + protocol seam + minimal fake) with the test/CI setup below; **Phase 2** is the v1 critical path, growing the fake/CI feature-by-feature. Heavier machinery (snapshot tier, full E2E, release pipeline) grows in *after* there's something worth shipping. Full sequence: [project-phases.md](./project-phases.md).
 
 ---
 
@@ -71,6 +71,13 @@ Because the heavy logic lives in the pure `Curation` package (no PhotoKit at all
 | Snapshot | swift-snapshot-testing | **Deferred (D26);** when added, pin OS/device and ban committed record-mode. |
 
 **Dependency-minimalism policy:** SPM only. Every new third-party dependency requires explicit justification in the PR and a note in this doc's appendix. An unattended agent does not add libraries freely.
+
+### Dev-loop tooling (for the agent author)
+
+Two zero-dependency aids make agentic development cheap; both are DEBUG-only / release-inert (D30) and documented with copy-paste recipes in the [README](../../README.md):
+
+- **Logging.** `os.Logger` under subsystem `com.valtteriluoma.poimi`, used at the impure seams (composition root, PhotoKit, stores). Retrieve a run's logs from a booted simulator (`log show` for `.notice`+, `log stream` for `.info`/`.debug`) — so a failing run's behavior can be read/pasted instead of guessed. Logging lives in the app target only; `Curation` stays side-effect-free.
+- **Screenshot harness.** `Scripts/screenshots.sh` launches straight to a named `DebugScreen` against the deterministic `FakePhotoLibrary` and captures a stable PNG — so each screen can be eyeballed against its Paper design in one command. This is the screenshot *harness*, **distinct from pixel-snapshot *testing*** (deferred, D26): it produces images for a human/agent to compare, not byte-stable assertions.
 
 ---
 

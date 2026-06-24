@@ -95,10 +95,19 @@
 
 ---
 
-## Still open (decide during the spike / slice)
+## Still open
 
-- Lazy adapter vs flat `[AssetRef]` array — settle with the D17 benchmark.
-- Whether to support a degraded `.limited` mode at all, or hard-gate (D6 leans hard-gate).
-- Which keywords belong in the App Store subtitle (discoverability, given the opaque name). *(HIG #9.)*
-- Within-overlay swipe-between-photos behavior and which photo we land back on.
-- *(resolved)* Section-completion identity → **D32 (d)**; v1 scope → **D34 (full)**.
+- **Degraded `.limited` mode vs hard-gate** (D6 leans hard-gate) — settle when the onboarding /
+  authorization flow is built (#31). The fake already models `.limited`.
+- **App Store subtitle keywords** (discoverability, given the opaque name) — Phase 3. *(HIG #9.)*
+
+### Resolved since the review
+
+- **Within-overlay swipe + which photo we land back on** → **resolved by the Phase-0 spike**:
+  swipe-and-select is promoted to v1 (load-bearing), and dismiss returns to the photo you swiped to
+  ([spike-findings.md](./spike-findings.md)).
+- **Lazy adapter vs flat `[AssetRef]` array (D17)** → **resolved by decision** (not a recorded
+  spike number): a main-actor windowed snapshot served from the actor (architecture §2), with the
+  "don't materialize" claim enforced by the access-counting / scale guard (D29) at the real fetch
+  tier (#34).
+- **Section-completion identity** → **D32 (d)**; **v1 scope** → **D34 (full)**.

@@ -69,7 +69,7 @@ The HIG is the baseline, not a suggestion. Specifically: standard navigation pat
 Target both; design adaptively rather than porting. **v1 scope (decided):** the adaptive *layout* — including iPad split-view — ships in v1; the iPad *input polish* is deferred to v1.1 (so the navigation architecture is settled now, but the input-mode test surface stays small).
 
 - **Layout by size class — v1.** Compact width (iPhone, slide-over): `NavigationStack`, single-column grid flow, bottom-reachable chrome. Regular width (iPad, large iPhone landscape): `NavigationSplitView` — sidebar · the review grid · the photo detail. The grid uses adaptive `LazyVGrid` columns that scale with available width. The detail column hosts its own `NavigationStack` so the zoom transition still applies (see the architecture's adaptive-navigation note).
-- **Sidebar — v1.** Holds the session(s); location buckets join it in v1.1. (Until buckets land it's lightweight — sessions + setup entry.)
+- **Sidebar — v1.** Holds the album library; location buckets join it in v1.1. (Until buckets land it's lightweight — the albums list + setup entry.)
 - **Pointer, hover, keyboard & drag-and-drop — v1.1.** Hover states on cells, keyboard shortcuts for the power workflow (select/deselect, next/previous, expand, export) with a discoverability overlay, trackpad-friendly drag-select, and drag-and-drop. This is where the iPad becomes a *power tool*; it's deferred so v1 doesn't carry the extra input-mode test matrix.
 - **Multitasking — v1.** Split View / Stage Manager / window resizing must reflow cleanly; no fixed layouts.
 - **One codebase, adaptive views** — not separate iPhone/iPad screens.
