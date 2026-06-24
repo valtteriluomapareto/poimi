@@ -83,14 +83,14 @@ struct SelectionStoreTests {
 
     @Test("the debounced flush actually fires after the window and persists — no manual flush")
     func debouncedFlushFires() async throws {
-        let (projects, selection) = try makeStores(debounce: .milliseconds(50))
+        let (projects, selection) = try makeStores(debounce: .milliseconds(10))
         let a = project(projects, "A")
 
         selection.activate(a)
         selection.toggle("x")
-        // Not flushing manually — await past the window so the scheduled MainActor task runs.
-        try await Task.sleep(for: .milliseconds(500))
-        await Task.yield()
+        // Await the actual scheduled task (sleep + write), not a fixed guess — deterministic on
+        // any runner. No manual flushNow().
+        await selection.awaitPendingFlush()
         #expect(SelectionSnapshot.decode(a.selectionSnapshot).assetIDs == ["x"])
 
         selection.deactivate()
@@ -98,7 +98,7 @@ struct SelectionStoreTests {
 
     @Test("switching cancels the outgoing project's pending debounce; the incoming one fires on its own")
     func switchCancelsStaleDebounceAndIncomingFires() async throws {
-        let (projects, selection) = try makeStores(debounce: .milliseconds(50))
+        let (projects, selection) = try makeStores(debounce: .milliseconds(10))
         let a = project(projects, "A")
         let b = project(projects, "B")
 
@@ -106,11 +106,10 @@ struct SelectionStoreTests {
         selection.toggle("a/1")        // schedules A's debounce
         selection.activate(b)          // flushes A synchronously + cancels A's timer
         selection.toggle("b/1")        // schedules B's debounce
+        await selection.awaitPendingFlush()   // await B's timer (A's was cancelled on switch)
 
-        // Wait past the window: A's cancelled timer must NOT re-fire (and could never write B's
-        // pick onto A); B's own timer fires and persists its set.
-        try await Task.sleep(for: .milliseconds(500))
-        await Task.yield()
+        // A keeps only its flush-on-switch value (its cancelled timer never re-fired, and could
+        // never write B's pick onto A); B's own timer fired and persisted its set.
         #expect(SelectionSnapshot.decode(a.selectionSnapshot).assetIDs == ["a/1"])
         #expect(SelectionSnapshot.decode(b.selectionSnapshot).assetIDs == ["b/1"])
 
