@@ -215,6 +215,16 @@ level. `FakeThumbnailProvider` is stateless (`FakeThumbnailProvider.swift:15-21`
 `SystemThumbnailProvider` is not reachable in the headless/simulator tiers, so the flicker logic
 cannot be asserted through the seam as it stands.
 
+**Status: fixed (this PR).** Implemented exactly as above: `ThumbnailMemoryCache` (synchronous,
+`@unchecked Sendable` over a thread-safe `NSCache`), a `nonisolated cachedThumbnail(...)` on the
+seam, the provider fills it with the final (non-degraded) image, and the cell paints a hit via the
+pure `thumbnailDisplay(...)` resolver — never clearing to a placeholder on a hit. **Coverage
+boundary (peer review):** the *decision logic* is unit-tested (the resolver's placeholder rule + the
+cache's store/lookup/keying), but the cell's `.task(id:)` recycle path that drives `loadedID`/`image`
+is **not** rendered in a test — the project has no SwiftUI view-rendering test tier, so the
+spinner-flash regression is guarded at the pure-function seam, not at the live recycle. A device/UI
+test is the residual, tracked for the on-device pass (#46).
+
 ---
 
 ## 🟡 Finding 3 — album list decodes the selection blob repeatedly per row

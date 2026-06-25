@@ -83,7 +83,7 @@ struct ReviewGridView: View {
                     // change so the grid re-layout, the .snappy animation, and the prefetch-window
                     // recompute (.onChange below) each fire once per step, not per gesture sample
                     // (smoothness review, Finding 4).
-                    let next = min(maxColumns, max(minColumns, Int(proposed.rounded())))
+                    let next = clampedColumnCount(proposed, min: minColumns, max: maxColumns)
                     if next != columnCount { columnCount = next }
                 }
                 .onEnded { _ in pinchBaseline = columnCount }
@@ -189,4 +189,12 @@ private struct ReviewSectionHeader: View {
         let selectedCount = selection.selected.intersection(group.assetIDs).count
         return "\(title). \(group.count) photos, \(selectedCount) selected."
     }
+}
+
+/// Round a proposed (fractional) pinch column count to the nearest whole column, clamped to the
+/// allowed range. Pulled out of the gesture closure so the clamping is unit-tested (the gesture's
+/// write-frequency guard around it stays UI-bound). `minColumns ≤ maxColumns` is the caller's
+/// contract (the grid derives both from the size class).
+func clampedColumnCount(_ proposed: Double, min minColumns: Int, max maxColumns: Int) -> Int {
+    Swift.min(maxColumns, Swift.max(minColumns, Int(proposed.rounded())))
 }

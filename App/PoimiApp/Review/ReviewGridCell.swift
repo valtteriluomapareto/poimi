@@ -87,6 +87,9 @@ struct ReviewGridCell: View {
             image = nil
             loadedID = nil
             let loaded = await load(id)
+            // If the cell recycled while awaiting, this task is cancelled and a fresh one runs for
+            // the new id — don't commit this (now-stale) result over it.
+            guard !Task.isCancelled else { return }
             image = loaded
             loadedID = id
         }

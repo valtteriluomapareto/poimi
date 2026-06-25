@@ -52,3 +52,21 @@ struct PrefetchWindowTests {
         #expect(Self.window.slice(visibleIDs: ["gone/1", "gone/2"], columnCount: 3, rowMargin: 2).isEmpty)
     }
 }
+
+/// The pure pinch-density clamp pulled out of the grid's MagnifyGesture (smoothness Finding 4).
+@Suite("Grid column clamping (Finding 4)")
+struct ColumnClampTests {
+    @Test("rounds to the nearest whole column")
+    func rounds() {
+        #expect(clampedColumnCount(3.4, min: 2, max: 8) == 3)
+        #expect(clampedColumnCount(3.6, min: 2, max: 8) == 4)
+    }
+
+    @Test("clamps to the min and max bounds")
+    func clamps() {
+        #expect(clampedColumnCount(0.4, min: 2, max: 8) == 2)   // below min → min
+        #expect(clampedColumnCount(99, min: 2, max: 8) == 8)    // above max → max
+        #expect(clampedColumnCount(2.0, min: 2, max: 5) == 2)   // exact min
+        #expect(clampedColumnCount(5.0, min: 2, max: 5) == 5)   // exact max
+    }
+}
