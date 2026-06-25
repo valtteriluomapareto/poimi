@@ -43,7 +43,7 @@ struct AppRootView: View {
     private var stack: some View {
         @Bindable var coordinator = coordinator
         return NavigationStack(path: $coordinator.path) {
-            AlbumsRootStub()
+            AlbumsView()
                 .navigationDestination(for: Route.self, destination: destination)
         }
     }
@@ -52,7 +52,7 @@ struct AppRootView: View {
     private var splitView: some View {
         @Bindable var coordinator = coordinator
         return NavigationSplitView {
-            AlbumsRootStub()
+            AlbumsView()
         } detail: {
             NavigationStack(path: $coordinator.path) {
                 RoutePlaceholder(symbol: "sidebar.right", title: "Select an album",
@@ -77,14 +77,6 @@ struct AppRootView: View {
             RoutePlaceholder(symbol: "rectangle.stack.badge.plus", title: "Export",
                              detail: "album \(id.uuidString.prefix(8)) (#39)")
         }
-    }
-}
-
-/// The albums-library root stub (#32 replaces it). Routes are pushed by the coordinator.
-private struct AlbumsRootStub: View {
-    var body: some View {
-        RoutePlaceholder(symbol: "photo.stack", title: "Albums", detail: "The album library (#32)")
-            .navigationTitle("Albums")
     }
 }
 

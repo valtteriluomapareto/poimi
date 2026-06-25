@@ -75,11 +75,14 @@ struct DebugShellView: View {
     let screen: DebugScreen
     let authorization: LibraryAuthorization
     @State private var coordinator: AppCoordinator?
+    @State private var projectStore: ProjectStore?
 
     var body: some View {
         Group {
-            if let coordinator {
-                AppRootView().environment(coordinator)
+            if let coordinator, let projectStore {
+                AppRootView()
+                    .environment(coordinator)
+                    .environment(projectStore)
             } else {
                 ProgressView()
             }
@@ -89,9 +92,29 @@ struct DebugShellView: View {
             // so onboarding/recovery/albums each render their phase regardless of the launch flag.
             let resolved = AppCoordinator(library: FakePhotoLibrary(status: authorization))
             await resolved.refreshAuthorization()
+            let store = (try? AppModelContainer.make(inMemory: true)).map { ProjectStore(container: $0) }
+            if let store, screen == .shell { Self.seedSampleAlbums(into: store) }
             coordinator = resolved
+            projectStore = store
             Log.app.notice("screenshot-ready: \(screen.rawValue, privacy: .public)")
         }
+    }
+
+    /// Seed three albums spanning the derived statuses so the `shell` screenshot is a meaningful,
+    /// deterministic library (not an empty state).
+    private static func seedSampleAlbums(into store: ProjectStore) {
+        let start = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01Z
+        let end = Date(timeIntervalSince1970: 1_767_225_600)     // 2026-01-01Z
+        func snapshot(_ count: Int) -> Data {
+            (try? SelectionSnapshot(assetIDs: Set((0..<count).map { "id\($0)" })).encoded()) ?? Data()
+        }
+        let done = store.create(title: "Best of 2024", rangeStart: start, rangeEnd: end, targetCount: 200)
+        done.selectionSnapshot = snapshot(187)
+        done.markedDoneAt = Date(timeIntervalSince1970: 1_750_000_000)
+        let inProgress = store.create(title: "Summer trip", rangeStart: start, rangeEnd: end, targetCount: 80)
+        inProgress.selectionSnapshot = snapshot(34)
+        _ = store.create(title: "Best of 2025", rangeStart: start, rangeEnd: end, targetCount: 150)  // not started
+        store.refresh()
     }
 }
 
