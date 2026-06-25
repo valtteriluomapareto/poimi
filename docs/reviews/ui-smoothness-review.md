@@ -6,6 +6,17 @@
 **Question asked:** *Will the conventions in this app keep the UI smooth?* (the stated top priority)
 **Commit reviewed:** `53daed3` (merge of #67, "review grid + in-grid selection")
 
+> **Revision note (peer-reviewed, 2026-06-25).** This document was reviewed by three personas
+> (Swift Architect, Test Engineer, Pragmatic Developer) and revised. Material corrections from
+> that pass: **Finding 1 downgraded 🔴→🟡** (its `.scrollPosition` mechanism was overstated — it
+> does *not* write per-frame); **Finding 1's fix changed to favour hoisting into `CandidateStore`**
+> (testability + a calendar-staleness pitfall a naive memo would introduce); **Finding 2's fix
+> corrected** (a cache *behind the actor* still incurs the async hop — it must be a synchronous
+> front); **the process gate corrected** (the 10k seed already exists; an Instruments pass is not
+> CI-automatable — replaced with a grep guard + headless timing smoke). New lower-confidence
+> findings (pinch re-layout storm, `groupIdentity` coupling) added from the architect pass. The
+> per-persona provenance is in the appendix.
+
 ---
 
 ## Executive verdict
@@ -16,29 +27,29 @@ main-thread PhotoKit fetches, whole-grid re-renders on selection, eager image ma
 were all made *correctly and deliberately*. The pure `Curation` boundary keeps the expensive
 logic out of the view layer and unit-tested.
 
-**But there is one real defect on the single most important screen** — `DayGrouping` is
-recomputed inside a SwiftUI `body` on the scroll/tap hot path — and it directly contradicts the
-code's own documented invariant. On a small, recent library you will not feel it; over "a year
-of photos" (the actual product target) it is exactly the kind of unbounded main-thread work that
-drops frames. Fix that one item and the grid will hold up at scale.
+**There are no ship-blockers.** The headline issue (Finding 1) is a real, avoidable main-thread
+hitch on the review grid that contradicts the code's own documented invariant — but it is a
+one-line-class hoist, not a fire drill, and its cost was originally dramatized (see the revision
+note). The two further items (a thumbnail spinner-flash on cell recycle; repeated JSON decoding
+in the album list) are lower severity, and one is already acknowledged in a code comment.
 
-There are two further papercuts (a guaranteed thumbnail spinner-flash on cell recycle; repeated
-JSON decoding in the album list) that are lower severity and, in one case, already acknowledged
-in a code comment.
+Net: the bones are right and the risky architectural decisions were all made correctly. The work
+remaining is a small set of cheap, targeted fixes — not a rethink.
 
 Severity legend used below:
 
 | Marker | Meaning |
 | --- | --- |
-| 🔴 **Critical** | Will drop frames at the product's target scale; on the smoothness-critical path; contradicts a stated invariant. |
-| 🟡 **Medium** | Perceived-smoothness / minor hitch; or a real cost that is currently bounded but will grow. |
+| 🔴 **Critical** | Ship-blocker; will reliably drop frames at target scale. *(none found)* |
+| 🟡 **Medium** | A real hitch / perceived-smoothness cost, or a bounded cost that will grow. Fix, but not a blocker. |
 | 🟢 **Sound** | Verified correct — a decision that actively protects smoothness; do not regress. |
+| 🔵 **Investigate** | Plausible smoothness cost raised in peer review, not yet measured. Profile before acting. |
 
 ---
 
-## 🔴 Finding 1 — `DayGrouping` recomputes on the scroll/tap hot path
+## 🟡 Finding 1 — `DayGrouping` recomputes in a SwiftUI `body` on the scroll/tap path
 
-**Severity:** Critical
+**Severity:** Medium (an avoidable main-thread hitch on settle/tap/restore; not a per-frame storm)
 **Files:** `App/PoimiApp/Review/ScanningView.swift:71-79`,
 `App/PoimiApp/Review/ReviewGridView.swift:32,75,108`,
 `Curation/Sources/Curation/DayGrouping.swift:68-144`
@@ -70,93 +81,88 @@ The author correctly reasoned that **selection** toggles will not re-render `Sca
 (selection is observed by the cells/headers, not the parent). But they missed a second source of
 re-evaluation that they introduced themselves: **the scroll anchor.**
 
-`scrollAnchorID` is `@State` **owned by `ScanningView`**:
+`scrollAnchorID` is `@State` **owned by `ScanningView`** (`ScanningView.swift:29`), and it is wired
+**two-way** into the grid's scroll position:
 
 ```swift
-// ScanningView.swift:29
-@State private var scrollAnchorID: String?
-```
-
-It is wired **two-way** into the grid's scroll position:
-
-```swift
-// ReviewGridView.swift:32  (the binding)
-@Binding var scrollAnchorID: String?
-
-// ReviewGridView.swift:75  (two-way scroll tracking)
+// ReviewGridView.swift:75
 .scrollPosition(id: $scrollAnchorID, anchor: .center)
 ```
 
-`.scrollPosition(id:anchor:)` is a **read/write** binding: SwiftUI writes the identity of the
-item at the anchor *back into the binding as the user scrolls*. On top of that, the binding is
-written:
+`.scrollPosition(id:anchor:)` is a read/write binding — SwiftUI writes the anchored item's id back
+into it — and it is also written on **every cell tap** (`ReviewGridView.swift:108`:
+`onOpen: { scrollAnchorID = id; openAsset(id) }`) and by the **photo viewer on swipe-dismiss**
+(#36). Every such write mutates `ScanningView`'s `@State`, invalidates its `body`, re-enters the
+`.ready` branch, and calls `DayGrouping.groups(for: assets)` **again** on the main thread.
 
-- on **every cell tap** — `ReviewGridView.swift:108`: `onOpen: { scrollAnchorID = id; openAsset(id) }`
-- by the **photo viewer on swipe-dismiss** (#36), to restore the source cell.
+**Corrected frequency (peer review).** The original draft claimed this fires "during fast
+scrolling … the worst place." That is overstated. `.scrollPosition(id:)` does **not** write
+per-frame; it writes when the *anchored item's identity changes* (row-granularity) and on
+settle — plus on tap and viewer-dismiss. So the recompute recurs **tens of times per fling and
+once per tap/restore**, not 60×/sec. It is an avoidable hitch at the moment the user expects a
+tap/zoom/scroll-stop to feel instant — real, but not a continuous storm.
 
-Every one of those writes mutates `ScanningView`'s `@State`, which invalidates `ScanningView`'s
-`body`, which re-enters the `.ready` branch, which calls `DayGrouping.groups(for: assets)`
-**again** — on the main thread, mid-interaction.
+### What that recompute costs
 
-### What that recompute actually costs
+`DayGrouping.groups(for:)` defensively **re-sorts the entire input every call**
+(`DayGrouping.swift:135-144`, full O(n log n)), buckets every asset by calendar day, walks the day
+order, and **allocates a fresh `[DayGroup]`**. The product target is "a year (or any date range)"
+— realistically low thousands of assets in the common case, up to tens of thousands at the ceiling.
+At ~2k assets a single pass is sub-millisecond; at the 10k ceiling it is single-digit milliseconds.
+The freshly-allocated array also forces `ForEach(groups)` (`ReviewGridView.swift:63`) to re-diff the
+section structure (cheap — `DayGroup` is `Equatable` — but non-zero).
 
-`DayGrouping.groups(for:)` is not cheap-by-construction. It **defensively re-sorts the entire
-input every call**:
+So the honest framing: *not* a guaranteed dropped frame, but unbounded, wholly avoidable
+main-thread work executed on the interaction path of the make-or-break screen, plus a documented
+invariant that is simply wrong and will mislead the next person who reads it.
 
-```swift
-// DayGrouping.swift:135-144 — full O(n log n) sort, every call
-private static func chronological(_ assets: [AssetRef]) -> [AssetRef] {
-    assets.enumerated().sorted { lhs, rhs in
-        switch (lhs.element.captureDate, rhs.element.captureDate) {
-        case let (left?, right?): return left != right ? left < right : lhs.offset < rhs.offset
-        case (nil, _?): return false
-        case (_?, nil): return true
-        case (nil, nil): return lhs.offset < rhs.offset
-        }
-    }.map(\.element)
-}
-```
-
-…then buckets every asset by calendar day, walks the day order doing gap math, and **allocates a
-fresh `[DayGroup]` array** (`DayGrouping.swift:155-171`, `:99-120`). The product target is
-"a year (or any date range) of your photo library" — that is realistically **thousands to tens of
-thousands** of `AssetRef`s. Re-sorting and re-bucketing ~10k elements is single-digit milliseconds
-*per call*; at 60 fps the entire frame budget is 16 ms. Worse, the freshly-allocated `[DayGroup]`
-forces `ForEach(groups)` (`ReviewGridView.swift:63`) to re-diff the section structure each time.
-
-This is precisely the unbounded main-thread work the grouping was *extracted into a pure value to
-avoid* — note the sibling `PrefetchWindow` carries the same "does it stay smooth over thousands of
-assets" promise in its own header (`PrefetchWindow.swift:5-8`).
-
-### Why it will pass review and bite later
+### Why it would pass review and bite later
 
 On a small or recent test library the candidate count is low and the recompute is imperceptible —
-so it builds green, screenshots look right, and the latent cost ships. It only manifests at the
-product's actual target scale, on a real device, during fast scrolling — the worst place to
-discover it.
+so it builds green and the latent cost ships, surfacing only at the product's target scale on a
+real device.
 
-### Direction (not yet implemented)
+### Direction (not yet implemented) — prefer hoisting into the store
 
-Compute the grouping **once**, when `.ready` is reached, and pass the stable value down. Options,
-cheapest first:
+Compute the grouping **once**, when `.ready` is reached, and pass the stable value down. Two
+options were considered; **option 1 is now recommended** on both testability and correctness
+grounds (this changed in peer review):
 
-1. Group in `CandidateStore` when it transitions to `.ready` (store `[DayGroup]` instead of, or
-   alongside, `[AssetRef]`). Keeps it off the view entirely. The store's current `.ready([AssetRef])`
-   shape is justified for testability (`ScanningView.swift:72-74`), but a `.ready([DayGroup])` is
-   equally testable.
-2. Memoize in `ScanningView` via `@State` populated in a `.task(id:)` keyed on the asset-set
-   identity, so the `body` only reads the cached value.
+1. **Group in `CandidateStore`** when it transitions to `.ready` — change
+   `Phase.ready([AssetRef])` to `.ready([DayGroup])` (`CandidateStore.swift:33`). `DayGroup` is
+   already `Equatable`, so `Phase` stays `Equatable` and existing `store.phase == .empty`
+   assertions keep compiling. **Why preferred:**
+   - *Testable.* The regression guard becomes a plain store-state assertion ("`.ready` carries the
+     expected `[DayGroup]`"), in the exact shape `CandidateStoreTests` already uses
+     (`CandidateStoreTests.swift:47-53`). A "computed once per body render" assertion is **not**
+     realistically implementable (SwiftUI gives no supported render-count hook), so leaving the
+     call in the view leaves the fix unverifiable.
+   - *Forces the calendar decision into the open.* See the pitfall below.
+2. **Memoize in `ScanningView`** via `@State` populated in the existing `.task(id: project.id)`
+   (`ScanningView.swift:37`). Smaller diff, doesn't touch the store's payload — but has **no clean
+   unit test**, and a naive memo is exposed to the calendar pitfall.
 
-Either removes the recompute from the interaction path without touching the pure domain logic —
-it is a hoist, not a refactor, because the boundary is already clean.
+**Calendar / timezone pitfall (peer review — must address in either option).**
+`ScanningView.swift:76` calls `DayGrouping.groups(for:)` with **no `calendar:` argument**, so it
+uses the default `.current` (`DayGrouping.swift:72`) — while every existing grouping test pins a
+fixed UTC calendar. The current in-`body` recompute is *accidentally self-healing*: if the user
+crosses a timezone or the locale changes, the next re-eval regroups with the new calendar. **A
+naive memo keyed only on "asset-set identity" would silently go stale.** The hoist must either key
+the memo on calendar identity, invalidate on `NSCurrentLocaleDidChange` / timezone change, or make
+the store own an explicit injected calendar that is covered by a test. This calendar choice is
+currently *untested* and should gain a test as part of the fix.
+
+A static **grep guard** (in the spirit of `Scripts/check-curation-boundary.sh`) makes the fix
+durable: assert `DayGrouping.groups` never appears in `App/PoimiApp/Review/*View.swift`.
 
 ---
 
 ## 🟡 Finding 2 — guaranteed thumbnail spinner-flash on every cell recycle
 
-**Severity:** Medium (perceived smoothness; flicker, not dropped frames)
+**Severity:** Medium (perceived smoothness; a flicker, not dropped frames). Highest value-per-effort
+item in this review.
 **Files:** `App/PoimiApp/Review/ReviewGridCell.swift:30,65-68`,
-`App/PoimiApp/PhotoLibrary/SystemThumbnailProvider.swift:33-67`
+`App/PoimiApp/PhotoLibrary/SystemThumbnailProvider.swift:19,33-67`
 
 ### What the code does
 
@@ -177,86 +183,62 @@ When a `LazyVGrid` cell recycles onto a new asset, `.task(id:)` re-runs, sets `i
 ### Why it flickers even when the image is "cached"
 
 There is **no synchronous decoded-image cache** anywhere in the pipeline. `SystemThumbnailProvider`
-holds resolved `PHAsset`s (`assetsByID`) and drives `PHCachingImageManager`, but **every** image
-fetch is an `async` actor hop wrapped in `withCheckedContinuation`:
+holds resolved `PHAsset`s and drives `PHCachingImageManager`, but **every** image fetch is an
+`async` actor hop wrapped in `withCheckedContinuation` (`SystemThumbnailProvider.swift:33-67`).
+`PHCachingImageManager` pre-*decodes* and holds images in *its* cache but exposes **no synchronous
+accessor** — delivery is always through the async `requestImage` callback. So even on a fully
+primed asset, a recycled cell still: clears to `nil` → shows the spinner → hops to the actor →
+awaits the callback. On a fast scroll-back over already-seen rows the user sees a wave of
+`ProgressView` spinners over content that is effectively in memory. This is the single most common
+"this feels cheap" tell in a photo grid, and the app's #1 stated priority is smoothness.
 
-```swift
-// SystemThumbnailProvider.swift:33-60 (abridged)
-func thumbnail(for assetID: String, targetSize: CGSize) async -> UIImage? {
-    guard let asset = resolve(assetID) else { return nil }
-    ...
-    return await withCheckedContinuation { continuation in
-        let id = manager.requestImage(for: asset, ...) { image, info in
-            ...
-            if resumed.setOnce() { continuation.resume(returning: image) }
-        }
-    }
-}
-```
+### Direction (not yet implemented) — corrected from the original draft
 
-So even when the prefetch window (`updateCachingWindow`) has fully primed an asset, a recycled
-cell still: clears to `nil` → shows the spinner → hops to the actor → awaits the opportunistic
-callback → only then sets `image`. The prefetch window removes the *decode* latency but **not the
-guaranteed `nil` frame**. During a fast scroll-back over already-seen rows, the user sees a wave of
-`ProgressView` spinners flashing over content that is effectively already in memory.
+The original draft said "add a cache *in `SystemThumbnailProvider`*." That is **wrong as stated**:
+the provider is an `actor` (`SystemThumbnailProvider.swift:19`), so any cache read there is `async`
+and **still incurs the actor hop** — it would not remove the `nil` frame. The fix must give the
+cell a **synchronous** path:
 
-### Direction (not yet implemented)
+- A small, bounded `NSCache<NSString, UIImage>` exposed as a **`nonisolated`** front (NSCache is
+  its own thread-safe class, and `UIImage` is safe for concurrent reads, so this is Sendable-clean),
+  or threaded through the environment, so the cell can check it **synchronously inside `body`** and
+  seed `image` without ever rendering the placeholder on a hit.
+- This is *complementary* to `PHCachingImageManager`, not a duplicate: the manager solves decode
+  latency; the synchronous cache solves the mandatory-async-hop `nil` frame. NSCache auto-evicts
+  under memory pressure, so bound it with `countLimit` and clear it in `resetCache()` alongside the
+  existing `assetsByID` reset (`SystemThumbnailProvider.swift:104-111`).
 
-Add a small bounded in-memory `NSCache<NSString, UIImage>` keyed by `assetID` (+ quantized size)
-in `SystemThumbnailProvider`, returning a hit **synchronously**, so the cell can seed `image`
-without nil-ing first (e.g. only clear when there is no cache hit). This removes the flash on
-recycle while keeping the actor/PhotoKit path for cold loads. Bound it and clear it in
-`resetCache()` alongside the existing `assetsByID` reset (`SystemThumbnailProvider.swift:104-111`).
+**Testability note (peer review).** This fix is only verifiable if the "should the cell clear to
+`nil`?" decision is hoisted into a **pure helper** — e.g. a `ThumbnailCacheKey(assetID:size:)` plus
+an `enum CellImageState { case cached(UIImage), needsLoad }` resolver — and unit-tested at the value
+level. `FakeThumbnailProvider` is stateless (`FakeThumbnailProvider.swift:15-21`) and
+`SystemThumbnailProvider` is not reachable in the headless/simulator tiers, so the flicker logic
+cannot be asserted through the seam as it stands.
 
 ---
 
 ## 🟡 Finding 3 — album list decodes the selection blob repeatedly per row
 
-**Severity:** Medium (currently bounded; will grow; **already acknowledged in-code**)
+**Severity:** Medium (currently bounded; will grow; **already acknowledged in-code** — defer)
 **Files:** `App/PoimiApp/Persistence/CurationProject.swift:93-109`,
 `App/PoimiApp/Albums/AlbumsView.swift:77-128`,
 `App/PoimiApp/State/ProjectStore.swift`
 
 ### What the code does
 
-`persistedPickedCount` runs a `JSONDecoder` pass on each access:
+`persistedPickedCount` runs a `JSONDecoder` pass on each access (`CurationProject.swift:99-101`),
+and `status` decodes again (`:105-109`). `AlbumRow` reaches these through a **computed** `summary`
+property (`AlbumsView.swift:80`) referenced in both the `Text` (`:98`) and the `accessibilityLabel`
+(`:108`), while `statusSymbol` (`:113-119`) / `statusTint` (`:121-127`) each call `project.status`
+again. `AlbumSummary(project:)` itself calls both `status` and `persistedPickedCount`
+(`AlbumsView.swift:145-147`). That is roughly **half a dozen JSON decodes of the id-set blob per
+row, per render.** Compounding it, `ProjectStore.refresh()` replaces the **entire** `projects` array
+on every mutation, re-rendering the whole `List`.
 
-```swift
-// CurationProject.swift:99-101
-var persistedPickedCount: Int {
-    SelectionSnapshot.decode(selectionSnapshot).assetIDs.count
-}
-
-// CurationProject.swift:105-109 — status decodes again
-var status: ProjectStatus {
-    if markedDoneAt != nil { return .done }
-    if persistedPickedCount > 0 || !doneDays.isEmpty { return .inProgress }
-    return .empty
-}
-```
-
-`AlbumRow` reaches these through a **computed** `summary` property and several other computed
-accessors, each re-evaluated per render:
-
-```swift
-// AlbumsView.swift:80 — computed, not stored: rebuilds AlbumSummary on every access
-private var summary: AlbumSummary { AlbumSummary(project: project) }
-```
-
-`AlbumSummary(project:)` calls **both** `project.status` (one decode) **and**
-`project.persistedPickedCount` (a second decode) — `AlbumsView.swift:145-147`. `summary` is then
-referenced in the `Text` (`:98`) **and** the `accessibilityLabel` (`:108`), and `statusSymbol`
-(`:113-119`) / `statusTint` (`:121-127`) each call `project.status` again. That is roughly **half a
-dozen JSON decodes of the id-set blob per row, per render.**
-
-Compounding it, `ProjectStore.refresh()` replaces the **entire** `projects` array on every
-mutation (create / open / duplicate / reset / delete), so the whole `List` re-renders — e.g.
-deleting one album re-fetches all projects and re-renders every remaining row.
-
-### Why it is only Medium
+### Why it is Medium and deferred
 
 This is the album library, not the scroll-critical grid: a handful of rows, rendered occasionally.
-The code comment already calls the trap out explicitly and accepts it for v1:
+The code already calls the trap out and accepts it for v1:
 
 ```swift
 // CurationProject.swift:96-98
@@ -265,78 +247,112 @@ The code comment already calls the trap out explicitly and accepts it for v1:
 // this (or store a cheap `pickedCount: Int` column alongside the blob).
 ```
 
-That is a reasonable call. It is listed here so it is not forgotten once snapshots hold hundreds
-of ids and the album list grows — at which point the suggested cheap-`Int`-column fix (a stored
-`pickedCount` updated on flush) is the clean resolution and should land before this surface ships
-for real.
+That is a reasonable call, and all three review personas agreed: **do nothing now.** Building a
+stored `pickedCount` column means a property kept in sync on every flush plus a migration concern —
+premature for a surface (#32) that just landed. The in-code comment serves as the ticket; revisit
+when snapshots exceed a few hundred ids **or** the album count grows. When that fix lands, the
+stored-`pickedCount` column is also what makes the decode-count assertable (today there is no
+injection point and no existing test would catch a regression here).
+
+---
+
+## 🔵 Additional findings raised in peer review (investigate before acting)
+
+These were surfaced by the architect pass, are plausible on inspection, but have **not been
+measured**. Two of them are arguably more likely real-device frame-drop sources than Finding 1's
+settle-time recompute. Profile before committing fixes.
+
+### 🔵 4 — Pinch → `columnCount` re-layout / animation / prefetch storm
+**`ReviewGridView.swift:56-58,76,79-90`.** `MagnifyGesture.onChanged` mutates `columnCount` on
+*every gesture sample*. `columnCount` drives `columns` (a full `LazyVGrid` re-layout), is animated
+by `.animation(.snappy, value: columnCount)`, **and** fires `.onChange(of: columnCount)`
+→ `scheduleRecomputeWindow()` — so each pinch tick triggers re-layout **+** animation **+** a
+prefetch-window recompute. (Note: this revises the original draft's dismissal of the `.animation`
+line — the line is correctly value-scoped, but the `onChange` storm next to it is the real concern.)
+Likely wants a throttle / quantization so `columnCount` changes only when it crosses an integer
+boundary, not on every sample.
+
+### 🔵 5 — `groupIdentity` onChange rebuilds the whole prefetch window
+**`ReviewGridView.swift:92-96,120-122`.** `.onChange(of: groupIdentity)` resets `visibleIDs = []`
+and rebuilds the entire `PrefetchWindow`. `groupIdentity` is a string of `first-id # total-count`,
+so a *deterministic* regroup should keep it stable and not fire — but that means Finding 1's "fresh
+array forces a re-diff" coexists with a window that *doesn't* rebuild, a tension worth reconciling.
+This `groupIdentity` ↔ `visibleIDs` ↔ window coupling is the most fragile wiring on the screen and
+deserves a focused look when Finding 1 is addressed.
+
+### 🔵 6 — Per-cell `.task` actor-hop steady-state cost
+**`ReviewGridCell.swift:65`.** Every cell recycle spins up a `Task` that hops to the actor and sets
+up a continuation. At 5-8 columns scrolling fast this is a high rate of task creation + actor hops.
+The cancellation design is correct (and credited below); the steady-state hop cost is simply
+unmeasured. The synchronous cache from Finding 2 would also relieve this (a hit avoids the hop).
+
+### 🔵 7 — `.scrollPosition` restore + pinned headers
+**`ReviewGridView.swift:62,75`.** `pinnedViews: [.sectionHeaders]` combined with
+`.scrollPosition(id:anchor: .center)` over variable-height sections is a known source of
+restore-jump jank — directly relevant to the #36 zoom-dismiss restore path. Verify the restore
+lands cleanly on a busy-day boundary.
 
 ---
 
 ## 🟢 What is already right (do not regress)
 
-These are verified-correct decisions that actively protect smoothness. They are the reason the app
-is in good shape and the reason Finding 1 is a one-line hoist rather than a rewrite.
+Verified-correct decisions that actively protect smoothness — the reason the app is in good shape
+and the reason Finding 1 is a hoist rather than a rewrite.
 
 ### Selection is in-memory, mutated per-tap, debounced to disk (D15)
-`App/PoimiApp/State/SelectionStore.swift`. The source of truth is an in-memory `Set<String>`
-mutated synchronously on tap (`toggle`, `:77-89`); durability is a **debounced** snapshot
-(`scheduleFlush`, `:107-116`) flushed on background / project-switch. No per-tap SwiftData write —
-the single biggest persistence trap, deliberately avoided. The debounce is keyed by
-`PersistentIdentifier` and re-validated in `write` (`:118-132`) so a stale timer cannot write one
-project's picks onto another.
+`App/PoimiApp/State/SelectionStore.swift`. In-memory `Set<String>` mutated synchronously on tap
+(`toggle`, `:77-89`); durability is a **debounced** snapshot (`scheduleFlush`, `:107-116`) flushed
+on background / project-switch. No per-tap SwiftData write — the single biggest persistence trap,
+deliberately avoided. The debounce is keyed by `PersistentIdentifier` and re-validated in `write`
+(`:118-132`) so a stale timer can't cross projects.
 
 ### A selection toggle re-renders only the *visible* cells, never the O(n) grid
-`ReviewGridView.swift:13-16`, `ReviewGridCell.swift:29,33`. Cells and headers observe the
-`SelectionStore` themselves via `@Environment(SelectionStore.self)`; the parent grid `body` does
-**not** read `selected`. Because `LazyVGrid` only instantiates visible cells and `@Observable`
-invalidation is property-scoped, a toggle re-renders the ~20-50 on-screen cells (cheap, one-shot),
-not the whole grid. The documented invariant here **holds** (unlike Finding 1's).
+`ReviewGridView.swift:13-16`, `ReviewGridCell.swift:29,33`. Cells/headers observe `SelectionStore`
+via `@Environment`; the parent grid `body` does **not** read `selected`. With `LazyVGrid` laziness
++ property-scoped `@Observable` invalidation, a toggle re-renders only the ~20-50 on-screen cells.
+*Subtlety (peer review):* `@Observable` tracks the whole `selected` property, not per-element, so a
+toggle invalidates *all* visible cells (not just the tapped one) and each visible
+`ReviewSectionHeader` recomputes `selected.intersection(group.assetIDs)` (`ReviewGridView.swift:176`,
+`O(min(|selected|, group))` per visible header). Bounded and fine — but it is "all visible cells,"
+not "only the tapped cell."
 
 ### PhotoKit work is off the main actor
-`SystemThumbnailProvider` is a plain `actor`, not `@MainActor` (`SystemThumbnailProvider.swift:19`)
-— PhotoKit's image manager is thread-safe and decode happens on its own queues. The library fetch
-is likewise on an `actor` (`SystemPhotoLibrary.swift:22`), so the heavy
-`result.enumerateObjects { ... }` materialization (`:44-49`) runs off the main thread. Only the
-finished `[AssetRef]` value array crosses back.
+`SystemThumbnailProvider` is a plain `actor` (`SystemThumbnailProvider.swift:19`); `SystemPhotoLibrary`
+likewise (`SystemPhotoLibrary.swift:22`), so the heavy `enumerateObjects` materialization (`:44-49`)
+runs off-main. Only finished value arrays cross back.
 
 ### Per-cell PhotoKit request cancellation tied to recycling
-`ReviewGridCell.swift:65` (`.task(id:)`) + `SystemThumbnailProvider.swift:40-66`
-(`withTaskCancellationHandler` → `manager.cancelImageRequest`). When a cell recycles, the in-flight
-request for the old asset is cancelled. Correct and important under fast scroll.
+`ReviewGridCell.swift:65` + `SystemThumbnailProvider.swift:40-66` — recycling cancels the old
+asset's in-flight request. Important under fast scroll.
 
 ### Resolved-`PHAsset` caching + batch resolution
-`SystemThumbnailProvider.swift:78-83,113-118`. The prefetch window batch-resolves missing ids in a
-single `fetchAssets(withLocalIdentifiers:)` and caches them, so subsequent single thumbnail
-requests are fetch-free. `resetCache()` clears the map to bound session growth (`:104-111`).
+`SystemThumbnailProvider.swift:78-83,113-118` — the prefetch window batch-resolves missing ids in a
+single fetch and caches them; `resetCache()` bounds session growth (`:104-111`).
 
 ### The generation-guarded prefetch updater
-`ReviewGridView.swift:128-141`. A single in-flight updater loops until it has applied the latest
-visible generation, so out-of-order actor completions cannot leave a stale caching window. This is
-**not** a busy-spin — each iteration `await`s the actor call. Good backpressure design for a
-scroll-driven producer.
+`ReviewGridView.swift:128-141` — single in-flight updater that loops to the latest visible
+generation, so out-of-order completions can't cache a stale window. Not a busy-spin: each iteration
+`await`s the actor.
 
 ### The prefetch windowing math is a pure, tested value
-`PrefetchWindow.swift`. Built once per slice (the O(n) index map), queried O(visible) per scroll
-tick. Extracted out of the view specifically so the "smooth over thousands" property is unit-tested
-rather than buried in a `View`.
+`PrefetchWindow.swift` — built once per slice (O(n) index map), queried O(visible) per scroll tick;
+extracted from the view so the "smooth over thousands" property is unit-tested.
 
 ### The pure `Curation` domain boundary
-The grouping/filtering logic lives in a dependency-free SPM package (no PhotoKit/UIKit/SwiftUI),
-unit- and property-tested headlessly. This is *why* Finding 1 is fixable without risk — the
-expensive logic is already isolated; it is merely being *called* from the wrong place.
+Grouping/filtering live in a dependency-free SPM package, unit- and property-tested headlessly
+(`GroupingTests`, `PropertyTests` — 250 randomized seeds, DST stability, partition/no-loss). This is
+the empirical safety net that makes the Finding 1 hoist low-risk: `groups(for:)` is pure and
+order-independent of its call site, so moving *where* it is called cannot change *what* it returns.
 
 ---
 
-## Two subagent-flagged items checked and dismissed
+## One item checked and dismissed
 
-For the record, two items surfaced during review were investigated and found **not** to be
-problems:
-
-- **`.animation(.snappy, value: columnCount)` (`ReviewGridView.swift:76`)** — this is
-  *value-scoped*: it animates only when `columnCount` changes (the pinch-to-adjust density gesture),
-  **not** on every body re-render. Correct usage. Not a concern.
-- **Coordinator `path` mutation (`AppCoordinator`)** — standard `@Observable` +
-  `NavigationStack(path:)` usage; no observation race.
+For the record: the **coordinator `path` mutation** (`AppCoordinator`) is standard `@Observable` +
+`NavigationStack(path:)` usage — no observation race. (The original draft also dismissed
+`.animation(.snappy, value: columnCount)`; that dismissal is **partly revised** — the `.animation`
+line itself is correctly value-scoped, but the adjacent `.onChange(of: columnCount)` storm is now
+tracked as 🔵 Finding 4.)
 
 ---
 
@@ -344,22 +360,44 @@ problems:
 
 The conventions are strong, but Finding 1 exposes a blind spot: **the codebase reasons about
 re-renders informally in comments, and that reasoning was wrong on the most important screen.**
-"This runs once per ready render" was *asserted*, not *measured* — and the assertion missed a
-second write path into the same `@State`.
+"This runs once per ready render" was *asserted*, not *measured* — and missed a second write path
+into the same `@State`.
 
-For an app whose stated #1 priority is smoothness, one convention would have caught both Finding 1
-and Finding 3 at review time:
+One convention would have caught Findings 1 and 3 at review time:
 
 > **No non-trivial computation (sorts, decodes, groupings, large allocations) in a SwiftUI `body`,
 > or in a computed property read from `body`. Compute in `.task` / `@State` / the store, and pass
 > finished values down.**
 
-Pair it with a process gate:
+This is free — a one-line code-review heuristic worth adding to `CLAUDE.md`'s conventions.
 
-> **Run an Instruments Time Profiler pass on the review grid against a seeded ~10k-asset fake
-> library as part of the Definition of Done for the grid issues (#35 / #37).** The existing
-> screenshot harness eyeballs *layout* but cannot surface a main-thread *hitch*; a seeded
-> large-library profiling pass would have caught Finding 1 immediately.
+**Process gate — corrected (peer review).** The original draft proposed an Instruments Time
+Profiler pass as a Definition-of-Done gate "against a seeded ~10k-asset library." Two corrections:
+the seed **already exists** (`FakePhotoLibrary.scale(10_000)`, already exercised by a perf-smoke test
+at `FakePhotoLibrarySeedTests.swift:74-81`), and an Instruments trace is **not CI-automatable** —
+it is a manual, human-judged artifact with no pass/fail threshold, so it cannot gate a PR. The
+proportionate, in-convention substitutes:
+
+1. **A static grep guard** — `DayGrouping.groups` must not appear in `App/PoimiApp/Review/*View.swift`
+   (mirrors `Scripts/check-curation-boundary.sh`). CI-runnable; directly prevents Finding 1's
+   regression.
+2. **A headless timing smoke** in the integration tier over the existing `scale(10_000)` seed —
+   load the store, assert grouping happens once and completes under a generous wall-clock bound.
+   Won't catch frame drops, but is CI-runnable and would have caught Finding 1's repeated recompute.
+3. **A one-time, manual large-library eyeball-scroll** on a device before the grid ships (#35/#37) —
+   ad hoc, *not* a per-PR ritual (which would be written down and never honored on a small project).
+
+---
+
+## What to do
+
+| When | Item | Effort |
+| --- | --- | --- |
+| **Now** | Finding 1 — hoist grouping into `CandidateStore` (`.ready([DayGroup])`), fix the wrong comment, make the calendar explicit + tested, add the grep guard. | ~30-45 min |
+| **Now** | Finding 2 — synchronous (`nonisolated`) thumbnail cache so a hit skips the placeholder; hoist the clear-to-nil decision into a pure, tested helper. | ~1 hr |
+| **Profile, then decide** | Findings 4-7 (pinch storm, `groupIdentity` coupling, per-cell hop, pinned-header restore) — measure on a device / Instruments before fixing. | varies |
+| **Defer / ticket** | Finding 3 — leave the code; the in-code comment is the ticket; revisit when snapshots/album-count grow. | — |
+| **Adopt (free)** | The "no heavy work in `body`" convention in `CLAUDE.md`. | trivial |
 
 ---
 
@@ -367,9 +405,13 @@ Pair it with a process gate:
 
 | # | Finding | Severity | Path | Status |
 | --- | --- | --- | --- | --- |
-| 1 | `DayGrouping` recomputed in `ScanningView.body` via `scrollAnchorID` `@State` churn | 🔴 Critical | Scroll/tap hot path | Open — contradicts documented invariant |
-| 2 | Guaranteed `nil`→spinner frame on every cell recycle; no synchronous image cache | 🟡 Medium | Scroll hot path | Open |
-| 3 | Album list decodes selection blob ~6× per row per render; full-list re-fetch on mutation | 🟡 Medium | Album library | Open — acknowledged in-code, acceptable at v1 |
+| 1 | `DayGrouping` recomputed in `ScanningView.body` via `scrollAnchorID` `@State` writes | 🟡 Medium | Scroll/tap/restore | Open — fix now; contradicts a documented invariant |
+| 2 | Guaranteed `nil`→spinner frame on every cell recycle; no synchronous image cache | 🟡 Medium | Scroll hot path | Open — fix now (best value/effort) |
+| 3 | Album list decodes selection blob ~6× per row per render; full-list re-fetch on mutation | 🟡 Medium | Album library | Defer — acknowledged in-code, fine at v1 |
+| 4 | Pinch → `columnCount` re-layout + animation + prefetch recompute per gesture sample | 🔵 Investigate | Pinch gesture | Profile first |
+| 5 | `groupIdentity` onChange resets `visibleIDs` + rebuilds `PrefetchWindow` | 🔵 Investigate | Grouping change | Profile / reconcile with #1 |
+| 6 | Per-cell `.task` actor-hop steady-state cost under fast scroll | 🔵 Investigate | Scroll hot path | Profile; relieved by #2's cache |
+| 7 | `.scrollPosition` restore + pinned headers restore-jump | 🔵 Investigate | #36 dismiss path | Verify on a busy-day boundary |
 | — | Selection in-memory + debounced (D15) | 🟢 Sound | — | Keep |
 | — | Toggle re-renders visible cells only | 🟢 Sound | — | Keep |
 | — | PhotoKit off the main actor | 🟢 Sound | — | Keep |
@@ -378,7 +420,25 @@ Pair it with a process gate:
 | — | Generation-guarded prefetch updater | 🟢 Sound | — | Keep |
 | — | Pure, tested `Curation` boundary | 🟢 Sound | — | Keep |
 
-**Bottom line:** the bones are right. The risky architectural decisions were all made correctly.
-Fix Finding 1 (a hoist of `DayGrouping.groups` out of the `body`, ideally with a regression test
-that asserts the grouping is computed once per `.ready`), and the review grid will stay smooth at
-the product's target scale.
+**Bottom line:** the bones are right and the risky architectural decisions were all made correctly.
+There are no ship-blockers. Two cheap fixes (Findings 1 and 2) clear the real hot-path issues;
+Findings 4-7 want a profiling pass before action; Finding 3 is a fair-to-note deferral.
+
+---
+
+## Appendix — peer-review provenance
+
+This document's second revision incorporated a three-persona review. What each persona changed:
+
+- **Swift Architect** — corrected the `.scrollPosition(id:)` mechanism (writes on anchored-item
+  change/settle, not per-frame) → Finding 1 downgraded 🔴→🟡; flagged the calendar/timezone
+  staleness pitfall in any memoization; corrected Finding 2's actor-isolation gap (a cache behind
+  the actor still hops); raised Findings 4-7.
+- **Test Engineer** — showed "computed once per body render" is not assertable, making the
+  `CandidateStore` hoist (option 1) the testability-decisive choice; noted the spinner-flash fix is
+  only testable if the clear-to-nil decision is a pure helper; confirmed `FakePhotoLibrary.scale(10_000)`
+  already exists and an Instruments gate is not CI-automatable → proposed the grep guard + headless
+  smoke; confirmed existing `GroupingTests`/`PropertyTests` coverage makes the hoist safe.
+- **Pragmatic Developer** — pushed back on the original 🔴 severity and the "drops frames during
+  fast scroll" framing; endorsed the now/defer/drop prioritization; argued Finding 2 is the highest
+  value-per-effort item; rejected the per-PR Instruments ceremony in favour of a one-time eyeball.
