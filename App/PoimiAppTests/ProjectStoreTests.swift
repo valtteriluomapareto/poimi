@@ -128,6 +128,27 @@ struct ProjectStoreTests {
         #expect(store.projects.first?.targetAlbumID == "album/B")
     }
 
+    @Test("create(from:) persists the full setup draft — exclusions (sorted) + export target")
+    func createFromDraft() throws {
+        let store = try makeStore()
+        let draft = NewAlbumDraft(
+            title: "Trip",
+            rangeStart: Self.rangeStart,
+            rangeEnd: Self.rangeEnd,
+            targetCount: 80,
+            excludeScreenshots: false,
+            excludedAlbumIDs: ["album/whatsapp", "album/downloads"],
+            targetAlbumID: "album/existing")
+
+        let project = store.create(from: draft)
+        #expect(project.title == "Trip")
+        #expect(project.targetCount == 80)
+        #expect(project.excludeScreenshots == false)
+        #expect(project.excludedAlbumIDs == ["album/downloads", "album/whatsapp"])   // stored sorted
+        #expect(project.targetAlbumID == "album/existing")
+        #expect(store.projects.contains { $0.id == project.id })
+    }
+
     @Test("status derives from persisted state: empty → inProgress → done")
     func statusDerivation() throws {
         let store = try makeStore()

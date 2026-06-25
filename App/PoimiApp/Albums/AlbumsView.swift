@@ -14,6 +14,7 @@ import Curation
 struct AlbumsView: View {
     @Environment(ProjectStore.self) private var store
     @Environment(AppCoordinator.self) private var coordinator
+    @State private var showingSetup = false
 
     var body: some View {
         Group {
@@ -23,7 +24,7 @@ struct AlbumsView: View {
                 } description: {
                     Text("Create an album to hand-pick a year of photos into.")
                 } actions: {
-                    Button("New album", systemImage: "plus", action: newAlbum)
+                    Button("New album", systemImage: "plus") { showingSetup = true }
                         .buttonStyle(.borderedProminent)
                 }
             } else {
@@ -56,8 +57,11 @@ struct AlbumsView: View {
         .navigationTitle("Albums")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("New album", systemImage: "plus", action: newAlbum)
+                Button("New album", systemImage: "plus") { showingSetup = true }
             }
+        }
+        .sheet(isPresented: $showingSetup) {
+            NewAlbumSetupView(draft: .priorCalendarYear(now: Date(), calendar: .current))
         }
     }
 
@@ -65,16 +69,6 @@ struct AlbumsView: View {
     /// to its overview.
     private func open(_ project: CurationProject) {
         store.open(project)
-        coordinator.openProject(project.id)
-    }
-
-    private func newAlbum() {
-        // #33 replaces this with the range/target setup flow. For now, create a default album
-        // (the prior calendar year) and open it, so the library is usable end-to-end.
-        let calendar = Calendar.current
-        let now = Date()
-        let start = calendar.date(byAdding: .year, value: -1, to: now) ?? now
-        let project = store.create(title: "New Album", rangeStart: start, rangeEnd: now, targetCount: 100)
         coordinator.openProject(project.id)
     }
 }

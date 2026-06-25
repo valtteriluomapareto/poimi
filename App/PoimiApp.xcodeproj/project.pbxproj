@@ -35,6 +35,9 @@
 		00000000900000000000B901 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000900000000000A901 /* OnboardingView.swift */; };
 		00000000900000000000B902 /* AccessRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000900000000000A902 /* AccessRecoveryView.swift */; };
 		00000000A00000000000B0A1 /* AlbumsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000A00000000000A0A1 /* AlbumsView.swift */; };
+		00000000B00000000000B0B1 /* NewAlbumDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000B00000000000A0B1 /* NewAlbumDraft.swift */; };
+		00000000B00000000000B0B2 /* NewAlbumSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000B00000000000A0B2 /* NewAlbumSetupView.swift */; };
+		00000000B00000000000B0B3 /* AlbumPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000B00000000000A0B3 /* AlbumPickerView.swift */; };
 		000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000043 /* PhotoLibraryConformanceTests.swift */; };
 		000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */; };
 		00000000400000000000004E /* ProjectStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000004D /* ProjectStoreTests.swift */; };
@@ -42,6 +45,7 @@
 		000000004000000000000054 /* AppCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000053 /* AppCoordinatorTests.swift */; };
 		000000004000000000000056 /* RecoveryGuidanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000055 /* RecoveryGuidanceTests.swift */; };
 		000000004000000000000058 /* AlbumSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000057 /* AlbumSummaryTests.swift */; };
+		00000000400000000000005A /* NewAlbumDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000059 /* NewAlbumDraftTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -91,6 +95,9 @@
 		00000000900000000000A901 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		00000000900000000000A902 /* AccessRecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessRecoveryView.swift; sourceTree = "<group>"; };
 		00000000A00000000000A0A1 /* AlbumsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumsView.swift; sourceTree = "<group>"; };
+		00000000B00000000000A0B1 /* NewAlbumDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewAlbumDraft.swift; sourceTree = "<group>"; };
+		00000000B00000000000A0B2 /* NewAlbumSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewAlbumSetupView.swift; sourceTree = "<group>"; };
+		00000000B00000000000A0B3 /* AlbumPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumPickerView.swift; sourceTree = "<group>"; };
 		000000004000000000000042 /* PoimiAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PoimiAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000004000000000000043 /* PhotoLibraryConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryConformanceTests.swift; sourceTree = "<group>"; };
 		000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrarySeedTests.swift; sourceTree = "<group>"; };
@@ -99,6 +106,7 @@
 		000000004000000000000053 /* AppCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinatorTests.swift; sourceTree = "<group>"; };
 		000000004000000000000055 /* RecoveryGuidanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryGuidanceTests.swift; sourceTree = "<group>"; };
 		000000004000000000000057 /* AlbumSummaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumSummaryTests.swift; sourceTree = "<group>"; };
+		000000004000000000000059 /* NewAlbumDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewAlbumDraftTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -133,6 +141,7 @@
 				00000000800000000000C801 /* Navigation */,
 				00000000900000000000C901 /* Onboarding */,
 				00000000A00000000000C0A1 /* Albums */,
+				00000000B00000000000C0B1 /* Setup */,
 				00000000200000000000C001 /* Spike */,
 				000000001000000000000009 /* Resources */,
 			);
@@ -253,6 +262,16 @@
 			path = Albums;
 			sourceTree = "<group>";
 		};
+		00000000B00000000000C0B1 /* Setup */ = {
+			isa = PBXGroup;
+			children = (
+				00000000B00000000000A0B1 /* NewAlbumDraft.swift */,
+				00000000B00000000000A0B2 /* NewAlbumSetupView.swift */,
+				00000000B00000000000A0B3 /* AlbumPickerView.swift */,
+			);
+			path = Setup;
+			sourceTree = "<group>";
+		};
 		00000000400000000000C401 /* PoimiAppTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -263,6 +282,7 @@
 				000000004000000000000053 /* AppCoordinatorTests.swift */,
 				000000004000000000000055 /* RecoveryGuidanceTests.swift */,
 				000000004000000000000057 /* AlbumSummaryTests.swift */,
+				000000004000000000000059 /* NewAlbumDraftTests.swift */,
 			);
 			path = PoimiAppTests;
 			sourceTree = "<group>";
@@ -389,6 +409,9 @@
 				00000000900000000000B901 /* OnboardingView.swift in Sources */,
 				00000000900000000000B902 /* AccessRecoveryView.swift in Sources */,
 				00000000A00000000000B0A1 /* AlbumsView.swift in Sources */,
+				00000000B00000000000B0B1 /* NewAlbumDraft.swift in Sources */,
+				00000000B00000000000B0B2 /* NewAlbumSetupView.swift in Sources */,
+				00000000B00000000000B0B3 /* AlbumPickerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -403,6 +426,7 @@
 				000000004000000000000054 /* AppCoordinatorTests.swift in Sources */,
 				000000004000000000000056 /* RecoveryGuidanceTests.swift in Sources */,
 				000000004000000000000058 /* AlbumSummaryTests.swift in Sources */,
+				00000000400000000000005A /* NewAlbumDraftTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

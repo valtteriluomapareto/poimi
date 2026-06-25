@@ -53,7 +53,8 @@ final class ProjectStore {
         rangeEnd: Date,
         targetCount: Int,
         excludeScreenshots: Bool = true,
-        excludedAlbumIDs: [String] = []
+        excludedAlbumIDs: [String] = [],
+        targetAlbumID: String? = nil
     ) -> CurationProject {
         let timestamp = now()
         let project = CurationProject(
@@ -63,6 +64,7 @@ final class ProjectStore {
             targetCount: targetCount,
             excludeScreenshots: excludeScreenshots,
             excludedAlbumIDs: excludedAlbumIDs,
+            targetAlbumID: targetAlbumID,
             selectionSnapshot: Self.emptySnapshot,
             createdAt: timestamp,
             lastOpenedAt: timestamp)
@@ -70,6 +72,20 @@ final class ProjectStore {
         save("create")
         refresh()
         return project
+    }
+
+    /// Create a new album from a setup draft (#33). `excludedAlbumIDs` is sorted for a stable
+    /// persisted order.
+    @discardableResult
+    func create(from draft: NewAlbumDraft) -> CurationProject {
+        create(
+            title: draft.title,
+            rangeStart: draft.rangeStart,
+            rangeEnd: draft.rangeEnd,
+            targetCount: draft.targetCount,
+            excludeScreenshots: draft.excludeScreenshots,
+            excludedAlbumIDs: draft.excludedAlbumIDs.sorted(),
+            targetAlbumID: draft.targetAlbumID)
     }
 
     /// Mark a project as the most recently opened (bumps it to the top of the library).
