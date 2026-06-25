@@ -92,8 +92,13 @@ struct DebugShellView: View {
             // so onboarding/recovery/albums each render their phase regardless of the launch flag.
             let resolved = AppCoordinator(library: FakePhotoLibrary(status: authorization))
             await resolved.refreshAuthorization()
-            let store = (try? AppModelContainer.make(inMemory: true)).map { ProjectStore(container: $0) }
-            if let store, screen == .shell { Self.seedSampleAlbums(into: store) }
+            guard let store = (try? AppModelContainer.make(inMemory: true)).map({ ProjectStore(container: $0) }) else {
+                // Don't signal ready — the capture script then times out loudly instead of
+                // snapshotting the spinner as if it were the screen.
+                Log.app.error("DebugShellView: failed to build the in-memory store")
+                return
+            }
+            if screen == .shell { Self.seedSampleAlbums(into: store) }
             coordinator = resolved
             projectStore = store
             Log.app.notice("screenshot-ready: \(screen.rawValue, privacy: .public)")

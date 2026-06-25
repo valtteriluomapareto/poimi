@@ -29,7 +29,7 @@ struct AlbumsView: View {
             } else {
                 List {
                     ForEach(store.projects) { project in
-                        Button { coordinator.openProject(project.id) } label: {
+                        Button { open(project) } label: {
                             AlbumRow(project: project)
                         }
                         .buttonStyle(.plain)
@@ -59,6 +59,13 @@ struct AlbumsView: View {
                 Button("New album", systemImage: "plus", action: newAlbum)
             }
         }
+    }
+
+    /// Open an album: bump it to the top of the library (most-recently-opened, §12) and navigate
+    /// to its overview.
+    private func open(_ project: CurationProject) {
+        store.open(project)
+        coordinator.openProject(project.id)
     }
 
     private func newAlbum() {
@@ -92,6 +99,7 @@ struct AlbumRow: View {
                 HStack(spacing: 6) {
                     Image(systemName: statusSymbol)
                         .foregroundStyle(statusTint)
+                        .font(.subheadline)        // scales with Dynamic Type alongside the text
                         .imageScale(.small)
                     Text("\(summary.statusText) · \(summary.progressText)")
                         .font(.subheadline)

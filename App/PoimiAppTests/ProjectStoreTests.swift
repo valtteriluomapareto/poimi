@@ -111,14 +111,21 @@ struct ProjectStoreTests {
         #expect(project.status == .empty)
     }
 
-    @Test("delete removes the project record (and only that)")
+    @Test("delete removes only that project — siblings (and their export links) untouched")
     func delete() throws {
         let store = try makeStore()
-        let project = makeProject(store, title: "A")
-        #expect(store.projects.count == 1)
+        let a = makeProject(store, title: "A")
+        a.targetAlbumID = "album/A"            // A is exported
+        let b = makeProject(store, title: "B")
+        b.targetAlbumID = "album/B"
+        #expect(store.projects.count == 2)
 
-        store.delete(project)
-        #expect(store.projects.isEmpty)
+        store.delete(a)
+        // Only A's record is gone. B and its exported-album link are untouched — and the Photos
+        // albums themselves are untouched by construction (ProjectStore has no PhotoKit dependency
+        // and never deletes a `targetAlbumID`'s collection, D31).
+        #expect(store.projects.map(\.title) == ["B"])
+        #expect(store.projects.first?.targetAlbumID == "album/B")
     }
 
     @Test("status derives from persisted state: empty → inProgress → done")

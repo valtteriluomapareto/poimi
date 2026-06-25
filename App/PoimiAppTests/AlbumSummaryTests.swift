@@ -7,6 +7,7 @@
 //
 
 import Testing
+import Foundation
 import Curation
 @testable import PoimiApp
 
@@ -25,5 +26,18 @@ struct AlbumSummaryTests {
         #expect(AlbumSummary(status: .inProgress, picked: 47, target: 100).progressText == "47 / 100")
         #expect(AlbumSummary(status: .empty, picked: 0, target: 0).progressText == "0 / 0")
         #expect(AlbumSummary(status: .done, picked: 200, target: 200).progressText == "200 / 200")
+        // Large numbers are NOT locale-grouped (deliberate — plain Int interpolation).
+        #expect(AlbumSummary(status: .inProgress, picked: 1000, target: 5000).progressText == "1000 / 5000")
+    }
+
+    @Test("the project convenience init reads status + counts off the project")
+    func fromProject() throws {
+        let project = CurationProject(
+            title: "x", rangeStart: Date(timeIntervalSince1970: 0), rangeEnd: Date(timeIntervalSince1970: 1),
+            targetCount: 150, selectionSnapshot: try SelectionSnapshot(assetIDs: ["a", "b", "c"]).encoded(),
+            createdAt: Date(timeIntervalSince1970: 0), lastOpenedAt: Date(timeIntervalSince1970: 0))
+        let summary = AlbumSummary(project: project)
+        #expect(summary.statusText == "In progress")   // has picks, not finalized
+        #expect(summary.progressText == "3 / 150")
     }
 }
