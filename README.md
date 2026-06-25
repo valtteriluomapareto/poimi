@@ -171,3 +171,14 @@ xcrun simctl spawn booted log stream \
 
 Narrow to one area with `category == "PhotoLibrary"` (or `App`). Logging lives in the app
 target only — the pure `Curation` package stays side-effect-free.
+
+## License
+
+Poimi is **dual-licensed** (© 2026 Valtteri Luoma):
+
+- **Open source — [AGPL-3.0](LICENSE).** Free to use, study, modify, and share. Copyleft:
+  if you distribute Poimi or a derivative, or run a modified version as a network service,
+  you must release the complete corresponding source under AGPL-3.0 too.
+- **Commercial — by request.** To use Poimi without the AGPL obligations (e.g. in a
+  closed-source product), get a commercial license — see
+  [`COMMERCIAL-LICENSE.md`](COMMERCIAL-LICENSE.md).

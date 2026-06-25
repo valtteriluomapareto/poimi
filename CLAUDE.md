@@ -15,6 +15,10 @@ the human picks each photo. Full rationale: [docs/plans/product-plan.md](docs/pl
 The output is a **native Photos album** ("album", never "yearbook"). There is **no printing
 feature** — do not add print/PDF/export-to-print language anywhere.
 
+**License:** dual-licensed — AGPL-3.0 ([`LICENSE`](LICENSE)) for open-source use, with a
+commercial license by request ([`COMMERCIAL-LICENSE.md`](COMMERCIAL-LICENSE.md)). Don't add
+third-party dependencies under incompatible licenses.
+
 ## Status
 
 **Phase 2 (the v1 critical path) is in progress.** Built so far: the pure `Curation` domain,
