@@ -32,13 +32,37 @@ struct FakePhotoLibrarySeedTests {
         #expect(albums.count == 2)
     }
 
-    @Test("empty: no assets, no albums, authorized")
+    @Test("empty: no assets, no albums, no membership, authorized")
     func empty() async throws {
         let library = FakePhotoLibrary.empty()
         let assets = try await library.fetchAssets(in: .everything)
         #expect(assets.isEmpty)
         let albums = try await library.albums()
         #expect(albums.isEmpty)
+        // No albums ⇒ no membership: excluding anything yields nothing (the default WhatsApp
+        // membership must not leak into the empty seed).
+        let members = try await library.assetIDs(inAlbums: ["album/whatsapp"])
+        #expect(members.isEmpty)
+    }
+
+    @Test("assetIDs(inAlbums:): WhatsApp resolves to its two members; empty input → empty set")
+    func albumMembership() async throws {
+        let library = FakePhotoLibrary.yearMixed()
+        let members = try await library.assetIDs(inAlbums: ["album/whatsapp"])
+        #expect(members == ["fake/busy/0", "fake/busy/1"])
+        // Unknown album contributes nothing; empty input enumerates nothing (the seam contract).
+        #expect(try await library.assetIDs(inAlbums: ["album/nope"]).isEmpty)
+        #expect(try await library.assetIDs(inAlbums: []).isEmpty)
+    }
+
+    @Test("assetIDs(inAlbums:): multiple albums union their members (not last-wins)")
+    func albumMembershipUnion() async throws {
+        let library = FakePhotoLibrary(
+            membership: ["album/a": ["x", "y"], "album/b": ["y", "z"]])
+        // Union across both albums, de-duplicated on the overlap (y).
+        #expect(try await library.assetIDs(inAlbums: ["album/a", "album/b"]) == ["x", "y", "z"])
+        // A single album still resolves to just its own members.
+        #expect(try await library.assetIDs(inAlbums: ["album/b"]) == ["y", "z"])
     }
 
     @Test("limited: reports .limited authorization")

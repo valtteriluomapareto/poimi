@@ -68,6 +68,24 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
         return albums
     }
 
+    func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> {
+        guard !albumIDs.isEmpty else { return [] }
+        var ids: Set<String> = []
+        // Only images can be candidates (fetchAssets fetches `.image`), so restrict membership to
+        // images too — tighter and cheaper than enumerating an excluded album's videos/audio.
+        let imageOptions = PHFetchOptions()
+        imageOptions.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
+        // Resolve each excluded album by localIdentifier, then collect its assets' ids. Only the
+        // id strings escape the actor — the `PHAsset`s never do.
+        let collections = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: albumIDs, options: nil)
+        collections.enumerateObjects { collection, _, _ in
+            PHAsset.fetchAssets(in: collection, options: imageOptions).enumerateObjects { asset, _, _ in
+                ids.insert(asset.localIdentifier)
+            }
+        }
+        return ids
+    }
+
     // MARK: - Value mapping (PHAsset never escapes the actor)
 
     private static func map(_ status: PHAuthorizationStatus) -> LibraryAuthorization {

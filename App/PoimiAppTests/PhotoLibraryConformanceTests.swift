@@ -40,12 +40,23 @@ func assertFetchContract(_ library: any PhotoLibraryProviding, in interval: Date
     #expect(Set(assets.map(\.id)).count == assets.count)
 }
 
+/// The album-membership contract for `assetIDs(inAlbums:)` — content-agnostic, so it holds for
+/// any implementation (the new seam, #34). The fake/real *content* equivalence is the on-device
+/// run (#46); these are the invariants both sides must agree on regardless of seed.
+func assertAlbumMembershipContract(_ library: any PhotoLibraryProviding) async throws {
+    // Empty input enumerates nothing.
+    #expect(try await library.assetIDs(inAlbums: []).isEmpty)
+    // An unknown album id contributes nothing — no crash, no spurious ids.
+    #expect(try await library.assetIDs(inAlbums: ["bogus/nonexistent-album"]).isEmpty)
+}
+
 @Suite("PhotoLibrary conformance (#28)")
 struct PhotoLibraryConformanceTests {
 
-    @Test("FakePhotoLibrary satisfies the fetch contract")
+    @Test("FakePhotoLibrary satisfies the fetch + album-membership contracts")
     func fakeFetchContract() async throws {
         try await assertFetchContract(FakePhotoLibrary.yearMixed(), in: .year2025)
+        try await assertAlbumMembershipContract(FakePhotoLibrary.yearMixed())
     }
 
     @Test("empty FakePhotoLibrary satisfies the contract")
@@ -69,5 +80,8 @@ struct PhotoLibraryConformanceTests {
         let assets = try await library.fetchAssets(in: .year2025)
         #expect(assets.isEmpty)
         try await assertFetchContract(library, in: .year2025)
+        // The new membership seam must hold the same contract on the real impl: an unauthorized /
+        // empty library resolves any album id to nothing (and never traps).
+        try await assertAlbumMembershipContract(library)
     }
 }
