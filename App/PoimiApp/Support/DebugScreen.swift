@@ -194,39 +194,56 @@ struct DebugAlbumPickerHostView: View {
     }
 }
 
-/// Hosts the review-fetch scanning surface (#34): an in-memory project over the injected fake
+/// Hosts the review screen (#34 scan → #35 grid): an in-memory project over the injected fake
 /// (authorized, `yearMixed` seed + WhatsApp membership), with screenshots + the WhatsApp album
-/// excluded — so the captured `.ready` summary deterministically reflects the two exact filters.
+/// excluded. `.ready` renders the grid, so this captures the grid against the deterministic fake
+/// thumbnails with a few cells pre-selected (so selection encoding shows).
 struct DebugScanningHostView: View {
     @Environment(\.photoLibrary) private var library
-    // Retained so the in-memory store (which owns the ModelContainer) outlives `.task` — otherwise
-    // it deallocates, resets its context, and destroys `project` out from under ScanningView.
-    @State private var store: ProjectStore?
+    // Retained so the in-memory container (owned by the stores) outlives `.task` — otherwise it
+    // deallocates, resets its context, and destroys `project` out from under ScanningView.
+    @State private var projectStore: ProjectStore?
+    @State private var selectionStore: SelectionStore?
+    @State private var coordinator: AppCoordinator?
     @State private var project: CurationProject?
+
+    /// A few candidate ids to pre-select so the captured grid shows the badge + dim encoding.
+    private static let preselected = ["fake/busy/2", "fake/busy/5", "fake/quiet/16"]
 
     var body: some View {
         Group {
-            if let project {
+            if let selectionStore, let coordinator, let project {
                 NavigationStack { ScanningView(project: project) }
+                    .environment(selectionStore)
+                    .environment(coordinator)
             } else {
                 ProgressView()
             }
         }
         .task {
-            guard let built = (try? AppModelContainer.make(inMemory: true)).map({ ProjectStore(container: $0) }) else {
-                Log.app.error("DebugScanningHostView: failed to build the in-memory store")
+            guard let container = try? AppModelContainer.make(inMemory: true) else {
+                Log.app.error("DebugScanningHostView: failed to build the in-memory container")
                 return
             }
-            store = built
-            let created = built.create(
+            let projects = ProjectStore(container: container)
+            let selection = SelectionStore(container: container)
+            let created = projects.create(
                 title: "Best of 2025",
                 rangeStart: Self.yearStart, rangeEnd: Self.yearEnd,
                 targetCount: 100,
                 excludeScreenshots: true,
                 excludedAlbumIDs: ["album/whatsapp"])
+            selection.activate(created)
+            Self.preselected.forEach { selection.toggle($0) }
+
+            let coord = AppCoordinator(library: library)
+            projectStore = projects
+            selectionStore = selection
+            coordinator = coord
             project = created
-            // Probe the same fake the view loads against (it's instant), so we only signal ready
-            // once the pass has settled — the capture script never snapshots mid-scan.
+
+            // Probe the same fake the view loads against (instant) so we signal ready only once
+            // the candidates have settled — the capture script never snapshots mid-scan.
             let probe = CandidateStore(library: library)
             await probe.load(created)
             Log.app.notice("screenshot-ready: \(DebugScreen.scanning.rawValue, privacy: .public)")
