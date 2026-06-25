@@ -38,4 +38,16 @@ struct NewAlbumDraft: Equatable {
             excludedAlbumIDs: [],
             targetAlbumID: nil)
     }
+
+    /// The **inclusive** last day to show in the UI for an end-exclusive `rangeEnd` (one day
+    /// before it). Pure + calendar-injectable so the off-by-one is unit-tested, not buried in a view.
+    static func inclusiveEndDay(forExclusiveEnd end: Date, calendar: Calendar) -> Date {
+        calendar.date(byAdding: .day, value: -1, to: end) ?? end
+    }
+
+    /// The end-exclusive `rangeEnd` for an inclusive last day picked in the UI (one day after it).
+    /// Inverse of `inclusiveEndDay(forExclusiveEnd:calendar:)` for day-aligned dates.
+    static func exclusiveEnd(forInclusiveDay day: Date, calendar: Calendar) -> Date {
+        calendar.date(byAdding: .day, value: 1, to: day) ?? day
+    }
 }

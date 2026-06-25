@@ -14,9 +14,11 @@ struct NewAlbumSetupView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft: NewAlbumDraft
+    private let calendar: Calendar
 
-    init(draft: NewAlbumDraft) {
+    init(draft: NewAlbumDraft, calendar: Calendar = .current) {
         _draft = State(initialValue: draft)
+        self.calendar = calendar
     }
 
     var body: some View {
@@ -70,7 +72,7 @@ struct NewAlbumSetupView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create", action: create)
-                        .disabled(draft.title.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(!isValid)
                 }
             }
         }
@@ -82,12 +84,18 @@ struct NewAlbumSetupView: View {
         coordinator.openProject(project.id)
     }
 
+    /// A non-empty name and a non-inverted interval are required to create.
+    private var isValid: Bool {
+        !draft.title.trimmingCharacters(in: .whitespaces).isEmpty && draft.rangeEnd > draft.rangeStart
+    }
+
     /// The "To" picker shows an **inclusive** end day, while the draft stores `rangeEnd`
-    /// end-exclusive (the fetch contract) — so the picker reads/writes one day off.
+    /// end-exclusive (the fetch contract) — so the picker reads/writes one day off, using the
+    /// view's injected `calendar` (matching the calendar the draft was built with).
     private var inclusiveEnd: Binding<Date> {
         Binding(
-            get: { Calendar.current.date(byAdding: .day, value: -1, to: draft.rangeEnd) ?? draft.rangeEnd },
-            set: { draft.rangeEnd = Calendar.current.date(byAdding: .day, value: 1, to: $0) ?? $0 })
+            get: { NewAlbumDraft.inclusiveEndDay(forExclusiveEnd: draft.rangeEnd, calendar: calendar) },
+            set: { draft.rangeEnd = NewAlbumDraft.exclusiveEnd(forInclusiveDay: $0, calendar: calendar) })
     }
 
     /// Bridges the single export-target (`String?`) to the picker's `Set<String>` selection.

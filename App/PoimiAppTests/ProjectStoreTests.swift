@@ -142,6 +142,8 @@ struct ProjectStoreTests {
 
         let project = store.create(from: draft)
         #expect(project.title == "Trip")
+        #expect(project.rangeStart == Self.rangeStart)   // the source period must round-trip
+        #expect(project.rangeEnd == Self.rangeEnd)
         #expect(project.targetCount == 80)
         #expect(project.excludeScreenshots == false)
         #expect(project.excludedAlbumIDs == ["album/downloads", "album/whatsapp"])   // stored sorted

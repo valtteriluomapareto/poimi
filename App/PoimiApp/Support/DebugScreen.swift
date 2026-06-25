@@ -138,7 +138,8 @@ struct DebugSetupHostView: View {
     var body: some View {
         Group {
             if let coordinator, let store {
-                NewAlbumSetupView(draft: .priorCalendarYear(now: Self.fixedNow, calendar: Self.utc))
+                NewAlbumSetupView(draft: .priorCalendarYear(now: Self.fixedNow, calendar: Self.utc),
+                                  calendar: Self.utc)
                     .environment(coordinator)
                     .environment(store)
             } else {

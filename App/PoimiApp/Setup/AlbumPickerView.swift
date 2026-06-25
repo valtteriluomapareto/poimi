@@ -6,6 +6,9 @@
 //  them. One reusable view: `allowsMultiple` = true for the exclude-from-source picker, false for
 //  the single export-target picker (tapping replaces the selection).
 //
+//  Deferred (v1.1): album cover thumbnails (needs image loading) and "suggested-to-skip"
+//  highlighting/sorting of common excludes (WhatsApp, Downloads — design-inventory item 5).
+//
 
 import SwiftUI
 import Curation
@@ -25,6 +28,7 @@ struct AlbumPickerView: View {
                                        description: Text("You have no albums to choose from."))
             } else {
                 ForEach(albums) { album in
+                    let isSelected = selection.contains(album.id)
                     Button { toggle(album.id) } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -36,16 +40,19 @@ struct AlbumPickerView: View {
                                 }
                             }
                             Spacer()
-                            if selection.contains(album.id) {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.tint)
-                                    .fontWeight(.semibold)
-                                    .accessibilityLabel("Selected")
-                            }
+                            // A quiet `circle` on every unselected row makes selection
+                            // discoverable; the filled check carries the chosen state.
+                            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                                .accessibilityHidden(true)
                         }
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    // One VoiceOver element with the selected *state* as a trait (not a detached
+                    // "Selected" label), so selected vs unselected is announced.
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
         }
