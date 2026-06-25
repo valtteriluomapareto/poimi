@@ -22,15 +22,19 @@ import Curation
 actor FakePhotoLibrary: PhotoLibraryProviding {
     private let seededAssets: [AssetRef]
     private let seededAlbums: [AlbumRef]
+    /// Album id → the asset ids it contains, so the exclude-album filter can be exercised (D25).
+    private let membership: [String: Set<String>]
     private var status: LibraryAuthorization
 
     init(
         assets: [AssetRef] = FakePhotoLibrary.yearMixedSeed(),
         albums: [AlbumRef] = FakePhotoLibrary.defaultAlbums,
+        membership: [String: Set<String>] = FakePhotoLibrary.defaultMembership,
         status: LibraryAuthorization = .authorized
     ) {
         self.seededAssets = assets
         self.seededAlbums = albums
+        self.membership = membership
         self.status = status
     }
 
@@ -59,6 +63,10 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     }
 
     func albums() async throws -> [AlbumRef] { seededAlbums }
+
+    func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> {
+        albumIDs.reduce(into: Set<String>()) { $0.formUnion(membership[$1] ?? []) }
+    }
 }
 
 extension FakePhotoLibrary {
@@ -70,28 +78,40 @@ extension FakePhotoLibrary {
         AlbumRef(id: "album/downloads", title: "Downloads", count: nil)
     ]
 
+    /// Two busy-day assets also live in the WhatsApp album, so excluding it drops exactly them —
+    /// enough to exercise the exclude-album set-difference (D25).
+    static let defaultMembership: [String: Set<String>] = [
+        "album/whatsapp": ["fake/busy/0", "fake/busy/1"]
+    ]
+
     // MARK: - Canonical named seeds (D25)
 
     /// The default year-shaped, authorized library.
     static func yearMixed() -> FakePhotoLibrary {
-        FakePhotoLibrary(assets: yearMixedSeed(), albums: defaultAlbums, status: .authorized)
+        FakePhotoLibrary(assets: yearMixedSeed(), albums: defaultAlbums,
+                         membership: defaultMembership, status: .authorized)
     }
 
     /// An authorized but empty library (drives the empty states).
     static func empty() -> FakePhotoLibrary {
-        FakePhotoLibrary(assets: [], albums: [], status: .authorized)
+        // Explicitly membership-free: no albums means no membership (the default would otherwise
+        // reference a WhatsApp album this library doesn't vend).
+        FakePhotoLibrary(assets: [], albums: [], membership: [:], status: .authorized)
     }
 
     /// Limited-access state (drives the limited recovery flow).
     static func limited() -> FakePhotoLibrary {
-        FakePhotoLibrary(assets: yearMixedSeed(), albums: defaultAlbums, status: .limited)
+        FakePhotoLibrary(assets: yearMixedSeed(), albums: defaultAlbums,
+                         membership: defaultMembership, status: .limited)
     }
 
     /// A scale seed: `count` dated assets spread across the year — for the D29 scale check.
     /// (`AllICloudOptimized` and progressive-delivery seeds arrive with the image-loading
     /// surface in a later Phase-2 issue, D25.)
     static func scale(_ count: Int = 10_000) -> FakePhotoLibrary {
-        FakePhotoLibrary(assets: scaleSeed(count), albums: defaultAlbums, status: .authorized)
+        // No membership: the scale seed's ids don't intersect the canonical WhatsApp members.
+        FakePhotoLibrary(assets: scaleSeed(count), albums: defaultAlbums,
+                         membership: [:], status: .authorized)
     }
 
     /// A tiny year-shaped seed: a busy day (12 photos), a 3-day quiet run, a screenshot, and

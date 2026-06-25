@@ -53,4 +53,9 @@ public protocol PhotoLibraryProviding: Sendable {
     /// Enumerate the user's albums — for the exclude-album picker and the export-target
     /// selection step (architecture §8).
     func albums() async throws -> [AlbumRef]
+
+    /// The asset ids belonging to any of `albumIDs` — the precomputed membership the
+    /// exclude-album filter set-differences against (architecture §3). An empty `albumIDs`
+    /// yields an empty set (no enumeration).
+    func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String>
 }

@@ -40,6 +40,9 @@ enum DebugScreen: String, CaseIterable {
     case setup
     /// The exclude-album picker, against the fake's albums (#33).
     case albumpicker
+    /// The review-fetch scanning surface — drives the fetch+filter pipeline against the fake and
+    /// shows the resulting candidate summary (#34).
+    case scanning
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -71,6 +74,7 @@ struct DebugScreenHost: View {
         case .recovery: DebugShellView(screen: .recovery, authorization: .denied)
         case .setup: DebugSetupHostView()
         case .albumpicker: DebugAlbumPickerHostView()
+        case .scanning: DebugScanningHostView()
         }
     }
 }
@@ -183,6 +187,49 @@ struct DebugAlbumPickerHostView: View {
             Log.app.notice("screenshot-ready: \(DebugScreen.albumpicker.rawValue, privacy: .public)")
         }
     }
+}
+
+/// Hosts the review-fetch scanning surface (#34): an in-memory project over the injected fake
+/// (authorized, `yearMixed` seed + WhatsApp membership), with screenshots + the WhatsApp album
+/// excluded — so the captured `.ready` summary deterministically reflects the two exact filters.
+struct DebugScanningHostView: View {
+    @Environment(\.photoLibrary) private var library
+    // Retained so the in-memory store (which owns the ModelContainer) outlives `.task` — otherwise
+    // it deallocates, resets its context, and destroys `project` out from under ScanningView.
+    @State private var store: ProjectStore?
+    @State private var project: CurationProject?
+
+    var body: some View {
+        Group {
+            if let project {
+                NavigationStack { ScanningView(project: project) }
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            guard let built = (try? AppModelContainer.make(inMemory: true)).map({ ProjectStore(container: $0) }) else {
+                Log.app.error("DebugScanningHostView: failed to build the in-memory store")
+                return
+            }
+            store = built
+            let created = built.create(
+                title: "Best of 2025",
+                rangeStart: Self.yearStart, rangeEnd: Self.yearEnd,
+                targetCount: 100,
+                excludeScreenshots: true,
+                excludedAlbumIDs: ["album/whatsapp"])
+            project = created
+            // Probe the same fake the view loads against (it's instant), so we only signal ready
+            // once the pass has settled — the capture script never snapshots mid-scan.
+            let probe = CandidateStore(library: library)
+            await probe.load(created)
+            Log.app.notice("screenshot-ready: \(DebugScreen.scanning.rawValue, privacy: .public)")
+        }
+    }
+
+    private static let yearStart = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01Z
+    private static let yearEnd = Date(timeIntervalSince1970: 1_767_225_600)     // 2026-01-01Z
 }
 
 /// Shown when `-PoimiScreen` names a screen the catalog doesn't have. A loud, unmistakable

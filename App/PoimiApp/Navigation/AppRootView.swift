@@ -17,6 +17,7 @@ import Curation
 
 struct AppRootView: View {
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(ProjectStore.self) private var projectStore
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
@@ -62,15 +63,30 @@ struct AppRootView: View {
         }
     }
 
+    /// Resolve a route's project id against the library. A `nil` (e.g. a stale path after the
+    /// project was deleted) routes to a labeled placeholder rather than crashing.
+    private func project(_ id: UUID) -> CurationProject? {
+        projectStore.projects.first { $0.id == id }
+    }
+
     @ViewBuilder
     private func destination(for route: Route) -> some View {
         switch route {
         case .albumOverview(let id):
-            RoutePlaceholder(symbol: "square.grid.2x2", title: "Overview",
-                             detail: "album \(id.uuidString.prefix(8)) (#37)")
-        case .review(let id, let day):
-            RoutePlaceholder(symbol: "photo.on.rectangle.angled", title: "Review grid",
-                             detail: "album \(id.uuidString.prefix(8))\(day.map { " · \($0)" } ?? "") (#35)")
+            if let project = project(id) {
+                AlbumOverviewView(project: project)
+            } else {
+                RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
+                                 detail: "This album is no longer in your library.")
+            }
+        case .review(let id, _):
+            if let project = project(id) {
+                // #34: the scanning surface drives the fetch+filter pipeline; #35 fills the grid.
+                ScanningView(project: project)
+            } else {
+                RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
+                                 detail: "This album is no longer in your library.")
+            }
         case .photo(let assetID):
             RoutePlaceholder(symbol: "photo", title: "Photo", detail: "\(assetID) (#36)")
         case .export(let id):
