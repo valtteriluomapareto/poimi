@@ -19,6 +19,13 @@ struct CandidateStoreTests {
     private static let yearStart = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01Z
     private static let yearEnd = Date(timeIntervalSince1970: 1_767_225_600)     // 2026-01-01Z
 
+    /// A fixed UTC calendar so grouping-structure assertions don't depend on the runner's timezone.
+    private static let utc: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC")!
+        return c
+    }()
+
     /// Held for the whole test (one fresh in-memory store per `@Test` instance): the store retains
     /// the `ModelContainer`, so projects it creates stay valid through `load`. (A locally-scoped
     /// store would deallocate, reset its context, and destroy the returned model.)
@@ -43,13 +50,19 @@ struct CandidateStoreTests {
             excludedAlbumIDs: excludedAlbumIDs)
     }
 
-    /// Unwrap `.ready`'s candidates, or fail loudly with the actual phase.
-    private func readyAssets(_ store: CandidateStore, _ comment: Comment) -> [AssetRef] {
-        guard case .ready(let assets) = store.phase else {
+    /// Unwrap `.ready`'s day-groups, or fail loudly with the actual phase.
+    private func readyGroups(_ store: CandidateStore, _ comment: Comment) -> [DayGroup] {
+        guard case .ready(let groups) = store.phase else {
             Issue.record("expected .ready, got \(store.phase) — \(comment)")
             return []
         }
-        return assets
+        return groups
+    }
+
+    /// The candidate ids in chronological order — concatenating the groups reproduces the flat
+    /// slice the filter tier produced (a partition of the candidates, order-stable).
+    private func readyIDs(_ store: CandidateStore, _ comment: Comment) -> [String] {
+        readyGroups(store, comment).flatMap(\.assetIDs)
     }
 
     @Test("both filters resolve: screenshots + WhatsApp members dropped, chronological order kept")
@@ -58,7 +71,7 @@ struct CandidateStoreTests {
         let store = CandidateStore(library: FakePhotoLibrary())
         await store.load(project)
 
-        let ids = readyAssets(store, "both filters").map(\.id)
+        let ids = readyIDs(store, "both filters")
         // 16 dated − 1 screenshot − 2 WhatsApp members = 13, oldest → newest (March before July).
         #expect(ids == ["fake/quiet/16", "fake/quiet/17", "fake/quiet/18"]
             + (2...11).map { "fake/busy/\($0)" })
@@ -67,13 +80,55 @@ struct CandidateStoreTests {
         #expect(!ids.contains("fake/undated"))   // undated never returned by a range fetch
     }
 
+    // MARK: Grouping happens once, in the store (Finding 1)
+
+    @Test("`.ready` carries adaptive day-groups partitioning the filtered candidates")
+    func groupsAtReady() async throws {
+        let project = makeProject(excludeScreenshots: true, excludedAlbumIDs: ["album/whatsapp"])
+        let store = CandidateStore(library: FakePhotoLibrary(), calendar: Self.utc)
+        await store.load(project)
+
+        let groups = readyGroups(store, "grouped at ready")
+        // The March 16–18 run is quiet (< 10/day → one merged group); July 5 keeps 10 after the
+        // WhatsApp exclusion (≥ 10 → its own busy group). Two groups, oldest → newest.
+        #expect(groups.count == 2)
+        #expect(groups.first?.isBusyDay == false)
+        #expect(groups.first?.assetIDs == ["fake/quiet/16", "fake/quiet/17", "fake/quiet/18"])
+        #expect(groups.last?.isBusyDay == true)
+        #expect(groups.last?.assetIDs == (2...11).map { "fake/busy/\($0)" })
+        // Concatenation reproduces the flat chronological slice — no loss, no duplication.
+        #expect(readyIDs(store, "partition") == ["fake/quiet/16", "fake/quiet/17", "fake/quiet/18"]
+            + (2...11).map { "fake/busy/\($0)" })
+    }
+
+    @Test("the store groups by its injected calendar (timezone shifts day bucketing)")
+    func respectsInjectedCalendar() async throws {
+        // Two assets straddling UTC midnight: 23:00Z on 2025-06-25 and 01:00Z on 2025-06-26.
+        let a = AssetRef(id: "edge/a", captureDate: Date(timeIntervalSince1970: 1_750_892_400))
+        let b = AssetRef(id: "edge/b", captureDate: Date(timeIntervalSince1970: 1_750_899_600))
+        let library = FakePhotoLibrary(assets: [a, b], albums: [], membership: [:])
+        let project = makeProject(excludeScreenshots: false)
+
+        // UTC: the two land on different calendar days (Jun 25 and Jun 26).
+        let utcStore = CandidateStore(library: library, calendar: Self.utc)
+        await utcStore.load(project)
+        #expect(Set(readyGroups(utcStore, "utc").flatMap(\.days)).count == 2)
+
+        // UTC−3: both shift back into the same calendar day (Jun 25) — only the calendar changed.
+        var minus3 = Calendar(identifier: .gregorian)
+        minus3.timeZone = TimeZone(secondsFromGMT: -3 * 3600)!
+        let shiftedStore = CandidateStore(library: library, calendar: minus3)
+        await shiftedStore.load(project)
+        #expect(Set(readyGroups(shiftedStore, "utc-3").flatMap(\.days)).count == 1)
+    }
+
     @Test("no filters: every dated in-range asset survives (screenshot included, undated excluded)")
     func noFilters() async throws {
         let project = makeProject(excludeScreenshots: false, excludedAlbumIDs: [])
         let store = CandidateStore(library: FakePhotoLibrary())
         await store.load(project)
 
-        let ids = Set(readyAssets(store, "no filters").map(\.id))
+        let ids = Set(readyIDs(store, "no filters"))
         #expect(ids.count == 16)
         #expect(ids.contains("fake/shot"))           // not filtered when the toggle is off
         #expect(ids.contains("fake/busy/0"))         // not excluded when no album is excluded
@@ -86,7 +141,7 @@ struct CandidateStoreTests {
         let store = CandidateStore(library: FakePhotoLibrary())
         await store.load(project)
 
-        let ids = Set(readyAssets(store, "screenshots only").map(\.id))
+        let ids = Set(readyIDs(store, "screenshots only"))
         #expect(ids.count == 15)
         #expect(!ids.contains("fake/shot"))
         #expect(ids.contains("fake/busy/0"))
@@ -98,7 +153,7 @@ struct CandidateStoreTests {
         let store = CandidateStore(library: FakePhotoLibrary())
         await store.load(project)
 
-        let ids = Set(readyAssets(store, "album exclusion only").map(\.id))
+        let ids = Set(readyIDs(store, "album exclusion only"))
         #expect(ids.count == 14)
         #expect(!ids.contains("fake/busy/0") && !ids.contains("fake/busy/1"))
         #expect(ids.contains("fake/shot"))           // screenshot kept (its toggle is off)
@@ -112,7 +167,7 @@ struct CandidateStoreTests {
         let store = CandidateStore(library: FakePhotoLibrary())
         await store.load(project)
         // Same as the screenshots-only case: 16 dated − 1 screenshot = 15.
-        #expect(Set(readyAssets(store, "zero-member album").map(\.id)).count == 15)
+        #expect(Set(readyIDs(store, "zero-member album")).count == 15)
     }
 
     @Test("filters removing every in-range asset settle on .empty (not .ready([]))")
