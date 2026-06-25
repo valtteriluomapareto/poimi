@@ -36,6 +36,10 @@ enum DebugScreen: String, CaseIterable {
     case onboarding
     /// The access-recovery screen (`AppRootView` with a `.denied` fake, #31).
     case recovery
+    /// The new-album setup form, against an in-memory store + fake albums (#33).
+    case setup
+    /// The exclude-album picker, against the fake's albums (#33).
+    case albumpicker
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -65,6 +69,8 @@ struct DebugScreenHost: View {
         case .shell: DebugShellView(screen: .shell, authorization: .authorized)
         case .onboarding: DebugShellView(screen: .onboarding, authorization: .notDetermined)
         case .recovery: DebugShellView(screen: .recovery, authorization: .denied)
+        case .setup: DebugSetupHostView()
+        case .albumpicker: DebugAlbumPickerHostView()
         }
     }
 }
@@ -120,6 +126,62 @@ struct DebugShellView: View {
         inProgress.selectionSnapshot = snapshot(34)
         _ = store.create(title: "Best of 2025", rangeStart: start, rangeEnd: end, targetCount: 150)  // not started
         store.refresh()
+    }
+}
+
+/// Hosts the new-album setup form (#33) against an in-memory store + an authorized fake. Uses a
+/// FIXED clock + UTC calendar so the defaulted title/dates are deterministic in the screenshot.
+struct DebugSetupHostView: View {
+    @State private var coordinator: AppCoordinator?
+    @State private var store: ProjectStore?
+
+    var body: some View {
+        Group {
+            if let coordinator, let store {
+                NewAlbumSetupView(draft: .priorCalendarYear(now: Self.fixedNow, calendar: Self.utc),
+                                  calendar: Self.utc)
+                    .environment(coordinator)
+                    .environment(store)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            let coord = AppCoordinator(library: FakePhotoLibrary(status: .authorized))
+            await coord.refreshAuthorization()
+            guard let built = (try? AppModelContainer.make(inMemory: true)).map({ ProjectStore(container: $0) }) else {
+                Log.app.error("DebugSetupHostView: failed to build the in-memory store")
+                return
+            }
+            coordinator = coord
+            store = built
+            Log.app.notice("screenshot-ready: \(DebugScreen.setup.rawValue, privacy: .public)")
+        }
+    }
+
+    private static let fixedNow = Date(timeIntervalSince1970: 1_750_000_000)   // ~2025-06-15
+    private static let utc: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+}
+
+/// Hosts the exclude-album picker (#33) against the injected fake's albums, with one album
+/// pre-selected so the checkmark is visible in the screenshot.
+struct DebugAlbumPickerHostView: View {
+    @Environment(\.photoLibrary) private var library
+    @State private var selection: Set<String> = []
+
+    var body: some View {
+        NavigationStack {
+            AlbumPickerView(selection: $selection, allowsMultiple: true)
+        }
+        .task {
+            _ = try? await library.albums()          // ensure the fake's albums are ready first
+            selection = ["album/whatsapp"]           // pre-select one so the checkmark shows
+            Log.app.notice("screenshot-ready: \(DebugScreen.albumpicker.rawValue, privacy: .public)")
+        }
     }
 }
 

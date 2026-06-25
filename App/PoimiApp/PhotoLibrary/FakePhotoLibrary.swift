@@ -63,10 +63,11 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
 
 extension FakePhotoLibrary {
     static let defaultAlbums: [AlbumRef] = [
-        // `count: nil` to match SystemPhotoLibrary, which doesn't populate counts yet — so
-        // designs/screenshots validated against the fake match the real app (no phantom counts).
-        AlbumRef(id: "album/screenshots", title: "Screenshots", count: nil),
-        AlbumRef(id: "album/whatsapp", title: "WhatsApp", count: nil)
+        // Regular user albums only — SystemPhotoLibrary enumerates `.albumRegular`, so smart
+        // albums (Screenshots, Recents) don't appear; the fake matches that. `count: nil` too,
+        // since the real impl doesn't populate counts yet (no fake-vs-real drift).
+        AlbumRef(id: "album/whatsapp", title: "WhatsApp", count: nil),
+        AlbumRef(id: "album/downloads", title: "Downloads", count: nil)
     ]
 
     // MARK: - Canonical named seeds (D25)
