@@ -21,6 +21,7 @@ struct PoimiApp: App {
     // permission → albums), reading `\.photoLibrary` and the stores — never PhotoKit/SwiftData
     // directly.
     private let photoLibrary = PhotoLibraryProvider.make()
+    private let thumbnailProvider = ThumbnailProvider.make()
     private let modelContainer: ModelContainer
     @State private var projectStore: ProjectStore
     @State private var selectionStore: SelectionStore
@@ -47,6 +48,7 @@ struct PoimiApp: App {
         WindowGroup {
             rootView
                 .environment(\.photoLibrary, photoLibrary)
+                .environment(\.thumbnailProvider, thumbnailProvider)
                 .environment(projectStore)
                 .environment(selectionStore)
                 .environment(coordinator)
