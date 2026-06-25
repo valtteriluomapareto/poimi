@@ -6,13 +6,14 @@
 //  day-groups with **pinned section headers** (the headline Phase-0 finding — a flat year-grid is
 //  harder to curate than grouped). The grid still scrolls as one chronological flow. It keeps:
 //    • badge-select (resolved by the spike): tap a cell opens it; tap the ≥44pt badge selects,
-//    • pinch-to-adjust column density (default 3 on iPhone),
+//    • pinch-to-adjust column density (default 3 on iPhone; clamped by size class),
 //    • a scroll-driven prefetch window (visible range ± a row margin) feeding the thumbnail seam,
 //    • `.scrollPosition` restore to the source cell after a zoom dismiss (#36).
 //
-//  Selection is the shared `SelectionStore` (the in-memory `Set` source of truth, D15); reading
-//  `contains` here ties the grid to it via Observation, so a toggle re-renders just the affected
-//  cells. The tally + export chrome and the select-mode toolbar land in #35 part 3.
+//  Selection lives in the shared `SelectionStore` (the in-memory `Set`, D15) — but the cells and
+//  section headers observe it themselves, so this parent body does NOT depend on `selected`. A
+//  toggle therefore re-renders only the visible cells / pinned headers, never the whole O(n) grid.
+//  The tally + export chrome and the select-mode toolbar land in #35 part 3.
 //
 
 import SwiftUI
@@ -31,20 +32,26 @@ struct ReviewGridView: View {
     @Binding var scrollAnchorID: String?
 
     @Environment(\.thumbnailProvider) private var thumbnails
-    @Environment(SelectionStore.self) private var selection
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var columnCount = 3
     @State private var pinchBaseline = 3
     @State private var visibleIDs: Set<String> = []
     @State private var window = PrefetchWindow(orderedIDs: [])
-    @State private var recomputeScheduled = false
+    // Generation-guarded prefetch: a single in-flight updater loops until it has applied the latest
+    // visible state, so out-of-order actor calls can't leave a stale window cached (D-review #35).
+    @State private var windowGeneration = 0
+    @State private var windowUpdating = false
 
     private let spacing: CGFloat = 2
     private let minColumns = 2
-    private let maxColumns = 8
     private let windowRowMargin = 2
     /// Oversized vs the on-screen point size on purpose (Retina + density headroom).
     private let thumbnailTarget = CGSize(width: 400, height: 400)
+
+    /// iPhone tops out at 5 columns (any more shrinks the cell below the 44pt badge, leaving no
+    /// room to tap "open"); iPad allows denser grids. Matches the styleguide's 2–5 iPhone range.
+    private var maxColumns: Int { sizeClass == .compact ? 5 : 8 }
 
     private var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: spacing), count: columnCount)
@@ -59,7 +66,7 @@ struct ReviewGridView: View {
                             cell(for: id).id(id)
                         }
                     } header: {
-                        sectionHeader(group)
+                        ReviewSectionHeader(group: group)
                     }
                 }
             }
@@ -81,69 +88,27 @@ struct ReviewGridView: View {
         }
         .onChange(of: visibleIDs) { scheduleRecomputeWindow() }
         .onChange(of: columnCount) { scheduleRecomputeWindow() }
+        .onChange(of: maxColumns) { columnCount = min(columnCount, maxColumns) }
         .onChange(of: groupIdentity) {
             rebuildWindow()
             visibleIDs = []
             scheduleRecomputeWindow()
         }
-        .onDisappear { Task { await thumbnails.resetCache() } }
-    }
-
-    // MARK: Section header (adaptive day-group label)
-
-    private func sectionHeader(_ group: DayGroup) -> some View {
-        HStack(spacing: 6) {
-            if group.isBusyDay {
-                Circle().fill(.tint).frame(width: 6, height: 6)
-            }
-            Text(DayGroupHeader.title(for: group))
-                .font(.subheadline.weight(.semibold))
-            Text("· \(group.count)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bar)
-        // A heading + a per-section selected/total summary so VoiceOver can navigate a huge grid.
-        .accessibilityElement(children: .ignore)
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityLabel(sectionAccessibilityLabel(group))
-    }
-
-    private func sectionAccessibilityLabel(_ group: DayGroup) -> String {
-        let selectedCount = group.assetIDs.reduce(0) { $0 + (selection.contains($1) ? 1 : 0) }
-        return "\(DayGroupHeader.title(for: group)). \(group.count) photos, \(selectedCount) selected."
+        // NB: no cache reset on disappear — pushing the #36 viewer fires onDisappear, and resetting
+        // there would cold-reload every thumbnail on return. The prefetch window bounds growth; a
+        // full reset is tied to leaving review entirely (with the viewer / deactivation, later).
     }
 
     // MARK: Cell
 
     private func cell(for id: String) -> some View {
-        let isSelected = selection.contains(id)
-        return ReviewGridCell(id: id, isSelected: isSelected, load: load)
-            .matchedTransitionSource(id: id, in: zoomNamespace)
-            .onTapGesture {
-                scrollAnchorID = id
-                openAsset(id)
-            }
-            // The ≥44pt badge zone wins over the whole-cell tap and toggles selection (D9).
-            .overlay(alignment: .bottomTrailing) {
-                Color.clear
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-                    .onTapGesture { selection.toggle(id) }
-            }
+        ReviewGridCell(
+            id: id,
+            load: load,
+            onOpen: { scrollAnchorID = id; openAsset(id) },
+            zoomNamespace: zoomNamespace)
             .onAppear { visibleIDs.insert(id) }
             .onDisappear { visibleIDs.remove(id) }
-            // VoiceOver: one element per cell, its selected state, and a named toggle action so a
-            // photo can be selected without hunting for the badge.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Photo")
-            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-            .accessibilityHint("Opens full screen. Use the actions to select.")
-            .accessibilityAction(named: isSelected ? "Deselect" : "Select") { selection.toggle(id) }
     }
 
     private func load(_ id: String) async -> UIImage? {
@@ -161,12 +126,54 @@ struct ReviewGridView: View {
     }
 
     private func scheduleRecomputeWindow() {
-        guard !recomputeScheduled else { return }
-        recomputeScheduled = true
+        windowGeneration += 1
+        guard !windowUpdating else { return }   // one updater in flight; it loops to the latest gen
+        windowUpdating = true
         Task { @MainActor in
-            recomputeScheduled = false
-            let slice = window.slice(visibleIDs: visibleIDs, columnCount: columnCount, rowMargin: windowRowMargin)
-            await thumbnails.updateCachingWindow(to: slice)
+            var applied = -1
+            while applied != windowGeneration {
+                applied = windowGeneration
+                let slice = window.slice(visibleIDs: visibleIDs, columnCount: columnCount, rowMargin: windowRowMargin)
+                await thumbnails.updateCachingWindow(to: slice)
+            }
+            windowUpdating = false
         }
+    }
+}
+
+/// One pinned day-group header. Observes the `SelectionStore` itself (for the live per-section
+/// selected/total VoiceOver summary) so the parent grid body stays independent of `selected`.
+private struct ReviewSectionHeader: View {
+    let group: DayGroup
+    @Environment(SelectionStore.self) private var selection
+
+    var body: some View {
+        let title = DayGroupHeader.title(for: group)
+        HStack(spacing: 6) {
+            // A neutral busy-day marker — gold is reserved for the interactive accent (selection /
+            // tally / export), so a non-interactive day indicator shouldn't borrow it.
+            if group.isBusyDay {
+                Circle().fill(.secondary).frame(width: 6, height: 6)
+            }
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Text("· \(group.count)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar)
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel(summary(title))
+    }
+
+    private func summary(_ title: String) -> String {
+        // Intersection is O(min(|selected|, group)) — cheaper than scanning every id in a busy day.
+        let selectedCount = selection.selected.intersection(group.assetIDs).count
+        return "\(title). \(group.count) photos, \(selectedCount) selected."
     }
 }
