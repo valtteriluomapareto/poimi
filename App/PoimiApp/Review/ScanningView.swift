@@ -68,12 +68,12 @@ struct ScanningView: View {
                 indicatorVisible = true
             }
 
-        case .ready(let assets):
-            // The grid sections by the same adaptive day-groups the overview/completion use. Grouped
-            // here (not in the store) so the store's `.ready` stays a plain `[AssetRef]` for tests;
-            // this runs once per ready render — selection toggles re-render the grid, not this view.
+        case .ready(let groups):
+            // The store already grouped the candidates into adaptive day-groups, ONCE, when the pass
+            // settled (Finding 1). The grid renders them directly — this branch re-evaluates on a
+            // scroll-anchor write, so it must not do the O(n log n) grouping work itself.
             ReviewGridView(
-                groups: DayGrouping.groups(for: assets),
+                groups: groups,
                 openAsset: { coordinator.openPhoto($0) },
                 zoomNamespace: zoomNamespace,
                 scrollAnchorID: $scrollAnchorID)

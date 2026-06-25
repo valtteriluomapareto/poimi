@@ -18,6 +18,13 @@
 //  and its access-counting guard (D29) are #47, which depends on this. The flat array matches
 //  the existing `fetchAssets` contract, so this introduces no regression for #47 to undo.
 //
+//  Grouping lives here, NOT in the review grid's `body` (smoothness review, Finding 1):
+//  `DayGrouping.groups` is an O(n log n) sort + bucket over the whole candidate set, so it must
+//  run exactly once — when the pass settles to `.ready` — never on a view re-render (a scroll
+//  anchor write would otherwise recompute it on the interaction hot path). The `calendar` is
+//  owned + injected here so the timezone policy is explicit and testable (rather than implicitly
+//  `.current` inside a `body`), and the grouped `.ready` is the value the grid renders directly.
+//
 
 import Foundation
 import Curation
@@ -26,12 +33,14 @@ import Curation
 @Observable
 final class CandidateStore {
     /// The phases the scanning surface renders. `Equatable` so the view (and tests) can compare
-    /// without unwrapping the associated assets.
+    /// without unwrapping the associated groups.
     enum Phase: Equatable {
         case idle
         case scanning
-        /// The filtered candidates, oldest → newest. Non-empty by construction (empty → `.empty`).
-        case ready([AssetRef])
+        /// The filtered candidates grouped into adaptive day-groups, oldest → newest. Non-empty by
+        /// construction (empty → `.empty`). The review grid renders these directly — grouping is
+        /// done here, once, not in the view (Finding 1).
+        case ready([DayGroup])
         /// Nothing matched the range and filters — a real, expected outcome, not an error.
         case empty
         case failed
@@ -39,9 +48,14 @@ final class CandidateStore {
 
     private(set) var phase: Phase = .idle
     private let library: any PhotoLibraryProviding
+    /// The calendar the day-grouping buckets by. Injected (default `.current`) so the timezone
+    /// policy is explicit and a test can pin it — and so a locale/timezone change is a property of
+    /// this store, not an accident of where grouping used to run.
+    private let calendar: Calendar
 
-    init(library: any PhotoLibraryProviding) {
+    init(library: any PhotoLibraryProviding, calendar: Calendar = .current) {
         self.library = library
+        self.calendar = calendar
     }
 
     /// Run the fetch → resolve → filter pass for `project`, publishing each phase as it settles.
@@ -66,7 +80,10 @@ final class CandidateStore {
                 fetched,
                 excludeScreenshots: project.excludeScreenshots,
                 excludedAssetIDs: excludedAssetIDs)
-            phase = candidates.isEmpty ? .empty : .ready(candidates)
+            // Group once, here — the grid renders the groups directly and never recomputes them
+            // (Finding 1). Concatenating the groups' `assetIDs` reproduces the chronological slice.
+            let groups = DayGrouping.groups(for: candidates, calendar: calendar)
+            phase = groups.isEmpty ? .empty : .ready(groups)
         } catch {
             Log.photoLibrary.error("CandidateStore.load failed: \(String(describing: error), privacy: .public)")
             phase = .failed

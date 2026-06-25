@@ -24,6 +24,12 @@ protocol ThumbnailProviding: Sendable {
     /// asset can't be resolved or the request is cancelled before any image arrives.
     func thumbnail(for assetID: String, targetSize: CGSize) async -> UIImage?
 
+    /// A synchronously-available cached thumbnail for `assetID` at `targetSize`, or `nil` if it is
+    /// not in the in-memory cache. Lets a recycled cell paint an already-loaded image immediately
+    /// instead of flashing a placeholder during the async reload (smoothness review, Finding 2).
+    /// `nonisolated` so the cell can call it from the main actor without an `await` hop.
+    nonisolated func cachedThumbnail(for assetID: String, targetSize: CGSize) -> UIImage?
+
     /// Set the prefetch/caching window to `assetIDs` (the grid's visible range ± a row margin), so
     /// PhotoKit pre-decodes just ahead of the scroll. Diffs against the previous window internally.
     func updateCachingWindow(to assetIDs: [String]) async

@@ -16,6 +16,11 @@ actor FakeThumbnailProvider: ThumbnailProviding {
         Self.tile(for: assetID, size: targetSize)
     }
 
+    // No synchronous cache for the fake: its tiles are recomputed deterministically and cheaply, so
+    // it always takes the (instant) async path. Returning nil keeps it stateless (Finding 2 affects
+    // only the real PhotoKit round-trip, which the fake doesn't make).
+    nonisolated func cachedThumbnail(for assetID: String, targetSize: CGSize) -> UIImage? { nil }
+
     // The prefetch window / cache lifecycle is a no-op for the fake — there's nothing to pre-decode.
     func updateCachingWindow(to assetIDs: [String]) {}
     func resetCache() {}

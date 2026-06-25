@@ -78,7 +78,13 @@ struct ReviewGridView: View {
             MagnifyGesture()
                 .onChanged { value in
                     let proposed = Double(pinchBaseline) / value.magnification
-                    columnCount = min(maxColumns, max(minColumns, Int(proposed.rounded())))
+                    // MagnifyGesture fires continuously, but the column count only crosses an
+                    // integer boundary a few times across a whole pinch. Write only on a real
+                    // change so the grid re-layout, the .snappy animation, and the prefetch-window
+                    // recompute (.onChange below) each fire once per step, not per gesture sample
+                    // (smoothness review, Finding 4).
+                    let next = clampedColumnCount(proposed, min: minColumns, max: maxColumns)
+                    if next != columnCount { columnCount = next }
                 }
                 .onEnded { _ in pinchBaseline = columnCount }
         )
@@ -105,6 +111,7 @@ struct ReviewGridView: View {
         ReviewGridCell(
             id: id,
             load: load,
+            cachedImage: cachedImage,
             onOpen: { scrollAnchorID = id; openAsset(id) },
             zoomNamespace: zoomNamespace)
             .onAppear { visibleIDs.insert(id) }
@@ -113,6 +120,12 @@ struct ReviewGridView: View {
 
     private func load(_ id: String) async -> UIImage? {
         await thumbnails.thumbnail(for: id, targetSize: thumbnailTarget)
+    }
+
+    /// Synchronous cache lookup at the cell's request size — a hit lets a recycled cell skip the
+    /// placeholder (Finding 2). `nonisolated` on the seam, so this never hops the actor.
+    private func cachedImage(_ id: String) -> UIImage? {
+        thumbnails.cachedThumbnail(for: id, targetSize: thumbnailTarget)
     }
 
     // MARK: Prefetch window
@@ -176,4 +189,12 @@ private struct ReviewSectionHeader: View {
         let selectedCount = selection.selected.intersection(group.assetIDs).count
         return "\(title). \(group.count) photos, \(selectedCount) selected."
     }
+}
+
+/// Round a proposed (fractional) pinch column count to the nearest whole column, clamped to the
+/// allowed range. Pulled out of the gesture closure so the clamping is unit-tested (the gesture's
+/// write-frequency guard around it stays UI-bound). `minColumns ≤ maxColumns` is the caller's
+/// contract (the grid derives both from the size class).
+func clampedColumnCount(_ proposed: Double, min minColumns: Int, max maxColumns: Int) -> Int {
+    Swift.min(maxColumns, Swift.max(minColumns, Int(proposed.rounded())))
 }

@@ -111,6 +111,12 @@ jobs:
         # D30: any Fake* test double must be #if DEBUG-gated (inert in release).
         run: ./Scripts/check-fake-release-isolation.sh
 
+      - name: Check grouping stays out of views
+        # Smoothness (docs/reviews/ui-smoothness-review.md, Finding 1): DayGrouping.groups is an
+        # O(n log n) pass over the whole candidate set — it must run once in CandidateStore, never
+        # in a SwiftUI View body (where a scroll-anchor write would recompute it on the hot path).
+        run: ./Scripts/check-no-grouping-in-views.sh
+
       # --- App build + integration tests (slowest; after the fast checks) ------
 
       - name: Build PoimiApp (Release)

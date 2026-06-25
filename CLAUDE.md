@@ -94,10 +94,11 @@ xcodebuild build -project App/PoimiApp.xcodeproj -scheme PoimiApp -configuration
 # Lint — warnings advisory, errors gate (not --strict yet, per D28); no unjustified disables:
 swiftlint lint --quiet
 
-# CI guards (all three must pass):
+# CI guards (all four must pass):
 Scripts/check-curation-boundary.sh
 Scripts/check-liquid-glass.sh
 Scripts/check-fake-release-isolation.sh
+Scripts/check-no-grouping-in-views.sh   # day-grouping stays in the store, never a View body
 ```
 
 **Testing framework:** Swift Testing (`@Test`/`@Suite`/`#expect`/`#require`), not XCTest. The
@@ -120,7 +121,7 @@ the harness is for human/agent eyeballing, not assertions.
 
 ## CI gates (every PR, all green to merge)
 
-Checkout → select Xcode 26 → SwiftLint → `Curation` tests → the 3 guards → Release build → app
+Checkout → select Xcode 26 → SwiftLint → `Curation` tests → the 4 guards → Release build → app
 build + integration tests on an iOS 26 sim. Defined in `.github/workflows/ci.yml`.
 
 ## Conventions
@@ -134,6 +135,10 @@ build + integration tests on an iOS 26 sim. Defined in `.github/workflows/ci.yml
 - **SwiftUI-first** (design-language): use standard components everywhere they fit; build custom
   only where the product needs it (grid cell, zoom detail, tally chrome). No UIKit unless forced;
   Observation, not Combine.
+- **No heavy work in a `body`** (smoothness, ui-smoothness-review Finding 1): never run a sort,
+  decode, grouping, or large allocation inside a SwiftUI `body` or a computed property read from
+  `body` — a `body` re-evaluates on incidental state writes (e.g. a `.scrollPosition` anchor).
+  Compute once in a store / `.task` / `@State` and pass finished values down.
 - **Dependency-minimalism:** SPM only; a new third-party dependency needs explicit PR justification
   + a note in development-guidelines. An agent does not add libraries freely.
 - **The `.xcodeproj` is hand-authored** (no XcodeGen/Tuist). Add files by editing `project.pbxproj`
