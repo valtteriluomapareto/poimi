@@ -19,9 +19,14 @@ import Curation
 struct ScanningView: View {
     let project: CurationProject
     @Environment(\.photoLibrary) private var library
+    @Environment(AppCoordinator.self) private var coordinator
+    @Environment(SelectionStore.self) private var selection
     @State private var store: CandidateStore?
     /// Gates the scanning indicator behind a grace delay (below) so instant scans never flash it.
     @State private var indicatorVisible = false
+    /// Pairs grid cells with the `.zoom` viewer (#36); the anchor restores scroll on return.
+    @Namespace private var zoomNamespace
+    @State private var scrollAnchorID: String?
 
     var body: some View {
         content
@@ -30,6 +35,9 @@ struct ScanningView: View {
             // Keyed by project id so re-targeting (e.g. iPad detail column) reloads for the new
             // album rather than showing the previous one's candidates.
             .task(id: project.id) {
+                // Hydrate the selection for this project (idempotent — activate() no-ops if it's
+                // already active, so re-entry never clobbers unflushed picks).
+                selection.activate(project)
                 let resolved = store ?? CandidateStore(library: library)
                 store = resolved
                 if resolved.phase == .idle { await resolved.load(project) }
@@ -61,9 +69,14 @@ struct ScanningView: View {
             }
 
         case .ready(let assets):
-            // Placeholder for the #35 review grid: proves the whole pipeline end-to-end by
-            // summarizing the filtered candidates and how the grouping function partitions them.
-            ReadySummaryView(assets: assets)
+            // The grid sections by the same adaptive day-groups the overview/completion use. Grouped
+            // here (not in the store) so the store's `.ready` stays a plain `[AssetRef]` for tests;
+            // this runs once per ready render — selection toggles re-render the grid, not this view.
+            ReviewGridView(
+                groups: DayGrouping.groups(for: assets),
+                openAsset: { coordinator.openPhoto($0) },
+                zoomNamespace: zoomNamespace,
+                scrollAnchorID: $scrollAnchorID)
 
         case .empty:
             ContentUnavailableView {
@@ -82,31 +95,5 @@ struct ScanningView: View {
                     .buttonStyle(.borderedProminent)
             }
         }
-    }
-}
-
-/// The `.ready` stand-in until #35 builds the grid: the candidate count and the day-group
-/// partition the review grid will section by — enough to verify the fetch+filter+group pipeline
-/// in a screenshot. A plain summary (not `ContentUnavailableView`, whose "unavailable" semantics
-/// would misframe a positive result for VoiceOver).
-private struct ReadySummaryView: View {
-    let assets: [AssetRef]
-
-    var body: some View {
-        let groups = DayGrouping.groups(for: assets)
-        VStack(spacing: 12) {
-            // Green reads as success here — the same status-green the album list uses for "done".
-            Image(systemName: "checkmark.circle")
-                .font(.largeTitle)
-                .foregroundStyle(.brandGreen)
-            Text("\(assets.count) photos ready")
-                .font(.title2.bold())
-            Text("Across ^[\(groups.count) day-group](inflect: true) to review. The grid lands in #35.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

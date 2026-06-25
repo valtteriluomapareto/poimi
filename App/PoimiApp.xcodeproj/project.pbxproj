@@ -44,6 +44,10 @@
 		00000000C00000000000B0C1 /* CandidateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C1 /* CandidateStore.swift */; };
 		00000000C00000000000B0C2 /* ScanningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C2 /* ScanningView.swift */; };
 		00000000C00000000000B0C3 /* AlbumOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C3 /* AlbumOverviewView.swift */; };
+		00000000C00000000000B0C4 /* PrefetchWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C4 /* PrefetchWindow.swift */; };
+		00000000C00000000000B0C5 /* ReviewGridCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C5 /* ReviewGridCell.swift */; };
+		00000000C00000000000B0C6 /* ReviewGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C6 /* ReviewGridView.swift */; };
+		00000000C00000000000B0C7 /* DayGroupHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C7 /* DayGroupHeader.swift */; };
 		000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000043 /* PhotoLibraryConformanceTests.swift */; };
 		000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */; };
 		00000000400000000000004E /* ProjectStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000004D /* ProjectStoreTests.swift */; };
@@ -54,6 +58,8 @@
 		00000000400000000000005A /* NewAlbumDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000059 /* NewAlbumDraftTests.swift */; };
 		00000000400000000000005C /* CandidateStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000005B /* CandidateStoreTests.swift */; };
 		00000000400000000000005E /* ThumbnailProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000005D /* ThumbnailProviderTests.swift */; };
+		000000004000000000000060 /* PrefetchWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000005F /* PrefetchWindowTests.swift */; };
+		000000004000000000000062 /* DayGroupHeaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000061 /* DayGroupHeaderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -112,6 +118,10 @@
 		00000000C00000000000A0C1 /* CandidateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CandidateStore.swift; sourceTree = "<group>"; };
 		00000000C00000000000A0C2 /* ScanningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanningView.swift; sourceTree = "<group>"; };
 		00000000C00000000000A0C3 /* AlbumOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumOverviewView.swift; sourceTree = "<group>"; };
+		00000000C00000000000A0C4 /* PrefetchWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrefetchWindow.swift; sourceTree = "<group>"; };
+		00000000C00000000000A0C5 /* ReviewGridCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewGridCell.swift; sourceTree = "<group>"; };
+		00000000C00000000000A0C6 /* ReviewGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewGridView.swift; sourceTree = "<group>"; };
+		00000000C00000000000A0C7 /* DayGroupHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayGroupHeader.swift; sourceTree = "<group>"; };
 		000000004000000000000042 /* PoimiAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PoimiAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000004000000000000043 /* PhotoLibraryConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryConformanceTests.swift; sourceTree = "<group>"; };
 		000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrarySeedTests.swift; sourceTree = "<group>"; };
@@ -123,6 +133,8 @@
 		000000004000000000000059 /* NewAlbumDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewAlbumDraftTests.swift; sourceTree = "<group>"; };
 		00000000400000000000005B /* CandidateStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CandidateStoreTests.swift; sourceTree = "<group>"; };
 		00000000400000000000005D /* ThumbnailProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailProviderTests.swift; sourceTree = "<group>"; };
+		00000000400000000000005F /* PrefetchWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrefetchWindowTests.swift; sourceTree = "<group>"; };
+		000000004000000000000061 /* DayGroupHeaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayGroupHeaderTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -298,6 +310,10 @@
 				00000000C00000000000A0C1 /* CandidateStore.swift */,
 				00000000C00000000000A0C2 /* ScanningView.swift */,
 				00000000C00000000000A0C3 /* AlbumOverviewView.swift */,
+				00000000C00000000000A0C4 /* PrefetchWindow.swift */,
+				00000000C00000000000A0C5 /* ReviewGridCell.swift */,
+				00000000C00000000000A0C6 /* ReviewGridView.swift */,
+				00000000C00000000000A0C7 /* DayGroupHeader.swift */,
 			);
 			path = Review;
 			sourceTree = "<group>";
@@ -315,6 +331,8 @@
 				000000004000000000000059 /* NewAlbumDraftTests.swift */,
 				00000000400000000000005B /* CandidateStoreTests.swift */,
 				00000000400000000000005D /* ThumbnailProviderTests.swift */,
+				00000000400000000000005F /* PrefetchWindowTests.swift */,
+				000000004000000000000061 /* DayGroupHeaderTests.swift */,
 			);
 			path = PoimiAppTests;
 			sourceTree = "<group>";
@@ -450,6 +468,10 @@
 				00000000C00000000000B0C1 /* CandidateStore.swift in Sources */,
 				00000000C00000000000B0C2 /* ScanningView.swift in Sources */,
 				00000000C00000000000B0C3 /* AlbumOverviewView.swift in Sources */,
+				00000000C00000000000B0C4 /* PrefetchWindow.swift in Sources */,
+				00000000C00000000000B0C5 /* ReviewGridCell.swift in Sources */,
+				00000000C00000000000B0C6 /* ReviewGridView.swift in Sources */,
+				00000000C00000000000B0C7 /* DayGroupHeader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -467,6 +489,8 @@
 				00000000400000000000005A /* NewAlbumDraftTests.swift in Sources */,
 				00000000400000000000005C /* CandidateStoreTests.swift in Sources */,
 				00000000400000000000005E /* ThumbnailProviderTests.swift in Sources */,
+				000000004000000000000060 /* PrefetchWindowTests.swift in Sources */,
+				000000004000000000000062 /* DayGroupHeaderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
