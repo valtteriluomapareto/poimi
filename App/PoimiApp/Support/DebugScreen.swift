@@ -21,6 +21,7 @@
 
 import OSLog
 import SwiftUI
+import UIKit
 import Curation
 
 /// The screenshot-harness catalog. Each raw value is a `-PoimiScreen <id>` argument and the
@@ -43,6 +44,9 @@ enum DebugScreen: String, CaseIterable {
     /// The review-fetch scanning surface — drives the fetch+filter pipeline against the fake and
     /// shows the resulting candidate summary (#34).
     case scanning
+    /// The thumbnail seam — a grid of deterministic fake tiles, proving `\.thumbnailProvider`
+    /// renders without PhotoKit (#35).
+    case thumbs
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -75,6 +79,7 @@ struct DebugScreenHost: View {
         case .setup: DebugSetupHostView()
         case .albumpicker: DebugAlbumPickerHostView()
         case .scanning: DebugScanningHostView()
+        case .thumbs: DebugThumbnailHostView()
         }
     }
 }
@@ -230,6 +235,40 @@ struct DebugScanningHostView: View {
 
     private static let yearStart = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01Z
     private static let yearEnd = Date(timeIntervalSince1970: 1_767_225_600)     // 2026-01-01Z
+}
+
+/// Hosts the thumbnail seam (#35): a grid of deterministic fake tiles loaded through the injected
+/// `\.thumbnailProvider`. Proves the seam renders end-to-end (id → provider → `UIImage` → cell) and
+/// that the colors are stable run-to-run (FNV-1a hue, not the per-process `hashValue`).
+struct DebugThumbnailHostView: View {
+    @Environment(\.thumbnailProvider) private var provider
+    @State private var tiles: [Tile] = []
+
+    private struct Tile: Identifiable { let id: String; let image: UIImage }
+    private static let ids = (0..<12).map { "fake/busy/\($0)" }
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 3), spacing: 2) {
+                ForEach(tiles) { tile in
+                    Image(uiImage: tile.image)
+                        .resizable()
+                        .scaledToFit()
+                }
+            }
+            .padding(2)
+        }
+        .task {
+            var loaded: [Tile] = []
+            for id in Self.ids {
+                if let image = await provider.thumbnail(for: id, targetSize: CGSize(width: 200, height: 200)) {
+                    loaded.append(Tile(id: id, image: image))
+                }
+            }
+            tiles = loaded
+            Log.app.notice("screenshot-ready: \(DebugScreen.thumbs.rawValue, privacy: .public)")
+        }
+    }
 }
 
 /// Shown when `-PoimiScreen` names a screen the catalog doesn't have. A loud, unmistakable
