@@ -104,6 +104,33 @@ struct CandidateStoreTests {
         #expect(ids.contains("fake/shot"))           // screenshot kept (its toggle is off)
     }
 
+    @Test("excluding a real but empty album leaves the candidates unchanged")
+    func zeroMemberExcludedAlbum() async throws {
+        // album/downloads exists in the seed but has no members — excluding it must be a no-op,
+        // distinct from excluding an unknown id, and must NOT drop anything.
+        let project = makeProject(excludeScreenshots: true, excludedAlbumIDs: ["album/downloads"])
+        let store = CandidateStore(library: FakePhotoLibrary())
+        await store.load(project)
+        // Same as the screenshots-only case: 16 dated − 1 screenshot = 15.
+        #expect(Set(readyAssets(store, "zero-member album").map(\.id)).count == 15)
+    }
+
+    @Test("filters removing every in-range asset settle on .empty (not .ready([]))")
+    func emptyAfterFiltering() async throws {
+        // The only in-range asset is a screenshot; excluding screenshots empties the candidates.
+        // This is the product-meaningful empty ("you filtered them all out"), distinct from
+        // "no photos in that period".
+        let onlyAScreenshot = AssetRef(
+            id: "only/shot",
+            captureDate: Date(timeIntervalSince1970: 1_745_000_000),   // 2025-04-18Z
+            isScreenshot: true)
+        let library = FakePhotoLibrary(assets: [onlyAScreenshot], albums: [], membership: [:])
+        let project = makeProject(excludeScreenshots: true)
+        let store = CandidateStore(library: library)
+        await store.load(project)
+        #expect(store.phase == .empty)
+    }
+
     @Test("a range matching nothing settles on .empty (not an error)")
     func emptyOutOfRange() async throws {
         let start = Date(timeIntervalSince1970: 1_893_456_000)   // 2030-01-01Z
@@ -136,6 +163,16 @@ struct CandidateStoreTests {
         await store.load(project)
         #expect(store.phase == .failed)
     }
+
+    @Test("a failure while resolving excluded albums also surfaces as .failed")
+    func failureResolvingExclusions() async throws {
+        // The fetch succeeds but the second await (assetIDs) throws — a real PhotoKit error can
+        // surface there too, and it must still become .failed (not a half-applied .ready).
+        let project = makeProject(excludedAlbumIDs: ["album/whatsapp"])
+        let store = CandidateStore(library: FailingMembershipLibrary())
+        await store.load(project)
+        #expect(store.phase == .failed)
+    }
 }
 
 /// A library whose range fetch always throws — to exercise the `.failed` phase.
@@ -147,4 +184,18 @@ private actor FailingLibrary: PhotoLibraryProviding {
     }
     func albums() async throws -> [AlbumRef] { [] }
     func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> { [] }
+}
+
+/// A library whose range fetch succeeds but whose membership resolution throws — to prove the
+/// pipeline's *second* await also maps to `.failed`.
+private actor FailingMembershipLibrary: PhotoLibraryProviding {
+    func authorizationStatus() async -> LibraryAuthorization { .authorized }
+    func requestAuthorization() async -> LibraryAuthorization { .authorized }
+    func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {
+        FakePhotoLibrary.yearMixedSeed().filter { $0.captureDate != nil }
+    }
+    func albums() async throws -> [AlbumRef] { [] }
+    func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> {
+        throw PhotoLibraryError.fetchFailed
+    }
 }

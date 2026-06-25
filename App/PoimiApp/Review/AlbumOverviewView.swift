@@ -30,7 +30,7 @@ struct AlbumOverviewView: View {
                 coordinator.openReview(project.id)
             }
             .buttonStyle(PrimaryActionButtonStyle())
-            .accessibilityHint("Scans your library for this album's photos, then opens the review grid.")
+            .accessibilityHint("Scans your library for this album's photos, then opens review.")
         }
         .padding(32)
         .frame(maxWidth: 480)

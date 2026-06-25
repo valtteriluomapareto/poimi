@@ -55,6 +55,16 @@ struct FakePhotoLibrarySeedTests {
         #expect(try await library.assetIDs(inAlbums: []).isEmpty)
     }
 
+    @Test("assetIDs(inAlbums:): multiple albums union their members (not last-wins)")
+    func albumMembershipUnion() async throws {
+        let library = FakePhotoLibrary(
+            membership: ["album/a": ["x", "y"], "album/b": ["y", "z"]])
+        // Union across both albums, de-duplicated on the overlap (y).
+        #expect(try await library.assetIDs(inAlbums: ["album/a", "album/b"]) == ["x", "y", "z"])
+        // A single album still resolves to just its own members.
+        #expect(try await library.assetIDs(inAlbums: ["album/b"]) == ["y", "z"])
+    }
+
     @Test("limited: reports .limited authorization")
     func limited() async throws {
         let status = await FakePhotoLibrary.limited().authorizationStatus()
