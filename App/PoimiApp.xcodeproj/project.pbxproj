@@ -26,6 +26,7 @@
 		00000000300000000000B305 /* ThumbnailProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A305 /* ThumbnailProviding.swift */; };
 		00000000300000000000B306 /* SystemThumbnailProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A306 /* SystemThumbnailProvider.swift */; };
 		00000000300000000000B307 /* FakeThumbnailProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A307 /* FakeThumbnailProvider.swift */; };
+		00000000300000000000B308 /* ThumbnailMemoryCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A308 /* ThumbnailMemoryCache.swift */; };
 		00000000500000000000B501 /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000500000000000A501 /* Log.swift */; };
 		00000000500000000000B502 /* DebugScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000500000000000A502 /* DebugScreen.swift */; };
 		00000000600000000000B601 /* CurationProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000600000000000A601 /* CurationProject.swift */; };
@@ -60,6 +61,7 @@
 		00000000400000000000005E /* ThumbnailProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000005D /* ThumbnailProviderTests.swift */; };
 		000000004000000000000060 /* PrefetchWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000005F /* PrefetchWindowTests.swift */; };
 		000000004000000000000062 /* DayGroupHeaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000061 /* DayGroupHeaderTests.swift */; };
+		000000004000000000000064 /* ThumbnailMemoryCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000063 /* ThumbnailMemoryCacheTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -100,6 +102,7 @@
 		00000000300000000000A305 /* ThumbnailProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailProviding.swift; sourceTree = "<group>"; };
 		00000000300000000000A306 /* SystemThumbnailProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemThumbnailProvider.swift; sourceTree = "<group>"; };
 		00000000300000000000A307 /* FakeThumbnailProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeThumbnailProvider.swift; sourceTree = "<group>"; };
+		00000000300000000000A308 /* ThumbnailMemoryCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailMemoryCache.swift; sourceTree = "<group>"; };
 		00000000500000000000A501 /* Log.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
 		00000000500000000000A502 /* DebugScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugScreen.swift; sourceTree = "<group>"; };
 		00000000600000000000A601 /* CurationProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurationProject.swift; sourceTree = "<group>"; };
@@ -135,6 +138,7 @@
 		00000000400000000000005D /* ThumbnailProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailProviderTests.swift; sourceTree = "<group>"; };
 		00000000400000000000005F /* PrefetchWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrefetchWindowTests.swift; sourceTree = "<group>"; };
 		000000004000000000000061 /* DayGroupHeaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayGroupHeaderTests.swift; sourceTree = "<group>"; };
+		000000004000000000000063 /* ThumbnailMemoryCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailMemoryCacheTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -236,6 +240,7 @@
 				00000000300000000000A305 /* ThumbnailProviding.swift */,
 				00000000300000000000A306 /* SystemThumbnailProvider.swift */,
 				00000000300000000000A307 /* FakeThumbnailProvider.swift */,
+				00000000300000000000A308 /* ThumbnailMemoryCache.swift */,
 			);
 			path = PhotoLibrary;
 			sourceTree = "<group>";
@@ -333,6 +338,7 @@
 				00000000400000000000005D /* ThumbnailProviderTests.swift */,
 				00000000400000000000005F /* PrefetchWindowTests.swift */,
 				000000004000000000000061 /* DayGroupHeaderTests.swift */,
+				000000004000000000000063 /* ThumbnailMemoryCacheTests.swift */,
 			);
 			path = PoimiAppTests;
 			sourceTree = "<group>";
@@ -450,6 +456,7 @@
 				00000000300000000000B305 /* ThumbnailProviding.swift in Sources */,
 				00000000300000000000B306 /* SystemThumbnailProvider.swift in Sources */,
 				00000000300000000000B307 /* FakeThumbnailProvider.swift in Sources */,
+				00000000300000000000B308 /* ThumbnailMemoryCache.swift in Sources */,
 				00000000500000000000B501 /* Log.swift in Sources */,
 				00000000500000000000B502 /* DebugScreen.swift in Sources */,
 				00000000600000000000B601 /* CurationProject.swift in Sources */,
@@ -491,6 +498,7 @@
 				00000000400000000000005E /* ThumbnailProviderTests.swift in Sources */,
 				000000004000000000000060 /* PrefetchWindowTests.swift in Sources */,
 				000000004000000000000062 /* DayGroupHeaderTests.swift in Sources */,
+				000000004000000000000064 /* ThumbnailMemoryCacheTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

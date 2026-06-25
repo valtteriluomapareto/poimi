@@ -105,6 +105,7 @@ struct ReviewGridView: View {
         ReviewGridCell(
             id: id,
             load: load,
+            cachedImage: cachedImage,
             onOpen: { scrollAnchorID = id; openAsset(id) },
             zoomNamespace: zoomNamespace)
             .onAppear { visibleIDs.insert(id) }
@@ -113,6 +114,12 @@ struct ReviewGridView: View {
 
     private func load(_ id: String) async -> UIImage? {
         await thumbnails.thumbnail(for: id, targetSize: thumbnailTarget)
+    }
+
+    /// Synchronous cache lookup at the cell's request size — a hit lets a recycled cell skip the
+    /// placeholder (Finding 2). `nonisolated` on the seam, so this never hops the actor.
+    private func cachedImage(_ id: String) -> UIImage? {
+        thumbnails.cachedThumbnail(for: id, targetSize: thumbnailTarget)
     }
 
     // MARK: Prefetch window

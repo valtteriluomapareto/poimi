@@ -19,6 +19,10 @@ import UIKit
 actor SystemThumbnailProvider: ThumbnailProviding {
     private let cachingManager = PHCachingImageManager()
 
+    /// Synchronous decoded-thumbnail cache (Finding 2). `nonisolated` + thread-safe so the grid cell
+    /// can read it from the main actor without hopping onto this actor; filled on each load below.
+    private nonisolated let memory = ThumbnailMemoryCache()
+
     /// One quantized request size for every thumbnail, so the cache keys stay stable as the grid
     /// recycles cells. Oversized vs the on-screen point size on purpose (Retina + headroom for a
     /// density change without a re-fetch).
@@ -30,9 +34,14 @@ actor SystemThumbnailProvider: ThumbnailProviding {
     /// The currently-cached window, to diff add/remove when the visible range moves.
     private var cachedWindow: [PHAsset] = []
 
+    nonisolated func cachedThumbnail(for assetID: String, targetSize: CGSize) -> UIImage? {
+        memory.image(for: assetID, targetSize: targetSize)
+    }
+
     func thumbnail(for assetID: String, targetSize: CGSize) async -> UIImage? {
         guard let asset = resolve(assetID) else { return nil }
         let manager = cachingManager
+        let cache = memory   // nonisolated; capture a local so the callback doesn't touch the actor
         // Box the request id so the cancellation handler can read it even if cancellation lands
         // between issuing the request and the box being set.
         let requestIDBox = LockedBox<PHImageRequestID>()
@@ -53,6 +62,10 @@ actor SystemThumbnailProvider: ThumbnailProviding {
                     contentMode: .aspectFill, options: options
                 ) { image, info in
                     let isDegraded = (info?[PHImageResultIsDegradedKey] as? NSNumber)?.boolValue ?? false
+                    // Cache the FINAL (non-degraded) image regardless of whether we've already
+                    // resumed on an earlier degraded callback — that's the copy a recycled cell
+                    // should get back synchronously (Finding 2), not the low-res placeholder.
+                    if let image, !isDegraded { cache.store(image, for: assetID, targetSize: targetSize) }
                     // The opportunistic low-res first is fine for the grid; resume on the first
                     // image we actually get. PhotoKit upgrades the cached copy for the next request.
                     guard !isDegraded || image != nil else { return }
@@ -103,6 +116,7 @@ actor SystemThumbnailProvider: ThumbnailProviding {
 
     func resetCache() {
         cachingManager.stopCachingImagesForAllAssets()
+        memory.removeAll()
         cachedWindow = []
         // Also drop the resolved-asset map: without this it grows unbounded across a session and
         // isn't freed when the grid disappears (the one moment we'd expect it released). Re-entry
