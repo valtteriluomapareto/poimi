@@ -104,6 +104,10 @@ actor SystemThumbnailProvider: ThumbnailProviding {
     func resetCache() {
         cachingManager.stopCachingImagesForAllAssets()
         cachedWindow = []
+        // Also drop the resolved-asset map: without this it grows unbounded across a session and
+        // isn't freed when the grid disappears (the one moment we'd expect it released). Re-entry
+        // simply re-resolves, fetch-cheap.
+        assetsByID = [:]
     }
 
     private func resolve(_ id: String) -> PHAsset? {

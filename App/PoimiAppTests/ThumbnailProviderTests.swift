@@ -29,8 +29,15 @@ struct ThumbnailProviderTests {
         let provider = FakeThumbnailProvider()
         let first = await provider.thumbnail(for: "fake/busy/0", targetSize: Self.size)
         let second = await provider.thumbnail(for: "fake/busy/0", targetSize: Self.size)
-        // Equal pixels ⇒ a stable hash (FNV-1a), not the per-process-seeded `String.hashValue`.
         #expect(first?.pngData() == second?.pngData())
+    }
+
+    @Test("fake: a known id maps to a known hue (golden — catches a revert to a per-process hash)")
+    func fakeHueIsStableAcrossProcesses() {
+        // Within-process equality (above) holds even for `String.hashValue` (seeded once per
+        // launch), so it can't catch the regression the comment warns against. A precomputed
+        // golden value can: "fake/busy/0" folds to hash % 360 == 181 under the fixed-basis fold.
+        #expect(FakeThumbnailProvider.stableHue("fake/busy/0") == CGFloat(181) / 360)
     }
 
     @Test("fake: different ids render different tiles")
@@ -51,7 +58,8 @@ struct ThumbnailProviderTests {
     @Test("system: an unresolvable id yields nil; the cache lifecycle doesn't trap (unauthorized)")
     func systemUnresolvable() async {
         // On a fresh/unauthorized simulator, no id resolves to a PHAsset — so a request returns nil
-        // and the window/reset calls run harmlessly over an empty resolution set.
+        // and the window/reset calls run harmlessly over an empty resolution set. The authorized
+        // window-resolution + start/stop-caching behavior needs real assets → on-device run (#46).
         let provider = SystemThumbnailProvider()
         await provider.updateCachingWindow(to: ["bogus/1", "bogus/2"])
         let image = await provider.thumbnail(for: "bogus/nonexistent", targetSize: Self.size)

@@ -33,9 +33,13 @@ actor FakeThumbnailProvider: ThumbnailProviding {
         }
     }
 
-    /// FNV-1a over the id's UTF-8 bytes → a hue in [0, 1). Deterministic across processes.
-    private static func stableHue(_ id: String) -> CGFloat {
-        var hash: UInt64 = 1_469_598_103_934_665_603        // FNV offset basis
+    /// A stable hue in [0, 1) from the id's UTF-8 bytes — an FNV-1a-style xor/multiply fold with a
+    /// fixed 64-bit basis. Deterministic *across processes* (unlike `String.hashValue`, which is
+    /// seeded per launch), which is what makes the rendered grid reproducible run-to-run. Internal
+    /// (not private) so a golden test can pin a known id to a known hue and catch a regression back
+    /// to a per-process hash.
+    static func stableHue(_ id: String) -> CGFloat {
+        var hash: UInt64 = 1_469_598_103_934_665_603        // fixed basis
         for byte in id.utf8 { hash = (hash ^ UInt64(byte)) &* 1_099_511_628_211 }  // FNV prime
         return CGFloat(hash % 360) / 360
     }
