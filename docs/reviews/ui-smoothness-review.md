@@ -272,6 +272,11 @@ line — the line is correctly value-scoped, but the `onChange` storm next to it
 Likely wants a throttle / quantization so `columnCount` changes only when it crosses an integer
 boundary, not on every sample.
 
+**Status: addressed (defensive).** `ReviewGridView`'s `MagnifyGesture.onChanged` now writes
+`columnCount` only when the rounded value actually changes, so the re-layout, the `.snappy`
+animation, and the `.onChange`-driven prefetch recompute fire once per step instead of per gesture
+sample. Unmeasured (no device profiling available) — the change is purely a redundant-write guard.
+
 ### 🔵 5 — `groupIdentity` onChange rebuilds the whole prefetch window
 **`ReviewGridView.swift:92-96,120-122`.** `.onChange(of: groupIdentity)` resets `visibleIDs = []`
 and rebuilds the entire `PrefetchWindow`. `groupIdentity` is a string of `first-id # total-count`,
@@ -280,17 +285,30 @@ array forces a re-diff" coexists with a window that *doesn't* rebuild, a tension
 This `groupIdentity` ↔ `visibleIDs` ↔ window coupling is the most fragile wiring on the screen and
 deserves a focused look when Finding 1 is addressed.
 
+**Status: resolved by Finding 1.** Grouping is now computed once in `CandidateStore`, so the
+`groups` the grid receives are stable across scrolls and taps — `groupIdentity` no longer changes
+mid-session, so the `visibleIDs`-reset + window-rebuild only fires on a genuine new grouping (a new
+project / reload), which is the intended trigger. No further change needed.
+
 ### 🔵 6 — Per-cell `.task` actor-hop steady-state cost
 **`ReviewGridCell.swift:65`.** Every cell recycle spins up a `Task` that hops to the actor and sets
 up a continuation. At 5-8 columns scrolling fast this is a high rate of task creation + actor hops.
 The cancellation design is correct (and credited below); the steady-state hop cost is simply
 unmeasured. The synchronous cache from Finding 2 would also relieve this (a hit avoids the hop).
 
+**Status: relieved by Finding 2.** With the synchronous `cachedThumbnail` front, a recycle onto a
+primed asset is satisfied in `body` with no `Task` spawn and no actor hop at all; only a genuine
+cold cell takes the async path. The remaining cold-load hop is inherent and unmeasured.
+
 ### 🔵 7 — `.scrollPosition` restore + pinned headers
 **`ReviewGridView.swift:62,75`.** `pinnedViews: [.sectionHeaders]` combined with
 `.scrollPosition(id:anchor: .center)` over variable-height sections is a known source of
 restore-jump jank — directly relevant to the #36 zoom-dismiss restore path. Verify the restore
 lands cleanly on a busy-day boundary.
+
+**Status: open — deferred to #36.** The full-screen viewer that exercises the restore path is #36
+and not built yet (`openAsset` currently just records the anchor). There is nothing safe to change
+blind; verify on a device once #36 lands.
 
 ---
 
@@ -405,13 +423,13 @@ proportionate, in-convention substitutes:
 
 | # | Finding | Severity | Path | Status |
 | --- | --- | --- | --- | --- |
-| 1 | `DayGrouping` recomputed in `ScanningView.body` via `scrollAnchorID` `@State` writes | 🟡 Medium | Scroll/tap/restore | Open — fix now; contradicts a documented invariant |
-| 2 | Guaranteed `nil`→spinner frame on every cell recycle; no synchronous image cache | 🟡 Medium | Scroll hot path | Open — fix now (best value/effort) |
+| 1 | `DayGrouping` recomputed in `ScanningView.body` via `scrollAnchorID` `@State` writes | 🟡 Medium | Scroll/tap/restore | **Fixed** (this PR) — grouped once in `CandidateStore` + CI guard |
+| 2 | Guaranteed `nil`→spinner frame on every cell recycle; no synchronous image cache | 🟡 Medium | Scroll hot path | **Fixed** (this PR) — synchronous `ThumbnailMemoryCache` front |
 | 3 | Album list decodes selection blob ~6× per row per render; full-list re-fetch on mutation | 🟡 Medium | Album library | Defer — acknowledged in-code, fine at v1 |
-| 4 | Pinch → `columnCount` re-layout + animation + prefetch recompute per gesture sample | 🔵 Investigate | Pinch gesture | Profile first |
-| 5 | `groupIdentity` onChange resets `visibleIDs` + rebuilds `PrefetchWindow` | 🔵 Investigate | Grouping change | Profile / reconcile with #1 |
-| 6 | Per-cell `.task` actor-hop steady-state cost under fast scroll | 🔵 Investigate | Scroll hot path | Profile; relieved by #2's cache |
-| 7 | `.scrollPosition` restore + pinned headers restore-jump | 🔵 Investigate | #36 dismiss path | Verify on a busy-day boundary |
+| 4 | Pinch → `columnCount` re-layout + animation + prefetch recompute per gesture sample | 🔵 Investigate | Pinch gesture | **Addressed** (this PR) — redundant-write guard; unmeasured |
+| 5 | `groupIdentity` onChange resets `visibleIDs` + rebuilds `PrefetchWindow` | 🔵 Investigate | Grouping change | **Resolved by #1** — groups now stable across scrolls |
+| 6 | Per-cell `.task` actor-hop steady-state cost under fast scroll | 🔵 Investigate | Scroll hot path | **Relieved by #2** — a cache hit avoids the Task/hop |
+| 7 | `.scrollPosition` restore + pinned headers restore-jump | 🔵 Investigate | #36 dismiss path | Open — deferred to #36 (viewer not built) |
 | — | Selection in-memory + debounced (D15) | 🟢 Sound | — | Keep |
 | — | Toggle re-renders visible cells only | 🟢 Sound | — | Keep |
 | — | PhotoKit off the main actor | 🟢 Sound | — | Keep |

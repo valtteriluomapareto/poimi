@@ -78,7 +78,13 @@ struct ReviewGridView: View {
             MagnifyGesture()
                 .onChanged { value in
                     let proposed = Double(pinchBaseline) / value.magnification
-                    columnCount = min(maxColumns, max(minColumns, Int(proposed.rounded())))
+                    // MagnifyGesture fires continuously, but the column count only crosses an
+                    // integer boundary a few times across a whole pinch. Write only on a real
+                    // change so the grid re-layout, the .snappy animation, and the prefetch-window
+                    // recompute (.onChange below) each fire once per step, not per gesture sample
+                    // (smoothness review, Finding 4).
+                    let next = min(maxColumns, max(minColumns, Int(proposed.rounded())))
+                    if next != columnCount { columnCount = next }
                 }
                 .onEnded { _ in pinchBaseline = columnCount }
         )
