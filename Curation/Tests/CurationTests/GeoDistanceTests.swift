@@ -73,7 +73,7 @@ struct GeoDistanceTests {
 
     // MARK: Properties (seeded, reproducible — D24)
 
-    private func randomCoordinate(_ rng: inout SeededRNG64) -> Coordinate {
+    private func randomCoordinate(_ rng: inout SeededRNG) -> Coordinate {
         Coordinate(latitude: Double.random(in: -90...90, using: &rng),
                    longitude: Double.random(in: -180...180, using: &rng))
     }
