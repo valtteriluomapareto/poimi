@@ -128,24 +128,43 @@ This was the biggest gap in the first draft ("collapse into a trip" was one sent
 a pipeline **over the existing `DayGroup` output**, so D33's "additive, not a rework" holds and the
 done-day atom (§13, `section.days ⊆ doneDays`) is never broken:
 
-1. **Assign** each *located* asset a cluster id (§5.2, pure).
+> **v1.1 decision (ratified) — label by the dominant cluster (P5).** A time-run gets **exactly one**
+> trip label = the cluster holding the **plurality** of its located assets; the majority simply wins,
+> with no abstain and no multi-tag. Crucially this is **label-by-dominant, not merge-into-dominant**:
+> the spatial **clusters stay distinct**, so every place keeps its own browsable bucket and a photo's
+> place membership is always its *own* cluster — only the run's *name* goes to the winner. (We chose
+> this over the earlier "abstain below a fraction threshold / allow multiple tags" idea because it's
+> simpler, deterministic, no more expensive to compute, and **lossless** — nothing becomes
+> unreachable. The "ignore a handful of stray points" instinct is already handled upstream by
+> DBSCAN's `minPts`: trivially sparse points become noise → the no-location bucket, §5.4, so no
+> separate merge rule is needed.)
+
+1. **Assign** each *located* asset a cluster id (§5.2, pure). This membership *is* the place bucket —
+   it never changes based on what else shares a day.
 2. **Form trips = `place ∩ contiguous-time-run`.** A trip is a maximal run of consecutive `DayKey`s
-   (reuse `DayGrouping.dayGap` with its own `gapToleranceDays`) whose located assets are *dominated*
-   by a single cluster above a fraction threshold. This is the step that turns a *place* (spatial)
-   into a *trip* (spatio-temporal) — and it is exactly what the first draft was missing.
-3. **Overlay, don't re-cut.** A trip is an *annotation* (`tripID?` per `DayGroup` / per `DayKey`),
-   never a re-partition of `assetIDs`. The day-group stays the unit of done-tracking.
+   (reuse `DayGrouping.dayGap` with its own `gapToleranceDays`), labeled by the **dominant cluster**
+   of its located assets (plurality wins; ties broken deterministically, e.g. by the lower medoid
+   id). This is the step that turns a *place* (spatial) into a *trip* (spatio-temporal).
+3. **Overlay, don't re-cut.** The trip is a single *annotation* (one `tripID?` per `DayGroup` /
+   `DayKey`), never a re-partition of `assetIDs` and never a rewrite of any asset's cluster
+   membership. The day-group stays the unit of done-tracking; the place buckets stay the unit of
+   by-location browsing.
 
 This resolves the hard cases explicitly:
 - **Home in Jan vs June** = same cluster, two different time-runs → two trips (correct).
-- **Two trips the same day** → demoted to day granularity (one `DayKey`); sub-day place splits are
-  **out of scope** because they'd break the done-day atom. State this as a known v1.1 limitation.
+- **Shared / concurrent-location library** (the family case: partner A in Italy, partner B in Finland
+  on the *same* days) → both place buckets exist and stay browsable; the mixed week is *named* by
+  whichever has the plurality (e.g. "Italy"), and the minority photos remain in their own bucket +
+  the timeline. The label is a convenience, not a claim about every photo in the run.
+- **Two trips the same day** → resolved to one day-granularity label = the day's dominant cluster;
+  sub-day place splits are **out of scope** (they'd break the done-day atom). Known v1.1 limitation.
 - **A trip spanning a quiet run + busy days** → the overlay can span multiple `DayGroup`s (including a
   merged quiet run) *without splitting them*; an in-run "home → travel → abroad" day stays in its
-  day-group and simply isn't dominated by the trip cluster.
-- **Determinism** inherits from §5.2's pinned sort + `dayGap` (already deterministic).
+  day-group and is simply labeled by that run's dominant cluster.
+- **Determinism** inherits from §5.2's pinned sort + `dayGap`, plus the explicit tie-break above.
 
-§10's property tests now have a concrete spec to pin.
+§10's property tests now have a concrete spec to pin (incl. the dominant-label tie-break and the
+concurrent-location case).
 
 ---
 
@@ -263,7 +282,10 @@ Proposals, not yet ratified D-numbers:
 - **P4 — Mandate the pure distance metric** (equirectangular-about-mean-latitude / haversine, wrap-
   aware) and **DBSCAN** clustering with a pinned input sort; geocode the **medoid**.
 - **P5 — Trips are a time-contiguous overlay over day-groups (§6), never a re-partition;** sub-day
-  place splits are out of scope for v1.1 (done-day atom).
+  place splits are out of scope for v1.1 (done-day atom). **Ratified detail:** each time-run takes a
+  **single label = its dominant (plurality) cluster** — *label*-by-dominant, not *merge*-by-dominant,
+  so clusters stay distinct and every place keeps a browsable bucket (no abstain, no multi-tag;
+  `minPts` suppresses trivial specks upstream).
 
 ---
 
