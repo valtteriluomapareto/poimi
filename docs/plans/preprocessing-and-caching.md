@@ -128,23 +128,28 @@ This was the biggest gap in the first draft ("collapse into a trip" was one sent
 a pipeline **over the existing `DayGroup` output**, so D33's "additive, not a rework" holds and the
 done-day atom (§13, `section.days ⊆ doneDays`) is never broken:
 
-> **v1.1 decision (ratified) — label by the dominant cluster (P5).** A time-run gets **exactly one**
+> **v1.1 decision (agreed — becomes a D-number at v1.1 kickoff, §12/P5) — label by the dominant
+> cluster.** A time-run gets **exactly one**
 > trip label = the cluster holding the **plurality** of its located assets; the majority simply wins,
 > with no abstain and no multi-tag. Crucially this is **label-by-dominant, not merge-into-dominant**:
 > the spatial **clusters stay distinct**, so every place keeps its own browsable bucket and a photo's
 > place membership is always its *own* cluster — only the run's *name* goes to the winner. (We chose
 > this over the earlier "abstain below a fraction threshold / allow multiple tags" idea because it's
 > simpler, deterministic, no more expensive to compute, and **lossless** — nothing becomes
-> unreachable. The "ignore a handful of stray points" instinct is already handled upstream by
-> DBSCAN's `minPts`: trivially sparse points become noise → the no-location bucket, §5.4, so no
-> separate merge rule is needed.)
+> unreachable. The "ignore a handful of stray points" instinct is handled by two *complementary*
+> filters, not a merge rule: DBSCAN's `minPts` drops *noise-sparse* points (→ no-location, §5.4),
+> while the plurality vote drops *dense-but-minority* sub-clusters from the **label** — e.g. a 4-photo
+> airport cluster mid-trip is dense enough to be its own valid cluster/bucket, but loses the vote, so
+> it keeps its bucket yet doesn't name the run. `minPts` alone does **not** absorb minority
+> sub-clusters; the vote does.)
 
 1. **Assign** each *located* asset a cluster id (§5.2, pure). This membership *is* the place bucket —
    it never changes based on what else shares a day.
 2. **Form trips = `place ∩ contiguous-time-run`.** A trip is a maximal run of consecutive `DayKey`s
    (reuse `DayGrouping.dayGap` with its own `gapToleranceDays`), labeled by the **dominant cluster**
-   of its located assets (plurality wins; ties broken deterministically, e.g. by the lower medoid
-   id). This is the step that turns a *place* (spatial) into a *trip* (spatio-temporal).
+   of its located assets (plurality wins; ties broken deterministically by the lower medoid id — the
+   canonical cluster identity, §5.3). This is the step that turns a *place* (spatial) into a *trip*
+   (spatio-temporal).
 3. **Overlay, don't re-cut.** The trip is a single *annotation* (one `tripID?` per `DayGroup` /
    `DayKey`), never a re-partition of `assetIDs` and never a rewrite of any asset's cluster
    membership. The day-group stays the unit of done-tracking; the place buckets stay the unit of
@@ -282,7 +287,7 @@ Proposals, not yet ratified D-numbers:
 - **P4 — Mandate the pure distance metric** (equirectangular-about-mean-latitude / haversine, wrap-
   aware) and **DBSCAN** clustering with a pinned input sort; geocode the **medoid**.
 - **P5 — Trips are a time-contiguous overlay over day-groups (§6), never a re-partition;** sub-day
-  place splits are out of scope for v1.1 (done-day atom). **Ratified detail:** each time-run takes a
+  place splits are out of scope for v1.1 (done-day atom). **Agreed detail:** each time-run takes a
   **single label = its dominant (plurality) cluster** — *label*-by-dominant, not *merge*-by-dominant,
   so clusters stay distinct and every place keeps a browsable bucket (no abstain, no multi-tag;
   `minPts` suppresses trivial specks upstream).
@@ -313,6 +318,13 @@ Revised after a three-persona review:
   "alternative"), confirmed the doc is justified as constraint-capture, and trimmed the concurrency
   /testing prose to pointers.
 
+The §6 label-by-dominant decision and the §15 idea backlog had a second three-persona pass (Swift
+Architect, Pragmatic Developer, Design/HIG). It added: the §6 `minPts`-vs-plurality clarification and
+canonical tie-break; the summary's fingerprint cache-key + app-tier/off-main placement; the tint's
+gapless-grid placement tension + tint-cap + colorblind/never-color-alone constraints; and the
+progressive-disclosure product-fit reconsideration (selection-by-omission vs the "choose every photo"
+truth; duplicates the #37/D20 overview; re-scope to collapse only *done* runs).
+
 ---
 
 ## 15. Idea backlog — review-grid / location-overview UX (undesigned; Paper later)
@@ -321,32 +333,74 @@ Captured ideas, **not decisions and not specs** — the visual/interaction desig
 later. Recorded here so they aren't lost and so each carries the hooks/constraints a future design
 should respect. All are *additive over the date day-groups* (D33), and none change v1.
 
-- **Tint the bigger clusters/trips in the review grid.** Give a substantial trip a subtle background
-  colour so it reads as a distinct stretch while scrolling the one chronological flow — a light
-  visual grouping cue, not a re-layout. *Constraints for the design:* gold is reserved for the
-  interactive accent (selection / tally / export — see `ReviewSectionHeader`), so trip tints must be
-  neutral/distinct from it; must hold up under Liquid Glass + Reduce Transparency; and the tint is a
-  *label of the dominant cluster* (§6), so a mixed run is tinted by its plurality, not split.
+> **Cross-cutting (design review).** Each idea inserts *algorithm-derived chrome between the user and
+> the photos*. The product truth is "you choose every photo, **not an algorithm**," and the design
+> north star is "the photos are the product; everything else is quiet and gets out of the way." So
+> every idea must clear the bar of **orienting without deciding**. The verdicts below (pursue /
+> pursue-with-caveats / reconsider) come from a HIG/design pass — idea 2's LLM and idea 3 are the two
+> at risk of crossing into auto-curation.
 
-- **A short, personal verbal summary per cluster/trip** — e.g. *"mostly at home, with stops in New
-  York and Tennessee."*
-  - *Baseline (no LLM):* templatable directly from data we already derive — the cluster names
-    (geocoded), per-cluster counts, and date span. Deterministic, always available, cacheable like
-    the geocoded names (§8 / the D18 pattern).
-  - *Enhancement — Apple Intelligence on-device LLM:* use the **Foundation Models** framework (iOS 26,
-    on-device) to phrase the summary more naturally/personally. On-device generation **fits the
-    privacy stance** (data never leaves the device, D8) — a notable advantage over any cloud LLM.
-    *Constraints for the design:* availability is gated (Apple-Intelligence-capable devices only) →
-    must degrade gracefully to the templated baseline; output is non-deterministic → cache it (don't
-    regenerate per render, mirroring the geocoded-name cache); feed it the **derived metadata**
-    (places, counts, dates), not photo pixels — image understanding is a separate, heavier,
-    further-future idea. Dependency-minimalism still holds: Foundation Models is a first-party SDK,
-    not a third-party package.
+- **Tint the bigger clusters/trips in the review grid** — *pursue with caveats* (most on-brand, lowest
+  risk: pure orientation, hides nothing). A substantial trip reads as a distinct stretch via a subtle
+  background — a grouping cue, not a re-layout, labeled by the dominant cluster (§6, so a mixed run is
+  tinted by its plurality, not split). *Constraints for the design:*
+  - **Gold is reserved** for the interactive accent (selection / tally / export — see
+    `ReviewSectionHeader`) and tints must also stay clear of the **green** selection hairline; use
+    muted, *semantic* light/dark tints (Photos/Calendar-style), defined to survive dark mode +
+    Increase Contrast.
+  - **Where does a tint physically live in a 0-pt gapless grid?** (styleguide §3 — the grid is a
+    gutterless photo wall.) A background wash has almost no surface and risks *recoloring the photos*
+    being judged. Likely answer: a thin edge band / header-anchored treatment for tinted runs, **not**
+    a wash behind cells. Resolve this in Paper before the idea is real.
+  - **Cap how many tints show at once** (small N) — a busy travel year tinted everywhere becomes a
+    quilt that competes with the photos; broad-overview coloring is the #37/D20 overview tier's job,
+    not the review grid's.
+  - **Never color-alone / colorblind-safe** — the header already carries the grouping; the tint is
+    redundant decoration, never the sole cue (must hold up under Liquid Glass + Reduce Transparency).
 
-- **Progressive disclosure — clusters start collapsed.** A trip/cluster shows a few representative
-  thumbnails (e.g. its medoid + a handful) until you start reviewing it, then expands to the full
-  grid — keeps a year navigable at a glance. *Constraints for the design:* collapsed state changes
-  what counts as "visible," so it interacts with the scroll-driven `PrefetchWindow` and the
-  `.scrollPosition` restore (#36) — the prefetch/visible-range logic would need to understand
-  collapsed sections; and it must not reintroduce heavy work in a `body` (compute the
-  representative set once, not per render).
+- **A short verbal summary per cluster/trip** — e.g. *"mostly at home, with stops in New York and
+  Tennessee."* *Pursue the template; reconsider / strongly caveat the LLM.*
+  - *Baseline (no LLM) — the on-brand default:* templatable directly from data we already derive —
+    cluster names (geocoded), per-cluster counts, date span. Deterministic, always available, reads as
+    a *caption* not a *claim* (like Photos' "Trip to …"). Cache key: a **content fingerprint of the
+    run's (cluster, count) tally** — *not* the simple medoid-coord key, because the summary has the §8
+    membership-drift hazard (a newly-added in-range asset changes counts/plurality while a naïve key
+    wouldn't notice). Closer to the deferred assignment cache's fingerprint key than to the name cache.
+  - *Enhancement — Apple Intelligence on-device LLM (Foundation Models, iOS 26):* could phrase it more
+    naturally. **On-device fits the privacy stance** (data never leaves the device, D8 — a real
+    advantage over cloud). *Technical constraints:* app-tier behind a `Sendable` seam (like
+    `PlaceNaming`/`ThumbnailProviding`, §4) — never in pure `Curation`; generation runs **off the main
+    actor** (inherit §9's posture), result crosses back as a value; availability is gated
+    (Apple-Intelligence-capable devices) → graceful fallback to the template; non-deterministic →
+    cached (same fingerprint key). First-party SDK, so dependency-minimalism holds. *Product-fit risk
+    (the reason it's "reconsider"):* an LLM writing a "personal" summary of someone's family year
+    drifts from *orienting* into *narrating their life* — the algorithmic-authorship posture the
+    product positions against (cf. the "opposite of this app" framing in product-plan). The risk is in
+    the **voice** (sounding auto-generated/uncanny/presumptuous; a bad inference on a hard year), and
+    it's decorative to the *picking* task. If pursued: opt-in over an always-correct template,
+    **neutral orientation tone, never first-person/sentimental narration**, on-device guarantee
+    surfaced as loudly as the photo-access stance, judged by "more useful than the template *for
+    choosing photos*," not "nicer prose." Feed it derived metadata, not pixels (image understanding is
+    a separate, heavier, further-future idea).
+
+- **Progressive disclosure — clusters start collapsed** — *reconsider / sharply re-scope* (the idea
+  most in tension with the core loop). The thumbnails-until-reviewed sketch: a trip shows a few
+  representative thumbnails, expanding to the full grid on review. *Why reconsider (design review):*
+  - It **conflicts with the product truth at the mechanism level** — "review/choose **every** photo"
+    needs every photo *visible to be chosen*. Collapsing to "medoid + a handful" lets the app
+    *pre-decide which photos you see first* (and which need an extra action to see at all) — and the
+    representative-thumbnail choice (medoid = geographic center, unrelated to photographic interest)
+    is itself an editorial decision about photos the user hasn't picked. That's selection-by-omission.
+  - It **duplicates the chosen overview tier** — the "a year isn't one scannable grid" problem is
+    already answered by the drill-down **overview screen** (#37/D20, the spike's overview finding); an
+    in-grid collapse is a second, weaker answer that compromises the selection surface.
+  - It **cuts across the per-`DayKey` done-atom** (§13) and would need a "viewed" state v1 deliberately
+    doesn't track (per-asset *viewed* is a v1.1 item).
+  - *Only on-ethos form to carry forward:* collapse runs the user has **explicitly marked done** (§13)
+    — collapse the *finished*, never the *unreviewed* — which keeps a year navigable without
+    gatekeeping an unmade decision and rides the existing done-day truth.
+  - *Technical hooks if ever built:* the collapse trigger must feed `groupIdentity` /
+    `rebuildWindow()` (today it keys on first-group-id + total count, which a collapse leaves
+    unchanged → the prefetch `orderedIDs` would go stale); the generation-guarded prefetch updater
+    already absorbs the expand burst; compute the representative set once, never in a `body`; and an
+    anchor inside a collapsed section won't resolve for `.scrollPosition` restore (#36).
