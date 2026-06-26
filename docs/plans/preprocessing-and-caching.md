@@ -312,3 +312,41 @@ Revised after a three-persona review:
 - **Pragmatic Developer** — identified the cache inversion (the first draft filed the right MVP under
   "alternative"), confirmed the doc is justified as constraint-capture, and trimmed the concurrency
   /testing prose to pointers.
+
+---
+
+## 15. Idea backlog — review-grid / location-overview UX (undesigned; Paper later)
+
+Captured ideas, **not decisions and not specs** — the visual/interaction design happens in Paper
+later. Recorded here so they aren't lost and so each carries the hooks/constraints a future design
+should respect. All are *additive over the date day-groups* (D33), and none change v1.
+
+- **Tint the bigger clusters/trips in the review grid.** Give a substantial trip a subtle background
+  colour so it reads as a distinct stretch while scrolling the one chronological flow — a light
+  visual grouping cue, not a re-layout. *Constraints for the design:* gold is reserved for the
+  interactive accent (selection / tally / export — see `ReviewSectionHeader`), so trip tints must be
+  neutral/distinct from it; must hold up under Liquid Glass + Reduce Transparency; and the tint is a
+  *label of the dominant cluster* (§6), so a mixed run is tinted by its plurality, not split.
+
+- **A short, personal verbal summary per cluster/trip** — e.g. *"mostly at home, with stops in New
+  York and Tennessee."*
+  - *Baseline (no LLM):* templatable directly from data we already derive — the cluster names
+    (geocoded), per-cluster counts, and date span. Deterministic, always available, cacheable like
+    the geocoded names (§8 / the D18 pattern).
+  - *Enhancement — Apple Intelligence on-device LLM:* use the **Foundation Models** framework (iOS 26,
+    on-device) to phrase the summary more naturally/personally. On-device generation **fits the
+    privacy stance** (data never leaves the device, D8) — a notable advantage over any cloud LLM.
+    *Constraints for the design:* availability is gated (Apple-Intelligence-capable devices only) →
+    must degrade gracefully to the templated baseline; output is non-deterministic → cache it (don't
+    regenerate per render, mirroring the geocoded-name cache); feed it the **derived metadata**
+    (places, counts, dates), not photo pixels — image understanding is a separate, heavier,
+    further-future idea. Dependency-minimalism still holds: Foundation Models is a first-party SDK,
+    not a third-party package.
+
+- **Progressive disclosure — clusters start collapsed.** A trip/cluster shows a few representative
+  thumbnails (e.g. its medoid + a handful) until you start reviewing it, then expands to the full
+  grid — keeps a year navigable at a glance. *Constraints for the design:* collapsed state changes
+  what counts as "visible," so it interacts with the scroll-driven `PrefetchWindow` and the
+  `.scrollPosition` restore (#36) — the prefetch/visible-range logic would need to understand
+  collapsed sections; and it must not reintroduce heavy work in a `body` (compute the
+  representative set once, not per render).
