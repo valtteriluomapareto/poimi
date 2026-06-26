@@ -13,16 +13,7 @@ import Foundation
 import Curation
 @testable import PoimiApp
 
-extension DateInterval {
-    /// All representable time — for "fetch everything" assertions against the fake. Note:
-    /// `.distantPast`/`.distantFuture` bridged into an `NSPredicate` is a PhotoKit sharp edge,
-    /// so the on-device System conformance run (#46) should use a bounded interval, not this.
-    static let everything = DateInterval(start: .distantPast, end: .distantFuture)
-    /// Calendar year 2025 (UTC), end-exclusive.
-    static let year2025 = DateInterval(
-        start: Date(timeIntervalSince1970: 1_735_689_600),   // 2025-01-01T00:00:00Z
-        end: Date(timeIntervalSince1970: 1_767_225_600))     // 2026-01-01T00:00:00Z
-}
+// `DateInterval.year2025` / `.everything` live in TestSupport.swift.
 
 /// The fetch-contract invariants — content-agnostic, so they hold for any implementation.
 func assertFetchContract(_ library: any PhotoLibraryProviding, in interval: DateInterval) async throws {

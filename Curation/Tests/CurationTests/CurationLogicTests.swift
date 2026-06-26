@@ -7,24 +7,13 @@ import Testing
 import Foundation
 @testable import Curation
 
-private func cal(_ tz: String = "UTC") -> Calendar {
-    var c = Calendar(identifier: .gregorian)
-    c.timeZone = TimeZone(identifier: tz)!
-    return c
-}
-
-private func asset(_ id: String, _ y: Int, _ m: Int, _ d: Int, calendar: Calendar) -> AssetRef {
-    let date = calendar.date(from: DateComponents(year: y, month: m, day: d, hour: 12))!
-    return AssetRef(id: id, captureDate: date)
-}
-
-private func day(_ y: Int, _ m: Int, _ d: Int) -> DayKey { .day(year: y, month: m, day: d) }
+// Fixtures (`utcCalendar`, `asset`, `dk`) live in TestSupport.swift.
 
 // MARK: - Filtering
 
 @Suite("Filtering (#20)")
 struct FilteringTests {
-    private let calendar = cal()
+    private let calendar = utcCalendar()
 
     @Test("excludes screenshots only when the flag is on")
     func screenshots() {
@@ -76,7 +65,7 @@ struct TargetTests {
 
 @Suite("Completion, resume & stats (#20)")
 struct CompletionTests {
-    private let calendar = cal()
+    private let calendar = utcCalendar()
 
     private func quietRun() -> [AssetRef] {
         [asset("a", 2025, 3, 16, calendar: calendar),
@@ -88,9 +77,9 @@ struct CompletionTests {
     func isDone() {
         let group = DayGrouping.groups(for: quietRun(), threshold: 10, calendar: calendar)[0]
         #expect(!Completion.isDone(group, doneDays: []))
-        let partial: Set<DayKey> = [day(2025, 3, 16), day(2025, 3, 17)]
+        let partial: Set<DayKey> = [dk(2025, 3, 16), dk(2025, 3, 17)]
         #expect(!Completion.isDone(group, doneDays: partial))
-        let full = partial.union([day(2025, 3, 18)])
+        let full = partial.union([dk(2025, 3, 18)])
         #expect(Completion.isDone(group, doneDays: full))
     }
 
@@ -98,7 +87,7 @@ struct CompletionTests {
     func markUnmark() {
         let group = DayGrouping.groups(for: quietRun(), threshold: 10, calendar: calendar)[0]
         let done = Completion.markingDone(group, in: [])
-        #expect(done == [day(2025, 3, 16), day(2025, 3, 17), day(2025, 3, 18)])
+        #expect(done == [dk(2025, 3, 16), dk(2025, 3, 17), dk(2025, 3, 18)])
         #expect(Completion.markingUndone(group, in: done).isEmpty)
     }
 
@@ -108,16 +97,16 @@ struct CompletionTests {
         input.append(asset("a2", 2025, 3, 16, calendar: calendar))   // dup day
         input.append(AssetRef(id: "u", captureDate: nil))            // undated
         let days = Completion.daysWithPhotos(in: input, calendar: calendar)
-        #expect(days == [day(2025, 3, 16), day(2025, 3, 17), day(2025, 3, 18), .undated])
+        #expect(days == [dk(2025, 3, 16), dk(2025, 3, 17), dk(2025, 3, 18), .undated])
     }
 
     @Test("resume is the earliest undone day, nil when all done")
     func resume() {
         let input = quietRun()
-        #expect(Completion.resumeDay(assets: input, doneDays: [], calendar: calendar) == day(2025, 3, 16))
-        let someDone: Set<DayKey> = [day(2025, 3, 16), day(2025, 3, 17)]
-        #expect(Completion.resumeDay(assets: input, doneDays: someDone, calendar: calendar) == day(2025, 3, 18))
-        let allDone = someDone.union([day(2025, 3, 18)])
+        #expect(Completion.resumeDay(assets: input, doneDays: [], calendar: calendar) == dk(2025, 3, 16))
+        let someDone: Set<DayKey> = [dk(2025, 3, 16), dk(2025, 3, 17)]
+        #expect(Completion.resumeDay(assets: input, doneDays: someDone, calendar: calendar) == dk(2025, 3, 18))
+        let allDone = someDone.union([dk(2025, 3, 18)])
         #expect(Completion.resumeDay(assets: input, doneDays: allDone, calendar: calendar) == nil)
     }
 
@@ -130,7 +119,7 @@ struct CompletionTests {
             asset("b", 2025, 3, 17, calendar: calendar),
             asset("c", 2025, 3, 18, calendar: calendar)   // NOT done
         ]
-        let doneDays: Set<DayKey> = [day(2025, 3, 16), day(2025, 3, 17)]
+        let doneDays: Set<DayKey> = [dk(2025, 3, 16), dk(2025, 3, 17)]
         // Select one done asset + the not-done one (c). The not-done pick must NOT inflate %.
         let selection: Set<String> = ["a", "c"]
         let stats = CompletionStats(assets: input, doneDays: doneDays, selection: selection, calendar: calendar)
@@ -164,10 +153,10 @@ struct CompletionTests {
         // Regroup FINELY (threshold 1 → every day its own group). Each of 16/17/18 must
         // still read done; the busy day (25) must not. Progress is preserved.
         let fine = DayGrouping.groups(for: input, threshold: 1, calendar: calendar)
-        let d16 = fine.first { $0.days == [day(2025, 3, 16)] }!
-        let d17 = fine.first { $0.days == [day(2025, 3, 17)] }!
-        let d18 = fine.first { $0.days == [day(2025, 3, 18)] }!
-        let busy = fine.first { $0.days == [day(2025, 3, 25)] }!
+        let d16 = fine.first { $0.days == [dk(2025, 3, 16)] }!
+        let d17 = fine.first { $0.days == [dk(2025, 3, 17)] }!
+        let d18 = fine.first { $0.days == [dk(2025, 3, 18)] }!
+        let busy = fine.first { $0.days == [dk(2025, 3, 25)] }!
         #expect(Completion.isDone(d16, doneDays: doneDays))
         #expect(Completion.isDone(d17, doneDays: doneDays))
         #expect(Completion.isDone(d18, doneDays: doneDays))
@@ -175,6 +164,6 @@ struct CompletionTests {
         #expect(!busyDone)
 
         // Resume is day-level, so it points at the busy day regardless of grouping.
-        #expect(Completion.resumeDay(assets: input, doneDays: doneDays, calendar: calendar) == day(2025, 3, 25))
+        #expect(Completion.resumeDay(assets: input, doneDays: doneDays, calendar: calendar) == dk(2025, 3, 25))
     }
 }

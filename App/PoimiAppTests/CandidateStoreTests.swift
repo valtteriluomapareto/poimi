@@ -16,15 +16,7 @@ import Curation
 @Suite("CandidateStore fetch + exact filters (#34)")
 struct CandidateStoreTests {
 
-    private static let yearStart = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01Z
-    private static let yearEnd = Date(timeIntervalSince1970: 1_767_225_600)     // 2026-01-01Z
-
-    /// A fixed UTC calendar so grouping-structure assertions don't depend on the runner's timezone.
-    private static let utc: Calendar = {
-        var c = Calendar(identifier: .gregorian)
-        c.timeZone = TimeZone(identifier: "UTC")!
-        return c
-    }()
+    // Date anchors + UTC calendar live in TestSupport.swift (`TestDates`, `utcCalendar()`).
 
     /// Held for the whole test (one fresh in-memory store per `@Test` instance): the store retains
     /// the `ModelContainer`, so projects it creates stay valid through `load`. (A locally-scoped
@@ -39,8 +31,8 @@ struct CandidateStoreTests {
     private func makeProject(
         excludeScreenshots: Bool = true,
         excludedAlbumIDs: [String] = [],
-        rangeStart: Date = yearStart,
-        rangeEnd: Date = yearEnd
+        rangeStart: Date = TestDates.year2025Start,
+        rangeEnd: Date = TestDates.year2025End
     ) -> CurationProject {
         store.create(
             title: "Best of 2025",
@@ -85,7 +77,7 @@ struct CandidateStoreTests {
     @Test("`.ready` carries adaptive day-groups partitioning the filtered candidates")
     func groupsAtReady() async throws {
         let project = makeProject(excludeScreenshots: true, excludedAlbumIDs: ["album/whatsapp"])
-        let store = CandidateStore(library: FakePhotoLibrary(), calendar: Self.utc)
+        let store = CandidateStore(library: FakePhotoLibrary(), calendar: utcCalendar())
         await store.load(project)
 
         let groups = readyGroups(store, "grouped at ready")
@@ -110,7 +102,7 @@ struct CandidateStoreTests {
         let project = makeProject(excludeScreenshots: false)
 
         // UTC: the two land on different calendar days (Jun 25 and Jun 26).
-        let utcStore = CandidateStore(library: library, calendar: Self.utc)
+        let utcStore = CandidateStore(library: library, calendar: utcCalendar())
         await utcStore.load(project)
         #expect(Set(readyGroups(utcStore, "utc").flatMap(\.days)).count == 2)
 
@@ -199,13 +191,13 @@ struct CandidateStoreTests {
     @Test("a zero-length or inverted range degrades to .empty without trapping DateInterval")
     func emptyDegenerateRange() async throws {
         // Equal bounds (zero length).
-        let zero = makeProject(rangeStart: Self.yearStart, rangeEnd: Self.yearStart)
+        let zero = makeProject(rangeStart: TestDates.year2025Start, rangeEnd: TestDates.year2025Start)
         let zeroStore = CandidateStore(library: FakePhotoLibrary())
         await zeroStore.load(zero)
         #expect(zeroStore.phase == .empty)
 
         // Inverted (end before start) — would trap `DateInterval(start:end:)` if not guarded.
-        let inverted = makeProject(rangeStart: Self.yearEnd, rangeEnd: Self.yearStart)
+        let inverted = makeProject(rangeStart: TestDates.year2025End, rangeEnd: TestDates.year2025Start)
         let invertedStore = CandidateStore(library: FakePhotoLibrary())
         await invertedStore.load(inverted)
         #expect(invertedStore.phase == .empty)
@@ -228,6 +220,20 @@ struct CandidateStoreTests {
         await store.load(project)
         #expect(store.phase == .failed)
     }
+
+    @Test("re-loading after .failed restarts the pass and reaches .ready (the documented retry)")
+    func retryAfterFailure() async throws {
+        // load() is documented as callable again after .failed ("Try again"); prove the same store
+        // re-enters .scanning and settles to .ready once the library recovers.
+        let project = makeProject()
+        let store = CandidateStore(library: RecoveringLibrary())
+        await store.load(project)
+        #expect(store.phase == .failed)          // first attempt throws
+        await store.load(project)                // retry
+        if case .ready = store.phase {} else {
+            Issue.record("expected .ready after retry, got \(store.phase)")
+        }
+    }
 }
 
 /// A library whose range fetch always throws — to exercise the `.failed` phase.
@@ -236,6 +242,21 @@ private actor FailingLibrary: PhotoLibraryProviding {
     func requestAuthorization() async -> LibraryAuthorization { .authorized }
     func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {
         throw PhotoLibraryError.fetchFailed
+    }
+    func albums() async throws -> [AlbumRef] { [] }
+    func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> { [] }
+}
+
+/// A library that throws on the FIRST fetch, then succeeds — to exercise the retry-after-.failed
+/// path on a single store.
+private actor RecoveringLibrary: PhotoLibraryProviding {
+    private var attempts = 0
+    func authorizationStatus() async -> LibraryAuthorization { .authorized }
+    func requestAuthorization() async -> LibraryAuthorization { .authorized }
+    func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {
+        attempts += 1
+        if attempts == 1 { throw PhotoLibraryError.fetchFailed }
+        return FakePhotoLibrary.yearMixedSeed().filter { $0.captureDate != nil }
     }
     func albums() async throws -> [AlbumRef] { [] }
     func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> { [] }
