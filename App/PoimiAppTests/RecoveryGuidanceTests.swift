@@ -24,7 +24,7 @@ struct RecoveryGuidanceTests {
         // (the `case .denied, .restricted` grouping). If they ever need distinct copy, split the
         // mapping AND this assertion together.
         #expect(restricted == denied)
-        // The limited copy must speak to the "hides most of your year" trap specifically.
+        // The limited copy must name the limited-access trap specifically.
         #expect(limited.message.localizedCaseInsensitiveContains("limited"))
     }
 
