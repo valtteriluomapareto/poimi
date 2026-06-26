@@ -24,8 +24,8 @@ struct RecoveryGuidance: Equatable {
         case .limited:
             RecoveryGuidance(
                 title: "Full access needed",
-                message: "Limited access hides most of your year and can't save albums. "
-                    + "Poimi needs all your photos to curate a full year.")
+                message: "Limited access only shows the photos you specifically picked. "
+                    + "Poimi needs your whole library to curate a full year by date.")
         case .denied, .restricted:
             RecoveryGuidance(
                 title: "Photo access is off",

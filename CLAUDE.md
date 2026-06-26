@@ -27,8 +27,8 @@ dev tooling (OSLog + screenshot harness), the state foundation (`CurationProject
 `ProjectStore`/`SelectionStore`), the **navigation coordinator** (#30), and the **onboarding +
 authorization flow** (#31). `@main` now launches the real coordinator-driven `AppRootView`
 (onboarding → permission → albums); the screens below `albums` are labeled stubs until their
-issues land (#32 albums list, #35 review grid, …). The throwaway **Spike** is no longer the
-launch path — it remains only as the reference for the real review grid (#35), then is deleted.
+issues land (#32 albums list, #35 review grid, …). The throwaway Phase-0 **Spike** has served its
+purpose (it seeded the real review grid, #35) and has now been **deleted**.
 Phase/issue plan: [docs/plans/project-phases.md](docs/plans/project-phases.md).
 
 ## Repo map
@@ -45,7 +45,6 @@ App/
     Navigation/                Route, AppCoordinator, AppRootView (the adaptive spine, #30)
     Onboarding/                OnboardingView, AccessRecoveryView (first-run + auth, #31)
     Support/                   Log (OSLog), DebugScreen (screenshot harness)
-    Spike/                     THROWAWAY Phase-0 spike (no longer launched; deleted at #35)
     Resources/                 Assets.xcassets (AccentColor, BrandGreen, OnAccent, AppIcon)
   PoimiAppTests/               integration tier (Swift Testing, runs on a sim)
 Curation/                      pure-domain SPM package — NO Photos/SwiftData/UIKit/SwiftUI
@@ -142,8 +141,9 @@ build + integration tests on an iOS 26 sim. Defined in `.github/workflows/ci.yml
 - **Dependency-minimalism:** SPM only; a new third-party dependency needs explicit PR justification
   + a note in development-guidelines. An agent does not add libraries freely.
 - **The `.xcodeproj` is hand-authored** (no XcodeGen/Tuist). Add files by editing `project.pbxproj`
-  with the structured ID blocks (app=1, Spike=2, PhotoLibrary=3, tests=4, Support=5, Persistence=6,
-  State=7, Navigation=8, Onboarding=9; next new group = 10); `plutil -lint` after, and
+  with the structured ID blocks (app=1, PhotoLibrary=3, tests=4, Support=5, Persistence=6,
+  State=7, Navigation=8, Onboarding=9; Albums/Setup/Review use A0/B0/C0 ids; 2 retired with the
+  Spike; next new group = 10); `plutil -lint` after, and
   `xcodebuild -list` to confirm it still reads. Keep diffs to
   the intended change — no Xcode reformatting churn.
 - **Tests with fixes:** every bug fix ships with a failing-then-passing regression test.

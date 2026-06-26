@@ -29,8 +29,12 @@ struct NewAlbumSetupView: View {
                 }
 
                 Section {
-                    DatePicker("From", selection: $draft.rangeStart, displayedComponents: .date)
-                    DatePicker("To", selection: inclusiveEnd, displayedComponents: .date)
+                    // Mutually bounded so an inverted/zero range is unreachable (Create can't be
+                    // silently disabled with no explanation): From ≤ the inclusive To, and vice-versa.
+                    DatePicker("From", selection: $draft.rangeStart, in: ...inclusiveEndDate,
+                               displayedComponents: .date)
+                    DatePicker("To", selection: inclusiveEnd, in: draft.rangeStart...,
+                               displayedComponents: .date)
                 } header: {
                     Text("Period")
                 } footer: {
@@ -87,6 +91,11 @@ struct NewAlbumSetupView: View {
     /// A non-empty name and a non-inverted interval are required to create.
     private var isValid: Bool {
         !draft.title.trimmingCharacters(in: .whitespaces).isEmpty && draft.rangeEnd > draft.rangeStart
+    }
+
+    /// The inclusive end day as a value — the upper bound for the "From" picker (see above).
+    private var inclusiveEndDate: Date {
+        NewAlbumDraft.inclusiveEndDay(forExclusiveEnd: draft.rangeEnd, calendar: calendar)
     }
 
     /// The "To" picker shows an **inclusive** end day, while the draft stores `rangeEnd`

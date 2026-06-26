@@ -3,9 +3,8 @@
 //  PoimiApp
 //
 //  The SwiftUI app entry point + composition root. It launches the real coordinator-driven
-//  `AppRootView` (onboarding → permission → albums → …, #30/#31). The Phase-0 throwaway spike
-//  (`SpikeRootView`, under `Spike/`) is no longer the launch path; its `Render/*` views are the
-//  reference for the real review grid (#35) and the spike is deleted when that lands.
+//  `AppRootView` (onboarding → permission → albums → …, #30/#31). (The Phase-0 throwaway spike that
+//  seeded the review grid, #35, has since been deleted.)
 //
 //  This target owns the impure layers — PhotoKit, SwiftData, UI, navigation — and depends on the
 //  pure `Curation` package. Dependencies point toward `Curation`, never away from it (D14/D21).

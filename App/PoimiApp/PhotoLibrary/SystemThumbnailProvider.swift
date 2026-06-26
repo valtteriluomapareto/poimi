@@ -62,13 +62,19 @@ actor SystemThumbnailProvider: ThumbnailProviding {
                     contentMode: .aspectFill, options: options
                 ) { image, info in
                     let isDegraded = (info?[PHImageResultIsDegradedKey] as? NSNumber)?.boolValue ?? false
+                    // A terminal callback is the final (non-degraded) result, an error, or a
+                    // cancellation — after it, PhotoKit delivers nothing more.
+                    let isTerminal = !isDegraded
+                        || info?[PHImageErrorKey] != nil
+                        || (info?[PHImageCancelledKey] as? NSNumber)?.boolValue == true
                     // Cache the FINAL (non-degraded) image regardless of whether we've already
                     // resumed on an earlier degraded callback — that's the copy a recycled cell
                     // should get back synchronously (Finding 2), not the low-res placeholder.
                     if let image, !isDegraded { cache.store(image, for: assetID, targetSize: targetSize) }
-                    // The opportunistic low-res first is fine for the grid; resume on the first
-                    // image we actually get. PhotoKit upgrades the cached copy for the next request.
-                    guard !isDegraded || image != nil else { return }
+                    // Resume on the first usable image OR any terminal callback, so a degraded-and-nil
+                    // delivery on the offline/iCloud path can never leave the continuation unresumed
+                    // (the task would otherwise park forever). resume-once is guarded by `resumed`.
+                    guard image != nil || isTerminal else { return }
                     if resumed.setOnce() { continuation.resume(returning: image) }
                 }
                 requestIDBox.value = id

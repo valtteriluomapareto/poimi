@@ -100,11 +100,15 @@ extension CurationProject {
         SelectionSnapshot.decode(selectionSnapshot).assetIDs.count
     }
 
-    /// Derived lifecycle status (§12). `markedDoneAt` wins; otherwise any picks or done-days
-    /// mean in-progress.
-    var status: ProjectStatus {
+    /// Derived lifecycle status from an **already-decoded** picked count — lets a caller that
+    /// already has the count (the album row decodes the snapshot once per render) avoid decoding
+    /// the blob a second time. `markedDoneAt` wins; otherwise any picks or done-days mean in-progress.
+    func status(forPickedCount picked: Int) -> ProjectStatus {
         if markedDoneAt != nil { return .done }
-        if persistedPickedCount > 0 || !doneDays.isEmpty { return .inProgress }
+        if picked > 0 || !doneDays.isEmpty { return .inProgress }
         return .empty
     }
+
+    /// Derived lifecycle status (§12). Decodes the snapshot once via `persistedPickedCount`.
+    var status: ProjectStatus { status(forPickedCount: persistedPickedCount) }
 }
