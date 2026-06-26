@@ -162,8 +162,8 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
 - **[docs/plans/development-guidelines.md](docs/plans/development-guidelines.md)** — testability,
   test tiers, tooling, CI, Definition of Done.
 - **[docs/plans/preprocessing-and-caching.md](docs/plans/preprocessing-and-caching.md)** — what we
-  cache (state, never bytes) and the v1.1 **location-preprocessing** subsystem (the first persisted
-  derived-data cache after D18; geocode-once + invalidatable place assignments).
+  cache (state, never bytes) and the v1.1 **location-preprocessing** subsystem (live clustering +
+  the geocoded-name cache as the only network-bound thing worth persisting, the D18 pattern).
 - **[docs/design/design-language.md](docs/design/design-language.md)** — the visual/interaction
   north star (Liquid Glass, SwiftUI-first, adaptive iPad).
 - **[docs/design/styleguide.md](docs/design/styleguide.md)** — concrete tokens (color, type,
