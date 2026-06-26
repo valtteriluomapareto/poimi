@@ -161,6 +161,9 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
   issue tables + the design inventory + the timeline-grouping spec.
 - **[docs/plans/development-guidelines.md](docs/plans/development-guidelines.md)** — testability,
   test tiers, tooling, CI, Definition of Done.
+- **[docs/plans/preprocessing-and-caching.md](docs/plans/preprocessing-and-caching.md)** — what we
+  cache (state, never bytes) and the v1.1 **location-preprocessing** subsystem (the first persisted
+  derived-data cache after D18; geocode-once + invalidatable place assignments).
 - **[docs/design/design-language.md](docs/design/design-language.md)** — the visual/interaction
   north star (Liquid Glass, SwiftUI-first, adaptive iPad).
 - **[docs/design/styleguide.md](docs/design/styleguide.md)** — concrete tokens (color, type,
