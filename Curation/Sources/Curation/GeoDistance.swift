@@ -44,7 +44,8 @@ public extension Coordinate {
     ///   - **Parameter-free** — unlike an equirectangular approximation, there is no reference
     ///     latitude to choose or get wrong; it is correct everywhere from the equator to the poles.
     ///   - **Anti-meridian-safe for free** — the longitude term enters only as `sin²(Δλ / 2)`, and
-    ///     `sin²((Δλ ∓ 360°) / 2) == sin²(Δλ / 2)`, so +179° and −179° read as 2° apart, not 358°.
+    ///     `sin²((Δλ ∓ 360°) / 2) == sin²(Δλ / 2)`, so +179.9° and −179.9° read as ~0.2° apart, not
+    ///     ~359.8°.
     ///
     /// Properties (pinned by tests): non-negative, symmetric (`a.distance(to: b) == b.distance(to: a)`),
     /// zero iff the coordinates are equal, bounded above by half the Earth's circumference (antipodal
@@ -73,7 +74,6 @@ public extension Coordinate {
 }
 
 private extension Double {
-    /// Degrees → radians. Local + private so the domain stays dependency-light and the conversion
-    /// lives next to its only use.
+    /// Degrees → radians.
     var degreesToRadians: Double { self * .pi / 180 }
 }

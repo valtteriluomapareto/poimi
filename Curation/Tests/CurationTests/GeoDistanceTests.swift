@@ -81,7 +81,7 @@ struct GeoDistanceTests {
     @Test("distance is non-negative, symmetric, and within the half-circumference bound",
           arguments: 0..<300)
     func metricAxioms(seed: Int) {
-        var rng = SeededRNG64(seed: UInt64(seed))
+        var rng = SeededRNG(seed: UInt64(seed))
         let a = randomCoordinate(&rng)
         let b = randomCoordinate(&rng)
         let ab = a.distance(to: b)
@@ -94,25 +94,31 @@ struct GeoDistanceTests {
 
     @Test("the triangle inequality holds for arbitrary triples", arguments: 0..<300)
     func triangleInequality(seed: Int) {
-        var rng = SeededRNG64(seed: UInt64(seed) &+ 1)
+        var rng = SeededRNG(seed: UInt64(seed) &+ 1)
         let a = randomCoordinate(&rng)
         let b = randomCoordinate(&rng)
         let c = randomCoordinate(&rng)
         // 1 mm of slack absorbs floating-point error; the geometric inequality is exact.
         #expect(a.distance(to: c) <= a.distance(to: b) + b.distance(to: c) + 1e-3)
     }
-}
 
-/// A small seedable PRNG (SplitMix64) so generated inputs are reproducible per seed — mirrors the
-/// `SeededRNG` in PropertyTests (kept local: that one is `private` to its file).
-struct SeededRNG64: RandomNumberGenerator {
-    private var state: UInt64
-    init(seed: UInt64) { state = seed &+ 0x9E37_79B9_7F4A_7C15 }
-    mutating func next() -> UInt64 {
-        state = state &+ 0x9E37_79B9_7F4A_7C15
-        var mixed = state
-        mixed = (mixed ^ (mixed >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        mixed = (mixed ^ (mixed >> 27)) &* 0x94D0_49BB_1331_11EB
-        return mixed ^ (mixed >> 31)
+    // MARK: Edge branches (pinned by name so a refactor can't silently regress them)
+
+    @Test("a pole is one point regardless of longitude — no cos-singularity")
+    func poleHasNoSingularity() {
+        // cos(±90°) is finite and there's no division by it, so the north pole at any two longitudes
+        // is ~0 m apart (not NaN/Inf).
+        let d = Coordinate(latitude: 90, longitude: 0).distance(to: Coordinate(latitude: 90, longitude: 170))
+        expect(d, near: 0, within: 1e-6, "north pole, two longitudes")
+    }
+
+    @Test("near-antipodal points stay finite and bounded (the max(0, 1−a) clamp)")
+    func nearAntipodalIsFiniteNotNaN() {
+        // Near antipodes `a` can round just above 1; without the clamp √(1−a) would be NaN. Assert a
+        // finite distance just under half the circumference.
+        let half = Coordinate.earthRadiusMeters * .pi
+        let d = Coordinate(latitude: 0.0001, longitude: 0).distance(to: Coordinate(latitude: -0.0001, longitude: 179.9999))
+        #expect(d.isFinite)
+        #expect(d > 0 && d <= half + 1e-3)
     }
 }

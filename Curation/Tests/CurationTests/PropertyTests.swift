@@ -12,8 +12,9 @@ import Testing
 import Foundation
 @testable import Curation
 
-/// A small seedable PRNG (SplitMix64) so generated inputs are reproducible per seed.
-private struct SeededRNG: RandomNumberGenerator {
+/// A small seedable PRNG (SplitMix64) so generated inputs are reproducible per seed. `internal`
+/// (not `private`) so the other test suites in this target reuse the one implementation.
+struct SeededRNG: RandomNumberGenerator {
     private var state: UInt64
     init(seed: UInt64) { state = seed &+ 0x9E37_79B9_7F4A_7C15 }
     mutating func next() -> UInt64 {
