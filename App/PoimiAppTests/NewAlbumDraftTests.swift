@@ -10,15 +10,11 @@ import Foundation
 @Suite("NewAlbumDraft (#33)")
 struct NewAlbumDraftTests {
 
-    private func utc() -> Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        return calendar
-    }
+    // `utcCalendar()` lives in TestSupport.swift.
 
     @Test("prior-calendar-year default: title + a full end-exclusive prior year, screenshots off-source")
     func priorYearDefault() {
-        let calendar = utc()
+        let calendar = utcCalendar()
         let now = calendar.date(from: DateComponents(year: 2026, month: 6, day: 15))!
         let draft = NewAlbumDraft.priorCalendarYear(now: now, calendar: calendar)
 
@@ -35,14 +31,14 @@ struct NewAlbumDraftTests {
 
     @Test("the default tracks the clock's year")
     func tracksYear() {
-        let calendar = utc()
+        let calendar = utcCalendar()
         let now = calendar.date(from: DateComponents(year: 2031, month: 1, day: 2))!
         #expect(NewAlbumDraft.priorCalendarYear(now: now, calendar: calendar).title == "Best of 2030")
     }
 
     @Test("a leap prior year spans 366 days (the span isn't hardcoded to 365)")
     func leapYearSpan() {
-        let calendar = utc()
+        let calendar = utcCalendar()
         let now = calendar.date(from: DateComponents(year: 2025, month: 6, day: 15))!   // prior year 2024 (leap)
         let draft = NewAlbumDraft.priorCalendarYear(now: now, calendar: calendar)
         #expect(draft.title == "Best of 2024")
@@ -52,7 +48,7 @@ struct NewAlbumDraftTests {
 
     @Test("inclusive-end ↔ exclusive-end round-trips (the To-picker off-by-one)")
     func inclusiveEndRoundTrip() {
-        let calendar = utc()
+        let calendar = utcCalendar()
         let exclusiveEnd = calendar.date(from: DateComponents(year: 2026, month: 1, day: 1))!
         let inclusiveDay = NewAlbumDraft.inclusiveEndDay(forExclusiveEnd: exclusiveEnd, calendar: calendar)
         #expect(inclusiveDay == calendar.date(from: DateComponents(year: 2025, month: 12, day: 31)))   // shows Dec 31

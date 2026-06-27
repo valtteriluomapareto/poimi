@@ -7,17 +7,7 @@ import Testing
 import Foundation
 @testable import Curation
 
-private func cal(_ tz: String = "UTC") -> Calendar {
-    var c = Calendar(identifier: .gregorian)
-    c.timeZone = TimeZone(identifier: tz)!
-    return c
-}
-
-private func asset(_ id: String, _ y: Int, _ m: Int, _ d: Int, hour: Int = 12, calendar: Calendar) -> AssetRef {
-    AssetRef(id: id, captureDate: calendar.date(from: DateComponents(year: y, month: m, day: d, hour: hour))!)
-}
-
-private func dk(_ y: Int, _ m: Int, _ d: Int) -> DayKey { .day(year: y, month: m, day: d) }
+// Fixtures (`utcCalendar`, `asset`, `dk`) live in TestSupport.swift.
 
 // MARK: - DayKey string round-trip (Architect minor)
 
@@ -62,7 +52,7 @@ struct DayKeyStringTests {
 
 @Suite("Grouping robustness (review)")
 struct GroupingRobustnessTests {
-    private let c = cal()
+    private let c = utcCalendar()
 
     @Test("unsorted / descending input still groups chronologically")
     func unsortedInput() {
@@ -103,7 +93,7 @@ struct GroupingRobustnessTests {
 
     @Test("midnight in a non-UTC zone keys to the local day")
     func midnightLocalDay() {
-        let helsinki = cal("Europe/Helsinki")
+        let helsinki = utcCalendar("Europe/Helsinki")
         // Local 2025-06-20 00:00 Helsinki is the prior UTC day — must key to the local 20th.
         let midnight = helsinki.date(from: DateComponents(year: 2025, month: 6, day: 20, hour: 0))!
         #expect(DayKey(date: midnight, calendar: helsinki) == dk(2025, 6, 20))
@@ -127,7 +117,7 @@ struct GroupingRobustnessTests {
 
 @Suite("Done-but-changed reconcile (review)")
 struct ReconcileTests {
-    private let c = cal()
+    private let c = utcCalendar()
 
     @Test("a new photo on a done day re-opens that day")
     func newPhotoReopens() {
@@ -188,7 +178,7 @@ struct ReconcileTests {
 
 @Suite("Bounds & filters (review)")
 struct BoundsTests {
-    private let c = cal()
+    private let c = utcCalendar()
 
     @Test("TargetProgress stays in bounds across a grid incl. negatives")
     func targetBounds() {
