@@ -93,18 +93,22 @@ enum ProjectStatus: Sendable, Equatable {
 extension CurationProject {
     /// The picked-asset count from the *persisted* snapshot. For the active project the live
     /// count lives in `SelectionStore`; this is the durable value the library list reads.
-    /// Decodes the blob on each access — fine at v1 scale (a handful of projects, read once per
-    /// library render). If the album-list cell ever decodes large snapshots every frame, cache
-    /// this (or store a cheap `pickedCount: Int` column alongside the blob).
+    /// Decodes the blob on each access — the album row calls it once per render (deriving status via
+    /// `status(forPickedCount:)`), so it's a single decode per row; fine at v1 scale. If snapshots
+    /// grow large, store a cheap `pickedCount: Int` column alongside the blob.
     var persistedPickedCount: Int {
         SelectionSnapshot.decode(selectionSnapshot).assetIDs.count
     }
 
-    /// Derived lifecycle status (§12). `markedDoneAt` wins; otherwise any picks or done-days
-    /// mean in-progress.
-    var status: ProjectStatus {
+    /// Derived lifecycle status from an **already-decoded** picked count — lets a caller that
+    /// already has the count (the album row decodes the snapshot once per render) avoid decoding
+    /// the blob a second time. `markedDoneAt` wins; otherwise any picks or done-days mean in-progress.
+    func status(forPickedCount picked: Int) -> ProjectStatus {
         if markedDoneAt != nil { return .done }
-        if persistedPickedCount > 0 || !doneDays.isEmpty { return .inProgress }
+        if picked > 0 || !doneDays.isEmpty { return .inProgress }
         return .empty
     }
+
+    /// Derived lifecycle status (§12). Decodes the snapshot once via `persistedPickedCount`.
+    var status: ProjectStatus { status(forPickedCount: persistedPickedCount) }
 }
