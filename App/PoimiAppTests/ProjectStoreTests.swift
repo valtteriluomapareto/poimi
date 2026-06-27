@@ -17,17 +17,12 @@ struct ProjectStoreTests {
     // opened ordering is assertable.
     private func makeStore() throws -> ProjectStore {
         let container = try AppModelContainer.make(inMemory: true)
-        var tick = Date(timeIntervalSince1970: 1_000_000_000)
-        let clock: () -> Date = { defer { tick += 1 }; return tick }
-        return ProjectStore(container: container, now: clock)   // store retains the container
+        return ProjectStore(container: container, now: monotonicClock())   // store retains the container
     }
-
-    private static let rangeStart = Date(timeIntervalSince1970: 1_735_689_600) // 2025-01-01Z
-    private static let rangeEnd = Date(timeIntervalSince1970: 1_767_225_600)   // 2026-01-01Z
 
     @discardableResult
     private func makeProject(_ store: ProjectStore, title: String, target: Int = 50) -> CurationProject {
-        store.create(title: title, rangeStart: Self.rangeStart, rangeEnd: Self.rangeEnd, targetCount: target)
+        store.create(title: title, rangeStart: TestDates.year2025Start, rangeEnd: TestDates.year2025End, targetCount: target)
     }
 
     @Test("create inserts a fresh, empty, unexported project")
@@ -133,8 +128,8 @@ struct ProjectStoreTests {
         let store = try makeStore()
         let draft = NewAlbumDraft(
             title: "Trip",
-            rangeStart: Self.rangeStart,
-            rangeEnd: Self.rangeEnd,
+            rangeStart: TestDates.year2025Start,
+            rangeEnd: TestDates.year2025End,
             targetCount: 80,
             excludeScreenshots: false,
             excludedAlbumIDs: ["album/whatsapp", "album/downloads"],
@@ -142,8 +137,8 @@ struct ProjectStoreTests {
 
         let project = store.create(from: draft)
         #expect(project.title == "Trip")
-        #expect(project.rangeStart == Self.rangeStart)   // the source period must round-trip
-        #expect(project.rangeEnd == Self.rangeEnd)
+        #expect(project.rangeStart == TestDates.year2025Start)   // the source period must round-trip
+        #expect(project.rangeEnd == TestDates.year2025End)
         #expect(project.targetCount == 80)
         #expect(project.excludeScreenshots == false)
         #expect(project.excludedAlbumIDs == ["album/downloads", "album/whatsapp"])   // stored sorted

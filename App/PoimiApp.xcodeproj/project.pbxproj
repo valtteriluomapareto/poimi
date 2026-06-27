@@ -62,6 +62,7 @@
 		000000004000000000000060 /* PrefetchWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000005F /* PrefetchWindowTests.swift */; };
 		000000004000000000000062 /* DayGroupHeaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000061 /* DayGroupHeaderTests.swift */; };
 		000000004000000000000064 /* ThumbnailMemoryCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000063 /* ThumbnailMemoryCacheTests.swift */; };
+		000000004000000000000066 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000065 /* TestSupport.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -139,6 +140,7 @@
 		00000000400000000000005F /* PrefetchWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrefetchWindowTests.swift; sourceTree = "<group>"; };
 		000000004000000000000061 /* DayGroupHeaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayGroupHeaderTests.swift; sourceTree = "<group>"; };
 		000000004000000000000063 /* ThumbnailMemoryCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailMemoryCacheTests.swift; sourceTree = "<group>"; };
+		000000004000000000000065 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -339,6 +341,7 @@
 				00000000400000000000005F /* PrefetchWindowTests.swift */,
 				000000004000000000000061 /* DayGroupHeaderTests.swift */,
 				000000004000000000000063 /* ThumbnailMemoryCacheTests.swift */,
+				000000004000000000000065 /* TestSupport.swift */,
 			);
 			path = PoimiAppTests;
 			sourceTree = "<group>";
@@ -499,6 +502,7 @@
 				000000004000000000000060 /* PrefetchWindowTests.swift in Sources */,
 				000000004000000000000062 /* DayGroupHeaderTests.swift in Sources */,
 				000000004000000000000064 /* ThumbnailMemoryCacheTests.swift in Sources */,
+				000000004000000000000066 /* TestSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

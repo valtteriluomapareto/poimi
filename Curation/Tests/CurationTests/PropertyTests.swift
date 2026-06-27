@@ -12,33 +12,12 @@ import Testing
 import Foundation
 @testable import Curation
 
-/// A small seedable PRNG (SplitMix64) so generated inputs are reproducible per seed. `internal`
-/// (not `private`) so the other test suites in this target reuse the one implementation.
-struct SeededRNG: RandomNumberGenerator {
-    private var state: UInt64
-    init(seed: UInt64) { state = seed &+ 0x9E37_79B9_7F4A_7C15 }
-    mutating func next() -> UInt64 {
-        state = state &+ 0x9E37_79B9_7F4A_7C15
-        var mixed = state
-        mixed = (mixed ^ (mixed >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        mixed = (mixed ^ (mixed >> 27)) &* 0x94D0_49BB_1331_11EB
-        return mixed ^ (mixed >> 31)
-    }
-}
-
-private func utc() -> Calendar {
-    var c = Calendar(identifier: .gregorian)
-    c.timeZone = TimeZone(identifier: "UTC")!
-    return c
-}
+// `SeededRNG` and `utcCalendar` live in TestSupport.swift.
 
 @Suite("Curation properties (#56, D24)")
 struct PropertyTests {
-    private let c = utc()
-    private let base = {
-        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
-        return cal.date(from: DateComponents(year: 2025, month: 1, day: 1))!
-    }()
+    private let c = utcCalendar()
+    private let base = utcCalendar().date(from: DateComponents(year: 2025, month: 1, day: 1))!
 
     /// Build a randomized asset set: unique ids, a mix of dated (spread across ~3 months) and
     /// undated assets, in arbitrary order.

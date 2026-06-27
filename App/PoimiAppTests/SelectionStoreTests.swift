@@ -13,22 +13,17 @@ import Curation
 @Suite("SelectionStore (#29)")
 struct SelectionStoreTests {
 
-    private static let rangeStart = Date(timeIntervalSince1970: 1_735_689_600)
-    private static let rangeEnd = Date(timeIntervalSince1970: 1_767_225_600)
-
     // A shared in-memory context backing both stores, plus a ProjectStore to mint projects.
     private func makeStores(debounce: Duration = .seconds(60)) throws -> (ProjectStore, SelectionStore) {
         // Both stores share ONE container (so they see the same context) and each retains it.
         let container = try AppModelContainer.make(inMemory: true)
-        var tick = Date(timeIntervalSince1970: 1_000_000_000)
-        let clock: () -> Date = { defer { tick += 1 }; return tick }
         return (
-            ProjectStore(container: container, now: clock),
+            ProjectStore(container: container, now: monotonicClock()),
             SelectionStore(container: container, debounce: debounce))
     }
 
     private func project(_ store: ProjectStore, _ title: String, target: Int = 50) -> CurationProject {
-        store.create(title: title, rangeStart: Self.rangeStart, rangeEnd: Self.rangeEnd, targetCount: target)
+        store.create(title: title, rangeStart: TestDates.year2025Start, rangeEnd: TestDates.year2025End, targetCount: target)
     }
 
     @Test("a tap mutates the in-memory set but does NOT write per-tap — durability is debounced (D15)")

@@ -16,20 +16,15 @@ import Curation
 @Suite("DayGroupHeader (#35)")
 struct DayGroupHeaderTests {
 
-    private static let utc: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        return calendar
-    }()
     private static let enUS = Locale(identifier: "en_US")
 
     private func date(_ y: Int, _ m: Int, _ d: Int) -> Date {
-        Self.utc.date(from: DateComponents(year: y, month: m, day: d, hour: 12))!
+        utcCalendar().date(from: DateComponents(year: y, month: m, day: d, hour: 12))!
     }
 
     private func title(_ assets: [AssetRef]) -> String {
-        let groups = DayGrouping.groups(for: assets, calendar: Self.utc)
-        return DayGroupHeader.title(for: groups[0], calendar: Self.utc, locale: Self.enUS)
+        let groups = DayGrouping.groups(for: assets, calendar: utcCalendar())
+        return DayGroupHeader.title(for: groups[0], calendar: utcCalendar(), locale: Self.enUS)
     }
 
     @Test("a single-day group reads weekday, month, day")
