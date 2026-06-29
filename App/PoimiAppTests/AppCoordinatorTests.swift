@@ -137,4 +137,24 @@ struct AppCoordinatorTests {
         coord.openReview(id, day: day)
         #expect(coord.path.last == .review(id, day))
     }
+
+    @Test("openPhoto records lastViewedID and pushes the photo route (viewer + scroll anchor, #36)")
+    func openPhotoRecordsLastViewed() {
+        let coord = coordinator(.authorized)
+        let id = UUID()
+        coord.openProject(id)
+        coord.openReview(id)
+        coord.openPhoto("asset/42")
+        // lastViewedID is the grid's scroll-restore anchor (D22) + the `.zoom` source; set on open.
+        #expect(coord.lastViewedID == "asset/42")
+        #expect(coord.path.last == .photo("asset/42"))
+    }
+
+    @Test("the review candidate list is shared so the viewer can page through it (#36)")
+    func reviewCandidateListShared() {
+        let coord = coordinator(.authorized)
+        #expect(coord.reviewOrderedIDs.isEmpty)
+        coord.reviewOrderedIDs = ["a", "b", "c"]   // published by the review screen on .ready
+        #expect(coord.reviewOrderedIDs == ["a", "b", "c"])
+    }
 }

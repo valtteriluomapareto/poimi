@@ -47,6 +47,8 @@ enum DebugScreen: String, CaseIterable {
     /// The thumbnail seam — a grid of deterministic fake tiles, proving `\.thumbnailProvider`
     /// renders without PhotoKit (#35).
     case thumbs
+    /// The full-screen photo viewer — pager + select-in-place chrome over the fake tiles (#36).
+    case photoviewer
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -80,6 +82,7 @@ struct DebugScreenHost: View {
         case .albumpicker: DebugAlbumPickerHostView()
         case .scanning: DebugScanningHostView()
         case .thumbs: DebugThumbnailHostView()
+        case .photoviewer: DebugPhotoViewerHostView()
         }
     }
 }
@@ -200,6 +203,7 @@ struct DebugAlbumPickerHostView: View {
 /// thumbnails with a few cells pre-selected (so selection encoding shows).
 struct DebugScanningHostView: View {
     @Environment(\.photoLibrary) private var library
+    @Namespace private var zoomNamespace
     // Retained so the in-memory container (owned by the stores) outlives `.task` — otherwise it
     // deallocates, resets its context, and destroys `project` out from under ScanningView.
     @State private var projectStore: ProjectStore?
@@ -213,7 +217,7 @@ struct DebugScanningHostView: View {
     var body: some View {
         Group {
             if let selectionStore, let coordinator, let project {
-                NavigationStack { ScanningView(project: project) }
+                NavigationStack { ScanningView(project: project, zoomNamespace: zoomNamespace) }
                     .environment(selectionStore)
                     .environment(coordinator)
             } else {
@@ -250,8 +254,57 @@ struct DebugScanningHostView: View {
         }
     }
 
-    private static let yearStart = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01Z
-    private static let yearEnd = Date(timeIntervalSince1970: 1_767_225_600)     // 2026-01-01Z
+    static let yearStart = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01Z
+    static let yearEnd = Date(timeIntervalSince1970: 1_767_225_600)     // 2026-01-01Z
+}
+
+/// Hosts the full-screen photo viewer (#36) over the deterministic fake tiles: a coordinator seeded
+/// with the candidate list + last-viewed id, a selection with a few picks, opened on a selected
+/// photo — so the capture shows the pager chrome (position, the gold select-in-place check, tally).
+struct DebugPhotoViewerHostView: View {
+    @Environment(\.photoLibrary) private var library
+    @State private var coordinator: AppCoordinator?
+    @State private var selectionStore: SelectionStore?
+    @State private var projectStore: ProjectStore?
+
+    /// The post-filter candidates of the `yearMixed` seed (quiet run + busy day minus WhatsApp).
+    private static let ids = ["fake/quiet/16", "fake/quiet/17", "fake/quiet/18"]
+        + (2...11).map { "fake/busy/\($0)" }
+    private static let startID = "fake/busy/5"   // a selected one, mid-list
+
+    var body: some View {
+        Group {
+            if let coordinator, let selectionStore {
+                NavigationStack { PhotoViewerView(startID: Self.startID) }
+                    .environment(coordinator)
+                    .environment(selectionStore)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            guard let container = try? AppModelContainer.make(inMemory: true) else {
+                Log.app.error("DebugPhotoViewerHostView: failed to build the in-memory container")
+                return
+            }
+            let projects = ProjectStore(container: container)
+            let selection = SelectionStore(container: container)
+            let created = projects.create(
+                title: "Best of 2025",
+                rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
+                targetCount: 100)
+            selection.activate(created)
+            ["fake/busy/2", "fake/busy/5", "fake/quiet/16"].forEach { selection.toggle($0) }
+
+            let coord = AppCoordinator(library: library)
+            coord.reviewOrderedIDs = Self.ids
+            coord.lastViewedID = Self.startID
+            projectStore = projects
+            selectionStore = selection
+            coordinator = coord
+            Log.app.notice("screenshot-ready: \(DebugScreen.photoviewer.rawValue, privacy: .public)")
+        }
+    }
 }
 
 /// Hosts the thumbnail seam (#35): a grid of deterministic fake tiles loaded through the injected

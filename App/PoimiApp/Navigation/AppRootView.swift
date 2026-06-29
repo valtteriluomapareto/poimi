@@ -19,6 +19,9 @@ struct AppRootView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(ProjectStore.self) private var projectStore
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// Owned here (above both destinations) so the grid cell's `matchedTransitionSource` and the
+    /// viewer's `.navigationTransition(.zoom)` share one namespace and pair (#36, D10).
+    @Namespace private var zoomNamespace
 
     var body: some View {
         Group {
@@ -81,14 +84,17 @@ struct AppRootView: View {
             }
         case .review(let id, _):
             if let project = project(id) {
-                // #34: the scanning surface drives the fetch+filter pipeline; #35 fills the grid.
-                ScanningView(project: project)
+                // Scanning → grid (#34/#35); the grid's cells source the `.zoom` from this namespace.
+                ScanningView(project: project, zoomNamespace: zoomNamespace)
             } else {
                 RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
                                  detail: "This album is no longer in your library.")
             }
         case .photo(let assetID):
-            RoutePlaceholder(symbol: "photo", title: "Photo", detail: "\(assetID) (#36)")
+            // The viewer zooms from/back to the cell of whatever photo is in view (`lastViewedID`,
+            // which the viewer keeps current as it swipes); falls back to the tapped id.
+            PhotoViewerView(startID: assetID)
+                .navigationTransition(.zoom(sourceID: coordinator.lastViewedID ?? assetID, in: zoomNamespace))
         case .export(let id):
             RoutePlaceholder(symbol: "rectangle.stack.badge.plus", title: "Export",
                              detail: "album \(id.uuidString.prefix(8)) (#39)")

@@ -27,6 +27,15 @@ final class AppCoordinator {
     /// The typed navigation path below the albums root (bound to the `NavigationStack`).
     var path: [Route] = []
 
+    /// The open album's candidate ids in chronological order — the list the photo viewer pages
+    /// through (#36). Set by the review screen when its fetch settles; empty when no review is open.
+    var reviewOrderedIDs: [String] = []
+
+    /// The asset last viewed in the grid / viewer. The grid restores its scroll to it on return
+    /// from the viewer (D22) and the viewer keys its `.zoom` source off it; set on cell tap and
+    /// updated as the viewer swipes. Shared so scroll position survives the round-trip.
+    var lastViewedID: String?
+
     init(library: any PhotoLibraryProviding) {
         self.library = library
     }
@@ -65,8 +74,10 @@ final class AppCoordinator {
         path.append(.review(projectID, day))
     }
 
-    /// Push the full-screen photo viewer (the `.zoom` destination).
+    /// Push the full-screen photo viewer (the `.zoom` destination). Records the asset as last-viewed
+    /// so the `.zoom` source + the grid's scroll restore are anchored to it from the outset.
     func openPhoto(_ assetID: String) {
+        lastViewedID = assetID
         path.append(.photo(assetID))
     }
 
