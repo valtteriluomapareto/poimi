@@ -24,6 +24,9 @@ struct ScanningView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @State private var store: CandidateStore?
+    /// The album the current `store` loaded — so a reused view instance reloads for a NEW album
+    /// rather than republishing the previous one's candidates (the iPad detail-column retarget, #42).
+    @State private var loadedProjectID: UUID?
     /// Gates the scanning indicator behind a grace delay (below) so instant scans never flash it.
     @State private var indicatorVisible = false
 
@@ -41,12 +44,21 @@ struct ScanningView: View {
                 // Hydrate the selection for this project (idempotent — activate() no-ops if it's
                 // already active, so re-entry never clobbers unflushed picks).
                 selection.activate(project)
-                let resolved = store ?? CandidateStore(library: library)
-                store = resolved
-                if resolved.phase == .idle { await resolved.load(project) }
-                // Publish the candidate list so the photo viewer can page through it (#36).
-                if case .ready(let groups) = resolved.phase {
+                // Reload when the album actually changed (or first load); reuse only survives a
+                // benign re-appear of the SAME album, so returning from the viewer doesn't re-scan.
+                // Gating on project identity (not `.idle`) stops a reused view instance from serving
+                // the previous album's candidates + day map to the viewer (#42).
+                if store == nil || loadedProjectID != project.id {
+                    let fresh = CandidateStore(library: library)
+                    store = fresh
+                    loadedProjectID = project.id
+                    await fresh.load(project)
+                }
+                // Publish the candidate list + per-photo day map so the photo viewer can page
+                // through it and label each photo's day (#36).
+                if case .ready(let groups) = store?.phase {
                     coordinator.reviewOrderedIDs = groups.flatMap(\.assetIDs)
+                    coordinator.reviewDayByID = store?.dayByID ?? [:]
                 }
             }
     }

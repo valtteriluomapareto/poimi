@@ -33,4 +33,15 @@ enum DayGroupHeader {
         monthDay.timeZone = calendar.timeZone
         return "\(firstDate.formatted(monthDay)) – \(lastDate.formatted(monthDay))"
     }
+
+    /// The per-photo day label for the viewer (#36): one calendar day, "Sat, Jul 5", or "Undated".
+    /// Identical style to a single-day section title, so the viewer's label and the grid's day
+    /// section agree. The viewer shows the photo's *own* day — not its group's span — since a merged
+    /// quiet run spans several days but each photo sits on exactly one.
+    static func dayLabel(for key: DayKey, calendar: Calendar = .current, locale: Locale = .current) -> String {
+        guard let date = key.anchorDate(in: calendar) else { return String(localized: "Undated") }
+        var style = Date.FormatStyle.dateTime.weekday(.abbreviated).month(.abbreviated).day().locale(locale)
+        style.timeZone = calendar.timeZone
+        return date.formatted(style)
+    }
 }

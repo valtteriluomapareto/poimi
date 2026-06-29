@@ -31,6 +31,11 @@ final class AppCoordinator {
     /// through (#36). Set by the review screen when its fetch settles; empty when no review is open.
     var reviewOrderedIDs: [String] = []
 
+    /// Each candidate's calendar day, keyed by asset id — the per-photo day the viewer labels with
+    /// (#36). Published by the review screen alongside `reviewOrderedIDs`; empty when no review is
+    /// open (the viewer then just shows the position, no day label).
+    var reviewDayByID: [String: DayKey] = [:]
+
     /// The asset last viewed in the grid / viewer. The grid restores its scroll to it on return
     /// from the viewer (D22) and the viewer keys its `.zoom` source off it; set on cell tap and
     /// updated as the viewer swipes. Shared so scroll position survives the round-trip.

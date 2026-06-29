@@ -93,6 +93,38 @@ struct CandidateStoreTests {
             + (2...11).map { "fake/busy/\($0)" })
     }
 
+    @Test("the per-photo day map is published for the viewer's label (#36)")
+    func dayMapPublished() async throws {
+        let project = makeProject(excludeScreenshots: true, excludedAlbumIDs: ["album/whatsapp"])
+        let store = CandidateStore(library: FakePhotoLibrary(), calendar: utcCalendar())
+        await store.load(project)
+
+        // Each candidate maps to its *own* calendar day (unlike a merged group, which spans days):
+        // the quiet run resolves per day, and every busy photo lands on July 5.
+        #expect(store.dayByID["fake/quiet/16"] == .day(year: 2025, month: 3, day: 16))
+        #expect(store.dayByID["fake/quiet/18"] == .day(year: 2025, month: 3, day: 18))
+        #expect(store.dayByID["fake/busy/2"] == .day(year: 2025, month: 7, day: 5))
+        // The map covers exactly the ready candidates — every one has a day, and filtered-out
+        // assets (the screenshot, the WhatsApp members) are absent.
+        let ids = readyIDs(store, "day map")
+        #expect(ids.allSatisfy { store.dayByID[$0] != nil })
+        #expect(store.dayByID.count == ids.count)
+        #expect(store.dayByID["fake/shot"] == nil)
+    }
+
+    @Test("a reload that finds nothing clears the day map — no stale labels on the next album (#36)")
+    func dayMapResetsOnReload() async throws {
+        // The reset at the top of load() is behavior, not housekeeping: switching albums (or a retry)
+        // must not leave the previous map behind to mislabel the viewer. Drive populated → empty on
+        // ONE store — the only path that actually exercises the reset line.
+        let store = CandidateStore(library: FakePhotoLibrary(), calendar: utcCalendar())
+        await store.load(makeProject(excludeScreenshots: true, excludedAlbumIDs: ["album/whatsapp"]))
+        #expect(!store.dayByID.isEmpty)
+        // An inverted range degrades to .empty via the guard (before any fetch) — the map must clear.
+        await store.load(makeProject(rangeStart: TestDates.year2025End, rangeEnd: TestDates.year2025Start))
+        #expect(store.dayByID.isEmpty)
+    }
+
     @Test("the store groups by its injected calendar (timezone shifts day bucketing)")
     func respectsInjectedCalendar() async throws {
         // Two assets straddling UTC midnight: 23:00Z on 2025-06-25 and 01:00Z on 2025-06-26.
@@ -105,6 +137,10 @@ struct CandidateStoreTests {
         let utcStore = CandidateStore(library: library, calendar: utcCalendar())
         await utcStore.load(project)
         #expect(Set(readyGroups(utcStore, "utc").flatMap(\.days)).count == 2)
+        // The per-photo day map keys on the SAME injected calendar as grouping — a regression that
+        // built it with `.current` would still pass the grouping assertion above but fail here.
+        #expect(utcStore.dayByID["edge/a"] == .day(year: 2025, month: 6, day: 25))
+        #expect(utcStore.dayByID["edge/b"] == .day(year: 2025, month: 6, day: 26))
 
         // UTC−3: both shift back into the same calendar day (Jun 25) — only the calendar changed.
         var minus3 = Calendar(identifier: .gregorian)
@@ -112,6 +148,9 @@ struct CandidateStoreTests {
         let shiftedStore = CandidateStore(library: library, calendar: minus3)
         await shiftedStore.load(project)
         #expect(Set(readyGroups(shiftedStore, "utc-3").flatMap(\.days)).count == 1)
+        // The map shifts in lockstep: edge/b's 01:00Z slides back to Jun 25 under UTC−3.
+        #expect(shiftedStore.dayByID["edge/a"] == .day(year: 2025, month: 6, day: 25))
+        #expect(shiftedStore.dayByID["edge/b"] == .day(year: 2025, month: 6, day: 25))
     }
 
     @Test("no filters: every dated in-range asset survives (screenshot included, undated excluded)")
@@ -209,6 +248,7 @@ struct CandidateStoreTests {
         let store = CandidateStore(library: FailingLibrary())
         await store.load(project)
         #expect(store.phase == .failed)
+        #expect(store.dayByID.isEmpty)   // a failed pass leaves no (stale) day map behind
     }
 
     @Test("a failure while resolving excluded albums also surfaces as .failed")
