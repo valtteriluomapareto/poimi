@@ -9,8 +9,9 @@
 //  `SelectionStore`), so "open to decide" is itself a fast multi-select path, not a dead end.
 //
 //  Each page is progressive: it paints the cached thumbnail immediately, then swaps to the
-//  full-resolution image when it lands. Pinch-zoom/pan, the filmstrip scrubber, and the per-photo
-//  day label are #36 part 2.
+//  full-resolution image when it lands. Pinch-zoom / pan / double-tap-to-point land here (part 2a);
+//  the filmstrip scrubber, the per-photo day label, and a zoom-aware swipe-down-to-dismiss are #36
+//  part 2b (a free-floating swipe-down would fight panning a zoomed photo, so the chevron exits).
 //
 
 import SwiftUI
@@ -33,40 +34,50 @@ struct PhotoViewerView: View {
         _currentID = State(initialValue: startID)
     }
 
+    /// `.scrollPosition(id:)` works in `String?`; map it onto the non-optional `currentID` (a nil
+    /// scroll target — momentarily between pages — leaves the last page id in place).
+    private var pageBinding: Binding<String?> {
+        Binding(get: { currentID }, set: { if let id = $0 { currentID = id } })
+    }
+
     var body: some View {
-        // NB (scale, #36 part 2): `TabView(.page)` materializes the whole page tree, so this flat
-        // ForEach over the full candidate list is a known scale risk on a thousands-photo album.
-        // Part 2 promotes the spike's UIScrollView / UIPageViewController pager (which windows pages
-        // and also carries pinch-zoom). Page images themselves stay bounded — each `.task` is lazy.
-        TabView(selection: $currentID) {
-            ForEach(pages, id: \.self) { id in
-                PhotoPage(id: id).tag(id)
-            }
-        }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .background(Color.black)
-        .ignoresSafeArea()
-        .overlay(alignment: .top) { topBar }
-        .overlay(alignment: .bottom) { bottomTally }
-        .toolbar(.hidden, for: .navigationBar)
-        // Keep the shared anchor on the photo in view, so the grid restores here and the `.zoom`
-        // return pairs with this cell.
-        .onChange(of: currentID) { coordinator.lastViewedID = currentID }
-        .onAppear {
-            let list = coordinator.reviewOrderedIDs.contains(startID) ? coordinator.reviewOrderedIDs : [startID]
-            pages = list
-            indexByID = Dictionary(list.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
-        }
-        // Swipe down to dismiss (the Photos convention). Simultaneous so it doesn't steal the
-        // TabView's horizontal page-swipe; it acts only on a clearly downward-dominant drag.
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 24).onEnded { value in
-                if value.translation.height > 120,
-                   value.translation.height > abs(value.translation.width) * 1.5 {
-                    coordinator.pop()
+        // A lazy horizontal paging scroll: `LazyHStack` only materializes the visible + adjacent
+        // pages (so a thousands-photo album stays light — the TabView(.page) scale risk is gone),
+        // `.scrollTargetBehavior(.paging)` snaps page-to-page, and `.scrollPosition` two-way-binds
+        // the current page id. Each page is a `ZoomableScrollView` (pinch-zoom / pan / double-tap).
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 0) {
+                    ForEach(pages, id: \.self) { id in
+                        PhotoPage(id: id)
+                            .containerRelativeFrame(.horizontal)
+                            .id(id)
+                    }
                 }
+                .scrollTargetLayout()
             }
-        )
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: pageBinding)
+            .scrollIndicators(.hidden)
+            .background(Color.black)
+            .ignoresSafeArea()
+            .overlay(alignment: .top) { topBar }
+            .overlay(alignment: .bottom) { bottomTally }
+            .toolbar(.hidden, for: .navigationBar)
+            // Keep the shared anchor on the photo in view, so the grid restores here and the `.zoom`
+            // return pairs with this cell.
+            .onChange(of: currentID) { coordinator.lastViewedID = currentID }
+            .onAppear {
+                let list = coordinator.reviewOrderedIDs.contains(startID) ? coordinator.reviewOrderedIDs : [startID]
+                pages = list
+                indexByID = Dictionary(list.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+                // `.scrollPosition` to a *mid-list* id in a `LazyHStack` doesn't reliably land on the
+                // first layout (the target page isn't built yet), so scroll to it explicitly once the
+                // pages exist — otherwise the viewer opens on page 0 while the chrome reads the tapped
+                // photo's position.
+                DispatchQueue.main.async { proxy.scrollTo(startID, anchor: .center) }
+            }
+        }
     }
 
     // MARK: Chrome (floats on scrims over the photo — Liquid Glass behavior)
@@ -154,9 +165,7 @@ private struct PhotoPage: View {
             ZStack {
                 Color.black
                 if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
+                    ZoomableScrollView(image: image)   // pinch-zoom / pan / double-tap
                 } else {
                     ProgressView()
                         .controlSize(.large)
@@ -165,7 +174,7 @@ private struct PhotoPage: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Photo")   // the per-photo date label rides #36 part 2
+            .accessibilityLabel("Photo")   // the per-photo date label rides #36 part 2b
             .task(id: id) {
                 // Paint the already-decoded thumbnail first (no black flash), then the full-res.
                 if image == nil,
