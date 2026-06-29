@@ -33,17 +33,30 @@ struct PhotoViewerView: View {
         _currentID = State(initialValue: startID)
     }
 
+    /// `.scrollPosition(id:)` works in `String?`; map it onto the non-optional `currentID` (a nil
+    /// scroll target — momentarily between pages — leaves the last page id in place).
+    private var pageBinding: Binding<String?> {
+        Binding(get: { currentID }, set: { if let id = $0 { currentID = id } })
+    }
+
     var body: some View {
-        // NB (scale, #36 part 2): `TabView(.page)` materializes the whole page tree, so this flat
-        // ForEach over the full candidate list is a known scale risk on a thousands-photo album.
-        // Part 2 promotes the spike's UIScrollView / UIPageViewController pager (which windows pages
-        // and also carries pinch-zoom). Page images themselves stay bounded — each `.task` is lazy.
-        TabView(selection: $currentID) {
-            ForEach(pages, id: \.self) { id in
-                PhotoPage(id: id).tag(id)
+        // A lazy horizontal paging scroll: `LazyHStack` only materializes the visible + adjacent
+        // pages (so a thousands-photo album stays light — the TabView(.page) scale risk is gone),
+        // `.scrollTargetBehavior(.paging)` snaps page-to-page, and `.scrollPosition` two-way-binds
+        // the current page id. Each page is a `ZoomableScrollView` (pinch-zoom / pan / double-tap).
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 0) {
+                ForEach(pages, id: \.self) { id in
+                    PhotoPage(id: id)
+                        .containerRelativeFrame(.horizontal)
+                        .id(id)
+                }
             }
+            .scrollTargetLayout()
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
+        .scrollTargetBehavior(.paging)
+        .scrollPosition(id: pageBinding)
+        .scrollIndicators(.hidden)
         .background(Color.black)
         .ignoresSafeArea()
         .overlay(alignment: .top) { topBar }
@@ -154,9 +167,7 @@ private struct PhotoPage: View {
             ZStack {
                 Color.black
                 if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
+                    ZoomableScrollView(image: image)   // pinch-zoom / pan / double-tap
                 } else {
                     ProgressView()
                         .controlSize(.large)
@@ -165,7 +176,7 @@ private struct PhotoPage: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Photo")   // the per-photo date label rides #36 part 2
+            .accessibilityLabel("Photo")   // the per-photo date label rides #36 part 2b
             .task(id: id) {
                 // Paint the already-decoded thumbnail first (no black flash), then the full-res.
                 if image == nil,
