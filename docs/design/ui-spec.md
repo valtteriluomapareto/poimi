@@ -16,12 +16,15 @@ not new decisions.
 
 ```
 ┌─────────────────────────────────────────────┐
-│  [ 147 / 200  ▓▓▓░░ ]        Clear   ⤴ Export │  ← top chrome (standard nav bar: glass + scroll-edge)
+│                              Clear   ⤴ Export │  ← nav trailing actions
+│  Best of 2025                                 │  ← large nav title (album name)
+│  1,847 photos · Jan 2025 – Dec 2025           │  ┐ scroll-top header
+│  147 / 200  ▓▓▓▓▓▓▓░░░░░░░░░░  73 left         │  ┘ (subtitle + full-width tally)
 ├─────────────────────────────────────────────┤
 │  • Sat, Jul 5            · 24      Select all │  ← pinned day-group header
-│  ┌────┐ ┌────┐ ┌────┐                         │
-│  │ ✓▣ │ │  ◯ │ │  ◯ │   …  square cells        │
-│  └────┘ └────┘ └────┘                         │
+│  ┌────┬────┬────┐                              │
+│  │ ▣✓ │  ◯ │  ◯ │   gapless square cells       │  ← gold check top-right
+│  └────┴────┴────┘                              │
 │  Mar 16 – Mar 18         · 3      Select all   │  ← merged quiet run
 │  …                                            │
 └─────────────────────────────────────────────┘
@@ -33,7 +36,7 @@ not new decisions.
   day-groups** (Curation `DayGrouping`) with **pinned section headers**. Busy days stand alone;
   quiet days merge into a run. Grouping is computed **once** in `CandidateStore` when the fetch
   settles — never in a view `body` (guard: `check-no-grouping-in-views.sh`).
-- **Square cells** (resolved by the spike — square scans fastest), 2pt gutter.
+- **Square cells** (resolved by the spike — square scans fastest), **gapless** (0-pt gutter — a photo wall, styleguide §3 / Paper design).
 - **Pinch-to-adjust density**, default **3 columns** on iPhone, clamped to **2–5** (compact) so the
   44pt badge never swallows the cell; iPad goes denser. Density change animates `.snappy`, gated off
   under Reduce Motion.
@@ -53,28 +56,31 @@ not new decisions.
 ## Selection (D9)
 
 - **Badge-select** (resolved): tap the **cell** opens it full-screen; tap the **≥44pt badge**
-  (bottom-trailing) selects. Light **selection haptic** on each flip.
+  (**top-right**, Paper design) selects. Light **selection haptic** on each flip.
 - **Three-layer redundant encoding** so state survives color-blindness + bright thumbnails:
-  1. a **gold filled checkmark** badge — *the affordance*,
+  1. a **gold filled checkmark** badge (top-right) — *the affordance*,
   2. a **dim** overlay,
-  3. a **~1.5px green inset hairline** — structural only (the one sanctioned green in grid chrome).
+  3. a **~2px green inset border** — structural only (the one sanctioned green in grid chrome).
 - Source of truth is the in-memory `Set` in `SelectionStore` (D15); cells + headers observe it
   directly, so a toggle re-renders only visible cells, never the whole grid.
 
 ## Top chrome
 
-Lives in the **standard top nav bar** (Liquid Glass + the scroll-edge effect for free; no
-hand-rolled floating glass, no bottom bar in the thumb/scroll zone):
+At the **top**, not a floating bottom bar (which would fight the scroll/select gestures). A
+**large nav title** (the album name) + a **scroll-top header** beneath it (`ReviewHeader`):
 
-- **Tally** (principal): `picked / target` in `monospacedDigit` + a slim progress bar (gold; green
-  at target; the fill is floored to a visible sliver once there's any pick). The orientation device.
-  **AX reflow**: at accessibility text sizes it drops to numerals only (the dense bar-on-chrome is
-  the likeliest Dynamic-Type contrast failure). **The tally takes the principal slot, yielding the
-  centered album title on this screen** — intentional: the tally is the must-read chrome, and the
-  album name is one tap back (the overview titles itself with it).
-- **Export** (top-right): the primary action; disabled until ≥1 photo is picked. Routes to the
-  export flow (#39).
-- **Clear** (top-right, destructive): shown only when there is a selection.
+- **Subtitle**: `<count> photos · <period>` (e.g. "1,847 photos · Jan 2025 – Dec 2025"). The period
+  is the album's range; the exclusive end is stepped back a day so a 2025 album reads "… – Dec 2025".
+- **Tally**: `picked / target` in `monospacedDigit` + a **full-width** progress bar + "`N left`"
+  (gold; green at target; fill floored to a visible sliver once there's any pick). The orientation
+  device. **AX reflow**: at accessibility text sizes the bar drops, numerals only (the dense
+  bar-on-chrome is the likeliest Dynamic-Type contrast failure).
+- The header scrolls away as you dive in; the large title collapses to the inline album name and
+  **Export** stays in the nav bar. Day-group section headers pin.
+- **Export** (nav top-right): the primary action; disabled until ≥1 photo is picked. Routes to #39.
+- **Clear** (nav top-right, destructive): shown only when there is a selection. *(Per the Paper
+  design, bulk Clear/Select-all ultimately move to the separate Select mode; kept here transitionally
+  until that screen is built so there's no interim capability gap.)*
 
 ## Accessibility
 

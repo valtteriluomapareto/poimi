@@ -24,6 +24,9 @@ struct ReviewGridView: View {
     /// The candidates split into adaptive day-groups (oldest → newest). Concatenating the groups'
     /// `assetIDs` reproduces the full chronological slice — the sections are headered runs of it.
     let groups: [DayGroup]
+    /// Metadata line under the title (e.g. "1,847 photos · Jan 2025 – Dec 2025"), shown in the
+    /// scroll-top header above the tally.
+    let subtitle: String
     /// Open a cell full-screen (the parent pushes the viewer, #36).
     let openAsset: (String) -> Void
     /// Namespace pairing the cell with the `.zoom` viewer destination (#36).
@@ -44,7 +47,7 @@ struct ReviewGridView: View {
     @State private var windowGeneration = 0
     @State private var windowUpdating = false
 
-    private let spacing: CGFloat = 2
+    private let spacing: CGFloat = 0   // gapless photo wall (Paper design / styleguide §3)
     private let minColumns = 2
     private let windowRowMargin = 2
     /// Oversized vs the on-screen point size on purpose (Retina + density headroom).
@@ -60,21 +63,26 @@ struct ReviewGridView: View {
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
-                ForEach(groups) { group in
-                    // Format the day title once per group (not per cell), and hand it to both the
-                    // header and the cells' VoiceOver labels for orientation.
-                    let title = DayGroupHeader.title(for: group)
-                    Section {
-                        ForEach(group.assetIDs, id: \.self) { id in
-                            cell(for: id, dayLabel: title).id(id)
+            VStack(spacing: 0) {
+                // The metadata + tally header scrolls away under the large nav title; the day-group
+                // section headers below pin.
+                ReviewHeader(subtitle: subtitle)
+                LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
+                    ForEach(groups) { group in
+                        // Format the day title once per group (not per cell), and hand it to both the
+                        // header and the cells' VoiceOver labels for orientation.
+                        let title = DayGroupHeader.title(for: group)
+                        Section {
+                            ForEach(group.assetIDs, id: \.self) { id in
+                                cell(for: id, dayLabel: title).id(id)
+                            }
+                        } header: {
+                            ReviewSectionHeader(group: group, title: title)
                         }
-                    } header: {
-                        ReviewSectionHeader(group: group, title: title)
                     }
                 }
+                .scrollTargetLayout()
             }
-            .scrollTargetLayout()
         }
         .scrollPosition(id: $scrollAnchorID, anchor: .center)
         // Reduce Motion → no density-change animation (the cross-fade is the system default).

@@ -68,15 +68,16 @@ struct ReviewGridCell: View {
         }
         .overlay {
             if isSelected {
-                // The third selection layer (styleguide §6): a narrow green inset hairline. Purely
-                // structural — the gold check stays the affordance — but it reads the selected cell
-                // at a glance in a near-gapless grid. `strokeBorder` insets so the line isn't clipped.
-                // Non-interactive so its hit-testable ring can't absorb an edge tap (→ open/select).
-                Rectangle().strokeBorder(Color.green, lineWidth: 1.5)
+                // The third selection layer (styleguide §6 / Paper design): a green inset border.
+                // Structural — the gold check stays the affordance — but in a gapless grid the border
+                // is what reads a selected cell at a glance. `strokeBorder` insets so it isn't clipped;
+                // non-interactive so its ring can't absorb an edge tap (→ open/select).
+                Rectangle().strokeBorder(Color.green, lineWidth: 2)
                     .allowsHitTesting(false)
             }
         }
-        .overlay(alignment: .bottomTrailing) { selectionBadge(isSelected) }
+        // Badge top-trailing (Paper design): the gold check sits in the top-right corner.
+        .overlay(alignment: .topTrailing) { selectionBadge(isSelected) }
         .matchedTransitionSource(id: id, in: zoomNamespace)
         .contentShape(Rectangle())
         .onTapGesture { onOpen() }
