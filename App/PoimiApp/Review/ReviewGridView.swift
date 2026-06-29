@@ -24,6 +24,9 @@ struct ReviewGridView: View {
     /// The candidates split into adaptive day-groups (oldest → newest). Concatenating the groups'
     /// `assetIDs` reproduces the full chronological slice — the sections are headered runs of it.
     let groups: [DayGroup]
+    /// Metadata line under the title (e.g. "1,847 photos · Jan 2025 – Dec 2025"), shown in the
+    /// scroll-top header above the tally.
+    let subtitle: String
     /// Open a cell full-screen (the parent pushes the viewer, #36).
     let openAsset: (String) -> Void
     /// Namespace pairing the cell with the `.zoom` viewer destination (#36).
@@ -44,7 +47,7 @@ struct ReviewGridView: View {
     @State private var windowGeneration = 0
     @State private var windowUpdating = false
 
-    private let spacing: CGFloat = 2
+    private let spacing: CGFloat = 0   // gapless photo wall (Paper design / styleguide §3)
     private let minColumns = 2
     private let windowRowMargin = 2
     /// Oversized vs the on-screen point size on purpose (Retina + density headroom).
@@ -76,6 +79,10 @@ struct ReviewGridView: View {
             }
             .scrollTargetLayout()
         }
+        // Pinned under the (large) nav title so the tally stays glanceable while scrolling the grid —
+        // it's the orientation device; losing it mid-scroll would defeat the point. A `.bar` backing
+        // gives scroll-edge legibility over bright thumbnails (ReviewHeader owns it).
+        .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(subtitle: subtitle) }
         .scrollPosition(id: $scrollAnchorID, anchor: .center)
         // Reduce Motion → no density-change animation (the cross-fade is the system default).
         .animation(reduceMotion ? nil : .snappy, value: columnCount)

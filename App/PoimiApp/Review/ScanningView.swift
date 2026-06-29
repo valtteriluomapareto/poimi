@@ -31,7 +31,7 @@ struct ScanningView: View {
     var body: some View {
         content
             .navigationTitle(project.title)
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .toolbar { reviewChrome }
             // Keyed by project id so re-targeting (e.g. iPad detail column) reloads for the new
             // album rather than showing the previous one's candidates.
@@ -45,18 +45,13 @@ struct ScanningView: View {
             }
     }
 
-    /// The tally + Export/Clear chrome, shown only once the grid is up (`.ready`). The standard nav
-    /// bar carries it with free Liquid Glass + scroll-edge legibility (styleguide). The items read
-    /// the `SelectionStore` internally, so hosting them here doesn't make this view re-render on a
-    /// selection toggle.
-    ///
-    /// The tally takes the `.principal` slot, which yields the centered album title on the review
-    /// screen — intentional: the tally is the must-read orientation device here, and the album name
-    /// is one tap back (the overview, #37, titles itself with the album). Documented in ui-spec.md.
+    /// The Export/Clear chrome, shown only once the grid is up (`.ready`). The large nav title keeps
+    /// the album name (Paper design); the tally lives in the scroll-top `ReviewHeader`, not the nav.
+    /// `ReviewToolbarActions` reads the `SelectionStore` internally, so hosting it here doesn't make
+    /// this view re-render on a selection toggle.
     @ToolbarContentBuilder
     private var reviewChrome: some ToolbarContent {
         if isReady {
-            ToolbarItem(placement: .principal) { ReviewTally() }
             ToolbarItem(placement: .topBarTrailing) {
                 ReviewToolbarActions(onExport: { coordinator.openExport(project.id) })
             }
@@ -66,6 +61,25 @@ struct ScanningView: View {
     private var isReady: Bool {
         if case .ready = store?.phase { return true }
         return false
+    }
+
+    /// The header metadata line: total candidates + the album's period, e.g.
+    /// "1,847 photos · Jan 2025 – Dec 2025".
+    private func headerSubtitle(_ groups: [DayGroup]) -> String {
+        let total = groups.reduce(0) { $0 + $1.count }
+        return "\(total.formatted()) photos · \(periodLabel)"
+    }
+
+    private var periodLabel: String {
+        let style = Date.FormatStyle.dateTime.month(.abbreviated).year()
+        let start = project.rangeStart.formatted(style)
+        // rangeEnd is exclusive: step back a calendar DAY to land on the last included day's month
+        // (a 2025 album ends at 2026-01-01 → "Dec 2025", not "Jan 2026"). A real calendar day (not a
+        // fixed interval) so it's correct across DST; a 1s step would land at 23:59:59 UTC, which a
+        // positive-offset timezone rolls back into January.
+        let lastDay = Calendar.current.date(byAdding: .day, value: -1, to: project.rangeEnd) ?? project.rangeEnd
+        let end = lastDay.formatted(style)
+        return start == end ? start : "\(start) – \(end)"
     }
 
     @ViewBuilder
@@ -98,6 +112,7 @@ struct ScanningView: View {
             // scroll-anchor write, so it must not do the O(n log n) grouping work itself.
             ReviewGridView(
                 groups: groups,
+                subtitle: headerSubtitle(groups),
                 openAsset: { coordinator.openPhoto($0) },
                 zoomNamespace: zoomNamespace,
                 scrollAnchorID: $scrollAnchorID)

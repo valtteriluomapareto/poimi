@@ -68,15 +68,16 @@ struct ReviewGridCell: View {
         }
         .overlay {
             if isSelected {
-                // The third selection layer (styleguide §6): a narrow green inset hairline. Purely
-                // structural — the gold check stays the affordance — but it reads the selected cell
-                // at a glance in a near-gapless grid. `strokeBorder` insets so the line isn't clipped.
-                // Non-interactive so its hit-testable ring can't absorb an edge tap (→ open/select).
-                Rectangle().strokeBorder(Color.green, lineWidth: 1.5)
+                // The third selection layer (styleguide §6 / Paper design): a green inset border.
+                // Structural — the gold check stays the affordance — but in a gapless grid the border
+                // is what reads a selected cell at a glance. `strokeBorder` insets so it isn't clipped;
+                // non-interactive so its ring can't absorb an edge tap (→ open/select).
+                Rectangle().strokeBorder(Color.green, lineWidth: 2)
                     .allowsHitTesting(false)
             }
         }
-        .overlay(alignment: .bottomTrailing) { selectionBadge(isSelected) }
+        // Badge top-trailing (Paper design): the gold check sits in the top-right corner.
+        .overlay(alignment: .topTrailing) { selectionBadge(isSelected) }
         .matchedTransitionSource(id: id, in: zoomNamespace)
         .contentShape(Rectangle())
         .onTapGesture { onOpen() }
@@ -113,18 +114,25 @@ struct ReviewGridCell: View {
     /// centered in a ≥44pt corner tap target that toggles selection (the parent's open-tap handles
     /// the rest of the cell, D9).
     private func selectionBadge(_ isSelected: Bool) -> some View {
-        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-            .font(.title3)
-            .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.9))
-            .background(
-                Circle()
-                    .fill(isSelected ? Color.accentColor : Color.black.opacity(0.25))
-                    .padding(2)
-            )
-            .shadow(radius: 1)
-            .frame(width: 44, height: 44)
-            .contentShape(Rectangle())
-            .onTapGesture { selection.toggle(id) }
+        Group {
+            if isSelected {
+                // Solid gold circle with a DARK check — styleguide §1: foreground on the gold accent
+                // is dark (#1C1C1E), not white (the gold is light in both modes). Palette: the check
+                // glyph (primary) = on-accent dark, the circle (secondary) = accent gold.
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color.onAccent, Color.accentColor)
+            } else {
+                // Empty ring; a subtle dark backing keeps it visible over bright thumbnails.
+                Image(systemName: "circle")
+                    .foregroundStyle(.white)
+                    .background(Circle().fill(Color.black.opacity(0.25)).padding(2))
+            }
+        }
+        .font(.title3)
+        .shadow(radius: 1)
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+        .onTapGesture { selection.toggle(id) }
     }
 }
 
