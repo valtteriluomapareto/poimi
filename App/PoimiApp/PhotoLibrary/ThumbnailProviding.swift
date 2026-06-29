@@ -30,6 +30,12 @@ protocol ThumbnailProviding: Sendable {
     /// `nonisolated` so the cell can call it from the main actor without an `await` hop.
     nonisolated func cachedThumbnail(for assetID: String, targetSize: CGSize) -> UIImage?
 
+    /// A high-quality, full-resolution image (downscaled to `targetSize`) for the full-screen viewer
+    /// (#36). Unlike `thumbnail` it requests the high-quality format, so the viewer shows the cached
+    /// thumbnail first and swaps to this when it arrives (progressive). Cancellation-aware; `nil` if
+    /// the asset can't be resolved or the request is cancelled.
+    func fullImage(for assetID: String, targetSize: CGSize) async -> UIImage?
+
     /// Set the prefetch/caching window to `assetIDs` (the grid's visible range ± a row margin), so
     /// PhotoKit pre-decodes just ahead of the scroll. Diffs against the previous window internally.
     func updateCachingWindow(to assetIDs: [String]) async

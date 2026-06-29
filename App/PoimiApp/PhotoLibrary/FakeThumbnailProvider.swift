@@ -16,6 +16,12 @@ actor FakeThumbnailProvider: ThumbnailProviding {
         Self.tile(for: assetID, size: targetSize)
     }
 
+    // Same deterministic tile at the viewer's (larger) size — same stable hue, so the full-screen
+    // image matches the cell the user tapped.
+    func fullImage(for assetID: String, targetSize: CGSize) async -> UIImage? {
+        Self.tile(for: assetID, size: targetSize)
+    }
+
     // No synchronous cache for the fake: its tiles are recomputed deterministically and cheaply, so
     // it always takes the (instant) async path. Returning nil keeps it stateless (Finding 2 affects
     // only the real PhotoKit round-trip, which the fake doesn't make).

@@ -85,6 +85,42 @@ actor SystemThumbnailProvider: ThumbnailProviding {
         }
     }
 
+    func fullImage(for assetID: String, targetSize: CGSize) async -> UIImage? {
+        guard let asset = resolve(assetID) else { return nil }
+        let manager = cachingManager
+        let requestIDBox = LockedBox<PHImageRequestID>()
+
+        return await withTaskCancellationHandler {
+            if Task.isCancelled { return nil }
+            return await withCheckedContinuation { (continuation: CheckedContinuation<UIImage?, Never>) in
+                let options = PHImageRequestOptions()
+                options.deliveryMode = .highQualityFormat   // one sharp result (the viewer shows the
+                options.resizeMode = .exact                 // cached thumbnail until it lands)
+                options.isNetworkAccessAllowed = true        // iCloud-optimized originals
+                options.isSynchronous = false
+
+                let resumed = LockedFlag()
+                let id = manager.requestImage(
+                    for: asset, targetSize: targetSize,
+                    contentMode: .aspectFit, options: options
+                ) { image, info in
+                    let isDegraded = (info?[PHImageResultIsDegradedKey] as? NSNumber)?.boolValue ?? false
+                    let isTerminal = !isDegraded
+                        || info?[PHImageErrorKey] != nil
+                        || (info?[PHImageCancelledKey] as? NSNumber)?.boolValue == true
+                    // Resume on the high-quality image or any terminal callback, so an offline/iCloud
+                    // failure can't leave the awaiting task parked forever.
+                    guard image != nil || isTerminal else { return }
+                    if resumed.setOnce() { continuation.resume(returning: image) }
+                }
+                requestIDBox.value = id
+                if Task.isCancelled { manager.cancelImageRequest(id) }
+            }
+        } onCancel: {
+            if let id = requestIDBox.value { manager.cancelImageRequest(id) }
+        }
+    }
+
     func updateCachingWindow(to assetIDs: [String]) {
         // Built per call as a local: PHImageRequestOptions is mutable / non-Sendable, so it can't be
         // a shared static in an actor. Cheap to construct.
