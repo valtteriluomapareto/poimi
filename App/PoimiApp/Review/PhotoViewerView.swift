@@ -22,21 +22,24 @@ struct PhotoViewerView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @State private var currentID: String
+    /// The pages to swipe + an id→index map, resolved once on appear so the position lookup is O(1)
+    /// per render rather than scanning the candidate list. Fall back to just this photo if the
+    /// shared list isn't populated (viewer opened without a live review context).
+    @State private var pages: [String] = []
+    @State private var indexByID: [String: Int] = [:]
 
     init(startID: String) {
         self.startID = startID
         _currentID = State(initialValue: startID)
     }
 
-    /// Page through the shared review list; fall back to just this photo if it isn't in it (e.g. the
-    /// viewer opened without a live review context).
-    private var ids: [String] {
-        coordinator.reviewOrderedIDs.contains(startID) ? coordinator.reviewOrderedIDs : [startID]
-    }
-
     var body: some View {
+        // NB (scale, #36 part 2): `TabView(.page)` materializes the whole page tree, so this flat
+        // ForEach over the full candidate list is a known scale risk on a thousands-photo album.
+        // Part 2 promotes the spike's UIScrollView / UIPageViewController pager (which windows pages
+        // and also carries pinch-zoom). Page images themselves stay bounded — each `.task` is lazy.
         TabView(selection: $currentID) {
-            ForEach(ids, id: \.self) { id in
+            ForEach(pages, id: \.self) { id in
                 PhotoPage(id: id).tag(id)
             }
         }
@@ -49,27 +52,49 @@ struct PhotoViewerView: View {
         // Keep the shared anchor on the photo in view, so the grid restores here and the `.zoom`
         // return pairs with this cell.
         .onChange(of: currentID) { coordinator.lastViewedID = currentID }
+        .onAppear {
+            let list = coordinator.reviewOrderedIDs.contains(startID) ? coordinator.reviewOrderedIDs : [startID]
+            pages = list
+            indexByID = Dictionary(list.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        }
+        // Swipe down to dismiss (the Photos convention). Simultaneous so it doesn't steal the
+        // TabView's horizontal page-swipe; it acts only on a clearly downward-dominant drag.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 24).onEnded { value in
+                if value.translation.height > 120,
+                   value.translation.height > abs(value.translation.width) * 1.5 {
+                    coordinator.pop()
+                }
+            }
+        )
     }
 
     // MARK: Chrome (floats on scrims over the photo — Liquid Glass behavior)
 
     private var topBar: some View {
         let isSelected = selection.contains(currentID)
-        let position = (ids.firstIndex(of: currentID) ?? 0) + 1
+        let position = (indexByID[currentID] ?? 0) + 1
         return HStack(spacing: 12) {
             Button { coordinator.pop() } label: {
-                Image(systemName: "chevron.left").font(.title3.weight(.semibold))
+                Image(systemName: "chevron.left")
+                    .font(.title3.weight(.semibold))
+                    .frame(minWidth: 44, minHeight: 44)   // ≥44pt hit target (HIG)
             }
+            .contentShape(Rectangle())
             .accessibilityLabel("Back to the grid")
             Spacer()
-            Text("\(position) of \(ids.count)")
+            Text("\(position) of \(pages.count)")
                 .font(.subheadline.weight(.medium))
                 .monospacedDigit()
             Spacer()
-            Button { selection.toggle(currentID) } label: { selectionGlyph(isSelected) }
-                .accessibilityLabel(isSelected ? "Selected" : "Not selected")
-                .accessibilityHint("Selects this photo")
-                .sensoryFeedback(.selection, trigger: isSelected)
+            Button { selection.toggle(currentID) } label: {
+                selectionGlyph(isSelected).frame(minWidth: 44, minHeight: 44)
+            }
+            .contentShape(Rectangle())
+            .accessibilityLabel("Select photo")
+            .accessibilityValue(isSelected ? "selected" : "")
+            .accessibilityAddTraits(.isToggle)
+            .sensoryFeedback(.selection, trigger: isSelected)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
@@ -139,6 +164,8 @@ private struct PhotoPage: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Photo")   // the per-photo date label rides #36 part 2
             .task(id: id) {
                 // Paint the already-decoded thumbnail first (no black flash), then the full-res.
                 if image == nil,
