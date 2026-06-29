@@ -15,9 +15,10 @@
 import SwiftUI
 import Curation
 
-/// The scroll-top header beneath the large nav title: a metadata subtitle + the full-width tally.
-/// Scrolls away as you dive into photos (the large title collapses to the inline album name + Export
-/// stays in the bar); the day-group section headers pin.
+/// The header pinned beneath the large nav title: a metadata subtitle + the full-width tally. Pinned
+/// (not scrolled) so the tally stays glanceable while you scroll the grid — it's the orientation
+/// device. A `.bar` backing gives the scroll-edge legibility over bright thumbnails for free and
+/// adapts under Reduce Transparency.
 struct ReviewHeader: View {
     /// e.g. "1,847 photos · Jan 2025 – Dec 2025" — static metadata from the project, passed in.
     let subtitle: String
@@ -29,9 +30,12 @@ struct ReviewHeader: View {
                 .foregroundStyle(.secondary)
             ReviewTally()
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
+        // 20pt leading aligns the strip under the large nav title's inset (cells are full-bleed at 0).
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
     }
 }
 

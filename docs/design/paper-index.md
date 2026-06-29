@@ -10,8 +10,10 @@ implementing it.
 - **URL:** https://app.paper.design/file/01KVSFMATJM712ABNQ5D0YDR1T/1-0
 - **File ID:** `01KVSFMATJM712ABNQ5D0YDR1T`
 - **How to open a screen:** the **node ID** below is the canonical handle — `open_file` (Paper MCP)
-  accepts a node ID or URL; or browse the file at the URL above. Always `get_guide` →
-  `get_basic_info` first in a fresh session (the Paper MCP can disconnect; reconnect via `/mcp`).
+  accepts a node ID or URL; or browse the file at the URL above. A per-artboard deep link follows the
+  page-URL pattern — `https://app.paper.design/file/01KVSFMATJM712ABNQ5D0YDR1T/<nodeID>` (e.g.
+  `…/129-0` for the Review grid). Always `get_guide` → `get_basic_info` first in a fresh session (the
+  Paper MCP can disconnect; reconnect via `/mcp`).
 - ✓ = artboard whose content I inspected directly; others are summarized from the artboard name +
   the project's screen inventory and should be eyeballed before building.
 

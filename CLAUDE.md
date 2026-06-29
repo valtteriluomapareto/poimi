@@ -134,6 +134,12 @@ build + integration tests on an iOS 26 sim. Defined in `.github/workflows/ci.yml
 - **SwiftUI-first** (design-language): use standard components everywhere they fit; build custom
   only where the product needs it (grid cell, zoom detail, tally chrome). No UIKit unless forced;
   Observation, not Combine.
+- **Designs live in Paper; build screens from them.** The screen designs are in the Paper file
+  (`paper-desktop` MCP) — see [docs/design/paper-index.md](docs/design/paper-index.md) for the map
+  (node IDs + content + issue/build status). Read a screen's design before implementing it. **Keep
+  the index current whenever you work with Paper:** add/rename/remove artboards, refresh content +
+  build-status, and re-stamp the "Index created/updated" date on a meaningful change. Build the
+  design's layout/interaction but keep **"album"** copy (the designs' "yearbook" wording is stale).
 - **No heavy work in a `body`** (smoothness, ui-smoothness-review Finding 1): never run a sort,
   decode, grouping, or large allocation inside a SwiftUI `body` or a computed property read from
   `body` — a `body` re-evaluates on incidental state writes (e.g. a `.scrollPosition` anchor).
@@ -170,5 +176,7 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
   spacing, materials, motion).
 - **[docs/design/ui-spec.md](docs/design/ui-spec.md)** — per-screen UI spec (the review screen so
   far): anatomy, grid/header/selection/chrome, a11y, deferrals (spike-then-document, D27).
+- **[docs/design/paper-index.md](docs/design/paper-index.md)** — index of the Paper design file: all
+  27 artboards (node IDs, content, issue + build status). Keep current when working with Paper.
 - **[docs/plans/spike-findings.md](docs/plans/spike-findings.md)** — the closed Phase-0 evidence
   (picking interaction, grouping, scale) that seeded Phase 1/2.

@@ -63,27 +63,26 @@ struct ReviewGridView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                // The metadata + tally header scrolls away under the large nav title; the day-group
-                // section headers below pin.
-                ReviewHeader(subtitle: subtitle)
-                LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
-                    ForEach(groups) { group in
-                        // Format the day title once per group (not per cell), and hand it to both the
-                        // header and the cells' VoiceOver labels for orientation.
-                        let title = DayGroupHeader.title(for: group)
-                        Section {
-                            ForEach(group.assetIDs, id: \.self) { id in
-                                cell(for: id, dayLabel: title).id(id)
-                            }
-                        } header: {
-                            ReviewSectionHeader(group: group, title: title)
+            LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
+                ForEach(groups) { group in
+                    // Format the day title once per group (not per cell), and hand it to both the
+                    // header and the cells' VoiceOver labels for orientation.
+                    let title = DayGroupHeader.title(for: group)
+                    Section {
+                        ForEach(group.assetIDs, id: \.self) { id in
+                            cell(for: id, dayLabel: title).id(id)
                         }
+                    } header: {
+                        ReviewSectionHeader(group: group, title: title)
                     }
                 }
-                .scrollTargetLayout()
             }
+            .scrollTargetLayout()
         }
+        // Pinned under the (large) nav title so the tally stays glanceable while scrolling the grid —
+        // it's the orientation device; losing it mid-scroll would defeat the point. A `.bar` backing
+        // gives scroll-edge legibility over bright thumbnails (ReviewHeader owns it).
+        .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(subtitle: subtitle) }
         .scrollPosition(id: $scrollAnchorID, anchor: .center)
         // Reduce Motion → no density-change animation (the cross-fade is the system default).
         .animation(reduceMotion ? nil : .snappy, value: columnCount)

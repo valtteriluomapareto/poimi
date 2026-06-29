@@ -58,7 +58,8 @@ not new decisions.
 - **Badge-select** (resolved): tap the **cell** opens it full-screen; tap the **≥44pt badge**
   (**top-right**, Paper design) selects. Light **selection haptic** on each flip.
 - **Three-layer redundant encoding** so state survives color-blindness + bright thumbnails:
-  1. a **gold filled checkmark** badge (top-right) — *the affordance*,
+  1. a **gold circle with a dark check** (top-right) — *the affordance* (foreground on the gold
+     accent is dark, not white, styleguide §1),
   2. a **dim** overlay,
   3. a **~2px green inset border** — structural only (the one sanctioned green in grid chrome).
 - Source of truth is the in-memory `Set` in `SelectionStore` (D15); cells + headers observe it
@@ -75,8 +76,9 @@ At the **top**, not a floating bottom bar (which would fight the scroll/select g
   (gold; green at target; fill floored to a visible sliver once there's any pick). The orientation
   device. **AX reflow**: at accessibility text sizes the bar drops, numerals only (the dense
   bar-on-chrome is the likeliest Dynamic-Type contrast failure).
-- The header scrolls away as you dive in; the large title collapses to the inline album name and
-  **Export** stays in the nav bar. Day-group section headers pin.
+- The header is **pinned** under the title (`.safeAreaInset(.top)`, `.bar` backing) so the tally
+  stays glanceable while scrolling — it's the orientation device. The large title collapses to the
+  inline album name; **Export** stays in the nav bar; day-group section headers pin too.
 - **Export** (nav top-right): the primary action; disabled until ≥1 photo is picked. Routes to #39.
 - **Clear** (nav top-right, destructive): shown only when there is a selection. *(Per the Paper
   design, bulk Clear/Select-all ultimately move to the separate Select mode; kept here transitionally

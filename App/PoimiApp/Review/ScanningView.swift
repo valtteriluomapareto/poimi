@@ -73,10 +73,11 @@ struct ScanningView: View {
     private var periodLabel: String {
         let style = Date.FormatStyle.dateTime.month(.abbreviated).year()
         let start = project.rangeStart.formatted(style)
-        // rangeEnd is exclusive: step back a full DAY to land on the last included day's month (a
-        // 2025 album ends at 2026-01-01 → "Dec 2025"). A day, not a second — a 1s step lands at
-        // 23:59:59 UTC, which a positive-offset local timezone rolls back into January.
-        let lastDay = project.rangeEnd.addingTimeInterval(-86_400)
+        // rangeEnd is exclusive: step back a calendar DAY to land on the last included day's month
+        // (a 2025 album ends at 2026-01-01 → "Dec 2025", not "Jan 2026"). A real calendar day (not a
+        // fixed interval) so it's correct across DST; a 1s step would land at 23:59:59 UTC, which a
+        // positive-offset timezone rolls back into January.
+        let lastDay = Calendar.current.date(byAdding: .day, value: -1, to: project.rangeEnd) ?? project.rangeEnd
         let end = lastDay.formatted(style)
         return start == end ? start : "\(start) – \(end)"
     }
