@@ -9,8 +9,9 @@
 //  `SelectionStore`), so "open to decide" is itself a fast multi-select path, not a dead end.
 //
 //  Each page is progressive: it paints the cached thumbnail immediately, then swaps to the
-//  full-resolution image when it lands. Pinch-zoom/pan, the filmstrip scrubber, and the per-photo
-//  day label are #36 part 2.
+//  full-resolution image when it lands. Pinch-zoom / pan / double-tap-to-point land here (part 2a);
+//  the filmstrip scrubber, the per-photo day label, and a zoom-aware swipe-down-to-dismiss are #36
+//  part 2b (a free-floating swipe-down would fight panning a zoomed photo, so the chevron exits).
 //
 
 import SwiftUI
@@ -44,42 +45,39 @@ struct PhotoViewerView: View {
         // pages (so a thousands-photo album stays light — the TabView(.page) scale risk is gone),
         // `.scrollTargetBehavior(.paging)` snaps page-to-page, and `.scrollPosition` two-way-binds
         // the current page id. Each page is a `ZoomableScrollView` (pinch-zoom / pan / double-tap).
-        ScrollView(.horizontal) {
-            LazyHStack(spacing: 0) {
-                ForEach(pages, id: \.self) { id in
-                    PhotoPage(id: id)
-                        .containerRelativeFrame(.horizontal)
-                        .id(id)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 0) {
+                    ForEach(pages, id: \.self) { id in
+                        PhotoPage(id: id)
+                            .containerRelativeFrame(.horizontal)
+                            .id(id)
+                    }
                 }
+                .scrollTargetLayout()
             }
-            .scrollTargetLayout()
-        }
-        .scrollTargetBehavior(.paging)
-        .scrollPosition(id: pageBinding)
-        .scrollIndicators(.hidden)
-        .background(Color.black)
-        .ignoresSafeArea()
-        .overlay(alignment: .top) { topBar }
-        .overlay(alignment: .bottom) { bottomTally }
-        .toolbar(.hidden, for: .navigationBar)
-        // Keep the shared anchor on the photo in view, so the grid restores here and the `.zoom`
-        // return pairs with this cell.
-        .onChange(of: currentID) { coordinator.lastViewedID = currentID }
-        .onAppear {
-            let list = coordinator.reviewOrderedIDs.contains(startID) ? coordinator.reviewOrderedIDs : [startID]
-            pages = list
-            indexByID = Dictionary(list.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
-        }
-        // Swipe down to dismiss (the Photos convention). Simultaneous so it doesn't steal the
-        // TabView's horizontal page-swipe; it acts only on a clearly downward-dominant drag.
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 24).onEnded { value in
-                if value.translation.height > 120,
-                   value.translation.height > abs(value.translation.width) * 1.5 {
-                    coordinator.pop()
-                }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: pageBinding)
+            .scrollIndicators(.hidden)
+            .background(Color.black)
+            .ignoresSafeArea()
+            .overlay(alignment: .top) { topBar }
+            .overlay(alignment: .bottom) { bottomTally }
+            .toolbar(.hidden, for: .navigationBar)
+            // Keep the shared anchor on the photo in view, so the grid restores here and the `.zoom`
+            // return pairs with this cell.
+            .onChange(of: currentID) { coordinator.lastViewedID = currentID }
+            .onAppear {
+                let list = coordinator.reviewOrderedIDs.contains(startID) ? coordinator.reviewOrderedIDs : [startID]
+                pages = list
+                indexByID = Dictionary(list.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+                // `.scrollPosition` to a *mid-list* id in a `LazyHStack` doesn't reliably land on the
+                // first layout (the target page isn't built yet), so scroll to it explicitly once the
+                // pages exist — otherwise the viewer opens on page 0 while the chrome reads the tapped
+                // photo's position.
+                DispatchQueue.main.async { proxy.scrollTo(startID, anchor: .center) }
             }
-        )
+        }
     }
 
     // MARK: Chrome (floats on scrims over the photo — Liquid Glass behavior)

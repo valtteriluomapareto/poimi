@@ -37,6 +37,7 @@ final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
         didSet {
             imageView.image = image
             setZoomScale(1, animated: false)
+            isScrollEnabled = false   // back to base zoom → let the pager swipe again
             setNeedsLayout()
         }
     }
@@ -51,6 +52,10 @@ final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
         showsHorizontalScrollIndicator = false
         backgroundColor = .clear
         contentInsetAdjustmentBehavior = .never
+        // Pan only once zoomed: at base zoom the inner scroll is disabled, so the enclosing paging
+        // scroll reliably gets the horizontal swipe between photos (a nested non-scrollable inner
+        // doesn't always defer to the outer otherwise).
+        isScrollEnabled = false
         imageView.contentMode = .scaleAspectFit
         imageView.isUserInteractionEnabled = true
         addSubview(imageView)
@@ -86,10 +91,17 @@ final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
     func scrollViewDidZoom(_ scrollView: UIScrollView) { centerImage() }
 
+    /// Once a pinch settles, the inner pan is enabled only if we ended up zoomed in — so a pinch back
+    /// to fit hands horizontal swipes back to the pager.
+    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+        isScrollEnabled = scale > minimumZoomScale
+    }
+
     @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
         let animated = !UIAccessibility.isReduceMotionEnabled   // Reduce Motion → snap, don't animate
         if zoomScale > minimumZoomScale {
             setZoomScale(minimumZoomScale, animated: animated)
+            isScrollEnabled = false   // back to fit → pager swipes
         } else {
             // Zoom toward the tapped point.
             let point = gesture.location(in: imageView)
@@ -98,6 +110,7 @@ final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
             let height = bounds.height / target
             zoom(to: CGRect(x: point.x - width / 2, y: point.y - height / 2, width: width, height: height),
                  animated: animated)
+            isScrollEnabled = true   // zoomed → inner pan within the photo
         }
     }
 }
