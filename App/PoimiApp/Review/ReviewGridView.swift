@@ -201,10 +201,13 @@ private struct ReviewSectionHeader: View {
             if allSelected { selection.deselect(group.assetIDs) } else { selection.select(group.assetIDs) }
         } label: {
             Text(allSelected ? "Deselect all" : "Select all")
-                .font(.footnote.weight(.medium))
+                .font(.footnote.weight(.semibold))
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.tint)
+        // Primary label color, NOT the gold accent: gold is for graphical marks — small gold text on
+        // the light `.bar` header fails the contrast caveat (styleguide §1). Position + weight signal
+        // that it's tappable.
+        .foregroundStyle(.primary)
         .accessibilityLabel(allSelected ? "Deselect all in \(title)" : "Select all in \(title)")
     }
 }

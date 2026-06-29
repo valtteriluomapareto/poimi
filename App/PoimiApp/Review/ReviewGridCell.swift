@@ -63,6 +63,7 @@ struct ReviewGridCell: View {
         .overlay {
             if isSelected {
                 Color.black.opacity(0.28)   // dim — redundant with the badge (D9)
+                    .allowsHitTesting(false)
             }
         }
         .overlay {
@@ -70,7 +71,9 @@ struct ReviewGridCell: View {
                 // The third selection layer (styleguide §6): a narrow green inset hairline. Purely
                 // structural — the gold check stays the affordance — but it reads the selected cell
                 // at a glance in a near-gapless grid. `strokeBorder` insets so the line isn't clipped.
+                // Non-interactive so its hit-testable ring can't absorb an edge tap (→ open/select).
                 Rectangle().strokeBorder(Color.green, lineWidth: 1.5)
+                    .allowsHitTesting(false)
             }
         }
         .overlay(alignment: .bottomTrailing) { selectionBadge(isSelected) }

@@ -67,8 +67,11 @@ Lives in the **standard top nav bar** (Liquid Glass + the scroll-edge effect for
 hand-rolled floating glass, no bottom bar in the thumb/scroll zone):
 
 - **Tally** (principal): `picked / target` in `monospacedDigit` + a slim progress bar (gold; green
-  at target). The orientation device. **AX reflow**: at accessibility text sizes it drops to
-  numerals only (the dense bar-on-chrome is the likeliest Dynamic-Type contrast failure).
+  at target; the fill is floored to a visible sliver once there's any pick). The orientation device.
+  **AX reflow**: at accessibility text sizes it drops to numerals only (the dense bar-on-chrome is
+  the likeliest Dynamic-Type contrast failure). **The tally takes the principal slot, yielding the
+  centered album title on this screen** — intentional: the tally is the must-read chrome, and the
+  album name is one tap back (the overview titles itself with it).
 - **Export** (top-right): the primary action; disabled until ≥1 photo is picked. Routes to the
   export flow (#39).
 - **Clear** (top-right, destructive): shown only when there is a selection.

@@ -52,7 +52,9 @@ struct ReviewTally: View {
             .overlay(alignment: .leading) {
                 Capsule()
                     .fill(progress.isComplete ? Color.green : Color.accentColor)
-                    .frame(width: 56 * progress.fraction)
+                    // Floor the fill to a visible sliver once there's any pick, so the first pick
+                    // moves the bar (3/100 would otherwise be ~1.7pt — reads as empty). Zero at zero.
+                    .frame(width: progress.picked > 0 ? max(3, 56 * progress.fraction) : 0)
             }
             .accessibilityHidden(true)
     }

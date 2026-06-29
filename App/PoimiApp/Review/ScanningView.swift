@@ -49,6 +49,10 @@ struct ScanningView: View {
     /// bar carries it with free Liquid Glass + scroll-edge legibility (styleguide). The items read
     /// the `SelectionStore` internally, so hosting them here doesn't make this view re-render on a
     /// selection toggle.
+    ///
+    /// The tally takes the `.principal` slot, which yields the centered album title on the review
+    /// screen — intentional: the tally is the must-read orientation device here, and the album name
+    /// is one tap back (the overview, #37, titles itself with the album). Documented in ui-spec.md.
     @ToolbarContentBuilder
     private var reviewChrome: some ToolbarContent {
         if isReady {
