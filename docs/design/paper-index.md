@@ -4,9 +4,10 @@ A map of the Poimi design file in **Paper** — every artboard, what it shows, a
 issues + the current build. This is the index for agents/humans to find a screen's design before
 implementing it.
 
-- **Index created:** 2026-06-29 (snapshot of the file at that date — re-verify against Paper before
-  relying on a specific detail; the file evolves).
-- **File:** "Poimi" · page "Page 1" (`1-0`) · **27 artboards**
+- **Index created:** 2026-06-29 · **updated:** 2026-06-29 (added the v1.1 idea-backlog cluster).
+  A snapshot — re-verify against Paper before relying on a specific detail; the file evolves.
+- **File:** "Poimi" · page "Page 1" (`1-0`) · **33 artboards** (27 product screens + a 6-artboard
+  v1.1 idea-backlog exploration cluster, below)
 - **URL:** https://app.paper.design/file/01KVSFMATJM712ABNQ5D0YDR1T/1-0
 - **File ID:** `01KVSFMATJM712ABNQ5D0YDR1T`
 - **How to open a screen:** the **node ID** below is the canonical handle — `open_file` (Paper MCP)
@@ -83,6 +84,21 @@ building #37. (Names describe each treatment; inspect before choosing.)
 | Album settings | `2F1-0` | Per-album settings (958 tall). | #41 · not built |
 | State · scanning (long fetch) | `2HZ-0` | The long-scan indicator state. | #34 · built (`ScanningView` scanning phase) |
 | State · empty range | `2JE-0` | Empty/no-photos-in-range state. | #40 · built minimally (`.empty` in `ScanningView`) |
+
+## Idea backlog (v1.1) — Paper explorations (390×844)
+
+Visual explorations of the §15 idea backlog ([../plans/preprocessing-and-caching.md](../plans/preprocessing-and-caching.md) §15) — **v1.1, location-subsystem, additive over the date day-groups; not v1, not committed.** Built 2026-06-29 in a cluster below the product screens.
+
+| Exploration | Node | Status | Notes |
+|---|---|---|---|
+| ① Trip tints · A solid + rail | `2KD-0` | exploration, **no winner** | Header-anchored solid tint + left rail over the date grid. |
+| ① Trip tints · B gradient | `2MO-0` | exploration | Same, but the tint fades (gradient band + headers). |
+| ① Trip tints · C liquid glass | `2OZ-0` | exploration | Frosted pill floating over the photos. |
+| ① Trip tints · D vertical gradient | `2RA-0` | exploration | Ambient top-to-bottom gradient that morphs between clusters; no strips. (Tints the photos — the §15 trade-off.) |
+| ② Verbal trip summary | `2TE-0` | **liked** | Deterministic caption ("Mostly at home, with stops in …") under the album identity — template voice, not LLM. |
+| ③ Collapse done runs | `2VR-0` | **direction agreed** | Done clusters collapse to a dimmed ✓ row + per-cluster location summary + thumb peek + "Show all"; the open cluster keeps its full grid. **Mark-as-done** (the done-circle, matching `26X-0`) is the collapse trigger. Re-scoped per §15: only *done* runs collapse, never the unreviewed. |
+
+Caveat: ① found no good-enough treatment (tinting a gapless photo grid recolors the photos being judged); ② and ③ are the keepers. None are v1 commitments — they inform the v1.1 location work.
 
 ## Reconciliation status
 
