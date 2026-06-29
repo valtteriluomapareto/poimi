@@ -93,6 +93,25 @@ struct CandidateStoreTests {
             + (2...11).map { "fake/busy/\($0)" })
     }
 
+    @Test("the per-photo day map is published for the viewer's label (#36)")
+    func dayMapPublished() async throws {
+        let project = makeProject(excludeScreenshots: true, excludedAlbumIDs: ["album/whatsapp"])
+        let store = CandidateStore(library: FakePhotoLibrary(), calendar: utcCalendar())
+        await store.load(project)
+
+        // Each candidate maps to its *own* calendar day (unlike a merged group, which spans days):
+        // the quiet run resolves per day, and every busy photo lands on July 5.
+        #expect(store.dayByID["fake/quiet/16"] == .day(year: 2025, month: 3, day: 16))
+        #expect(store.dayByID["fake/quiet/18"] == .day(year: 2025, month: 3, day: 18))
+        #expect(store.dayByID["fake/busy/2"] == .day(year: 2025, month: 7, day: 5))
+        // The map covers exactly the ready candidates — every one has a day, and filtered-out
+        // assets (the screenshot, the WhatsApp members) are absent.
+        let ids = readyIDs(store, "day map")
+        #expect(ids.allSatisfy { store.dayByID[$0] != nil })
+        #expect(store.dayByID.count == ids.count)
+        #expect(store.dayByID["fake/shot"] == nil)
+    }
+
     @Test("the store groups by its injected calendar (timezone shifts day bucketing)")
     func respectsInjectedCalendar() async throws {
         // Two assets straddling UTC midnight: 23:00Z on 2025-06-25 and 01:00Z on 2025-06-26.

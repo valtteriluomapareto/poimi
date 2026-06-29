@@ -272,6 +272,18 @@ struct DebugPhotoViewerHostView: View {
         + (2...11).map { "fake/busy/\($0)" }
     private static let startID = "fake/busy/5"   // a selected one, mid-list
 
+    /// The per-photo day map the viewer labels with (#36) — mirrors the `yearMixed` shape: three
+    /// consecutive quiet days then one busy day, so the screenshot shows a real day label.
+    private static let dayByID: [String: DayKey] = {
+        var map: [String: DayKey] = [
+            "fake/quiet/16": .day(year: 2025, month: 7, day: 16),
+            "fake/quiet/17": .day(year: 2025, month: 7, day: 17),
+            "fake/quiet/18": .day(year: 2025, month: 7, day: 18)
+        ]
+        for n in 2...11 { map["fake/busy/\(n)"] = .day(year: 2025, month: 7, day: 20) }
+        return map
+    }()
+
     var body: some View {
         Group {
             if let coordinator, let selectionStore {
@@ -298,6 +310,7 @@ struct DebugPhotoViewerHostView: View {
 
             let coord = AppCoordinator(library: library)
             coord.reviewOrderedIDs = Self.ids
+            coord.reviewDayByID = Self.dayByID
             coord.lastViewedID = Self.startID
             projectStore = projects
             selectionStore = selection

@@ -43,6 +43,7 @@
 		00000000C00000000000B0C8 /* ReviewChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C8 /* ReviewChrome.swift */; };
 		00000000C00000000000B0C9 /* PhotoViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C9 /* PhotoViewerView.swift */; };
 		00000000C00000000000B0CA /* ZoomableScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0CA /* ZoomableScrollView.swift */; };
+		00000000C00000000000B0CB /* Filmstrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0CB /* Filmstrip.swift */; };
 		000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000043 /* PhotoLibraryConformanceTests.swift */; };
 		000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */; };
 		00000000400000000000004E /* ProjectStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000004D /* ProjectStoreTests.swift */; };
@@ -114,6 +115,7 @@
 		00000000C00000000000A0C8 /* ReviewChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewChrome.swift; sourceTree = "<group>"; };
 		00000000C00000000000A0C9 /* PhotoViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoViewerView.swift; sourceTree = "<group>"; };
 		00000000C00000000000A0CA /* ZoomableScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomableScrollView.swift; sourceTree = "<group>"; };
+		00000000C00000000000A0CB /* Filmstrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Filmstrip.swift; sourceTree = "<group>"; };
 		000000004000000000000042 /* PoimiAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PoimiAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000004000000000000043 /* PhotoLibraryConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryConformanceTests.swift; sourceTree = "<group>"; };
 		000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrarySeedTests.swift; sourceTree = "<group>"; };
@@ -287,6 +289,7 @@
 				00000000C00000000000A0C8 /* ReviewChrome.swift */,
 				00000000C00000000000A0C9 /* PhotoViewerView.swift */,
 				00000000C00000000000A0CA /* ZoomableScrollView.swift */,
+				00000000C00000000000A0CB /* Filmstrip.swift */,
 			);
 			path = Review;
 			sourceTree = "<group>";
@@ -442,6 +445,7 @@
 				00000000C00000000000B0C8 /* ReviewChrome.swift in Sources */,
 				00000000C00000000000B0C9 /* PhotoViewerView.swift in Sources */,
 				00000000C00000000000B0CA /* ZoomableScrollView.swift in Sources */,
+				00000000C00000000000B0CB /* Filmstrip.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

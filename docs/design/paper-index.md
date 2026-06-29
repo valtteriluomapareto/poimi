@@ -4,7 +4,7 @@ A map of the Poimi design file in **Paper** — every artboard, what it shows, a
 issues + the current build. This is the index for agents/humans to find a screen's design before
 implementing it.
 
-- **Index created:** 2026-06-29 · **updated:** 2026-06-29 (added the v1.1 idea-backlog cluster).
+- **Index created:** 2026-06-29 · **updated:** 2026-06-29 (Photo viewer `WZ-0` built — #36 parts 1–2b).
   A snapshot — re-verify against Paper before relying on a specific detail; the file evolves.
 - **File:** "Poimi" · page "Page 1" (`1-0`) · **33 artboards** (27 product screens + a 6-artboard
   v1.1 idea-backlog exploration cluster, below)
@@ -48,7 +48,7 @@ full 999. The repo's Asset Catalog + styleguide.md mirror these.
 | Review grid — notes ✓ | `Y4-0` | 460×422 | Annotated spec for the above (two-tier triage; day-groups; selection encoding; top chrome; select-mode is a sibling). | — |
 | **Select mode** | `14C-0` | 390×844 | Active multi-select entered from the grid: a quick-select badge on **every** cell, **drag-to-multi-select**, per-day + whole-range Select-all, top toolbar (count + progress + Deselect-all). Same selection encoding. | #35 (deferred drag-select) · **not built** |
 | Select mode — notes ✓ | `11J-0` | 460×443 | Annotated spec for Select mode. | — |
-| **Photo viewer · swipe + select** | `WZ-0` | 390×844 | Full-bleed photo; top bar = back · "Sat 5 Jul / 12 of 53" · gold check toggle; bottom = live "148/200 picked" + a **filmstrip scrubber** (current enlarged, picked thumbs checked). Reached via the `.zoom` transition; returns to the same cell. | #36 · **not built (next)** |
+| **Photo viewer · swipe + select** | `WZ-0` | 390×844 | Full-bleed photo; top bar = back · "Sat 5 Jul / 12 of 53" · gold check toggle; bottom = live "148/200 picked" + a **filmstrip scrubber** (current enlarged, picked thumbs checked). Reached via the `.zoom` transition; returns to the same cell. | #36 · **built** (pt1 nav+zoom-in, pt2a pinch/pan/double-tap, pt2b day label + filmstrip; live drag-scrub + zoom-aware swipe-down deferred) |
 | Photo viewer — notes ✓ | `YU-0` | 460×422 | Annotated spec for the viewer (open-to-decide is itself a multi-select path). | — |
 
 ## Overview explorations — choose one (#37, 390×844)
@@ -103,6 +103,7 @@ Caveat: ① found no good-enough treatment (tinting a gapless photo grid recolor
 ## Reconciliation status
 
 The **Review grid** (`129-0`) was reconciled in #35-part-4 (this branch): large title + subtitle +
-full-width tally header, gold check top-right, gapless cells, green border. **Select mode**
-(`14C-0`, with drag-to-multi-select) and the **Photo viewer** (`WZ-0`, #36) are the next builds with
-designs ready. The **Overview** direction (#37) is an open design choice among the six explorations.
+full-width tally header, gold check top-right, gapless cells, green border. The **Photo viewer**
+(`WZ-0`, #36) is built (nav + `.zoom`, pinch/pan/double-tap, day label + filmstrip scrubber). **Select
+mode** (`14C-0`, with drag-to-multi-select) is the next build with a design ready. The **Overview**
+direction (#37) is an open design choice among the six explorations.

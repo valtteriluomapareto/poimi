@@ -44,9 +44,11 @@ struct ScanningView: View {
                 let resolved = store ?? CandidateStore(library: library)
                 store = resolved
                 if resolved.phase == .idle { await resolved.load(project) }
-                // Publish the candidate list so the photo viewer can page through it (#36).
+                // Publish the candidate list + per-photo day map so the photo viewer can page
+                // through it and label each photo's day (#36).
                 if case .ready(let groups) = resolved.phase {
                     coordinator.reviewOrderedIDs = groups.flatMap(\.assetIDs)
+                    coordinator.reviewDayByID = resolved.dayByID
                 }
             }
     }

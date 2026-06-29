@@ -47,6 +47,11 @@ final class CandidateStore {
     }
 
     private(set) var phase: Phase = .idle
+    /// Each candidate's calendar day, keyed by asset id — the per-photo day the viewer labels with
+    /// (#36). `DayGroup` only records the days a group *spans* (a merged quiet run spans several),
+    /// so the per-asset day is derived here from `captureDate` under the same `calendar`. Empty
+    /// until a pass settles to `.ready`.
+    private(set) var dayByID: [String: DayKey] = [:]
     private let library: any PhotoLibraryProviding
     /// The calendar the day-grouping buckets by. Injected (default `.current`) so the timezone
     /// policy is explicit and a test can pin it — and so a locale/timezone change is a property of
@@ -63,6 +68,7 @@ final class CandidateStore {
     /// `.scanning`.
     func load(_ project: CurationProject) async {
         phase = .scanning
+        dayByID = [:]   // clear any prior pass's map (e.g. a retry after .failed)
 
         // An empty / inverted range has no candidates — and `DateInterval(start:end:)` traps when
         // end < start, so guard before constructing it. Setup disables Create on an inverted range
@@ -83,6 +89,11 @@ final class CandidateStore {
             // Group once, here — the grid renders the groups directly and never recomputes them
             // (Finding 1). Concatenating the groups' `assetIDs` reproduces the chronological slice.
             let groups = DayGrouping.groups(for: candidates, calendar: calendar)
+            // Per-photo day map for the viewer's label (#36), built from the same candidates +
+            // calendar so it agrees with the grouping (a busy day and the viewer read the same day).
+            dayByID = Dictionary(
+                candidates.map { ($0.id, DayKey(date: $0.captureDate, calendar: calendar)) },
+                uniquingKeysWith: { first, _ in first })
             phase = groups.isEmpty ? .empty : .ready(groups)
         } catch {
             Log.photoLibrary.error("CandidateStore.load failed: \(String(describing: error), privacy: .public)")

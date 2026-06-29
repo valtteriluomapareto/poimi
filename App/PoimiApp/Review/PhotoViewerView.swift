@@ -62,7 +62,7 @@ struct PhotoViewerView: View {
             .background(Color.black)
             .ignoresSafeArea()
             .overlay(alignment: .top) { topBar }
-            .overlay(alignment: .bottom) { bottomTally }
+            .overlay(alignment: .bottom) { bottomBar }
             .toolbar(.hidden, for: .navigationBar)
             // Keep the shared anchor on the photo in view, so the grid restores here and the `.zoom`
             // return pairs with this cell.
@@ -94,9 +94,7 @@ struct PhotoViewerView: View {
             .contentShape(Rectangle())
             .accessibilityLabel("Back to the grid")
             Spacer()
-            Text("\(position) of \(pages.count)")
-                .font(.subheadline.weight(.medium))
-                .monospacedDigit()
+            positionLabel(position)
             Spacer()
             Button { selection.toggle(currentID) } label: {
                 selectionGlyph(isSelected).frame(minWidth: 44, minHeight: 44)
@@ -114,6 +112,26 @@ struct PhotoViewerView: View {
         .background(scrim(.top))
     }
 
+    /// The centered title: the current photo's calendar day over its position in the album, e.g.
+    /// "Sat, Jul 5" / "12 of 53" (design WZ-0). With no review context the day map is empty, so it
+    /// degrades to just the position.
+    private func positionLabel(_ position: Int) -> some View {
+        let day = coordinator.reviewDayByID[currentID].map { DayGroupHeader.dayLabel(for: $0) } ?? ""
+        let count = pages.count
+        return VStack(spacing: 1) {
+            if !day.isEmpty {
+                Text(day).font(.subheadline.weight(.semibold))
+            }
+            Text("\(position) of \(count)")
+                .font(day.isEmpty ? .subheadline.weight(.medium) : .caption)
+                .foregroundStyle(day.isEmpty ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.75)))
+                .monospacedDigit()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(day.isEmpty ? "Photo \(position) of \(count)"
+                                        : "\(day), photo \(position) of \(count)")
+    }
+
     @ViewBuilder
     private func selectionGlyph(_ isSelected: Bool) -> some View {
         if isSelected {
@@ -129,17 +147,26 @@ struct PhotoViewerView: View {
         }
     }
 
-    private var bottomTally: some View {
+    /// The live tally over the filmstrip scrubber (design WZ-0). The strip both orients (where am I,
+    /// what's picked) and jumps; the tally keeps the running count visible while you scrub.
+    private var bottomBar: some View {
+        VStack(spacing: 12) {
+            tally
+            Filmstrip(pages: pages, currentID: $currentID)
+        }
+        .padding(.top, 18)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity)
+        .background(scrim(.bottom))
+    }
+
+    private var tally: some View {
         let progress = selection.progress
         return (Text("\(progress.picked)").fontWeight(.semibold)
             + Text(" / \(progress.target) picked").foregroundStyle(.white.opacity(0.7)))
             .font(.subheadline)
             .monospacedDigit()
             .foregroundStyle(.white)
-            .padding(.bottom, 16)
-            .padding(.top, 20)
-            .frame(maxWidth: .infinity)
-            .background(scrim(.bottom))
             .accessibilityLabel("\(progress.picked) of \(progress.target) picked")
     }
 

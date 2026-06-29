@@ -157,4 +157,12 @@ struct AppCoordinatorTests {
         coord.reviewOrderedIDs = ["a", "b", "c"]   // published by the review screen on .ready
         #expect(coord.reviewOrderedIDs == ["a", "b", "c"])
     }
+
+    @Test("the per-photo day map is shared so the viewer can label each photo's day (#36)")
+    func reviewDayMapShared() {
+        let coord = coordinator(.authorized)
+        #expect(coord.reviewDayByID.isEmpty)
+        coord.reviewDayByID = ["a": .day(year: 2025, month: 7, day: 5)]   // published with the list
+        #expect(coord.reviewDayByID["a"] == .day(year: 2025, month: 7, day: 5))
+    }
 }

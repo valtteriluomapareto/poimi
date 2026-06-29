@@ -53,4 +53,20 @@ struct DayGroupHeaderTests {
         let header = title([AssetRef(id: "u", captureDate: nil)])
         #expect(header == "Undated")
     }
+
+    @Test("dayLabel formats one calendar day (weekday, month, day) for the viewer (#36)")
+    func dayLabelSingleDay() {
+        // The viewer labels each photo with its *own* day — same style as a single-day section.
+        let label = DayGroupHeader.dayLabel(for: .day(year: 2025, month: 7, day: 5),
+                                            calendar: utcCalendar(), locale: Self.enUS)
+        #expect(label.contains("Jul"))
+        #expect(label.contains("5"))
+        #expect(label.contains("Sat"))   // 2025-07-05 is a Saturday
+    }
+
+    @Test("dayLabel reads \"Undated\" for the undated key (#36)")
+    func dayLabelUndated() {
+        #expect(DayGroupHeader.dayLabel(for: .undated, calendar: utcCalendar(), locale: Self.enUS)
+            == "Undated")
+    }
 }
