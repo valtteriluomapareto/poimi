@@ -49,7 +49,7 @@ struct PhotoViewerView: View {
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 0) {
                     ForEach(pages, id: \.self) { id in
-                        PhotoPage(id: id)
+                        PhotoPage(id: id, accessibilityLabel: photoAXLabel(for: id))
                             .containerRelativeFrame(.horizontal)
                             .id(id)
                     }
@@ -74,8 +74,9 @@ struct PhotoViewerView: View {
                 // `.scrollPosition` to a *mid-list* id in a `LazyHStack` doesn't reliably land on the
                 // first layout (the target page isn't built yet), so scroll to it explicitly once the
                 // pages exist — otherwise the viewer opens on page 0 while the chrome reads the tapped
-                // photo's position.
-                DispatchQueue.main.async { proxy.scrollTo(startID, anchor: .center) }
+                // photo's position. `currentID` (== `startID` on first appear) so a re-appear lands on
+                // the last-viewed page, not the opener.
+                DispatchQueue.main.async { proxy.scrollTo(currentID, anchor: .center) }
             }
         }
     }
@@ -116,20 +117,37 @@ struct PhotoViewerView: View {
     /// "Sat, Jul 5" / "12 of 53" (design WZ-0). With no review context the day map is empty, so it
     /// degrades to just the position.
     private func positionLabel(_ position: Int) -> some View {
-        let day = coordinator.reviewDayByID[currentID].map { DayGroupHeader.dayLabel(for: $0) } ?? ""
+        let day = dayLabel(for: currentID)
         let count = pages.count
         return VStack(spacing: 1) {
             if !day.isEmpty {
-                Text(day).font(.subheadline.weight(.semibold))
+                Text(day)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)   // a long day at AX type sizes shrinks, not crowds the buttons
             }
             Text("\(position) of \(count)")
                 .font(day.isEmpty ? .subheadline.weight(.medium) : .caption)
-                .foregroundStyle(day.isEmpty ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.75)))
+                .foregroundStyle(.white.opacity(day.isEmpty ? 1 : 0.75))
                 .monospacedDigit()
         }
+        .shadow(color: .black.opacity(0.4), radius: 2)   // legible over a bright photo, like the glyphs
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(day.isEmpty ? "Photo \(position) of \(count)"
                                         : "\(day), photo \(position) of \(count)")
+    }
+
+    /// The current photo's day, "" when there's no review context (the day map is empty).
+    private func dayLabel(for id: String) -> String {
+        coordinator.reviewDayByID[id].map { DayGroupHeader.dayLabel(for: $0) } ?? ""
+    }
+
+    /// The per-page VoiceOver label: "Photo, Sat, Jul 5, 7 of 13" (day dropped if unavailable).
+    private func photoAXLabel(for id: String) -> String {
+        let position = (indexByID[id] ?? 0) + 1
+        let day = dayLabel(for: id)
+        return day.isEmpty ? "Photo, \(position) of \(pages.count)"
+                           : "Photo, \(day), \(position) of \(pages.count)"
     }
 
     @ViewBuilder
@@ -183,6 +201,9 @@ struct PhotoViewerView: View {
 /// One full-screen page: progressive thumbnail → full-resolution, fit to the screen on black.
 private struct PhotoPage: View {
     let id: String
+    /// The day + position, prebuilt by the viewer (which holds the day map + index) so the photo
+    /// element carries real context for VoiceOver — "Photo, Sat, Jul 5, 7 of 13" — not just "Photo".
+    let accessibilityLabel: String
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.displayScale) private var displayScale
     @State private var image: UIImage?
@@ -201,7 +222,7 @@ private struct PhotoPage: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Photo")   // the per-photo date label rides #36 part 2b
+            .accessibilityLabel(accessibilityLabel)
             .task(id: id) {
                 // Paint the already-decoded thumbnail first (no black flash), then the full-res.
                 if image == nil,

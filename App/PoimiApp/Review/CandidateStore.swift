@@ -91,6 +91,9 @@ final class CandidateStore {
             let groups = DayGrouping.groups(for: candidates, calendar: calendar)
             // Per-photo day map for the viewer's label (#36), built from the same candidates +
             // calendar so it agrees with the grouping (a busy day and the viewer read the same day).
+            // In practice every value is a real day: a range fetch never returns a nil-capture-date
+            // asset, so `.undated` doesn't arise here — the viewer's `.undated` label is defensive
+            // (and `DayKey(date: nil,…)`'s mapping is pinned in CurationTests regardless).
             dayByID = Dictionary(
                 candidates.map { ($0.id, DayKey(date: $0.captureDate, calendar: calendar)) },
                 uniquingKeysWith: { first, _ in first })
