@@ -18,6 +18,9 @@ import UIKit
 struct ReviewGridCell: View {
     /// The asset's `localIdentifier` — the only identity the view tier carries.
     let id: String
+    /// The cell's day-group title, for the VoiceOver label — so a wall of cells reads "Photo, Sat
+    /// Jul 5" rather than an undifferentiated "Photo, Photo, Photo".
+    let dayLabel: String
     /// Inject the thumbnail load; the closure owns PhotoKit access (the seam), so the cell stays
     /// free of any live `PHAsset`.
     let load: (String) async -> UIImage?
@@ -60,6 +63,17 @@ struct ReviewGridCell: View {
         .overlay {
             if isSelected {
                 Color.black.opacity(0.28)   // dim — redundant with the badge (D9)
+                    .allowsHitTesting(false)
+            }
+        }
+        .overlay {
+            if isSelected {
+                // The third selection layer (styleguide §6): a narrow green inset hairline. Purely
+                // structural — the gold check stays the affordance — but it reads the selected cell
+                // at a glance in a near-gapless grid. `strokeBorder` insets so the line isn't clipped.
+                // Non-interactive so its hit-testable ring can't absorb an edge tap (→ open/select).
+                Rectangle().strokeBorder(Color.green, lineWidth: 1.5)
+                    .allowsHitTesting(false)
             }
         }
         .overlay(alignment: .bottomTrailing) { selectionBadge(isSelected) }
@@ -68,7 +82,7 @@ struct ReviewGridCell: View {
         .onTapGesture { onOpen() }
         // VoiceOver: double-tap opens; a named rotor action selects (the badge is a touch target).
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Photo")
+        .accessibilityLabel("Photo, \(dayLabel)")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { onOpen() }
         .accessibilityAction(named: isSelected ? "Deselect" : "Select") { selection.toggle(id) }

@@ -161,4 +161,56 @@ struct SelectionStoreTests {
         #expect(selection.toggle("x") == false)
         #expect(selection.selected.isEmpty)
     }
+
+    @Test("bulk select / deselect add and remove whole id sets (select-all-section, #35)")
+    func bulkSelectDeselect() throws {
+        let (projects, selection) = try makeStores()
+        let a = project(projects, "A")
+        selection.activate(a)
+
+        selection.select(["s/1", "s/2", "s/3"])
+        #expect(selection.selected == ["s/1", "s/2", "s/3"])
+        selection.select(["s/3", "s/4"])               // overlap is a no-op union, not a duplicate
+        #expect(selection.selected == ["s/1", "s/2", "s/3", "s/4"])
+
+        selection.deselect(["s/2", "s/4", "s/nope"])    // unknown ids are harmless
+        #expect(selection.selected == ["s/1", "s/3"])
+
+        selection.deactivate()
+    }
+
+    @Test("clear empties the whole selection")
+    func clearAll() throws {
+        let (projects, selection) = try makeStores()
+        let a = project(projects, "A")
+        selection.activate(a)
+        selection.select(["x", "y", "z"])
+
+        selection.clear()
+        #expect(selection.selected.isEmpty)
+        #expect(selection.progress.picked == 0)
+
+        selection.deactivate()
+    }
+
+    @Test("bulk ops are inert when no project is active")
+    func bulkInertWhenInactive() throws {
+        let (_, selection) = try makeStores()
+        selection.select(["x", "y"])
+        selection.clear()
+        #expect(selection.selected.isEmpty)
+    }
+
+    @Test("a bulk select persists on flush — one debounced write for the batch (D15)")
+    func bulkPersists() async throws {
+        let (projects, selection) = try makeStores(debounce: .milliseconds(10))
+        let a = project(projects, "A")
+        selection.activate(a)
+
+        selection.select(["a/1", "a/2", "a/3"])
+        await selection.awaitPendingFlush()
+        #expect(SelectionSnapshot.decode(a.selectionSnapshot).assetIDs == ["a/1", "a/2", "a/3"])
+
+        selection.deactivate()
+    }
 }

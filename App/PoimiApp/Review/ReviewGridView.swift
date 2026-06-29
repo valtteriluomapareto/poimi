@@ -33,6 +33,7 @@ struct ReviewGridView: View {
 
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var columnCount = 3
     @State private var pinchBaseline = 3
@@ -61,19 +62,23 @@ struct ReviewGridView: View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
                 ForEach(groups) { group in
+                    // Format the day title once per group (not per cell), and hand it to both the
+                    // header and the cells' VoiceOver labels for orientation.
+                    let title = DayGroupHeader.title(for: group)
                     Section {
                         ForEach(group.assetIDs, id: \.self) { id in
-                            cell(for: id).id(id)
+                            cell(for: id, dayLabel: title).id(id)
                         }
                     } header: {
-                        ReviewSectionHeader(group: group)
+                        ReviewSectionHeader(group: group, title: title)
                     }
                 }
             }
             .scrollTargetLayout()
         }
         .scrollPosition(id: $scrollAnchorID, anchor: .center)
-        .animation(.snappy, value: columnCount)
+        // Reduce Motion → no density-change animation (the cross-fade is the system default).
+        .animation(reduceMotion ? nil : .snappy, value: columnCount)
         .gesture(
             MagnifyGesture()
                 .onChanged { value in
@@ -107,9 +112,10 @@ struct ReviewGridView: View {
 
     // MARK: Cell
 
-    private func cell(for id: String) -> some View {
+    private func cell(for id: String, dayLabel: String) -> some View {
         ReviewGridCell(
             id: id,
+            dayLabel: dayLabel,
             load: load,
             cachedImage: cachedImage,
             onOpen: { scrollAnchorID = id; openAsset(id) },
@@ -155,13 +161,16 @@ struct ReviewGridView: View {
 }
 
 /// One pinned day-group header. Observes the `SelectionStore` itself (for the live per-section
-/// selected/total VoiceOver summary) so the parent grid body stays independent of `selected`.
+/// selected/total summary + the select-all toggle) so the parent grid body stays independent of
+/// `selected`. The title is formatted once by the grid and passed in.
 private struct ReviewSectionHeader: View {
     let group: DayGroup
+    let title: String
     @Environment(SelectionStore.self) private var selection
 
     var body: some View {
-        let title = DayGroupHeader.title(for: group)
+        let selectedCount = selection.selected.intersection(group.assetIDs).count
+        let allSelected = selectedCount == group.count
         HStack(spacing: 6) {
             // A neutral busy-day marker — gold is reserved for the interactive accent (selection /
             // tally / export), so a non-interactive day indicator shouldn't borrow it.
@@ -174,20 +183,32 @@ private struct ReviewSectionHeader: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
+            sectionToggle(allSelected: allSelected)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.bar)
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(title). \(group.count) photos, \(selectedCount) selected.")
         .accessibilityAddTraits(.isHeader)
-        .accessibilityLabel(summary(title))
     }
 
-    private func summary(_ title: String) -> String {
-        // Intersection is O(min(|selected|, group)) — cheaper than scanning every id in a busy day.
-        let selectedCount = selection.selected.intersection(group.assetIDs).count
-        return "\(title). \(group.count) photos, \(selectedCount) selected."
+    /// Select-all / deselect-all for this day-group (the contextual bulk action, #35). Bulk ops
+    /// schedule a single debounced flush.
+    private func sectionToggle(allSelected: Bool) -> some View {
+        Button {
+            if allSelected { selection.deselect(group.assetIDs) } else { selection.select(group.assetIDs) }
+        } label: {
+            Text(allSelected ? "Deselect all" : "Select all")
+                .font(.footnote.weight(.semibold))
+        }
+        .buttonStyle(.plain)
+        // Primary label color, NOT the gold accent: gold is for graphical marks — small gold text on
+        // the light `.bar` header fails the contrast caveat (styleguide §1). Position + weight signal
+        // that it's tappable.
+        .foregroundStyle(.primary)
+        .accessibilityLabel(allSelected ? "Deselect all in \(title)" : "Select all in \(title)")
     }
 }
 

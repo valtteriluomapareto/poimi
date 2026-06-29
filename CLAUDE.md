@@ -168,5 +168,7 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
   north star (Liquid Glass, SwiftUI-first, adaptive iPad).
 - **[docs/design/styleguide.md](docs/design/styleguide.md)** — concrete tokens (color, type,
   spacing, materials, motion).
+- **[docs/design/ui-spec.md](docs/design/ui-spec.md)** — per-screen UI spec (the review screen so
+  far): anatomy, grid/header/selection/chrome, a11y, deferrals (spike-then-document, D27).
 - **[docs/plans/spike-findings.md](docs/plans/spike-findings.md)** — the closed Phase-0 evidence
   (picking interaction, grouping, scale) that seeded Phase 1/2.

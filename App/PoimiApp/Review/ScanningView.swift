@@ -32,6 +32,7 @@ struct ScanningView: View {
         content
             .navigationTitle(project.title)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar { reviewChrome }
             // Keyed by project id so re-targeting (e.g. iPad detail column) reloads for the new
             // album rather than showing the previous one's candidates.
             .task(id: project.id) {
@@ -42,6 +43,29 @@ struct ScanningView: View {
                 store = resolved
                 if resolved.phase == .idle { await resolved.load(project) }
             }
+    }
+
+    /// The tally + Export/Clear chrome, shown only once the grid is up (`.ready`). The standard nav
+    /// bar carries it with free Liquid Glass + scroll-edge legibility (styleguide). The items read
+    /// the `SelectionStore` internally, so hosting them here doesn't make this view re-render on a
+    /// selection toggle.
+    ///
+    /// The tally takes the `.principal` slot, which yields the centered album title on the review
+    /// screen — intentional: the tally is the must-read orientation device here, and the album name
+    /// is one tap back (the overview, #37, titles itself with the album). Documented in ui-spec.md.
+    @ToolbarContentBuilder
+    private var reviewChrome: some ToolbarContent {
+        if isReady {
+            ToolbarItem(placement: .principal) { ReviewTally() }
+            ToolbarItem(placement: .topBarTrailing) {
+                ReviewToolbarActions(onExport: { coordinator.openExport(project.id) })
+            }
+        }
+    }
+
+    private var isReady: Bool {
+        if case .ready = store?.phase { return true }
+        return false
     }
 
     @ViewBuilder
