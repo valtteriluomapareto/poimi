@@ -18,18 +18,20 @@ import Curation
 
 struct ScanningView: View {
     let project: CurationProject
+    /// Owned by `AppRootView` so grid cells and the photo viewer share one `.zoom` namespace (#36).
+    let zoomNamespace: Namespace.ID
     @Environment(\.photoLibrary) private var library
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @State private var store: CandidateStore?
     /// Gates the scanning indicator behind a grace delay (below) so instant scans never flash it.
     @State private var indicatorVisible = false
-    /// Pairs grid cells with the `.zoom` viewer (#36); the anchor restores scroll on return.
-    @Namespace private var zoomNamespace
-    @State private var scrollAnchorID: String?
 
     var body: some View {
-        content
+        // The grid's scroll anchor is the coordinator's `lastViewedID` (shared with the viewer), so
+        // returning from a photo restores the scroll to it (D22).
+        @Bindable var coordinator = coordinator
+        return content(scrollAnchor: $coordinator.lastViewedID)
             .navigationTitle(project.title)
             .navigationBarTitleDisplayMode(.large)
             .toolbar { reviewChrome }
@@ -42,6 +44,10 @@ struct ScanningView: View {
                 let resolved = store ?? CandidateStore(library: library)
                 store = resolved
                 if resolved.phase == .idle { await resolved.load(project) }
+                // Publish the candidate list so the photo viewer can page through it (#36).
+                if case .ready(let groups) = resolved.phase {
+                    coordinator.reviewOrderedIDs = groups.flatMap(\.assetIDs)
+                }
             }
     }
 
@@ -83,7 +89,7 @@ struct ScanningView: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func content(scrollAnchor: Binding<String?>) -> some View {
         switch store?.phase ?? .idle {
         case .idle, .scanning:
             ZStack {
@@ -115,7 +121,7 @@ struct ScanningView: View {
                 subtitle: headerSubtitle(groups),
                 openAsset: { coordinator.openPhoto($0) },
                 zoomNamespace: zoomNamespace,
-                scrollAnchorID: $scrollAnchorID)
+                scrollAnchorID: scrollAnchor)
 
         case .empty:
             ContentUnavailableView {

@@ -55,6 +55,18 @@ struct ThumbnailProviderTests {
         await provider.resetCache()
     }
 
+    @Test("fake: fullImage renders at the requested size and matches the thumbnail's tile")
+    func fakeFullImage() async throws {
+        let provider = FakeThumbnailProvider()
+        let big = CGSize(width: 256, height: 256)
+        let full = try #require(await provider.fullImage(for: "fake/busy/0", targetSize: big))
+        #expect(full.size == big)
+        // Same id, same size → identical deterministic tile as a thumbnail at that size (the viewer
+        // shows the same colour as the cell the user tapped).
+        let asThumb = await provider.thumbnail(for: "fake/busy/0", targetSize: big)
+        #expect(full.pngData() == asThumb?.pngData())
+    }
+
     @Test("system: an unresolvable id yields nil; the cache lifecycle doesn't trap (unauthorized)")
     func systemUnresolvable() async {
         // On a fresh/unauthorized simulator, no id resolves to a PHAsset — so a request returns nil
@@ -64,6 +76,8 @@ struct ThumbnailProviderTests {
         await provider.updateCachingWindow(to: ["bogus/1", "bogus/2"])
         let image = await provider.thumbnail(for: "bogus/nonexistent", targetSize: Self.size)
         #expect(image == nil)
+        let full = await provider.fullImage(for: "bogus/nonexistent", targetSize: Self.size)
+        #expect(full == nil)
         await provider.resetCache()
     }
 }
