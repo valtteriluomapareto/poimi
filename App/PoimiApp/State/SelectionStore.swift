@@ -88,6 +88,30 @@ final class SelectionStore {
         return nowSelected
     }
 
+    /// Bulk-select `ids` (e.g. "select all in this day-group"). One debounced flush for the whole
+    /// batch — never a write per id (D15).
+    func select(_ ids: some Sequence<String>) {
+        guard activeProject != nil else { return }
+        let before = selected.count
+        selected.formUnion(ids)
+        if selected.count != before { scheduleFlush() }
+    }
+
+    /// Bulk-deselect `ids` (the inverse of `select`, e.g. "deselect this day-group").
+    func deselect(_ ids: some Sequence<String>) {
+        guard activeProject != nil else { return }
+        let before = selected.count
+        selected.subtract(ids)
+        if selected.count != before { scheduleFlush() }
+    }
+
+    /// Clear the entire selection ("Clear" / "Deselect all" in the review chrome).
+    func clear() {
+        guard activeProject != nil, !selected.isEmpty else { return }
+        selected.removeAll()
+        scheduleFlush()
+    }
+
     /// Persist the current selection synchronously and cancel any pending debounce. Call on
     /// scenePhase→background and before switching projects (§12).
     func flushNow() {
