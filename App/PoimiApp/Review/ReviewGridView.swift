@@ -50,6 +50,9 @@ struct ReviewGridView: View {
     // visible state, so out-of-order actor calls can't leave a stale window cached (D-review #35).
     @State private var windowGeneration = 0
     @State private var windowUpdating = false
+    /// The last slice actually pushed to the cache, so an unchanged recompute (a scroll that didn't
+    /// cross a cell boundary) skips the actor hop instead of re-sending the same window every frame.
+    @State private var lastAppliedSlice: [String] = []
 
     private let spacing: CGFloat = 0   // gapless photo wall (Paper design / styleguide §3)
     private let minColumns = 2
@@ -83,7 +86,7 @@ struct ReviewGridView: View {
             }
             .scrollTargetLayout()
         }
-        // Pinned under the (large) nav title so the tally stays glanceable while scrolling the grid —
+        // Pinned under the (inline) nav title so the tally stays glanceable while scrolling the grid —
         // it's the orientation device; losing it mid-scroll would defeat the point. A `.bar` backing
         // gives scroll-edge legibility over bright thumbnails (ReviewHeader owns it).
         .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(subtitle: subtitle) }
@@ -107,10 +110,14 @@ struct ReviewGridView: View {
         .onAppear {
             Perf.event("grid.onAppear (dismiss span end)")
             Perf.measure("grid.onAppear restore→\(scrollAnchorID.map { String($0.suffix(8)) } ?? "nil")") {
-                // Restore to the last-viewed photo once (it's usually already on screen — the grid
-                // stays put under the pushed viewer — so this is a no-op scroll in the common case,
-                // and never the two-way write that looped).
-                scrollID = scrollAnchorID
+                // Restore to the last-viewed photo ONLY if it's still on screen — the grid stays put
+                // under the pushed viewer, so that's the common case (a no-op scroll). If the viewer
+                // swiped far away, scrolling the full LazyVGrid to a distant cell would materialise its
+                // whole prefix and hang (the very failure the viewer's windowing fixes); skip it and
+                // leave the grid where the user tapped.
+                if let target = scrollAnchorID, visibleIDs.contains(target) {
+                    scrollID = target
+                }
                 rebuildWindow()
                 scheduleRecomputeWindow()
             }
@@ -121,6 +128,7 @@ struct ReviewGridView: View {
         .onChange(of: groupIdentity) {
             rebuildWindow()
             visibleIDs = []
+            lastAppliedSlice = []   // new album → re-cache from scratch, don't skip on a stale match
             scheduleRecomputeWindow()
         }
         // NB: no cache reset on disappear — pushing the #36 viewer fires onDisappear, and resetting
@@ -173,6 +181,8 @@ struct ReviewGridView: View {
             while applied != windowGeneration {
                 applied = windowGeneration
                 let slice = window.slice(visibleIDs: visibleIDs, columnCount: columnCount, rowMargin: windowRowMargin)
+                guard slice != lastAppliedSlice else { continue }   // unchanged → no redundant actor hop
+                lastAppliedSlice = slice
                 let started = Perf.begin()
                 await thumbnails.updateCachingWindow(to: slice)
                 Perf.endIO("grid.updateCachingWindow n=\(slice.count)", since: started)

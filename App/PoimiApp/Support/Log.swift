@@ -19,6 +19,7 @@
 //  at the call site to stay readable.
 //
 
+import Foundation   // DispatchTime + String(format:) for the Perf timers
 import OSLog
 
 enum Log {

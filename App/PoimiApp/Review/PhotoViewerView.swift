@@ -34,10 +34,13 @@ struct PhotoViewerView: View {
     /// slides as you swipe, so positioning only ever builds a handful of pages.
     @State private var pages: [String] = []
 
-    /// Window shape: a small backward buffer (so opening/​re-centering materializes only a few pages)
-    /// plus a forward run, and a margin that triggers a slide before you swipe off either end.
-    private let windowBack = 8
-    private let windowForward = 60
+    /// Window shape: symmetric buffers so swiping back rebuilds the window as rarely as swiping
+    /// forward (an asymmetric buffer re-slid every few photos one way). Positioning into the window
+    /// is cheap regardless of where `currentID` lands because the window stays SMALL — the prefix
+    /// walk that froze the viewer is a property of a thousands-item stack, not of the local index.
+    /// `rebuildMargin` triggers a slide a few pages before either end.
+    private let windowBack = 34
+    private let windowForward = 34
     private let rebuildMargin = 4
 
     init(startID: String) {
@@ -110,12 +113,11 @@ struct PhotoViewerView: View {
             if pages != [id] { pages = [id] }
             return
         }
-        let lo = max(0, idx - windowBack)
-        let hi = min(allIDs.count, idx + windowForward + 1)
-        let next = Array(allIDs[lo..<hi])
+        let range = viewerWindow(count: allIDs.count, around: idx, back: windowBack, forward: windowForward)
+        let next = Array(allIDs[range])
         if next != pages {
             pages = next   // `.scrollPosition(id:)` keeps `currentID` put across this
-            Perf.event("viewer.window [\(lo)..<\(hi)] n=\(next.count) around \(id.suffix(8))")
+            Perf.event("viewer.window \(range.lowerBound)..<\(range.upperBound) n=\(next.count) @\(id.suffix(8))")
         }
     }
 
@@ -288,4 +290,17 @@ private struct PhotoPage: View {
             }
         }
     }
+}
+
+/// The bounded window of indices to render around `index` in a list of `count` — `back` before and
+/// `forward` after, clamped to `0..<count`. Pulled out of the view (like `clampedColumnCount` /
+/// `PrefetchWindow`) so the freeze-fix invariant is unit-tested without rendering: the slice ALWAYS
+/// contains `index` and never exceeds `back + forward + 1`. A flipped bound here brings back the
+/// mid-list materialisation hang the windowing exists to prevent — hence the guard.
+func viewerWindow(count: Int, around index: Int, back: Int, forward: Int) -> Range<Int> {
+    guard count > 0 else { return 0..<0 }
+    let clamped = min(max(index, 0), count - 1)
+    let lo = max(0, clamped - back)
+    let hi = min(count, clamped + forward + 1)
+    return lo..<hi
 }
