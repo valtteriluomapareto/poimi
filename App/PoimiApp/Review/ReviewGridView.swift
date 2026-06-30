@@ -29,6 +29,9 @@ struct ReviewGridView: View {
     /// The candidates split into adaptive day-groups (oldest → newest). Concatenating the groups'
     /// `assetIDs` reproduces the full chronological slice — the sections are headered runs of it.
     let groups: [DayGroup]
+    /// The album name — shown as the bold identity title in the pinned header (the nav title is
+    /// blanked, so this is the screen's one title).
+    let title: String
     /// Metadata line under the title (e.g. "1,847 photos · Jan 2025 – Dec 2025"), shown in the
     /// scroll-top header above the tally.
     let subtitle: String
@@ -117,7 +120,7 @@ struct ReviewGridView: View {
         // Pinned under the (inline) nav title so the tally stays glanceable while scrolling the grid —
         // it's the orientation device; losing it mid-scroll would defeat the point. A `.bar` backing
         // gives scroll-edge legibility over bright thumbnails (ReviewHeader owns it).
-        .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(subtitle: subtitle) }
+        .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(title: title, subtitle: subtitle) }
         // One-shot position for the #37 drill (lazy-safe; nil target = no positioning = top).
         .scrollPosition(id: $scrollTarget)
         // Reduce Motion → no density-change animation (the cross-fade is the system default).
@@ -368,6 +371,10 @@ private struct ReviewSectionHeader: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Marking a whole day done collapses the run — a bigger state change than a single pick, so
+        // it earns a haptic (success on done, a light tap on undo). Fires only on a real flip, not on
+        // a recycled header's initial render.
+        .sensoryFeedback(trigger: isDone) { _, nowDone in nowDone ? .success : .impact(weight: .light) }
         .accessibilityLabel("Mark \(title) done")
         .accessibilityValue(isDone ? "Done" : "Not done")
         .accessibilityAddTraits(.isToggle)

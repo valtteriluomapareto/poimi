@@ -175,7 +175,7 @@ struct CollapsedSectionPeek: View {
             HStack(spacing: 6) {
                 ForEach(shown, id: \.self) { id in
                     OverviewThumb(id: id, size: thumbSize, cornerRadius: thumbRadius)
-                        .opacity(pickedSet.contains(id) ? 1 : 0.45)   // dim the not-kept
+                        .opacity(pickedSet.contains(id) ? 1 : 0.55)   // dim the not-kept (>0.5 so it never reads as "loading")
                 }
                 if overflow > 0 {
                     RoundedRectangle(cornerRadius: thumbRadius)

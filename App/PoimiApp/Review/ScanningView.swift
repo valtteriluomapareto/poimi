@@ -33,7 +33,10 @@ struct ScanningView: View {
 
     var body: some View {
         content()
-            .navigationTitle(project.title)
+            // Blanked once the grid is up — the pinned ReviewHeader carries the bold album title
+            // there, so a nav title too would be a double title. Other phases (scanning / empty /
+            // failed) keep it as their only label.
+            .navigationTitle(isReady ? "" : project.title)
             // Inline, not large: a collapsing large title fought the pinned `.safeAreaInset` tally
             // header and the section headers in the same top zone (the "glitch between the title and
             // the first group" seen on device) and drove the Liquid Glass nav backdrop into an
@@ -147,6 +150,7 @@ struct ScanningView: View {
             // settled (Finding 1). The grid renders them directly and never recomputes the grouping.
             ReviewGridView(
                 groups: groups,
+                title: project.title,
                 subtitle: headerSubtitle(groups),
                 openAsset: { coordinator.openPhoto($0) },
                 scrollToDay: scrollToDay)
