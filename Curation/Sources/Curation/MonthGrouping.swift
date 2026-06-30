@@ -19,7 +19,7 @@ public struct MonthSummary: Sendable, Identifiable, Equatable, Codable {
     public let year: Int
     /// 1...12.
     public let month: Int
-    /// The month's asset ids, chronological (oldest → newest) — a contiguous slice of the input.
+    /// The month's asset ids, chronological (oldest → newest), id-tie-broken for determinism.
     public let assetIDs: [String]
 
     /// Stable, sortable id: `"2025-07"`.
@@ -40,7 +40,9 @@ public enum MonthGrouping {
     public static func summaries(for assets: [AssetRef], calendar: Calendar = .current) -> [MonthSummary] {
         let dated = assets
             .compactMap { asset in asset.captureDate.map { (asset.id, $0) } }
-            .sorted { $0.1 < $1.1 }   // oldest → newest; same month is then contiguous
+            // Oldest → newest, id-tie-broken so equal timestamps order deterministically (and match
+            // the grid). Same month is then contiguous.
+            .sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 < $1.0 }
 
         var result: [MonthSummary] = []
         var currentYear = 0

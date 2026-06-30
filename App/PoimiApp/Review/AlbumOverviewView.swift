@@ -114,16 +114,19 @@ struct AlbumOverviewView: View {
     }
 
     private func monthRow(_ month: MonthSummary, dayByID: [String: DayKey]) -> some View {
-        let picked = selection.selected.intersection(month.assetIDs).count
+        let name = MonthLabel.name(year: month.year, month: month.month)
+        let picked = month.assetIDs.reduce(into: 0) { if selection.selected.contains($1) { $0 += 1 } }
         return Button {
             // Drill into the review grid scrolled to this month's first day-group.
             coordinator.openReview(project.id, day: month.assetIDs.first.flatMap { dayByID[$0] })
         } label: {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(MonthLabel.name(year: month.year, month: month.month))
+                    Text(name)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)   // a long month name at AX type sizes shrinks, not clips
                     Spacer(minLength: 12)
                     Text("\(picked) picked")
                         .font(.subheadline.weight(.semibold))
@@ -142,8 +145,7 @@ struct AlbumOverviewView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(MonthLabel.name(year: month.year, month: month.month)), "
-            + "\(picked) of \(month.count) picked")
+        .accessibilityLabel("\(name), \(picked) of \(month.count) picked")
         .accessibilityHint("Opens this month in review")
         .accessibilityAddTraits(.isButton)
     }

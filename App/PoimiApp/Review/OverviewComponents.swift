@@ -14,6 +14,12 @@ struct CoverageHistogram: View {
     let summaries: [MonthSummary]
 
     private let maxBarHeight: CGFloat = 56
+    /// Cap the bar width so a sparse album (2–3 months) reads as a small chart, not giant slabs.
+    private let maxBarWidth: CGFloat = 30
+
+    /// One bar — a calendar month and its photo count. `id` is "yyyy-MM" so it's stable across a
+    /// year boundary (Jan 2025 ≠ Jan 2026).
+    private struct Bar: Identifiable { let id: String; let month: Int; let count: Int }
 
     var body: some View {
         if summaries.count > 1 {   // a single month has nothing to distribute
@@ -28,15 +34,35 @@ struct CoverageHistogram: View {
         }
     }
 
+    /// A CONTINUOUS month axis from the first to the last month with photos — months with none in
+    /// between render as 0-height slots, so the chart reads as a real timeline rather than a collapsed
+    /// list that hides the gaps.
+    private var monthBars: [Bar] {
+        guard let first = summaries.first, let last = summaries.last else { return [] }
+        let countByID = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0.count) })
+        var bars: [Bar] = []
+        var year = first.year
+        var month = first.month
+        while year < last.year || (year == last.year && month <= last.month) {
+            let key = String(format: "%04d-%02d", year, month)
+            bars.append(Bar(id: key, month: month, count: countByID[key] ?? 0))
+            month += 1
+            if month > 12 { month = 1; year += 1 }
+        }
+        return bars
+    }
+
     private var bars: some View {
-        let maxCount = max(summaries.map(\.count).max() ?? 1, 1)
+        let symbols = Calendar.current.veryShortMonthSymbols
+        let maxCount = max(monthBars.map(\.count).max() ?? 1, 1)
         return HStack(alignment: .bottom, spacing: 6) {
-            ForEach(summaries) { month in
+            ForEach(monthBars) { bar in
                 VStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.accentColor.opacity(barOpacity(month.count, of: maxCount)))
-                        .frame(height: max(3, maxBarHeight * CGFloat(month.count) / CGFloat(maxCount)))
-                    Text(Self.monthInitial(month.month))
+                        .fill(Color.accentColor.opacity(barOpacity(bar.count, of: maxCount)))
+                        .frame(maxWidth: maxBarWidth)
+                        .frame(height: max(2, maxBarHeight * CGFloat(bar.count) / CGFloat(maxCount)))
+                    Text(symbols.indices.contains(bar.month - 1) ? symbols[bar.month - 1] : "")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -57,12 +83,6 @@ struct CoverageHistogram: View {
         guard let peak = summaries.max(by: { $0.count < $1.count }) else { return nil }
         let name = MonthLabel.name(year: peak.year, month: peak.month)
         return "\(name) is your biggest month — \(peak.count.formatted()) photos."
-    }
-
-    static func monthInitial(_ month: Int) -> String {
-        let symbols = Calendar.current.veryShortMonthSymbols
-        guard month >= 1, month <= symbols.count else { return "" }
-        return symbols[month - 1]
     }
 }
 
@@ -102,7 +122,12 @@ private struct OverviewThumb: View {
             .clipShape(RoundedRectangle(cornerRadius: 5))
             .task(id: id) {
                 let px = size * displayScale
-                image = await thumbnails.thumbnail(for: id, targetSize: CGSize(width: px, height: px))
+                let target = CGSize(width: px, height: px)
+                // Cache-first paint (no placeholder flash on a re-appear), then the async load.
+                if image == nil, let cached = thumbnails.cachedThumbnail(for: id, targetSize: target) {
+                    image = cached
+                }
+                image = await thumbnails.thumbnail(for: id, targetSize: target)
             }
     }
 }

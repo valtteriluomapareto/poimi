@@ -59,6 +59,22 @@ struct MonthGroupingTests {
         #expect(MonthGrouping.summaries(for: input, calendar: cal).map(\.id) == ["2025-12", "2026-01"])
     }
 
+    @Test("month bucketing follows the injected calendar at a month boundary")
+    func respectsCalendar() {
+        // 2025-06-30 23:00:00 UTC. Under UTC → June; under UTC+3 (02:00 on Jul 1) → July.
+        let edge = AssetRef(id: "edge", captureDate: Date(timeIntervalSince1970: 1_751_324_400))
+        #expect(MonthGrouping.summaries(for: [edge], calendar: utcCalendar()).map(\.id) == ["2025-06"])
+        var plus3 = Calendar(identifier: .gregorian)
+        plus3.timeZone = TimeZone(secondsFromGMT: 3 * 3600)!
+        #expect(MonthGrouping.summaries(for: [edge], calendar: plus3).map(\.id) == ["2025-07"])
+    }
+
+    @Test("an all-undated input yields no summaries")
+    func allUndated() {
+        let input = [AssetRef(id: "a", captureDate: nil), AssetRef(id: "b", captureDate: nil)]
+        #expect(MonthGrouping.summaries(for: input, calendar: cal).isEmpty)
+    }
+
     @Test("concatenating the summaries' ids reproduces the dated input in chronological order")
     func partition() {
         let input = [

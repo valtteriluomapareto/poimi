@@ -78,9 +78,10 @@ struct AppRootView: View {
                 RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
                                  detail: "This album is no longer in your library.")
             }
-        case .review(let id, _):
+        case .review(let id, let day):
             if let project = project(id) {
-                ScanningView(project: project)   // scanning → grid (#34/#35)
+                ScanningView(project: project, scrollToDay: day)   // scanning → grid (#34/#35), #37 drill
+
             } else {
                 RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
                                  detail: "This album is no longer in your library.")

@@ -18,6 +18,8 @@ import Curation
 
 struct ScanningView: View {
     let project: CurationProject
+    /// A day-group to scroll the grid to on open — the overview's "drill into this month" target (#37).
+    var scrollToDay: DayKey?
     @Environment(\.photoLibrary) private var library
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
@@ -129,7 +131,8 @@ struct ScanningView: View {
             ReviewGridView(
                 groups: groups,
                 subtitle: headerSubtitle(groups),
-                openAsset: { coordinator.openPhoto($0) })
+                openAsset: { coordinator.openPhoto($0) },
+                scrollToDay: scrollToDay)
 
         case .empty:
             ContentUnavailableView {
