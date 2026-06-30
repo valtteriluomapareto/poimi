@@ -130,7 +130,10 @@ struct AlbumOverviewView: View {
                     Spacer(minLength: 12)
                     Text("\(picked) picked")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(picked > 0 ? Color.accentColor : .secondary)
+                        // `.primary` when there are picks (semibold carries the emphasis), NOT gold:
+                        // small gold text on the light row fails the styleguide §1 contrast caveat —
+                        // gold is reserved for graphical marks (the histogram fill, the check badges).
+                        .foregroundStyle(picked > 0 ? .primary : .secondary)
                         .monospacedDigit()
                     Text("· \(month.count)")
                         .font(.subheadline)

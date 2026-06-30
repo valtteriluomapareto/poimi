@@ -99,7 +99,7 @@ Visual explorations of the §15 idea backlog ([../plans/preprocessing-and-cachin
 | ① Trip tints · C liquid glass | `2OZ-0` | exploration | Frosted pill floating over the photos. |
 | ① Trip tints · D vertical gradient | `2RA-0` | exploration | Ambient top-to-bottom gradient that morphs between clusters; no strips. (Tints the photos — the §15 trade-off.) |
 | ② Verbal trip summary | `2TE-0` | **liked** | Deterministic caption ("Mostly at home, with stops in …") under the album identity — template voice, not LLM. |
-| ③ Collapse done runs | `2VR-0` | **direction agreed** | Done clusters collapse to a dimmed ✓ row + per-cluster location summary + thumb peek + "Show all"; the open cluster keeps its full grid. **Mark-as-done** (the done-circle, matching `26X-0`) is the collapse trigger. Re-scoped per §15: only *done* runs collapse, never the unreviewed. |
+| ③ Collapse done runs | `2VR-0` | **built (v1, date day-groups)** | Done clusters collapse to a dimmed ✓ header + thumb peek + "Show all"; the open cluster keeps its full grid. **Mark-as-done** (the done-circle, matching `26X-0`) is the collapse trigger, backed by `DoneStore`/`Completion`. Built on the review grid's date day-groups; per-cluster *location* summaries ride v1.1. Only *done* runs collapse, never the unreviewed. |
 
 Caveat: ① found no good-enough treatment (tinting a gapless photo grid recolors the photos being judged); ② and ③ are the keepers. None are v1 commitments — they inform the v1.1 location work.
 

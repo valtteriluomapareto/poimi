@@ -74,8 +74,9 @@ struct ReviewGridCell: View {
                 // The third selection layer (styleguide §6 / Paper design): a green inset border.
                 // Structural — the gold check stays the affordance — but in a gapless grid the border
                 // is what reads a selected cell at a glance. `strokeBorder` insets so it isn't clipped;
-                // non-interactive so its ring can't absorb an edge tap (→ open/select).
-                Rectangle().strokeBorder(Color.green, lineWidth: 2)
+                // non-interactive so its ring can't absorb an edge tap (→ open/select). The BRAND green
+                // (§6 secondary), so it doesn't read as a different green next to the done seal.
+                Rectangle().strokeBorder(Color.brandGreen, lineWidth: 2)
                     .allowsHitTesting(false)
             }
         }

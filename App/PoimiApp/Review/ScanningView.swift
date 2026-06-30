@@ -23,6 +23,7 @@ struct ScanningView: View {
     @Environment(\.photoLibrary) private var library
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
+    @Environment(DoneStore.self) private var doneStore
     @State private var store: CandidateStore?
     /// The album the current `store` loaded — so a reused view instance reloads for a NEW album
     /// rather than republishing the previous one's candidates (the iPad detail-column retarget, #42).
@@ -32,7 +33,10 @@ struct ScanningView: View {
 
     var body: some View {
         content()
-            .navigationTitle(project.title)
+            // Blanked once the grid is up — the pinned ReviewHeader carries the bold album title
+            // there, so a nav title too would be a double title. Other phases (scanning / empty /
+            // failed) keep it as their only label.
+            .navigationTitle(isReady ? "" : project.title)
             // Inline, not large: a collapsing large title fought the pinned `.safeAreaInset` tally
             // header and the section headers in the same top zone (the "glitch between the title and
             // the first group" seen on device) and drove the Liquid Glass nav backdrop into an
@@ -42,9 +46,10 @@ struct ScanningView: View {
             // Keyed by project id so re-targeting (e.g. iPad detail column) reloads for the new
             // album rather than showing the previous one's candidates.
             .task(id: project.id) {
-                // Hydrate the selection for this project (idempotent — activate() no-ops if it's
-                // already active, so re-entry never clobbers unflushed picks).
+                // Hydrate the selection + done-state for this project (idempotent — activate() no-ops
+                // if already active, so re-entry never clobbers unflushed picks/done-days).
                 selection.activate(project)
+                doneStore.activate(project)
                 // Reload when the album actually changed (or first load); reuse only survives a
                 // benign re-appear of the SAME album, so returning from the viewer doesn't re-scan.
                 // Gating on project identity (not `.idle`) stops a reused view instance from serving
@@ -54,6 +59,13 @@ struct ScanningView: View {
                     store = fresh
                     loadedProjectID = project.id
                     await fresh.load(project)
+                    // Reconcile done-state against the freshly-loaded candidates: a done day that
+                    // gained a photo since the last load re-opens, so the collapse never hides a new
+                    // unreviewed photo (D32(d)). Only on a real .ready load — an empty/failed load
+                    // would record a bogus (empty) baseline and re-open everything next time.
+                    if case .ready = fresh.phase {
+                        doneStore.reconcile(currentIDsByDay: Self.idsByDay(fresh.dayByID))
+                    }
                 }
                 // Publish the candidate list + per-photo day map so the photo viewer can page
                 // through it and label each photo's day (#36).
@@ -101,6 +113,14 @@ struct ScanningView: View {
         return start == end ? start : "\(start) – \(end)"
     }
 
+    /// Invert the store's per-photo `id → DayKey` map into the `DayKey → ids` shape the done-state
+    /// reconcile diffs against the persisted baseline.
+    private static func idsByDay(_ dayByID: [String: DayKey]) -> [DayKey: Set<String>] {
+        var out: [DayKey: Set<String>] = [:]
+        for (id, day) in dayByID { out[day, default: []].insert(id) }
+        return out
+    }
+
     @ViewBuilder
     private func content() -> some View {
         switch store?.phase ?? .idle {
@@ -130,6 +150,7 @@ struct ScanningView: View {
             // settled (Finding 1). The grid renders them directly and never recomputes the grouping.
             ReviewGridView(
                 groups: groups,
+                title: project.title,
                 subtitle: headerSubtitle(groups),
                 openAsset: { coordinator.openPhoto($0) },
                 scrollToDay: scrollToDay)

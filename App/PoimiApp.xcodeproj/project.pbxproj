@@ -24,6 +24,7 @@
 		00000000600000000000B602 /* AppSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000600000000000A602 /* AppSchema.swift */; };
 		00000000700000000000B701 /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000700000000000A701 /* ProjectStore.swift */; };
 		00000000700000000000B702 /* SelectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000700000000000A702 /* SelectionStore.swift */; };
+		00000000700000000000B703 /* DoneStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000700000000000A703 /* DoneStore.swift */; };
 		00000000800000000000B801 /* Route.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000800000000000A801 /* Route.swift */; };
 		00000000800000000000B802 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000800000000000A802 /* AppCoordinator.swift */; };
 		00000000800000000000B803 /* AppRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000800000000000A803 /* AppRootView.swift */; };
@@ -60,6 +61,7 @@
 		000000004000000000000062 /* DayGroupHeaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000061 /* DayGroupHeaderTests.swift */; };
 		000000004000000000000064 /* ThumbnailMemoryCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000063 /* ThumbnailMemoryCacheTests.swift */; };
 		000000004000000000000068 /* ViewerWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000067 /* ViewerWindowTests.swift */; };
+		00000000400000000000006A /* DoneStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000069 /* DoneStoreTests.swift */; };
 		000000004000000000000066 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000065 /* TestSupport.swift */; };
 /* End PBXBuildFile section */
 
@@ -99,6 +101,7 @@
 		00000000600000000000A602 /* AppSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSchema.swift; sourceTree = "<group>"; };
 		00000000700000000000A701 /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
 		00000000700000000000A702 /* SelectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionStore.swift; sourceTree = "<group>"; };
+		00000000700000000000A703 /* DoneStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoneStore.swift; sourceTree = "<group>"; };
 		00000000800000000000A801 /* Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Route.swift; sourceTree = "<group>"; };
 		00000000800000000000A802 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
 		00000000800000000000A803 /* AppRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRootView.swift; sourceTree = "<group>"; };
@@ -136,6 +139,7 @@
 		000000004000000000000061 /* DayGroupHeaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayGroupHeaderTests.swift; sourceTree = "<group>"; };
 		000000004000000000000063 /* ThumbnailMemoryCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailMemoryCacheTests.swift; sourceTree = "<group>"; };
 		000000004000000000000067 /* ViewerWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewerWindowTests.swift; sourceTree = "<group>"; };
+		000000004000000000000069 /* DoneStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoneStoreTests.swift; sourceTree = "<group>"; };
 		000000004000000000000065 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -241,6 +245,7 @@
 			children = (
 				00000000700000000000A701 /* ProjectStore.swift */,
 				00000000700000000000A702 /* SelectionStore.swift */,
+				00000000700000000000A703 /* DoneStore.swift */,
 			);
 			path = State;
 			sourceTree = "<group>";
@@ -319,6 +324,7 @@
 				000000004000000000000061 /* DayGroupHeaderTests.swift */,
 				000000004000000000000063 /* ThumbnailMemoryCacheTests.swift */,
 				000000004000000000000067 /* ViewerWindowTests.swift */,
+				000000004000000000000069 /* DoneStoreTests.swift */,
 				000000004000000000000065 /* TestSupport.swift */,
 			);
 			path = PoimiAppTests;
@@ -435,6 +441,7 @@
 				00000000600000000000B602 /* AppSchema.swift in Sources */,
 				00000000700000000000B701 /* ProjectStore.swift in Sources */,
 				00000000700000000000B702 /* SelectionStore.swift in Sources */,
+				00000000700000000000B703 /* DoneStore.swift in Sources */,
 				00000000800000000000B801 /* Route.swift in Sources */,
 				00000000800000000000B802 /* AppCoordinator.swift in Sources */,
 				00000000800000000000B803 /* AppRootView.swift in Sources */,
@@ -478,6 +485,7 @@
 				000000004000000000000062 /* DayGroupHeaderTests.swift in Sources */,
 				000000004000000000000064 /* ThumbnailMemoryCacheTests.swift in Sources */,
 				000000004000000000000068 /* ViewerWindowTests.swift in Sources */,
+				00000000400000000000006A /* DoneStoreTests.swift in Sources */,
 				000000004000000000000066 /* TestSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

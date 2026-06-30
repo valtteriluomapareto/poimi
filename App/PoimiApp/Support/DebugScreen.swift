@@ -210,6 +210,7 @@ struct DebugScanningHostView: View {
     // deallocates, resets its context, and destroys `project` out from under ScanningView.
     @State private var projectStore: ProjectStore?
     @State private var selectionStore: SelectionStore?
+    @State private var doneStore: DoneStore?
     @State private var coordinator: AppCoordinator?
     @State private var project: CurationProject?
 
@@ -218,9 +219,10 @@ struct DebugScanningHostView: View {
 
     var body: some View {
         Group {
-            if let selectionStore, let coordinator, let project {
+            if let selectionStore, let doneStore, let coordinator, let project {
                 NavigationStack { ScanningView(project: project) }
                     .environment(selectionStore)
+                    .environment(doneStore)
                     .environment(coordinator)
             } else {
                 ProgressView()
@@ -233,6 +235,7 @@ struct DebugScanningHostView: View {
             }
             let projects = ProjectStore(container: container)
             let selection = SelectionStore(container: container)
+            let done = DoneStore(container: container)
             let created = projects.create(
                 title: "Best of 2025",
                 rangeStart: Self.yearStart, rangeEnd: Self.yearEnd,
@@ -241,10 +244,14 @@ struct DebugScanningHostView: View {
                 excludedAlbumIDs: ["album/whatsapp"])
             selection.activate(created)
             Self.preselected.forEach { selection.toggle($0) }
+            // Mark the March quiet run done so the capture shows a collapsed cluster (idea ③) next to
+            // the open July one. ScanningView's own `doneStore.activate` reads these back.
+            created.doneDays = ["2025-03-16", "2025-03-17", "2025-03-18"]
 
             let coord = AppCoordinator(library: library)
             projectStore = projects
             selectionStore = selection
+            doneStore = done
             coordinator = coord
             project = created
 

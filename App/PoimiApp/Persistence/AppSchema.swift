@@ -6,6 +6,16 @@
 //  `NamedLocation` v1.1, the `ResourceSizeCacheEntry` D18 cache — join later versions). Wiring
 //  the migration plan now means a future field add is a declared stage, not an ad-hoc reset.
 //
+//  Migration policy (deliberate): an ADDITIVE OPTIONAL attribute on the existing `CurationProject`
+//  (e.g. `reviewedIDsByDay: Data?`, #89) is handled by SwiftData's AUTOMATIC lightweight migration —
+//  it adds the nil column to an existing store with no stage. Because v1 is a single shared model
+//  class (not a per-version snapshot), an explicit `MigrationStage` for such an add isn't even
+//  expressible without freezing an old model copy, and isn't needed. The version stamp therefore
+//  stays `1.0.0` and the plan stays empty until a NON-lightweight change (a rename, a type change, a
+//  new entity) lands — that's when v2 + a declared stage + passing the plan to `make` are required.
+//  NB: integration tests are all `inMemory` (fresh stores), so the lightweight upgrade of an existing
+//  on-disk store is verified by installing OVER a prior build on device, not by a unit test.
+//
 
 import Foundation
 import SwiftData

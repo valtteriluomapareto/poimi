@@ -29,6 +29,9 @@ struct ReviewGridView: View {
     /// The candidates split into adaptive day-groups (oldest → newest). Concatenating the groups'
     /// `assetIDs` reproduces the full chronological slice — the sections are headered runs of it.
     let groups: [DayGroup]
+    /// The album name — shown as the bold identity title in the pinned header (the nav title is
+    /// blanked, so this is the screen's one title).
+    let title: String
     /// Metadata line under the title (e.g. "1,847 photos · Jan 2025 – Dec 2025"), shown in the
     /// scroll-top header above the tally.
     let subtitle: String
@@ -41,13 +44,23 @@ struct ReviewGridView: View {
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(DoneStore.self) private var done
+    /// The single OPEN cluster (accordion): exactly one day-group shows its full grid at a time; every
+    /// other cluster is a collapsed peek. DECOUPLED from "done" — a cluster collapses because another
+    /// opened, not because it was marked done. Bounding the open set to one means only that cluster's
+    /// full-res cells load (the rest are tiny peek thumbs) — the perf win.
+    @State private var expandedGroupID: String?
 
     @State private var columnCount = 3
     @State private var pinchBaseline = 3
-    /// One-shot scroll position for the #37 drill — set ONCE on appear from `scrollToDay`, then just
-    /// tracks. Deliberately no `.center` anchor + a LOCAL state (the #81/#82 jump was a `.center`
-    /// two-way bind to a shared observable; `.scrollPosition` itself is lazy-safe, unlike `scrollTo`).
-    @State private var scrollTarget: String?
+    /// The scroll position (iOS 18 `ScrollPosition`). We only ever issue a ONE-SHOT `scrollTo` (opening
+    /// a cluster, or the #37 drill); otherwise it just reflects where the user is. This replaced the
+    /// older `.scrollPosition(id:)` binding, whose two-way write-back was RE-APPLIED on any re-layout —
+    /// so a select-all or a mark-done snapped the grid back to the last top item (#81/#82, seen on
+    /// device). `ScrollPosition` doesn't re-apply a programmatic scroll on re-layout, so the grid stays put.
+    @State private var scrollPosition = ScrollPosition()
+    /// Choose the initial open cluster once per appearance (first-unreviewed, or the #37 drill target).
+    @State private var didInitialOpen = false
     @State private var visibleIDs: Set<String> = []
     @State private var window = PrefetchWindow(orderedIDs: [])
     // Generation-guarded prefetch: a single in-flight updater loops until it has applied the latest
@@ -74,17 +87,36 @@ struct ReviewGridView: View {
 
     var body: some View {
         ScrollView {
+            // ONE LazyVGrid of day-group SECTIONS (idea ③), not a stack of nested grids. An open
+            // section's cells are direct grid items (so the grid stays lazy even for a 500-photo busy
+            // day — nesting a LazyVGrid inside a LazyVStack risked eager materialisation); a done
+            // section has NO cells and renders its full-width peek as the section FOOTER (a footer
+            // spans the grid width, which a column-bound item can't). `pinnedViews` keeps the day
+            // header glued to the top while you scroll a long open run (the #35 orientation finding).
             LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
                 ForEach(groups) { group in
-                    // Format the day title once per group (not per cell), and hand it to both the
-                    // header and the cells' VoiceOver labels for orientation.
+                    // Format the day title once per group (not per cell) — header + cell a11y labels.
                     let title = DayGroupHeader.title(for: group)
                     Section {
-                        ForEach(group.assetIDs, id: \.self) { id in
-                            cell(for: id, dayLabel: title).id(id)
+                        if !isCollapsed(group) {
+                            ForEach(group.assetIDs, id: \.self) { id in
+                                cell(for: id, dayLabel: title).id(id)
+                            }
                         }
                     } header: {
-                        ReviewSectionHeader(group: group, title: title)
+                        ReviewSectionHeader(group: group, title: title,
+                                            isDone: done.isDone(group),
+                                            isOpen: !isCollapsed(group),
+                                            onToggleOpen: { toggleOpen(group) })
+                    } footer: {
+                        // Collapsed → a peek (tap to open). Open → the "Mark as done" button AFTER the
+                        // photos, so you reach it once you've reviewed the day (discoverable, #38).
+                        if isCollapsed(group) {
+                            CollapsedSectionPeek(ids: group.assetIDs, dayTitle: title,
+                                                 isDone: done.isDone(group)) { toggleOpen(group) }
+                        } else {
+                            markDoneFooter(group)
+                        }
                     }
                 }
             }
@@ -93,11 +125,15 @@ struct ReviewGridView: View {
         // Pinned under the (inline) nav title so the tally stays glanceable while scrolling the grid —
         // it's the orientation device; losing it mid-scroll would defeat the point. A `.bar` backing
         // gives scroll-edge legibility over bright thumbnails (ReviewHeader owns it).
-        .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(subtitle: subtitle) }
-        // One-shot position for the #37 drill (lazy-safe; nil target = no positioning = top).
-        .scrollPosition(id: $scrollTarget)
+        .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(title: title, subtitle: subtitle) }
+        // Tracks position; we only issue a one-shot scrollTo for the #37 drill (onAppear). No
+        // re-applied target, so select-all / mark-done re-layouts never snap the grid (#81/#82).
+        .scrollPosition($scrollPosition, anchor: .top)
         // Reduce Motion → no density-change animation (the cross-fade is the system default).
         .animation(reduceMotion ? nil : .snappy, value: columnCount)
+        // Success haptic when a day is marked done (count up), a light tap on undo. Keyed here because
+        // the mark-done button lives in the footer and is removed before its own feedback could fire.
+        .sensoryFeedback(trigger: done.doneDays.count) { old, new in new > old ? .success : .impact(weight: .light) }
         .gesture(
             MagnifyGesture()
                 .onChanged { value in
@@ -115,12 +151,9 @@ struct ReviewGridView: View {
         .onAppear {
             Perf.event("grid.onAppear (return from viewer / drill)")
             Perf.measure("grid.onAppear setup") {
-                // Drill from the overview (#37): scroll once to the first cell of the day-group holding
-                // the target day. No explicit RESTORE otherwise — the grid stays put under the pushed
-                // viewer, and an explicit re-center jumped on selection (#81).
-                if scrollTarget == nil, let day = scrollToDay,
-                   let target = groups.first(where: { $0.days.contains(day) }) {
-                    scrollTarget = target.assetIDs.first
+                if !didInitialOpen {
+                    didInitialOpen = true
+                    chooseInitialCluster()
                 }
                 rebuildWindow()
                 scheduleRecomputeWindow()
@@ -129,15 +162,96 @@ struct ReviewGridView: View {
         .onChange(of: visibleIDs) { scheduleRecomputeWindow() }
         .onChange(of: columnCount) { scheduleRecomputeWindow() }
         .onChange(of: maxColumns) { columnCount = min(columnCount, maxColumns) }
-        .onChange(of: groupIdentity) {
+        .onChange(of: expandedGroupID) {
+            // The open cluster changed → which cells can render changed; re-derive the prefetch window.
             rebuildWindow()
+            scheduleRecomputeWindow()
+        }
+        .onChange(of: groupIdentity) {
             visibleIDs = []
-            lastAppliedSlice = []   // new album → re-cache from scratch, don't skip on a stale match
+            lastAppliedSlice = []      // new album → re-cache from scratch, don't skip on a stale match
+            chooseInitialCluster()     // open the new album's first-unreviewed (or its drill target)
+            rebuildWindow()
             scheduleRecomputeWindow()
         }
         // NB: no cache reset on disappear — pushing the #36 viewer fires onDisappear, and resetting
         // there would cold-reload every thumbnail on return. The prefetch window bounds growth; a
         // full reset is tied to leaving review entirely (with the viewer / deactivation, later).
+    }
+
+    // MARK: Accordion (one cluster open at a time)
+
+    /// Collapsed = NOT the single open cluster. Independent of "done": a done cluster can be re-opened,
+    /// and a not-done cluster is collapsed simply because another one is open.
+    private func isCollapsed(_ group: DayGroup) -> Bool { group.id != expandedGroupID }
+
+    /// On first appear (and on an album switch): open the #37 drill target if there is one, else the
+    /// first UNREVIEWED cluster (resume), else the first. The drill scrolls to its cluster; a plain
+    /// initial open doesn't (the grid sits at the top, done peeks above the open cluster).
+    private func chooseInitialCluster() {
+        if let day = scrollToDay, let target = groups.first(where: { $0.days.contains(day) }) {
+            open(target)
+        } else {
+            expandedGroupID = (groups.first(where: { !done.isDone($0) }) ?? groups.first)?.id
+        }
+    }
+
+    /// Tapping a cluster's header or peek toggles it: open it (auto-collapsing whoever was open), or —
+    /// if it's already the open one — collapse to none. Animated; opening scrolls the cluster up.
+    private func toggleOpen(_ group: DayGroup) {
+        withAnimation(reduceMotion ? nil : .snappy) {
+            if expandedGroupID == group.id { expandedGroupID = nil } else { open(group) }
+        }
+    }
+
+    /// Make `group` the single open cluster and scroll its first cell to the top.
+    private func open(_ group: DayGroup) {
+        expandedGroupID = group.id
+        if let first = group.assetIDs.first { scrollPosition.scrollTo(id: first, anchor: .top) }
+    }
+
+    /// The footer button's action: toggle the day's done flag. Marking done (not un-marking) flows
+    /// straight into the next unreviewed cluster — finish a day, land on the next.
+    private func markDone(_ group: DayGroup) {
+        let wasDone = done.isDone(group)
+        withAnimation(reduceMotion ? nil : .snappy) {
+            done.toggle(group)
+            if !wasDone { advanceAfter(group) }
+        }
+        if !wasDone { AccessibilityNotification.Announcement("Marked done").post() }
+    }
+
+    /// Open the next unreviewed cluster after `group`; if none remain ahead, collapse to all-peeks
+    /// (the "finished this stretch" state).
+    private func advanceAfter(_ group: DayGroup) {
+        guard let idx = groups.firstIndex(where: { $0.id == group.id }) else { expandedGroupID = nil; return }
+        if let next = groups[(idx + 1)...].first(where: { !done.isDone($0) }) {
+            open(next)
+        } else {
+            expandedGroupID = nil
+        }
+    }
+
+    /// The "Mark as done" CTA at the END of an open cluster's photos (the discoverable end-of-review
+    /// affordance, #38). A CENTERED, content-sized button (not a full-width slab) — brand-green and
+    /// prominent while not done; a quieter bordered "Mark as not done" once done (re-opened to edit).
+    @ViewBuilder
+    private func markDoneFooter(_ group: DayGroup) -> some View {
+        let isDone = done.isDone(group)
+        HStack {
+            Spacer()
+            Button { markDone(group) } label: {
+                Label(isDone ? "Mark as not done" : "Mark as done",
+                      systemImage: isDone ? "checkmark.seal.fill" : "checkmark.seal")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .tint(isDone ? Color(.systemGray) : .brandGreen)
+            Spacer()
+        }
+        .padding(.top, 10)
+        .padding(.bottom, 28)
+        .accessibilityHint(isDone ? "Reopens this day for editing" : "Marks this day reviewed and opens the next")
     }
 
     // MARK: Cell
@@ -173,7 +287,10 @@ struct ReviewGridView: View {
     }
 
     private func rebuildWindow() {
-        window = PrefetchWindow(orderedIDs: groups.flatMap(\.assetIDs))
+        // Only OPEN groups can render cells; a collapsed cluster shows a peek (its own 56pt thumbs),
+        // never a 400² cell. Keeping collapsed ids out of the window's universe stops the
+        // visible ± margin slice from pre-caching a neighbouring collapsed run at full cell size.
+        window = PrefetchWindow(orderedIDs: groups.filter { !isCollapsed($0) }.flatMap(\.assetIDs))
     }
 
     private func scheduleRecomputeWindow() {
@@ -196,38 +313,112 @@ struct ReviewGridView: View {
     }
 }
 
-/// One pinned day-group header. Observes the `SelectionStore` itself (for the live per-section
-/// selected/total summary + the select-all toggle) so the parent grid body stays independent of
-/// `selected`. The title is formatted once by the grid and passed in.
+/// One day-group (cluster) header — the accordion's open/collapse control. Tapping the left region
+/// opens the cluster (auto-collapsing whoever was open) or collapses it; a disclosure chevron signals
+/// it expands, a brand-green seal badge marks a done day (at a glance, even while collapsed), and
+/// "Select all" shows while open. Observes the `SelectionStore` itself so the parent grid body stays
+/// independent of `selected`. The toggle and Select-all are SEPARATE buttons (side by side) so a
+/// Select-all tap can't also fire the open/collapse. The title is formatted once by the grid.
 private struct ReviewSectionHeader: View {
     let group: DayGroup
     let title: String
+    let isDone: Bool
+    let isOpen: Bool
+    let onToggleOpen: () -> Void
     @Environment(SelectionStore.self) private var selection
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let selectedCount = selection.selected.intersection(group.assetIDs).count
         let allSelected = selectedCount == group.count
-        HStack(spacing: 6) {
-            // A neutral busy-day marker — gold is reserved for the interactive accent (selection /
-            // tally / export), so a non-interactive day indicator shouldn't borrow it.
-            if group.isBusyDay {
-                Circle().fill(.secondary).frame(width: 6, height: 6)
+        layout(selectedCount: selectedCount, allSelected: allSelected)
+            .padding(.leading, 8)
+            .padding(.trailing, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
+            .accessibilityElement(children: .contain)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /// At accessibility Dynamic Type sizes the one-line row can't hold [chevron][title][count][Select
+    /// all], so the day label — the point of the pinned header (#35 orientation) — would truncate.
+    /// Stack it: the open-toggle (chevron + wrapping title) on top, count + Select-all below. We WRAP,
+    /// never `minimumScaleFactor` (shrinking the user's chosen size is itself an a11y regression).
+    @ViewBuilder
+    private func layout(selectedCount: Int, allSelected: Bool) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                openToggle { HStack(spacing: 8) { disclosure; titleText; if isDone { doneBadge }; Spacer(minLength: 0) } }
+                HStack(spacing: 8) {
+                    countText(selectedCount)
+                    Spacer(minLength: 0)
+                    if isOpen { sectionToggle(allSelected: allSelected) }
+                }
             }
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-            Text("· \(group.count)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-            sectionToggle(allSelected: allSelected)
+        } else {
+            HStack(spacing: 8) {
+                openToggle {
+                    HStack(spacing: 8) {
+                        disclosure; titleText; countText(selectedCount); if isDone { doneBadge }
+                        Spacer(minLength: 0)
+                    }
+                }
+                if isOpen { sectionToggle(allSelected: allSelected) }
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bar)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(title). \(group.count) photos, \(selectedCount) selected.")
-        .accessibilityAddTraits(.isHeader)
+    }
+
+    /// The tap target that opens/collapses the cluster — wraps the chevron+title+count region (NOT the
+    /// whole row, so Select-all stays its own button). Carries the header's descriptive a11y + an
+    /// expanded/collapsed value.
+    private func openToggle<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        let selectedCount = selection.selected.intersection(group.assetIDs).count
+        return Button(action: onToggleOpen) {
+            content().contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title). \(group.count) photos, \(selectedCount) selected.\(isDone ? " Done." : "")")
+        .accessibilityValue(isOpen ? "Expanded" : "Collapsed")
+        .accessibilityHint("Double tap to \(isOpen ? "collapse" : "open") this day")
+    }
+
+    /// Disclosure chevron — signals the row expands; rotates down when open.
+    private var disclosure: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .rotationEffect(.degrees(isOpen ? 90 : 0))
+            .frame(width: 14)
+            .accessibilityHidden(true)
+    }
+
+    /// Non-interactive done indicator (the styleguide §7 completion seal, brand green) so finished days
+    /// read at a glance even when collapsed. Marking done is the footer button, not this badge.
+    private var doneBadge: some View {
+        Image(systemName: "checkmark.seal.fill")
+            .font(.subheadline)
+            .foregroundStyle(Color.brandGreen)
+            .accessibilityHidden(true)
+    }
+
+    private var titleText: some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(isDone ? .secondary : .primary)   // a done day reads quieter
+            .lineLimit(2)                  // wrap if long; never shrink (a11y)
+            .accessibilityHidden(true)
+    }
+
+    /// Open → the total ("· 10"); collapsed → the pick result ("3 of 10 kept"), since the cells aren't
+    /// visible to show their own selection — it's the one number the app tracks.
+    private func countText(_ selectedCount: Int) -> some View {
+        Text(isOpen ? "· \(group.count)" : "\(selectedCount) of \(group.count) kept")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .monospacedDigit()
+            .accessibilityHidden(true)
     }
 
     /// Select-all / deselect-all for this day-group (the contextual bulk action, #35). Bulk ops
@@ -238,6 +429,8 @@ private struct ReviewSectionHeader: View {
         } label: {
             Text(allSelected ? "Deselect all" : "Select all")
                 .font(.footnote.weight(.semibold))
+                .frame(minHeight: 44)        // a bulk action must match the touch-target floor (WCAG 2.5.8)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         // Primary label color, NOT the gold accent: gold is for graphical marks — small gold text on
