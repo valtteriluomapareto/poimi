@@ -23,6 +23,9 @@ struct PhotoViewerView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @State private var currentID: String
+    /// Whether the CURRENT page is zoomed in — reported up from its `ZoomableScrollView`. Gates
+    /// swipe-down-to-dismiss off so it doesn't fight panning a zoomed photo. Reset on a page change.
+    @State private var isZoomed = false
     /// The full candidate list (for the "N of M" position) + an id→global-index map (O(1) lookup).
     /// Resolved once on appear; falls back to just this photo when there's no live review context.
     @State private var allIDs: [String] = []
@@ -68,7 +71,9 @@ struct PhotoViewerView: View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(pages, id: \.self) { id in
-                    PhotoPage(id: id, accessibilityLabel: photoAXLabel(for: id))
+                    PhotoPage(id: id,
+                              accessibilityLabel: photoAXLabel(for: id),
+                              onZoomedChange: { zoomed in if id == currentID { isZoomed = zoomed } })
                         .containerRelativeFrame(.horizontal)
                         .id(id)
                 }
@@ -80,14 +85,27 @@ struct PhotoViewerView: View {
         .scrollIndicators(.hidden)
         .background(Color.black)
         .ignoresSafeArea()
+        // Swipe down to dismiss (Photos convention) — but ONLY when the photo isn't zoomed, so a
+        // downward pan of a zoomed photo isn't hijacked as a dismiss. At base zoom the inner scroll is
+        // disabled, so this is the sole consumer of a vertical drag; horizontal page-swipes stay with
+        // the paging scroll (this gesture only fires on a clearly downward-dominant drag).
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 20).onEnded { value in
+                guard !isZoomed,
+                      value.translation.height > 100,
+                      value.translation.height > abs(value.translation.width) * 1.5 else { return }
+                coordinator.pop()
+            }
+        )
         .overlay(alignment: .top) { topBar }
         .overlay(alignment: .bottom) { bottomBar }
         .toolbar(.hidden, for: .navigationBar)
-        // Keep the shared anchor on the photo in view, so the grid restores here and the `.zoom`
-        // return pairs with this cell; and slide the window before a swipe runs off its end.
+        // Keep the shared anchor on the photo in view; reset the zoom-gate for the new page; and
+        // slide the window before a swipe runs off its end.
         .onChange(of: currentID) {
             Perf.measure("viewer.onChange→\(currentID.suffix(8))") {
                 coordinator.lastViewedID = currentID
+                isZoomed = false   // a freshly-swiped-to page starts at fit; re-enable swipe-to-dismiss
                 slideWindowIfNeeded()
             }
         }
@@ -256,6 +274,8 @@ private struct PhotoPage: View {
     /// The day + position, prebuilt by the viewer (which holds the day map + index) so the photo
     /// element carries real context for VoiceOver — "Photo, Sat, Jul 5, 7 of 13" — not just "Photo".
     let accessibilityLabel: String
+    /// Forwarded from this page's `ZoomableScrollView` so the viewer can gate swipe-to-dismiss.
+    let onZoomedChange: (Bool) -> Void
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.displayScale) private var displayScale
     @State private var image: UIImage?
@@ -265,7 +285,7 @@ private struct PhotoPage: View {
             ZStack {
                 Color.black
                 if let image {
-                    ZoomableScrollView(image: image)   // pinch-zoom / pan / double-tap
+                    ZoomableScrollView(image: image, onZoomedChange: onZoomedChange)   // zoom / pan / 2× tap
                 } else {
                     ProgressView()
                         .controlSize(.large)

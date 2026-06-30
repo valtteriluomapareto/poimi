@@ -16,12 +16,18 @@ import UIKit
 struct ZoomableScrollView: UIViewRepresentable {
     /// The image to display, loaded (progressively) by the SwiftUI page and handed in here.
     let image: UIImage?
+    /// Reports whether the photo is zoomed in. The viewer uses it to suppress swipe-down-to-dismiss
+    /// while a zoomed photo is being panned (a downward pan would otherwise read as a dismiss).
+    var onZoomedChange: ((Bool) -> Void)?
 
     func makeUIView(context: Context) -> ZoomableImageScrollView {
-        ZoomableImageScrollView()
+        let view = ZoomableImageScrollView()
+        view.onZoomedChange = onZoomedChange
+        return view
     }
 
     func updateUIView(_ view: ZoomableImageScrollView, context: Context) {
+        view.onZoomedChange = onZoomedChange
         if view.image !== image { view.image = image }
     }
 }
@@ -30,6 +36,8 @@ struct ZoomableScrollView: UIViewRepresentable {
 /// bounds exist), avoiding the UIViewRepresentable frame-timing pitfall.
 final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
     private let imageView = UIImageView()
+    /// Notified whenever the zoomed-in state changes (see `setZoomed`).
+    var onZoomedChange: ((Bool) -> Void)?
 
     /// Setting a new image resets the zoom and re-lays out (the page may be recycled onto a new id,
     /// or swapped thumbnail → full-res).
@@ -37,9 +45,16 @@ final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
         didSet {
             imageView.image = image
             setZoomScale(1, animated: false)
-            isScrollEnabled = false   // back to base zoom → let the pager swipe again
+            setZoomed(false)   // back to base zoom → pager swipes again; viewer re-enables dismiss
             setNeedsLayout()
         }
+    }
+
+    /// Single source of truth for "zoomed in": gate the inner pan (so the enclosing paging scroll
+    /// gets horizontal swipes at base zoom) AND report up so the viewer can suppress swipe-to-dismiss.
+    private func setZoomed(_ zoomed: Bool) {
+        isScrollEnabled = zoomed
+        onZoomedChange?(zoomed)
     }
 
     init() {
@@ -92,16 +107,16 @@ final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
     func scrollViewDidZoom(_ scrollView: UIScrollView) { centerImage() }
 
     /// Once a pinch settles, the inner pan is enabled only if we ended up zoomed in — so a pinch back
-    /// to fit hands horizontal swipes back to the pager.
+    /// to fit hands horizontal swipes back to the pager (and re-enables swipe-to-dismiss).
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
-        isScrollEnabled = scale > minimumZoomScale
+        setZoomed(scale > minimumZoomScale)
     }
 
     @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
         let animated = !UIAccessibility.isReduceMotionEnabled   // Reduce Motion → snap, don't animate
         if zoomScale > minimumZoomScale {
             setZoomScale(minimumZoomScale, animated: animated)
-            isScrollEnabled = false   // back to fit → pager swipes
+            setZoomed(false)   // back to fit → pager swipes
         } else {
             // Zoom toward the tapped point.
             let point = gesture.location(in: imageView)
@@ -110,7 +125,7 @@ final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
             let height = bounds.height / target
             zoom(to: CGRect(x: point.x - width / 2, y: point.y - height / 2, width: width, height: height),
                  animated: animated)
-            isScrollEnabled = true   // zoomed → inner pan within the photo
+            setZoomed(true)   // zoomed → inner pan within the photo
         }
     }
 }
