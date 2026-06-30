@@ -141,68 +141,50 @@ func keptFirstOrdering(ids: [String], picked: Set<String>) -> [String] {
     ids.filter(picked.contains) + ids.filter { !picked.contains($0) }
 }
 
-/// The collapsed state of a done cluster in the review grid (idea ③). A done run's summary is about
-/// what the user KEPT, not raw chronology — so the peek foregrounds the *picked* photos and a "N of M
-/// kept" count (the number the whole app tracks). With zero picks it falls back to the first few,
-/// dimmed, so "done with nothing kept" stays legible rather than silent. Tapping re-opens the cluster
-/// without un-marking done. Reads `SelectionStore` itself, so the grid body stays selection-independent.
+/// The collapsed peek for a cluster in the accordion review grid — a width-filling strip of that
+/// day's photos; tap anywhere to open it (the disclosure chevron in its header signals that, so no
+/// "Show all"/overflow chrome). The count lives in the pinned header ("N of M kept" / "· total").
+/// A DONE cluster foregrounds the kept photos and dims the rest (its summary is "what I kept"); a
+/// not-done cluster shows a clean chronological preview at full opacity. Reads `SelectionStore`
+/// itself, so the grid body stays selection-independent.
 struct CollapsedSectionPeek: View {
     let ids: [String]
     /// The day-group title, threaded in for the VoiceOver label (a peek is otherwise contextless).
     let dayTitle: String
-    let onShowAll: () -> Void
+    /// Done clusters dim their not-kept thumbs (kept-emphasis); not-done clusters never dim.
+    let isDone: Bool
+    let onOpen: () -> Void
     @Environment(SelectionStore.self) private var selection
 
     private let thumbSize: CGFloat = 56
+    private let thumbSpacing: CGFloat = 6
     private let thumbRadius: CGFloat = 8
-    // Capped so the row (≤3 thumbs + the "+N" tile + "Show all") fits the narrowest supported width
-    // without overflowing; the total kept count lives in the pinned header.
-    private let maxThumbs = 3
+    private let trailingInset: CGFloat = 12
 
     var body: some View {
         // O(group size), bounded; runs in this subview, not the grid body.
         let pickedSet = selection.selected.intersection(ids)
-        let kept = pickedSet.count
-        // Keeps first (foregrounded, full opacity), then the rest dimmed — the peek is ABOUT what you
-        // kept, but still has visual body and shows the run wasn't empty.
-        let ordered = keptFirstOrdering(ids: ids, picked: pickedSet)
-        let shown = Array(ordered.prefix(maxThumbs))
-        let overflow = ids.count - shown.count
+        // Done → lead with the keeps; not-done → plain chronological order.
+        let ordered = isDone ? keptFirstOrdering(ids: ids, picked: pickedSet) : ids
 
-        // The kept-count lives in the pinned header ("N of M kept"); the peek is the visual preview —
-        // keeps bright, the rest dimmed — so it doesn't repeat the count text.
-        Button(action: onShowAll) {
-            HStack(spacing: 6) {
-                ForEach(shown, id: \.self) { id in
-                    OverviewThumb(id: id, size: thumbSize, cornerRadius: thumbRadius)
-                        .opacity(pickedSet.contains(id) ? 1 : 0.55)   // dim the not-kept (>0.5 so it never reads as "loading")
+        Button(action: onOpen) {
+            GeometryReader { geo in
+                // Fill the available width with as many 56pt thumbs as fit (Pro Max shows more than a
+                // mini) — no fixed cap, no "+N", just photos.
+                let fit = max(1, Int((geo.size.width - trailingInset + thumbSpacing) / (thumbSize + thumbSpacing)))
+                HStack(spacing: thumbSpacing) {
+                    ForEach(Array(ordered.prefix(fit)), id: \.self) { id in
+                        OverviewThumb(id: id, size: thumbSize, cornerRadius: thumbRadius)
+                            .opacity(isDone && !pickedSet.contains(id) ? 0.55 : 1)   // dim not-kept on DONE only
+                    }
+                    Spacer(minLength: 0)
                 }
-                if overflow > 0 {
-                    RoundedRectangle(cornerRadius: thumbRadius)
-                        .fill(Color(.tertiarySystemBackground))
-                        .overlay {
-                            Text("+\(overflow)")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        .frame(width: thumbSize, height: thumbSize)
-                }
-                Spacer(minLength: 8)
-                HStack(spacing: 2) {
-                    Text("Show all")
-                    Image(systemName: "chevron.right").font(.caption.weight(.semibold))
-                }
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
             }
-            // Leading flush to 0 so the peek thumbs line up with the gapless grid cells (a done day's
-            // photos don't jump left when you "Show all" it); trailing keeps "Show all" off the edge.
-            .padding(.trailing, 12)
+            .frame(height: thumbSize)
             .padding(.bottom, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(dayTitle). \(kept) of \(ids.count) photos kept. Show all.")
+        .accessibilityLabel("\(dayTitle). \(pickedSet.count) of \(ids.count) photos kept. Open.")
     }
 }
