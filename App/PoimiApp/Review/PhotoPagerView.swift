@@ -57,7 +57,8 @@ struct PhotoPagerView: UIViewControllerRepresentable {
         guard shownID != currentID, let target = context.coordinator.makePage(for: currentID) else { return }
         let toIndex = context.coordinator.index(of: currentID) ?? 0
         let fromIndex = shownID.flatMap(context.coordinator.index) ?? 0
-        pager.setViewControllers([target], direction: toIndex >= fromIndex ? .forward : .reverse, animated: true)
+        pager.setViewControllers([target], direction: toIndex >= fromIndex ? .forward : .reverse,
+                                 animated: !UIAccessibility.isReduceMotionEnabled)   // RM → jump, don't slide
     }
 
     final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate,
@@ -80,14 +81,17 @@ struct PhotoPagerView: UIViewControllerRepresentable {
         // MARK: Data source — prev / next over `allIDs`
         func pageViewController(_ pvc: UIPageViewController,
                                 viewControllerBefore vc: UIViewController) -> UIViewController? {
-            guard let id = (vc as? PhotoPageController)?.id, let i = index(of: id), i > 0 else { return nil }
-            return makePage(for: parent.allIDs[i - 1])
+            page(adjacentTo: vc, offset: -1)
         }
         func pageViewController(_ pvc: UIPageViewController,
                                 viewControllerAfter vc: UIViewController) -> UIViewController? {
-            guard let id = (vc as? PhotoPageController)?.id, let i = index(of: id),
-                  i < parent.allIDs.count - 1 else { return nil }
-            return makePage(for: parent.allIDs[i + 1])
+            page(adjacentTo: vc, offset: +1)
+        }
+
+        private func page(adjacentTo vc: UIViewController, offset: Int) -> PhotoPageController? {
+            guard let id = (vc as? PhotoPageController)?.id,
+                  let neighbour = adjacentID(in: parent.allIDs, to: id, offset: offset) else { return nil }
+            return makePage(for: neighbour)
         }
 
         // MARK: Delegate — publish the settled page
@@ -103,12 +107,29 @@ struct PhotoPagerView: UIViewControllerRepresentable {
             guard let pager else { return }
             let pan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan(_:)))
             pan.delegate = self
+            pan.maximumNumberOfTouches = 1   // dismiss is one-finger; don't begin on a two-finger pinch-start
             pager.view.addGestureRecognizer(pan)
             // Page scroll waits on this pan: a vertical drag keeps the pan alive (page scroll blocked,
             // no sideswipe); a horizontal drag fails the pan (shouldBegin=false) and pages normally.
-            if let scroll = pager.view.subviews.compactMap({ $0 as? UIScrollView }).first {
+            // The internal queuing scroll is an undocumented subview, so search the tree and make a
+            // regression loud rather than silently losing the arbitration.
+            if let scroll = Self.firstScrollView(in: pager.view) {
                 scroll.panGestureRecognizer.require(toFail: pan)
+            } else {
+                assertionFailure("UIPageViewController internal scroll not found; dismiss arbitration degraded")
             }
+        }
+
+        /// Depth-first search for the shallowest `UIScrollView` (the page controller's queuing scroll,
+        /// a direct subview today — recursed so a future nesting doesn't silently break the lookup).
+        private static func firstScrollView(in view: UIView) -> UIScrollView? {
+            for subview in view.subviews {
+                if let scroll = subview as? UIScrollView { return scroll }
+            }
+            for subview in view.subviews {
+                if let scroll = firstScrollView(in: subview) { return scroll }
+            }
+            return nil
         }
 
         private var currentPageZoomed: Bool {
@@ -187,4 +208,13 @@ final class PhotoPageController: UIViewController {
         super.viewDidDisappear(animated)
         loadTask?.cancel()
     }
+}
+
+/// The id `offset` away from `id` in `ids`, or nil at the ends / for an unknown id. Pulled out of the
+/// data source so the edge bounds (no prev before the first, no next after the last) are unit-tested
+/// — an off-by-one here is an index-out-of-bounds crash when you swipe to the first/last photo.
+func adjacentID(in ids: [String], to id: String, offset: Int) -> String? {
+    guard let i = ids.firstIndex(of: id) else { return nil }
+    let j = i + offset
+    return ids.indices.contains(j) ? ids[j] : nil
 }

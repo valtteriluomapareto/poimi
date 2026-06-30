@@ -65,3 +65,34 @@ struct ViewerWindowTests {
         }
     }
 }
+
+@Suite("Pager neighbour (#80)")
+struct PagerNeighbourTests {
+    private let ids = ["a", "b", "c", "d"]
+
+    @Test("the next / previous id mid-list")
+    func midList() {
+        #expect(adjacentID(in: ids, to: "b", offset: 1) == "c")
+        #expect(adjacentID(in: ids, to: "b", offset: -1) == "a")
+    }
+
+    @Test("no neighbour past the ends — the swipe-to-first/last crash guard")
+    func edges() {
+        #expect(adjacentID(in: ids, to: "a", offset: -1) == nil)   // nothing before the first
+        #expect(adjacentID(in: ids, to: "d", offset: 1) == nil)    // nothing after the last
+        #expect(adjacentID(in: ids, to: "a", offset: 1) == "b")    // but forward from the first is fine
+        #expect(adjacentID(in: ids, to: "d", offset: -1) == "c")
+    }
+
+    @Test("an unknown id has no neighbour")
+    func unknown() {
+        #expect(adjacentID(in: ids, to: "z", offset: 1) == nil)
+        #expect(adjacentID(in: ids, to: "z", offset: -1) == nil)
+    }
+
+    @Test("a single-element list has no neighbour either way")
+    func single() {
+        #expect(adjacentID(in: ["only"], to: "only", offset: 1) == nil)
+        #expect(adjacentID(in: ["only"], to: "only", offset: -1) == nil)
+    }
+}
