@@ -93,4 +93,58 @@ struct DoneStoreTests {
         #expect(done.isDone(g))
         done.deactivate()
     }
+
+    @Test("the debounced flush actually fires after the window and persists — no manual flush")
+    func debouncedFlushFires() async throws {
+        let (projects, done) = try makeStores(debounce: .milliseconds(10))
+        let a = project(projects, "A")
+        let g = group("g", [.day(year: 2025, month: 7, day: 5)])
+
+        done.activate(a)
+        done.toggle(g)
+        await done.awaitPendingFlush()              // await the real task, not a fixed sleep
+        #expect(a.doneDays == ["2025-07-05"])
+        done.deactivate()
+    }
+
+    @Test("switching cancels the outgoing project's pending debounce; the incoming fires on its own")
+    func switchCancelsStaleDebounceAndIncomingFires() async throws {
+        let (projects, done) = try makeStores(debounce: .milliseconds(10))
+        let a = project(projects, "A")
+        let b = project(projects, "B")
+
+        done.activate(a)
+        done.toggle(group("g", [.day(year: 2025, month: 7, day: 5)]))   // schedules A's flush
+        done.activate(b)                                                // flushes A synchronously, cancels its timer
+        done.toggle(group("h", [.day(year: 2025, month: 8, day: 1)]))   // schedules B's flush
+        await done.awaitPendingFlush()
+        #expect(a.doneDays == ["2025-07-05"])   // A's switch-flush value; its cancelled timer never wrote onto A
+        #expect(b.doneDays == ["2025-08-01"])
+        done.deactivate()
+    }
+
+    @Test("deactivate flushes the live done-days, then clears the active state")
+    func deactivateFlushesAndClears() throws {
+        let (projects, done) = try makeStores()   // 60s debounce — deactivate must flush, not the timer
+        let a = project(projects, "A")
+        let g = group("g", [.day(year: 2025, month: 7, day: 5)])
+
+        done.activate(a)
+        done.toggle(g)
+        done.deactivate()
+        #expect(a.doneDays == ["2025-07-05"])     // flushed on deactivate
+        #expect(done.doneDays.isEmpty)
+        #expect(done.isActive == false)
+        #expect(done.activeProjectID == nil)
+    }
+
+    @Test("activate decodes externally-persisted done-days (the launch / debug-host path)")
+    func activateDecodesPersisted() throws {
+        let (projects, done) = try makeStores()
+        let a = project(projects, "A")
+        a.doneDays = ["2025-03-16", "2025-03-17"]   // set outside the store (a prior session)
+        done.activate(a)
+        #expect(done.doneDays == [.day(year: 2025, month: 3, day: 16), .day(year: 2025, month: 3, day: 17)])
+        done.deactivate()
+    }
 }

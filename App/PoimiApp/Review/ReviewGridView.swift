@@ -78,26 +78,34 @@ struct ReviewGridView: View {
 
     var body: some View {
         ScrollView {
-            // A stack of CLUSTER blocks (idea ③): each is a header + either the gapless cell grid
-            // (open) or a thumbnail peek (done → collapsed). A done cluster shrinks to a peek so the
-            // wall declutters as you finish runs; "Show all" re-opens one without un-marking it. (Not
-            // a single pinned-header LazyVGrid anymore — a full-width peek can't live in grid columns,
-            // and the design is discrete cluster blocks.)
-            LazyVStack(alignment: .leading, spacing: 0) {
+            // A LazyVStack of per-cluster SECTIONS (idea ③). Each section is a pinned header +
+            // either the gapless cell grid (open) or a full-width thumbnail peek (done → collapsed):
+            // a done cluster shrinks to a peek so the wall declutters as you finish runs; "Show all"
+            // re-opens one without un-marking it. Sections (not one big LazyVGrid) because a
+            // full-width peek can't live in grid columns — and `pinnedViews` keeps the day header
+            // glued to the top while you scroll a long open run (the #35 orientation finding).
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 ForEach(groups) { group in
                     // Format the day title once per group (not per cell) — header + cell a11y labels.
                     let title = DayGroupHeader.title(for: group)
-                    ReviewSectionHeader(group: group, title: title,
-                                        isDone: done.isDone(group),
-                                        onToggleDone: { toggleDone(group) })
-                    if isCollapsed(group) {
-                        CollapsedSectionPeek(ids: group.assetIDs) { manuallyExpanded.insert(group.id) }
-                    } else {
-                        LazyVGrid(columns: columns, spacing: spacing) {
-                            ForEach(group.assetIDs, id: \.self) { id in
-                                cell(for: id, dayLabel: title).id(id)
+                    Section {
+                        if isCollapsed(group) {
+                            CollapsedSectionPeek(ids: group.assetIDs) { expand(group) }
+                        } else {
+                            LazyVGrid(columns: columns, spacing: spacing) {
+                                ForEach(group.assetIDs, id: \.self) { id in
+                                    cell(for: id, dayLabel: title).id(id)
+                                }
                             }
                         }
+                    } header: {
+                        // `.id(group.id)` is the #37 month-drill's scroll anchor — a header is a
+                        // direct child of the `.scrollTargetLayout()` below, so `.scrollPosition`
+                        // resolves it; a cell id (a grandchild inside the nested grid) would not.
+                        ReviewSectionHeader(group: group, title: title,
+                                            isDone: done.isDone(group),
+                                            onToggleDone: { toggleDone(group) })
+                            .id(group.id)
                     }
                 }
             }
@@ -134,7 +142,7 @@ struct ReviewGridView: View {
                 if scrollTarget == nil, let day = scrollToDay,
                    let target = groups.first(where: { $0.days.contains(day) }) {
                     if done.isDone(target) { manuallyExpanded.insert(target.id) }   // expand so its cells render
-                    scrollTarget = target.assetIDs.first
+                    scrollTarget = target.id   // the section header anchor, not a (grandchild) cell id
                 }
                 rebuildWindow()
                 scheduleRecomputeWindow()
@@ -147,6 +155,7 @@ struct ReviewGridView: View {
             rebuildWindow()
             visibleIDs = []
             lastAppliedSlice = []   // new album → re-cache from scratch, don't skip on a stale match
+            manuallyExpanded = []   // group ids belong to the old album; drop them so none leaks an expand
             scheduleRecomputeWindow()
         }
         // NB: no cache reset on disappear — pushing the #36 viewer fires onDisappear, and resetting
@@ -162,10 +171,26 @@ struct ReviewGridView: View {
     }
 
     /// Toggle a section done. Clearing the manual-expand override means done→collapsed and
-    /// undone→open follow naturally from `isCollapsed`.
+    /// undone→open follow naturally from `isCollapsed`. The collapse set just changed, so the
+    /// prefetch window (open groups only) has to be rebuilt.
     private func toggleDone(_ group: DayGroup) {
         done.toggle(group)
         manuallyExpanded.remove(group.id)
+        refreshWindowForCollapse()
+    }
+
+    /// "Show all" on a done cluster: re-open it (its cells render again) without un-marking done.
+    /// Its ids re-enter the prefetch window, so rebuild it.
+    private func expand(_ group: DayGroup) {
+        manuallyExpanded.insert(group.id)
+        refreshWindowForCollapse()
+    }
+
+    /// A collapse/expand changes which ids can actually render as cells; the prefetch window's
+    /// universe is open groups only (a collapsed peek loads its own small thumbs), so re-derive it.
+    private func refreshWindowForCollapse() {
+        rebuildWindow()
+        scheduleRecomputeWindow()
     }
 
     // MARK: Cell
@@ -201,7 +226,10 @@ struct ReviewGridView: View {
     }
 
     private func rebuildWindow() {
-        window = PrefetchWindow(orderedIDs: groups.flatMap(\.assetIDs))
+        // Only OPEN groups can render cells; a collapsed cluster shows a peek (its own 56pt thumbs),
+        // never a 400² cell. Keeping collapsed ids out of the window's universe stops the
+        // visible ± margin slice from pre-caching a neighbouring collapsed run at full cell size.
+        window = PrefetchWindow(orderedIDs: groups.filter { !isCollapsed($0) }.flatMap(\.assetIDs))
     }
 
     private func scheduleRecomputeWindow() {
@@ -243,9 +271,12 @@ private struct ReviewSectionHeader: View {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(isDone ? .secondary : .primary)   // a done run reads quieter
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)   // long date title + "Select all" must still fit at AX sizes
             Text("· \(group.count)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
             Spacer(minLength: 0)
             if !isDone { sectionToggle(allSelected: allSelected) }   // select-all only matters while open
         }
