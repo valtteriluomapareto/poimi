@@ -7,8 +7,13 @@
 //  harder to curate than grouped). The grid still scrolls as one chronological flow. It keeps:
 //    • badge-select (resolved by the spike): tap a cell opens it; tap the ≥44pt badge selects,
 //    • pinch-to-adjust column density (default 3 on iPhone; clamped by size class),
-//    • a scroll-driven prefetch window (visible range ± a row margin) feeding the thumbnail seam,
-//    • `.scrollPosition` restore to the source cell after a zoom dismiss (#36).
+//    • a scroll-driven prefetch window (visible range ± a row margin) feeding the thumbnail seam.
+//
+//  Scroll position on return from the viewer is NOT explicitly restored: the grid stays put under
+//  the pushed viewer (NavigationStack preserves it), which already lands the user back where they
+//  were. An earlier `.scrollPosition(anchor: .center)` *did* restore explicitly, but its continuous
+//  two-way re-centering jumped the grid whenever a selection toggle re-laid-out a cell (#81) — so it
+//  was removed; natural stay-put covers the common case without the jump.
 //
 //  Selection lives in the shared `SelectionStore` (the in-memory `Set`, D15) — but the cells and
 //  section headers observe it themselves, so this parent body does NOT depend on `selected`. A
@@ -27,10 +32,8 @@ struct ReviewGridView: View {
     /// Metadata line under the title (e.g. "1,847 photos · Jan 2025 – Dec 2025"), shown in the
     /// scroll-top header above the tally.
     let subtitle: String
-    /// Open a cell full-screen (the parent pushes the viewer, #36).
+    /// Open a cell full-screen (the parent pushes the viewer + records `lastViewedID`, #36).
     let openAsset: (String) -> Void
-    /// The cell to restore scroll position to (updated on tap / by the viewer on swipe).
-    @Binding var scrollAnchorID: String?
 
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -38,12 +41,6 @@ struct ReviewGridView: View {
 
     @State private var columnCount = 3
     @State private var pinchBaseline = 3
-    /// The grid's LIVE scroll position — a LOCAL state, deliberately NOT the shared
-    /// `coordinator.lastViewedID`. A two-way `.scrollPosition` bound straight to that observable made
-    /// the grid write it on every scroll frame; the viewer + `.zoom` source observe it, so a return
-    /// transition churned layout in a feedback loop (the "update multiple times per frame" / gesture
-    /// gate timeout on device). We restore FROM `scrollAnchorID` on appear and write it only on a tap.
-    @State private var scrollID: String?
     @State private var visibleIDs: Set<String> = []
     @State private var window = PrefetchWindow(orderedIDs: [])
     // Generation-guarded prefetch: a single in-flight updater loops until it has applied the latest
@@ -90,7 +87,6 @@ struct ReviewGridView: View {
         // it's the orientation device; losing it mid-scroll would defeat the point. A `.bar` backing
         // gives scroll-edge legibility over bright thumbnails (ReviewHeader owns it).
         .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(subtitle: subtitle) }
-        .scrollPosition(id: $scrollID, anchor: .center)
         // Reduce Motion → no density-change animation (the cross-fade is the system default).
         .animation(reduceMotion ? nil : .snappy, value: columnCount)
         .gesture(
@@ -108,16 +104,10 @@ struct ReviewGridView: View {
                 .onEnded { _ in pinchBaseline = columnCount }
         )
         .onAppear {
-            Perf.event("grid.onAppear (dismiss span end)")
-            Perf.measure("grid.onAppear restore→\(scrollAnchorID.map { String($0.suffix(8)) } ?? "nil")") {
-                // Restore to the last-viewed photo ONLY if it's still on screen — the grid stays put
-                // under the pushed viewer, so that's the common case (a no-op scroll). If the viewer
-                // swiped far away, scrolling the full LazyVGrid to a distant cell would materialise its
-                // whole prefix and hang (the very failure the viewer's windowing fixes); skip it and
-                // leave the grid where the user tapped.
-                if let target = scrollAnchorID, visibleIDs.contains(target) {
-                    scrollID = target
-                }
+            Perf.event("grid.onAppear (return from viewer)")
+            Perf.measure("grid.onAppear setup") {
+                // No explicit scroll restore — the grid stayed put under the pushed viewer, so it's
+                // already where the user left it (an explicit re-center jumped on selection, #81).
                 rebuildWindow()
                 scheduleRecomputeWindow()
             }
@@ -144,7 +134,7 @@ struct ReviewGridView: View {
             dayLabel: dayLabel,
             load: load,
             cachedImage: cachedImage,
-            onOpen: { Perf.event("grid.tap \(id.suffix(8))"); scrollAnchorID = id; openAsset(id) })
+            onOpen: { Perf.event("grid.tap \(id.suffix(8))"); openAsset(id) })
             .onAppear { visibleIDs.insert(id) }
             .onDisappear { visibleIDs.remove(id) }
     }
