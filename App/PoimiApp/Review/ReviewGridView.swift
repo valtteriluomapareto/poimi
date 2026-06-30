@@ -34,6 +34,9 @@ struct ReviewGridView: View {
     let subtitle: String
     /// Open a cell full-screen (the parent pushes the viewer + records `lastViewedID`, #36).
     let openAsset: (String) -> Void
+    /// A day-group to scroll to on open — the overview's "drill into this month" target (#37). Nil →
+    /// open at the top (the normal entry).
+    var scrollToDay: DayKey?
 
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -41,6 +44,10 @@ struct ReviewGridView: View {
 
     @State private var columnCount = 3
     @State private var pinchBaseline = 3
+    /// One-shot scroll position for the #37 drill — set ONCE on appear from `scrollToDay`, then just
+    /// tracks. Deliberately no `.center` anchor + a LOCAL state (the #81/#82 jump was a `.center`
+    /// two-way bind to a shared observable; `.scrollPosition` itself is lazy-safe, unlike `scrollTo`).
+    @State private var scrollTarget: String?
     @State private var visibleIDs: Set<String> = []
     @State private var window = PrefetchWindow(orderedIDs: [])
     // Generation-guarded prefetch: a single in-flight updater loops until it has applied the latest
@@ -87,6 +94,8 @@ struct ReviewGridView: View {
         // it's the orientation device; losing it mid-scroll would defeat the point. A `.bar` backing
         // gives scroll-edge legibility over bright thumbnails (ReviewHeader owns it).
         .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(subtitle: subtitle) }
+        // One-shot position for the #37 drill (lazy-safe; nil target = no positioning = top).
+        .scrollPosition(id: $scrollTarget)
         // Reduce Motion → no density-change animation (the cross-fade is the system default).
         .animation(reduceMotion ? nil : .snappy, value: columnCount)
         .gesture(
@@ -104,10 +113,15 @@ struct ReviewGridView: View {
                 .onEnded { _ in pinchBaseline = columnCount }
         )
         .onAppear {
-            Perf.event("grid.onAppear (return from viewer)")
+            Perf.event("grid.onAppear (return from viewer / drill)")
             Perf.measure("grid.onAppear setup") {
-                // No explicit scroll restore — the grid stayed put under the pushed viewer, so it's
-                // already where the user left it (an explicit re-center jumped on selection, #81).
+                // Drill from the overview (#37): scroll once to the first cell of the day-group holding
+                // the target day. No explicit RESTORE otherwise — the grid stays put under the pushed
+                // viewer, and an explicit re-center jumped on selection (#81).
+                if scrollTarget == nil, let day = scrollToDay,
+                   let target = groups.first(where: { $0.days.contains(day) }) {
+                    scrollTarget = target.assetIDs.first
+                }
                 rebuildWindow()
                 scheduleRecomputeWindow()
             }
