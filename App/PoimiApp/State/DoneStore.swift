@@ -76,19 +76,36 @@ final class DoneStore {
     /// is built by the caller from `CandidateStore.dayByID` (invert id→day to day→ids).
     func reconcile(currentIDsByDay current: [DayKey: Set<String>]) {
         guard let project = activeProject, project.persistentModelID == activeProjectID else { return }
-        if let data = project.reviewedIDsByDay, let previous = Self.decodeIDsByDay(data) {
-            // Have a baseline → reopen days that grew. (An empty/absent baseline is a first load:
-            // skip, or reopening would treat every id as new and re-open everything — see Completion.)
-            doneDays = Completion.reopening(doneDays: doneDays,
-                                            previousIDsByDay: previous,
-                                            currentIDsByDay: current)
-            project.doneDays = doneDays.map(\.description).sorted()
+        let previous = project.reviewedIDsByDay.flatMap(Self.decodeIDsByDay)
+        var dirty = false
+        // Reopen only against a REAL baseline. An absent (first load) OR an empty-dict baseline must
+        // reopen NOTHING: an empty `previous` makes every current id look "new" and would un-mark the
+        // user's whole year (the exact catastrophe Completion.reopening's caller contract warns about).
+        // A corrupt blob decodes to nil → also treated as no baseline (falls back to first-load).
+        if let previous, !previous.isEmpty {
+            let reconciled = Completion.reopening(doneDays: doneDays,
+                                                  previousIDsByDay: previous,
+                                                  currentIDsByDay: current)
+            if reconciled != doneDays {
+                doneDays = reconciled
+                project.doneDays = encodedDoneDays
+                dirty = true
+            }
         }
-        project.reviewedIDsByDay = Self.encodeIDsByDay(current)
-        do {
-            try context.save()
-        } catch {
-            Log.persistence.error("done reconcile save failed: \(String(describing: error), privacy: .public)")
+        // Record this load as the new baseline — but skip the rewrite when the candidate set is
+        // unchanged (a benign re-open of the same album) so we don't re-encode the same blob each time.
+        if previous != current {
+            project.reviewedIDsByDay = Self.encodeIDsByDay(current)
+            dirty = true
+        }
+        // A once-per-load reconcile saves DIRECTLY (not via the debounce) so the reopen is durable at
+        // once; a later debounced flush re-reads the live `doneDays`, so this direct save can't be lost.
+        if dirty {
+            do {
+                try context.save()
+            } catch {
+                Log.persistence.error("done reconcile save failed: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 
@@ -117,13 +134,17 @@ final class DoneStore {
         // Only the active project is written — a stale debounce from a previous project is a no-op
         // (the multi-project trap, §12). The guard makes the live `doneDays` safe to encode here.
         guard let project, project.persistentModelID == activeProjectID else { return }
-        project.doneDays = doneDays.map(\.description).sorted()
+        project.doneDays = encodedDoneDays
         do {
             try context.save()
         } catch {
             Log.persistence.error("done flush failed: \(String(describing: error), privacy: .public)")
         }
     }
+
+    /// The live done-days in the persisted `[String]` form — sorted `DayKey` descriptions. Shared by
+    /// `write` and `reconcile` so the two persistence paths can't drift.
+    private var encodedDoneDays: [String] { doneDays.map(\.description).sorted() }
 
     // The reconcile baseline persists as `[DayKey string: sorted ids]` JSON — the same string
     // round-trip `doneDays` uses (DayKey ⇄ its description), so `.undated` survives too.

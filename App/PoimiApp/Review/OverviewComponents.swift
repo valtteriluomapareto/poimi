@@ -134,6 +134,13 @@ private struct OverviewThumb: View {
     }
 }
 
+/// Keeps-first ordering for the collapsed peek: the picked ids (in source order) then the rest.
+/// Pure + `internal` so the "foreground the keeps" blocker fix is unit-tested and can't silently
+/// regress back to raw chronology (the product-blocker the ruthless review flagged).
+func keptFirstOrdering(ids: [String], picked: Set<String>) -> [String] {
+    ids.filter(picked.contains) + ids.filter { !picked.contains($0) }
+}
+
 /// The collapsed state of a done cluster in the review grid (idea ③). A done run's summary is about
 /// what the user KEPT, not raw chronology — so the peek foregrounds the *picked* photos and a "N of M
 /// kept" count (the number the whole app tracks). With zero picks it falls back to the first few,
@@ -148,7 +155,9 @@ struct CollapsedSectionPeek: View {
 
     private let thumbSize: CGFloat = 56
     private let thumbRadius: CGFloat = 8
-    private let maxThumbs = 5
+    // Capped so the row (≤3 thumbs + the "+N" tile + "Show all") fits the narrowest supported width
+    // without overflowing; the total kept count lives in the pinned header.
+    private let maxThumbs = 3
 
     var body: some View {
         // O(group size), bounded; runs in this subview, not the grid body.
@@ -156,7 +165,7 @@ struct CollapsedSectionPeek: View {
         let kept = pickedSet.count
         // Keeps first (foregrounded, full opacity), then the rest dimmed — the peek is ABOUT what you
         // kept, but still has visual body and shows the run wasn't empty.
-        let ordered = ids.filter(pickedSet.contains) + ids.filter { !pickedSet.contains($0) }
+        let ordered = keptFirstOrdering(ids: ids, picked: pickedSet)
         let shown = Array(ordered.prefix(maxThumbs))
         let overflow = ids.count - shown.count
 

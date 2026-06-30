@@ -41,7 +41,9 @@ final class CurationProject {
     /// (`DayKey` string → ids), encoded JSON. The baseline for the "done but changed" reconcile
     /// (D32(d)/D34): on the next load a done day that *gained* an id re-opens, so a newly-added
     /// photo is never silently hidden by the collapse. `nil` until the first load records it.
-    var reviewedIDsByDay: Data?
+    /// `.externalStorage` so this ~100s-of-KB blob faults in lazily and never loads with a plain
+    /// project fetch (the albums list, status checks) that has no use for it.
+    @Attribute(.externalStorage) var reviewedIDsByDay: Data?
     /// Cache of the derived resume day (§13).
     var resumeDayKey: String?
     /// Scroll anchor only — not the done-state authority (§13).

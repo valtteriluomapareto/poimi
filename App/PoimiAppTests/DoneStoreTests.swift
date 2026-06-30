@@ -194,4 +194,50 @@ struct DoneStoreTests {
         #expect(done.isDone(g))
         done.deactivate()
     }
+
+    @Test("reconcile: a corrupt baseline blob falls back to first-load (no reopen, no crash)")
+    func reconcileCorruptBaselineFallsBack() throws {
+        let (projects, done) = try makeStores()
+        let a = project(projects, "A")
+        let day = DayKey.day(year: 2025, month: 3, day: 16)
+        let g = group("g", [day])
+        a.reviewedIDsByDay = Data([0xFF, 0x01, 0x02])   // not decodable JSON (migration glitch / truncation)
+        done.activate(a)
+        done.toggle(g)
+        done.reconcile(currentIDsByDay: [day: ["x"]])
+        #expect(done.isDone(g))             // undecodable → treated as no baseline → reopen nothing
+        #expect(a.reviewedIDsByDay != nil)  // overwritten with a valid snapshot
+        done.deactivate()
+    }
+
+    @Test("reconcile with no active project is a silent no-op")
+    func reconcileNoActiveProjectIsNoOp() throws {
+        let (projects, done) = try makeStores()
+        let a = project(projects, "A")
+        let day = DayKey.day(year: 2025, month: 3, day: 16)
+        done.activate(a)
+        done.toggle(group("g", [day]))
+        done.flushNow()
+        #expect(a.doneDays == ["2025-03-16"])
+        done.deactivate()                                  // nothing active now
+        done.reconcile(currentIDsByDay: [day: ["x", "y"]]) // would reopen IF it ran
+        #expect(a.doneDays == ["2025-03-16"])              // guard → unchanged
+        #expect(a.reviewedIDsByDay == nil)                 // and no baseline recorded onto an inactive project
+    }
+
+    @Test("reconcile: a multi-day group re-opens when only ONE of its days gains a photo")
+    func reconcileReopensMultiDayGroupOnOneDayGain() throws {
+        let (projects, done) = try makeStores()
+        let a = project(projects, "A")
+        let d16 = DayKey.day(year: 2025, month: 3, day: 16)
+        let d17 = DayKey.day(year: 2025, month: 3, day: 17)
+        let run = group("run", [d16, d17])
+        done.activate(a)
+        done.toggle(run)                                            // both days done → group done
+        done.reconcile(currentIDsByDay: [d16: ["a"], d17: ["b"]])   // baseline
+        #expect(done.isDone(run))                                   // unchanged → still done
+        done.reconcile(currentIDsByDay: [d16: ["a"], d17: ["b", "c"]])   // d17 gained "c"
+        #expect(!done.isDone(run))                                  // one day reopened → whole group not done
+        done.deactivate()
+    }
 }

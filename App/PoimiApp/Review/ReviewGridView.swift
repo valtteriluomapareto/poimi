@@ -95,14 +95,16 @@ struct ReviewGridView: View {
                             }
                         }
                     } header: {
-                        // `.id(group.id)` is the #37 month-drill's scroll anchor — the header is a
-                        // direct child of the `.scrollTargetLayout()` below, so `.scrollPosition`
-                        // resolves it (it exists in both the open and collapsed branch, so the drill
-                        // never races a not-yet-rendered cell).
+                        // The header carries the #37 month-drill's scroll anchor — NAMESPACED
+                        // ("section:…") because `DayGroup.id` is the first asset's localIdentifier,
+                        // which is ALSO the first cell's `.id`; an un-prefixed header id would be a
+                        // duplicate anchor in this one LazyVGrid and confuse `.scrollPosition`. The
+                        // anchor lives on the header (present in both branches), so the drill targets
+                        // the section without racing a not-yet-rendered cell.
                         ReviewSectionHeader(group: group, title: title,
                                             isDone: done.isDone(group),
                                             onToggleDone: { toggleDone(group) })
-                            .id(group.id)
+                            .id(Self.sectionAnchor(group.id))
                     } footer: {
                         if isCollapsed(group) {
                             CollapsedSectionPeek(ids: group.assetIDs, dayTitle: title) { expand(group) }
@@ -137,13 +139,14 @@ struct ReviewGridView: View {
         .onAppear {
             Perf.event("grid.onAppear (return from viewer / drill)")
             Perf.measure("grid.onAppear setup") {
-                // Drill from the overview (#37): scroll once to the first cell of the day-group holding
-                // the target day. No explicit RESTORE otherwise — the grid stays put under the pushed
-                // viewer, and an explicit re-center jumped on selection (#81).
+                // Drill from the overview (#37): scroll once to the day-group holding the target day
+                // (the section header anchor). No explicit RESTORE otherwise — the grid stays put under
+                // the pushed viewer, and an explicit re-center jumped on selection (#81). The actual
+                // scroll-to-section still wants a device pass (#87) — a static screenshot can't confirm it.
                 if scrollTarget == nil, let day = scrollToDay,
                    let target = groups.first(where: { $0.days.contains(day) }) {
                     if done.isDone(target) { manuallyExpanded.insert(target.id) }   // expand so its cells render
-                    scrollTarget = target.id   // the section header anchor, not a (grandchild) cell id
+                    scrollTarget = Self.sectionAnchor(target.id)   // namespaced header anchor (see header)
                 }
                 rebuildWindow()
                 scheduleRecomputeWindow()
@@ -169,6 +172,11 @@ struct ReviewGridView: View {
     }
 
     // MARK: Collapse (idea ③)
+
+    /// The drill scroll anchor for a section, namespaced away from the cell ids (`DayGroup.id` is the
+    /// first asset's localIdentifier, which is also the first cell's `.id`). Header `.id` and the
+    /// `scrollTarget` write must use this same form so they match.
+    private static func sectionAnchor(_ groupID: String) -> String { "section:\(groupID)" }
 
     /// A done section renders collapsed unless the user re-opened it via "Show all".
     private func isCollapsed(_ group: DayGroup) -> Bool {
