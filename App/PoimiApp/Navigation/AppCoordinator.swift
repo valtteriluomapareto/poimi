@@ -82,6 +82,7 @@ final class AppCoordinator {
     /// Push the full-screen photo viewer (the `.zoom` destination). Records the asset as last-viewed
     /// so the `.zoom` source + the grid's scroll restore are anchored to it from the outset.
     func openPhoto(_ assetID: String) {
+        Perf.event("openPhoto \(assetID.suffix(8))")   // start of the open span (→ viewer.onAppear)
         lastViewedID = assetID
         path.append(.photo(assetID))
     }
@@ -93,6 +94,7 @@ final class AppCoordinator {
 
     func pop() {
         guard !path.isEmpty else { return }
+        Perf.event("pop from \(path.count) (dismiss span →)")   // start of the dismiss span (→ grid.onAppear)
         path.removeLast()
     }
 

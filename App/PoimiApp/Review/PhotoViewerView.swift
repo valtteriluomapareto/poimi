@@ -23,11 +23,25 @@ struct PhotoViewerView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @State private var currentID: String
-    /// The pages to swipe + an id→index map, resolved once on appear so the position lookup is O(1)
-    /// per render rather than scanning the candidate list. Fall back to just this photo if the
-    /// shared list isn't populated (viewer opened without a live review context).
-    @State private var pages: [String] = []
+    /// The full candidate list (for the "N of M" position) + an id→global-index map (O(1) lookup).
+    /// Resolved once on appear; falls back to just this photo when there's no live review context.
+    @State private var allIDs: [String] = []
     @State private var indexByID: [String: Int] = [:]
+    /// A bounded *window* of `allIDs` around the current photo — what the pager and filmstrip actually
+    /// render. A `LazyHStack` positioned at a mid-list id materializes its WHOLE prefix to get there
+    /// (`.scrollPosition` and `scrollTo` both do) — over a few-thousand-photo album that built
+    /// thousands of full-screen pages and froze the viewer. The window keeps it to a few dozen and
+    /// slides as you swipe, so positioning only ever builds a handful of pages.
+    @State private var pages: [String] = []
+
+    /// Window shape: symmetric buffers so swiping back rebuilds the window as rarely as swiping
+    /// forward (an asymmetric buffer re-slid every few photos one way). Positioning into the window
+    /// is cheap regardless of where `currentID` lands because the window stays SMALL — the prefix
+    /// walk that froze the viewer is a property of a thousands-item stack, not of the local index.
+    /// `rebuildMargin` triggers a slide a few pages before either end.
+    private let windowBack = 34
+    private let windowForward = 34
+    private let rebuildMargin = 4
 
     init(startID: String) {
         self.startID = startID
@@ -42,42 +56,80 @@ struct PhotoViewerView: View {
 
     var body: some View {
         // A lazy horizontal paging scroll: `LazyHStack` only materializes the visible + adjacent
-        // pages (so a thousands-photo album stays light — the TabView(.page) scale risk is gone),
-        // `.scrollTargetBehavior(.paging)` snaps page-to-page, and `.scrollPosition` two-way-binds
-        // the current page id. Each page is a `ZoomableScrollView` (pinch-zoom / pan / double-tap).
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 0) {
-                    ForEach(pages, id: \.self) { id in
-                        PhotoPage(id: id, accessibilityLabel: photoAXLabel(for: id))
-                            .containerRelativeFrame(.horizontal)
-                            .id(id)
-                    }
+        // pages (so a thousands-photo album stays light), `.scrollTargetBehavior(.paging)` snaps
+        // page-to-page, and `.scrollPosition(id:)` both restores the opening page and two-way-binds
+        // the current one. Each page is a `ZoomableScrollView` (pinch-zoom / pan / double-tap).
+        //
+        // Positioning is done by `.scrollPosition(id:)` ALONE — deliberately NOT a `ScrollViewReader`
+        // `scrollTo`. Over a whole album (thousands of candidates) `scrollTo` to a mid-list id walks
+        // the lazy stack from the start, materializing every page up to the target — full-screen
+        // pages × thousands froze the app on device. `.scrollPosition(id:)` lands on the bound id
+        // lazily, without building the prefix.
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 0) {
+                ForEach(pages, id: \.self) { id in
+                    PhotoPage(id: id, accessibilityLabel: photoAXLabel(for: id))
+                        .containerRelativeFrame(.horizontal)
+                        .id(id)
                 }
-                .scrollTargetLayout()
             }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: pageBinding)
-            .scrollIndicators(.hidden)
-            .background(Color.black)
-            .ignoresSafeArea()
-            .overlay(alignment: .top) { topBar }
-            .overlay(alignment: .bottom) { bottomBar }
-            .toolbar(.hidden, for: .navigationBar)
-            // Keep the shared anchor on the photo in view, so the grid restores here and the `.zoom`
-            // return pairs with this cell.
-            .onChange(of: currentID) { coordinator.lastViewedID = currentID }
-            .onAppear {
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.paging)
+        .scrollPosition(id: pageBinding)
+        .scrollIndicators(.hidden)
+        .background(Color.black)
+        .ignoresSafeArea()
+        .overlay(alignment: .top) { topBar }
+        .overlay(alignment: .bottom) { bottomBar }
+        .toolbar(.hidden, for: .navigationBar)
+        // Keep the shared anchor on the photo in view, so the grid restores here and the `.zoom`
+        // return pairs with this cell; and slide the window before a swipe runs off its end.
+        .onChange(of: currentID) {
+            Perf.measure("viewer.onChange→\(currentID.suffix(8))") {
+                coordinator.lastViewedID = currentID
+                slideWindowIfNeeded()
+            }
+        }
+        .onAppear {
+            Perf.event("viewer.onAppear (open span end)")
+            Perf.measure("viewer.onAppear build") {
                 let list = coordinator.reviewOrderedIDs.contains(startID) ? coordinator.reviewOrderedIDs : [startID]
-                pages = list
+                allIDs = list
                 indexByID = Dictionary(list.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
-                // `.scrollPosition` to a *mid-list* id in a `LazyHStack` doesn't reliably land on the
-                // first layout (the target page isn't built yet), so scroll to it explicitly once the
-                // pages exist — otherwise the viewer opens on page 0 while the chrome reads the tapped
-                // photo's position. `currentID` (== `startID` on first appear) so a re-appear lands on
-                // the last-viewed page, not the opener.
-                DispatchQueue.main.async { proxy.scrollTo(currentID, anchor: .center) }
+                rebuildWindow(around: startID)
             }
+        }
+        .onDisappear { Perf.event("viewer.onDisappear") }
+    }
+
+    // MARK: Windowing (bound the LazyHStack so positioning never builds thousands of pages)
+
+    /// Rebuild `pages` as the slice of `allIDs` spanning `windowBack` before `id` … `windowForward`
+    /// after it (clamped to the list). No-op when the slice is unchanged, so re-centering at the very
+    /// start/end of the album doesn't churn state.
+    private func rebuildWindow(around id: String) {
+        guard let idx = indexByID[id] else {
+            if pages != [id] { pages = [id] }
+            return
+        }
+        let range = viewerWindow(count: allIDs.count, around: idx, back: windowBack, forward: windowForward)
+        let next = Array(allIDs[range])
+        if next != pages {
+            pages = next   // `.scrollPosition(id:)` keeps `currentID` put across this
+            Perf.event("viewer.window \(range.lowerBound)..<\(range.upperBound) n=\(next.count) @\(id.suffix(8))")
+        }
+    }
+
+    /// When the current photo nears either end of the window, re-center the window on it. Most swipes
+    /// sit mid-window and do nothing; a slide only fires every ~`windowForward` photos.
+    private func slideWindowIfNeeded() {
+        guard let local = pages.firstIndex(of: currentID) else {
+            rebuildWindow(around: currentID)
+            return
+        }
+        if local < rebuildMargin || local > pages.count - 1 - rebuildMargin {
+            rebuildWindow(around: currentID)
         }
     }
 
@@ -118,7 +170,7 @@ struct PhotoViewerView: View {
     /// degrades to just the position.
     private func positionLabel(_ position: Int) -> some View {
         let day = dayLabel(for: currentID)
-        let count = pages.count
+        let count = allIDs.count   // position is over the whole album, not the render window
         return VStack(spacing: 1) {
             if !day.isEmpty {
                 Text(day)
@@ -146,8 +198,8 @@ struct PhotoViewerView: View {
     private func photoAXLabel(for id: String) -> String {
         let position = (indexByID[id] ?? 0) + 1
         let day = dayLabel(for: id)
-        return day.isEmpty ? "Photo, \(position) of \(pages.count)"
-                           : "Photo, \(day), \(position) of \(pages.count)"
+        return day.isEmpty ? "Photo, \(position) of \(allIDs.count)"
+                           : "Photo, \(day), \(position) of \(allIDs.count)"
     }
 
     @ViewBuilder
@@ -224,16 +276,31 @@ private struct PhotoPage: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityLabel)
             .task(id: id) {
+                Perf.event("page.task \(id.suffix(8))")   // a page materialized — should be only a few
                 // Paint the already-decoded thumbnail first (no black flash), then the full-res.
                 if image == nil,
                    let cached = thumbnails.cachedThumbnail(for: id, targetSize: CGSize(width: 400, height: 400)) {
                     image = cached
                 }
                 let pixels = CGSize(width: geo.size.width * displayScale, height: geo.size.height * displayScale)
-                if let full = await thumbnails.fullImage(for: id, targetSize: pixels) {
-                    image = full
-                }
+                let started = Perf.begin()
+                let full = await thumbnails.fullImage(for: id, targetSize: pixels)
+                Perf.endIO("page.fullImage \(id.suffix(8))", since: started)
+                if let full { image = full }
             }
         }
     }
+}
+
+/// The bounded window of indices to render around `index` in a list of `count` — `back` before and
+/// `forward` after, clamped to `0..<count`. Pulled out of the view (like `clampedColumnCount` /
+/// `PrefetchWindow`) so the freeze-fix invariant is unit-tested without rendering: the slice ALWAYS
+/// contains `index` and never exceeds `back + forward + 1`. A flipped bound here brings back the
+/// mid-list materialisation hang the windowing exists to prevent — hence the guard.
+func viewerWindow(count: Int, around index: Int, back: Int, forward: Int) -> Range<Int> {
+    guard count > 0 else { return 0..<0 }
+    let clamped = min(max(index, 0), count - 1)
+    let lo = max(0, clamped - back)
+    let hi = min(count, clamped + forward + 1)
+    return lo..<hi
 }
