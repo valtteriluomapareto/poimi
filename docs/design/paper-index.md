@@ -4,7 +4,7 @@ A map of the Poimi design file in **Paper** — every artboard, what it shows, a
 issues + the current build. This is the index for agents/humans to find a screen's design before
 implementing it.
 
-- **Index created:** 2026-06-29 · **updated:** 2026-06-29 (Photo viewer `WZ-0` built — #36 parts 1–2b).
+- **Index created:** 2026-06-29 · **updated:** 2026-06-30 (Overview #37 → 19P thumbnail rows, built).
   A snapshot — re-verify against Paper before relying on a specific detail; the file evolves.
 - **File:** "Poimi" · page "Page 1" (`1-0`) · **33 artboards** (27 product screens + a 6-artboard
   v1.1 idea-backlog exploration cluster, below)
@@ -53,8 +53,11 @@ full 999. The repo's Asset Catalog + styleguide.md mirror these.
 
 ## Overview explorations — choose one (#37, 390×844)
 
-Six alternative treatments of the zoom-out overview level. **Undecided** — pick a direction before
-building #37. (Names describe each treatment; inspect before choosing.)
+Six alternative treatments of the zoom-out overview level. **Chosen: `19P-0` (thumbnail rows)** — built
+for #37 as the v1 Overview (month rows: name · "N picked · total" · a thumbnail strip, + a coverage
+histogram). The four location-grouped treatments (`1DE`/`1H3`/`1LA`/`1PV`) need the v1.1 location
+subsystem; the plan is to evolve `19P`'s strip into `1PV` (location-segmented thumbnail bar) when that
+lands. (Names describe each treatment.)
 
 | Screen | Node | Treatment |
 |---|---|---|

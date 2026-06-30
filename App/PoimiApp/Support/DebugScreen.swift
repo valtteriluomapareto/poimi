@@ -49,6 +49,8 @@ enum DebugScreen: String, CaseIterable {
     case thumbs
     /// The full-screen photo viewer — pager + select-in-place chrome over the fake tiles (#36).
     case photoviewer
+    /// The album overview — month rows + coverage histogram over the fake candidates (#37).
+    case overview
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -83,6 +85,7 @@ struct DebugScreenHost: View {
         case .scanning: DebugScanningHostView()
         case .thumbs: DebugThumbnailHostView()
         case .photoviewer: DebugPhotoViewerHostView()
+        case .overview: DebugOverviewHostView()
         }
     }
 }
@@ -255,6 +258,55 @@ struct DebugScanningHostView: View {
 
     static let yearStart = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01Z
     static let yearEnd = Date(timeIntervalSince1970: 1_767_225_600)     // 2026-01-01Z
+}
+
+/// Hosts the album overview (#37) over the deterministic fake candidates: month rows + coverage
+/// histogram, with a few preselected picks so the per-month "N picked" reads non-zero.
+struct DebugOverviewHostView: View {
+    @Environment(\.photoLibrary) private var library
+    // Retained so the in-memory container outlives `.task` (a context-only hold SIGTRAPs on dealloc).
+    @State private var projectStore: ProjectStore?
+    @State private var selectionStore: SelectionStore?
+    @State private var coordinator: AppCoordinator?
+    @State private var project: CurationProject?
+
+    private static let preselected = ["fake/busy/2", "fake/busy/5", "fake/quiet/16"]
+
+    var body: some View {
+        Group {
+            if let selectionStore, let coordinator, let project {
+                NavigationStack { AlbumOverviewView(project: project) }
+                    .environment(selectionStore)
+                    .environment(coordinator)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            guard let container = try? AppModelContainer.make(inMemory: true) else {
+                Log.app.error("DebugOverviewHostView: failed to build the in-memory container")
+                return
+            }
+            let projects = ProjectStore(container: container)
+            let selection = SelectionStore(container: container)
+            let created = projects.create(
+                title: "Best of 2025",
+                rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
+                targetCount: 100,
+                excludeScreenshots: true,
+                excludedAlbumIDs: ["album/whatsapp"])
+            selection.activate(created)
+            Self.preselected.forEach { selection.toggle($0) }
+            projectStore = projects
+            selectionStore = selection
+            coordinator = AppCoordinator(library: library)
+            project = created
+
+            let probe = CandidateStore(library: library)
+            await probe.load(created)
+            Log.app.notice("screenshot-ready: \(DebugScreen.overview.rawValue, privacy: .public)")
+        }
+    }
 }
 
 /// Hosts the full-screen photo viewer (#36) over the deterministic fake tiles: a coordinator seeded
