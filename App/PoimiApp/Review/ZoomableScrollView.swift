@@ -19,6 +19,9 @@ struct ZoomableScrollView: UIViewRepresentable {
     /// Reports whether the photo is zoomed in. The viewer uses it to suppress swipe-down-to-dismiss
     /// while a zoomed photo is being panned (a downward pan would otherwise read as a dismiss).
     var onZoomedChange: ((Bool) -> Void)?
+    /// Whether this page is the one on screen. A page swiped away from drops its zoom back to fit, so
+    /// returning to it always starts zoomed-out (and the viewer's `isZoomed` gate stays correct).
+    var isActive: Bool = true
 
     func makeUIView(context: Context) -> ZoomableImageScrollView {
         let view = ZoomableImageScrollView()
@@ -29,6 +32,7 @@ struct ZoomableScrollView: UIViewRepresentable {
     func updateUIView(_ view: ZoomableImageScrollView, context: Context) {
         view.onZoomedChange = onZoomedChange
         if view.image !== image { view.image = image }
+        if !isActive { view.resetZoomToFit() }   // no-op once at fit; drops a swiped-away page's zoom
     }
 }
 
@@ -55,6 +59,14 @@ final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
     private func setZoomed(_ zoomed: Bool) {
         isScrollEnabled = zoomed
         onZoomedChange?(zoomed)
+    }
+
+    /// Drop back to fit (called when this page scrolls out of view). No-op when already at fit, so
+    /// repeated `updateUIView` calls are cheap.
+    func resetZoomToFit() {
+        guard zoomScale > minimumZoomScale else { return }
+        setZoomScale(minimumZoomScale, animated: false)
+        setZoomed(false)
     }
 
     init() {

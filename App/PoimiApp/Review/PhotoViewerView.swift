@@ -26,6 +26,9 @@ struct PhotoViewerView: View {
     /// Whether the CURRENT page is zoomed in — reported up from its `ZoomableScrollView`. Gates
     /// swipe-down-to-dismiss off so it doesn't fight panning a zoomed photo. Reset on a page change.
     @State private var isZoomed = false
+    /// Viewport height, so the dismiss gesture can ignore drags that start on the bottom chrome
+    /// (the filmstrip) — reaching for the strip shouldn't dismiss.
+    @State private var viewportHeight: CGFloat = 0
     /// The full candidate list (for the "N of M" position) + an id→global-index map (O(1) lookup).
     /// Resolved once on appear; falls back to just this photo when there's no live review context.
     @State private var allIDs: [String] = []
@@ -73,6 +76,7 @@ struct PhotoViewerView: View {
                 ForEach(pages, id: \.self) { id in
                     PhotoPage(id: id,
                               accessibilityLabel: photoAXLabel(for: id),
+                              isCurrent: id == currentID,
                               onZoomedChange: { zoomed in if id == currentID { isZoomed = zoomed } })
                         .containerRelativeFrame(.horizontal)
                         .id(id)
@@ -85,13 +89,16 @@ struct PhotoViewerView: View {
         .scrollIndicators(.hidden)
         .background(Color.black)
         .ignoresSafeArea()
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
         // Swipe down to dismiss (Photos convention) — but ONLY when the photo isn't zoomed, so a
         // downward pan of a zoomed photo isn't hijacked as a dismiss. At base zoom the inner scroll is
         // disabled, so this is the sole consumer of a vertical drag; horizontal page-swipes stay with
-        // the paging scroll (this gesture only fires on a clearly downward-dominant drag).
+        // the paging scroll (this gesture only fires on a clearly downward-dominant drag). Drags that
+        // start on the bottom chrome (the filmstrip) are ignored so scrubbing-reach can't dismiss.
         .simultaneousGesture(
             DragGesture(minimumDistance: 20).onEnded { value in
-                guard !isZoomed,
+                let startsOnFilmstrip = viewportHeight > 0 && value.startLocation.y > viewportHeight - 140
+                guard !isZoomed, !startsOnFilmstrip,
                       value.translation.height > 100,
                       value.translation.height > abs(value.translation.width) * 1.5 else { return }
                 coordinator.pop()
@@ -274,6 +281,8 @@ private struct PhotoPage: View {
     /// The day + position, prebuilt by the viewer (which holds the day map + index) so the photo
     /// element carries real context for VoiceOver — "Photo, Sat, Jul 5, 7 of 13" — not just "Photo".
     let accessibilityLabel: String
+    /// Whether this is the page on screen — a non-current page drops its zoom back to fit.
+    let isCurrent: Bool
     /// Forwarded from this page's `ZoomableScrollView` so the viewer can gate swipe-to-dismiss.
     let onZoomedChange: (Bool) -> Void
     @Environment(\.thumbnailProvider) private var thumbnails
@@ -285,7 +294,7 @@ private struct PhotoPage: View {
             ZStack {
                 Color.black
                 if let image {
-                    ZoomableScrollView(image: image, onZoomedChange: onZoomedChange)   // zoom / pan / 2× tap
+                    ZoomableScrollView(image: image, onZoomedChange: onZoomedChange, isActive: isCurrent)
                 } else {
                     ProgressView()
                         .controlSize(.large)
