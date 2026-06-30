@@ -56,6 +56,13 @@ struct ScanningView: View {
                     store = fresh
                     loadedProjectID = project.id
                     await fresh.load(project)
+                    // Reconcile done-state against the freshly-loaded candidates: a done day that
+                    // gained a photo since the last load re-opens, so the collapse never hides a new
+                    // unreviewed photo (D32(d)). Only on a real .ready load — an empty/failed load
+                    // would record a bogus (empty) baseline and re-open everything next time.
+                    if case .ready = fresh.phase {
+                        doneStore.reconcile(currentIDsByDay: Self.idsByDay(fresh.dayByID))
+                    }
                 }
                 // Publish the candidate list + per-photo day map so the photo viewer can page
                 // through it and label each photo's day (#36).
@@ -101,6 +108,14 @@ struct ScanningView: View {
         let lastDay = Calendar.current.date(byAdding: .day, value: -1, to: project.rangeEnd) ?? project.rangeEnd
         let end = lastDay.formatted(style)
         return start == end ? start : "\(start) – \(end)"
+    }
+
+    /// Invert the store's per-photo `id → DayKey` map into the `DayKey → ids` shape the done-state
+    /// reconcile diffs against the persisted baseline.
+    private static func idsByDay(_ dayByID: [String: DayKey]) -> [DayKey: Set<String>] {
+        var out: [DayKey: Set<String>] = [:]
+        for (id, day) in dayByID { out[day, default: []].insert(id) }
+        return out
     }
 
     @ViewBuilder

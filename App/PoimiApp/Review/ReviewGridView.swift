@@ -78,34 +78,35 @@ struct ReviewGridView: View {
 
     var body: some View {
         ScrollView {
-            // A LazyVStack of per-cluster SECTIONS (idea ③). Each section is a pinned header +
-            // either the gapless cell grid (open) or a full-width thumbnail peek (done → collapsed):
-            // a done cluster shrinks to a peek so the wall declutters as you finish runs; "Show all"
-            // re-opens one without un-marking it. Sections (not one big LazyVGrid) because a
-            // full-width peek can't live in grid columns — and `pinnedViews` keeps the day header
-            // glued to the top while you scroll a long open run (the #35 orientation finding).
-            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+            // ONE LazyVGrid of day-group SECTIONS (idea ③), not a stack of nested grids. An open
+            // section's cells are direct grid items (so the grid stays lazy even for a 500-photo busy
+            // day — nesting a LazyVGrid inside a LazyVStack risked eager materialisation); a done
+            // section has NO cells and renders its full-width peek as the section FOOTER (a footer
+            // spans the grid width, which a column-bound item can't). `pinnedViews` keeps the day
+            // header glued to the top while you scroll a long open run (the #35 orientation finding).
+            LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
                 ForEach(groups) { group in
                     // Format the day title once per group (not per cell) — header + cell a11y labels.
                     let title = DayGroupHeader.title(for: group)
                     Section {
-                        if isCollapsed(group) {
-                            CollapsedSectionPeek(ids: group.assetIDs) { expand(group) }
-                        } else {
-                            LazyVGrid(columns: columns, spacing: spacing) {
-                                ForEach(group.assetIDs, id: \.self) { id in
-                                    cell(for: id, dayLabel: title).id(id)
-                                }
+                        if !isCollapsed(group) {
+                            ForEach(group.assetIDs, id: \.self) { id in
+                                cell(for: id, dayLabel: title).id(id)
                             }
                         }
                     } header: {
-                        // `.id(group.id)` is the #37 month-drill's scroll anchor — a header is a
+                        // `.id(group.id)` is the #37 month-drill's scroll anchor — the header is a
                         // direct child of the `.scrollTargetLayout()` below, so `.scrollPosition`
-                        // resolves it; a cell id (a grandchild inside the nested grid) would not.
+                        // resolves it (it exists in both the open and collapsed branch, so the drill
+                        // never races a not-yet-rendered cell).
                         ReviewSectionHeader(group: group, title: title,
                                             isDone: done.isDone(group),
                                             onToggleDone: { toggleDone(group) })
                             .id(group.id)
+                    } footer: {
+                        if isCollapsed(group) {
+                            CollapsedSectionPeek(ids: group.assetIDs, dayTitle: title) { expand(group) }
+                        }
                     }
                 }
             }
@@ -156,6 +157,10 @@ struct ReviewGridView: View {
             visibleIDs = []
             lastAppliedSlice = []   // new album → re-cache from scratch, don't skip on a stale match
             manuallyExpanded = []   // group ids belong to the old album; drop them so none leaks an expand
+            // Drop the drill anchor too: group.id is a photo localIdentifier, so a stale one from the
+            // old album can collide-resolve in an overlapping new album and snap it to a wrong section
+            // (the two-way .scrollPosition binding keeps writing it back as you scroll).
+            scrollTarget = nil
             scheduleRecomputeWindow()
         }
         // NB: no cache reset on disappear — pushing the #36 viewer fires onDisappear, and resetting
@@ -171,19 +176,35 @@ struct ReviewGridView: View {
     }
 
     /// Toggle a section done. Clearing the manual-expand override means done→collapsed and
-    /// undone→open follow naturally from `isCollapsed`. The collapse set just changed, so the
-    /// prefetch window (open groups only) has to be rebuilt.
+    /// undone→open follow naturally from `isCollapsed`. Animated (Reduce-Motion-gated) so the
+    /// grid→peek swap doesn't slam ~N cells out and jerk everything below upward. The collapse set
+    /// just changed, so the prefetch window (open groups only) has to be rebuilt.
     private func toggleDone(_ group: DayGroup) {
-        done.toggle(group)
-        manuallyExpanded.remove(group.id)
+        withAnimation(reduceMotion ? nil : .snappy) {
+            done.toggle(group)
+            manuallyExpanded.remove(group.id)
+        }
         refreshWindowForCollapse()
+        announceCollapseState(of: group)
     }
 
     /// "Show all" on a done cluster: re-open it (its cells render again) without un-marking done.
     /// Its ids re-enter the prefetch window, so rebuild it.
     private func expand(_ group: DayGroup) {
-        manuallyExpanded.insert(group.id)
+        withAnimation(reduceMotion ? nil : .snappy) {
+            manuallyExpanded.insert(group.id)
+        }
         refreshWindowForCollapse()
+        announceCollapseState(of: group)
+    }
+
+    /// Tell VoiceOver the section just collapsed/expanded — otherwise the swap silently removes the
+    /// cells the user was on (or destroys the peek), losing focus with no status message (WCAG 4.1.3).
+    private func announceCollapseState(of group: DayGroup) {
+        let message = isCollapsed(group)
+            ? "Section collapsed, \(group.count) photos hidden"
+            : "Showing \(group.count) photos"
+        AccessibilityNotification.Announcement(message).post()
     }
 
     /// A collapse/expand changes which ids can actually render as cells; the prefetch window's
@@ -262,46 +283,86 @@ private struct ReviewSectionHeader: View {
     let isDone: Bool
     let onToggleDone: () -> Void
     @Environment(SelectionStore.self) private var selection
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let selectedCount = selection.selected.intersection(group.assetIDs).count
         let allSelected = selectedCount == group.count
-        HStack(spacing: 8) {
-            doneToggle
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isDone ? .secondary : .primary)   // a done run reads quieter
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)   // long date title + "Select all" must still fit at AX sizes
-            Text("· \(group.count)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-            if !isDone { sectionToggle(allSelected: allSelected) }   // select-all only matters while open
-        }
-        .padding(.leading, 8)
-        .padding(.trailing, 12)
-        .padding(.vertical, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bar)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(title). \(group.count) photos, \(selectedCount) selected.\(isDone ? " Done." : "")")
-        .accessibilityAddTraits(.isHeader)
+        layout(selectedCount: selectedCount, allSelected: allSelected)
+            .padding(.leading, 8)
+            .padding(.trailing, 12)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("\(title). \(group.count) photos, \(selectedCount) selected.\(isDone ? " Done." : "")")
+            .accessibilityAddTraits(.isHeader)
     }
 
-    /// The done circle — green ✓ when done, empty ○ otherwise. ≥44pt tap target. Marking done
-    /// collapses the section (idea ③).
+    /// At accessibility Dynamic Type sizes the one-line row can't hold [done][title][count][Select all],
+    /// so the day label — the whole point of the pinned header (#35 orientation) — would truncate. Stack
+    /// it instead: title wraps on its own line, the count + Select-all drop below. Below AX sizes it's
+    /// the compact single row. (We WRAP, never `minimumScaleFactor` — shrinking the user's chosen size is
+    /// itself an a11y regression.)
+    @ViewBuilder
+    private func layout(selectedCount: Int, allSelected: Bool) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) { doneToggle; titleText }
+                HStack(spacing: 8) {
+                    countText(selectedCount)
+                    Spacer(minLength: 0)
+                    if !isDone { sectionToggle(allSelected: allSelected) }
+                }
+            }
+        } else {
+            HStack(spacing: 8) {
+                doneToggle
+                titleText
+                countText(selectedCount)
+                Spacer(minLength: 0)
+                if !isDone { sectionToggle(allSelected: allSelected) }   // only matters while open
+            }
+        }
+    }
+
+    private var titleText: some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(isDone ? .secondary : .primary)   // a done run reads quieter
+            .lineLimit(2)                  // wrap if long; never shrink (a11y)
+            .accessibilityHidden(true)     // folded into the container label above — don't double-speak
+    }
+
+    /// When the section is done its cells are hidden, so the header carries the pick result ("3 of 10
+    /// kept") — the one number the app exists to track. While open, the cells show their own selection,
+    /// so just the total ("· 10").
+    private func countText(_ selectedCount: Int) -> some View {
+        Text(isDone ? "\(selectedCount) of \(group.count) kept" : "· \(group.count)")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .monospacedDigit()
+            .accessibilityHidden(true)
+    }
+
+    /// The done toggle. A SEAL glyph (the styleguide's completion mark, §7), NOT a circle — a circle
+    /// here collides with the cell selection badge (also a circle) and with "Select all" beside it,
+    /// reading as "select this whole day" and inviting a mis-tap that collapses the run. Brand green
+    /// (matches the album-library `.done` state; clears 3:1 on the light `.bar`, unlike system green).
+    /// ≥44pt target; exposes its on/off state to VoiceOver (a stable label + a toggle value/trait).
     private var doneToggle: some View {
         Button(action: onToggleDone) {
-            Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+            Image(systemName: isDone ? "checkmark.seal.fill" : "seal")
                 .font(.title3)
-                .foregroundStyle(isDone ? Color.green : .secondary)
+                .foregroundStyle(isDone ? Color.brandGreen : .secondary)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isDone ? "Mark \(title) not done" : "Mark \(title) done")
+        .accessibilityLabel("Mark \(title) done")
+        .accessibilityValue(isDone ? "Done" : "Not done")
+        .accessibilityAddTraits(.isToggle)
     }
 
     /// Select-all / deselect-all for this day-group (the contextual bulk action, #35). Bulk ops
@@ -312,6 +373,8 @@ private struct ReviewSectionHeader: View {
         } label: {
             Text(allSelected ? "Deselect all" : "Select all")
                 .font(.footnote.weight(.semibold))
+                .frame(minHeight: 44)        // a bulk action one row from the 44pt done toggle must match it (WCAG 2.5.8)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         // Primary label color, NOT the gold accent: gold is for graphical marks — small gold text on

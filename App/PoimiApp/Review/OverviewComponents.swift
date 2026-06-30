@@ -108,18 +108,20 @@ struct OverviewThumbnailStrip: View {
 private struct OverviewThumb: View {
     let id: String
     let size: CGFloat
+    /// Proportional to `size` — a 5pt radius reads tighter on a 56pt peek thumb than on the 30pt strip.
+    var cornerRadius: CGFloat = 5
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.displayScale) private var displayScale
     @State private var image: UIImage?
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 5)
+        RoundedRectangle(cornerRadius: cornerRadius)
             .fill(Color(.secondarySystemBackground))
             .overlay {
                 if let image { Image(uiImage: image).resizable().scaledToFill() }
             }
             .frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .task(id: id) {
                 let px = size * displayScale
                 let target = CGSize(width: px, height: px)
@@ -132,26 +134,45 @@ private struct OverviewThumb: View {
     }
 }
 
-/// The collapsed state of a done cluster in the review grid (idea ③): a peek of the first few photos
-/// + an overflow count + "Show all". Tapping anywhere re-opens the cluster (without un-marking done).
+/// The collapsed state of a done cluster in the review grid (idea ③). A done run's summary is about
+/// what the user KEPT, not raw chronology — so the peek foregrounds the *picked* photos and a "N of M
+/// kept" count (the number the whole app tracks). With zero picks it falls back to the first few,
+/// dimmed, so "done with nothing kept" stays legible rather than silent. Tapping re-opens the cluster
+/// without un-marking done. Reads `SelectionStore` itself, so the grid body stays selection-independent.
 struct CollapsedSectionPeek: View {
     let ids: [String]
+    /// The day-group title, threaded in for the VoiceOver label (a peek is otherwise contextless).
+    let dayTitle: String
     let onShowAll: () -> Void
+    @Environment(SelectionStore.self) private var selection
 
     private let thumbSize: CGFloat = 56
+    private let thumbRadius: CGFloat = 8
     private let maxThumbs = 5
 
     var body: some View {
+        // O(group size), bounded; runs in this subview, not the grid body.
+        let pickedSet = selection.selected.intersection(ids)
+        let kept = pickedSet.count
+        // Keeps first (foregrounded, full opacity), then the rest dimmed — the peek is ABOUT what you
+        // kept, but still has visual body and shows the run wasn't empty.
+        let ordered = ids.filter(pickedSet.contains) + ids.filter { !pickedSet.contains($0) }
+        let shown = Array(ordered.prefix(maxThumbs))
+        let overflow = ids.count - shown.count
+
+        // The kept-count lives in the pinned header ("N of M kept"); the peek is the visual preview —
+        // keeps bright, the rest dimmed — so it doesn't repeat the count text.
         Button(action: onShowAll) {
             HStack(spacing: 6) {
-                ForEach(Array(ids.prefix(maxThumbs)), id: \.self) { id in
-                    OverviewThumb(id: id, size: thumbSize)
+                ForEach(shown, id: \.self) { id in
+                    OverviewThumb(id: id, size: thumbSize, cornerRadius: thumbRadius)
+                        .opacity(pickedSet.contains(id) ? 1 : 0.45)   // dim the not-kept
                 }
-                if ids.count > maxThumbs {
-                    RoundedRectangle(cornerRadius: 6)
+                if overflow > 0 {
+                    RoundedRectangle(cornerRadius: thumbRadius)
                         .fill(Color(.tertiarySystemBackground))
                         .overlay {
-                            Text("+\(ids.count - maxThumbs)")
+                            Text("+\(overflow)")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
@@ -166,11 +187,13 @@ struct CollapsedSectionPeek: View {
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 12)
+            // Leading flush to 0 so the peek thumbs line up with the gapless grid cells (a done day's
+            // photos don't jump left when you "Show all" it); trailing keeps "Show all" off the edge.
+            .padding(.trailing, 12)
             .padding(.bottom, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Show all \(ids.count) photos in this section")
+        .accessibilityLabel("\(dayTitle). \(kept) of \(ids.count) photos kept. Show all.")
     }
 }

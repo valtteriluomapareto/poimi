@@ -61,13 +61,29 @@ public enum Completion {
         to current: [AssetRef],
         calendar: Calendar
     ) -> Set<DayKey> {
-        let before = idsByDay(previous, calendar: calendar)
-        let after = idsByDay(current, calendar: calendar)
+        reopening(doneDays: doneDays,
+                  previousIDsByDay: idsByDay(previous, calendar: calendar),
+                  currentIDsByDay: idsByDay(current, calendar: calendar))
+    }
+
+    /// The same reconcile over pre-grouped per-day id sets — the form a persisted snapshot naturally
+    /// takes (the app stores `[DayKey: ids]` from the last load rather than re-deriving full
+    /// `AssetRef`s). Re-opens a done day iff it gained an id it didn't have before.
+    ///
+    /// NOTE for callers: an empty `previousIDsByDay` makes *every* current id look new, so this would
+    /// re-open every done day. That's correct for the function (no baseline ⇒ everything is "new"),
+    /// so a caller with no baseline yet (a first load) must SKIP the call and just record the snapshot
+    /// — don't pass an empty previous and expect a no-op.
+    public static func reopening(
+        doneDays: Set<DayKey>,
+        previousIDsByDay previous: [DayKey: Set<String>],
+        currentIDsByDay current: [DayKey: Set<String>]
+    ) -> Set<DayKey> {
         // Compare *id sets*, not counts: a count delta misses add-and-delete churn — a day that
         // both gains and loses photos can keep an equal/smaller count while containing brand-new,
         // unreviewed assets. Re-open iff the day gained an id it didn't have before.
         let reopened = doneDays.filter { day in
-            !(after[day] ?? []).subtracting(before[day] ?? []).isEmpty
+            !(current[day] ?? []).subtracting(previous[day] ?? []).isEmpty
         }
         return doneDays.subtracting(reopened)
     }

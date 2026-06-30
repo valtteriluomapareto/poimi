@@ -147,4 +147,51 @@ struct DoneStoreTests {
         #expect(done.doneDays == [.day(year: 2025, month: 3, day: 16), .day(year: 2025, month: 3, day: 17)])
         done.deactivate()
     }
+
+    // MARK: - Done-but-changed reconcile (D32(d) — the collapse must not hide a new photo)
+
+    @Test("reconcile: the FIRST load (no baseline) records a snapshot and re-opens nothing")
+    func reconcileFirstLoadNoReopen() throws {
+        let (projects, done) = try makeStores()
+        let a = project(projects, "A")
+        let day = DayKey.day(year: 2025, month: 3, day: 16)
+        done.activate(a)
+        done.toggle(group("g", [day]))
+        #expect(a.reviewedIDsByDay == nil)               // no baseline before the first reconcile
+        done.reconcile(currentIDsByDay: [day: ["x"]])
+        #expect(done.isDone(group("g", [day])))          // still done — empty baseline must NOT reopen
+        #expect(a.reviewedIDsByDay != nil)               // baseline now recorded
+        done.deactivate()
+    }
+
+    @Test("reconcile: a done day that GAINED a photo since the last load re-opens (and persists)")
+    func reconcileGainReopens() throws {
+        let (projects, done) = try makeStores()
+        let a = project(projects, "A")
+        let day = DayKey.day(year: 2025, month: 3, day: 16)
+        let g = group("g", [day])
+        done.activate(a)
+        done.toggle(g)
+        done.reconcile(currentIDsByDay: [day: ["x"]])    // first load → baseline {x}
+        done.flushNow()
+        #expect(a.doneDays == ["2025-03-16"])            // done, persisted
+        done.reconcile(currentIDsByDay: [day: ["x", "y"]])   // "y" is new on a done day
+        #expect(!done.isDone(g))                         // re-opened
+        #expect(a.doneDays.isEmpty)                      // the reopen is persisted immediately
+        done.deactivate()
+    }
+
+    @Test("reconcile: a done day that only LOST a photo stays done")
+    func reconcileLossKeepsDone() throws {
+        let (projects, done) = try makeStores()
+        let a = project(projects, "A")
+        let day = DayKey.day(year: 2025, month: 3, day: 16)
+        let g = group("g", [day])
+        done.activate(a)
+        done.toggle(g)
+        done.reconcile(currentIDsByDay: [day: ["x", "y"]])   // baseline {x, y}
+        done.reconcile(currentIDsByDay: [day: ["x"]])        // "y" deleted, nothing new
+        #expect(done.isDone(g))
+        done.deactivate()
+    }
 }

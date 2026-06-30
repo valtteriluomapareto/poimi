@@ -68,6 +68,30 @@ final class DoneStore {
         scheduleFlush()
     }
 
+    /// Reconcile the active project's done-days against a freshly-loaded candidate set (call once,
+    /// after a load settles). A done day that **gained** an id since the last load re-opens, so a
+    /// newly-added photo is never silently hidden inside a collapsed peek (D32(d)/D34 — the decided
+    /// rider of mark-as-done). Always records the load as the new baseline. The FIRST load for a
+    /// project has no baseline, so it reopens nothing — only records the snapshot. `currentIDsByDay`
+    /// is built by the caller from `CandidateStore.dayByID` (invert id→day to day→ids).
+    func reconcile(currentIDsByDay current: [DayKey: Set<String>]) {
+        guard let project = activeProject, project.persistentModelID == activeProjectID else { return }
+        if let data = project.reviewedIDsByDay, let previous = Self.decodeIDsByDay(data) {
+            // Have a baseline → reopen days that grew. (An empty/absent baseline is a first load:
+            // skip, or reopening would treat every id as new and re-open everything — see Completion.)
+            doneDays = Completion.reopening(doneDays: doneDays,
+                                            previousIDsByDay: previous,
+                                            currentIDsByDay: current)
+            project.doneDays = doneDays.map(\.description).sorted()
+        }
+        project.reviewedIDsByDay = Self.encodeIDsByDay(current)
+        do {
+            try context.save()
+        } catch {
+            Log.persistence.error("done reconcile save failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
     /// Persist synchronously + cancel any pending debounce (scenePhase→background, project switch).
     func flushNow() {
         flushTask?.cancel()
@@ -99,5 +123,21 @@ final class DoneStore {
         } catch {
             Log.persistence.error("done flush failed: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    // The reconcile baseline persists as `[DayKey string: sorted ids]` JSON — the same string
+    // round-trip `doneDays` uses (DayKey ⇄ its description), so `.undated` survives too.
+    private static func encodeIDsByDay(_ map: [DayKey: Set<String>]) -> Data? {
+        let dict = Dictionary(uniqueKeysWithValues: map.map { ($0.key.description, $0.value.sorted()) })
+        return try? JSONEncoder().encode(dict)
+    }
+
+    private static func decodeIDsByDay(_ data: Data) -> [DayKey: Set<String>]? {
+        guard let dict = try? JSONDecoder().decode([String: [String]].self, from: data) else { return nil }
+        var out: [DayKey: Set<String>] = [:]
+        for (key, ids) in dict {
+            if let day = DayKey(key) { out[day] = Set(ids) }
+        }
+        return out
     }
 }

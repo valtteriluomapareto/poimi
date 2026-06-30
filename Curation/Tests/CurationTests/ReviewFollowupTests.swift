@@ -172,6 +172,31 @@ struct ReconcileTests {
         let reconciled = Completion.reopening(doneDays: [.undated], from: previous, to: current, calendar: c)
         #expect(reconciled.contains(.undated))                 // deletion never re-opens
     }
+
+    // The by-day overload — the form the app feeds from its persisted snapshot (the [AssetRef]
+    // overload above delegates to it, so those cases cover the shared logic too).
+    @Test("by-day overload: a gained id re-opens; a lost id stays done")
+    func byDayGainAndLoss() {
+        let day = dk(2025, 3, 16)
+        let gained = Completion.reopening(doneDays: [day],
+                                          previousIDsByDay: [day: ["a"]],
+                                          currentIDsByDay: [day: ["a", "b"]])
+        #expect(!gained.contains(day))
+        let lost = Completion.reopening(doneDays: [day],
+                                        previousIDsByDay: [day: ["a", "b"]],
+                                        currentIDsByDay: [day: ["a"]])
+        #expect(lost.contains(day))
+    }
+
+    @Test("by-day overload: an empty previous re-opens EVERY done day (caller must skip on no baseline)")
+    func byDayEmptyPreviousReopensAll() {
+        let days: Set<DayKey> = [dk(2025, 3, 16), dk(2025, 7, 5)]
+        let reconciled = Completion.reopening(
+            doneDays: days,
+            previousIDsByDay: [:],                              // no baseline
+            currentIDsByDay: [dk(2025, 3, 16): ["a"], dk(2025, 7, 5): ["b"]])
+        #expect(reconciled.isEmpty)                            // everything looks new ⇒ all re-open
+    }
 }
 
 // MARK: - Bounds & filters as properties (Codex + Tester / D24)
