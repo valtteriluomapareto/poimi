@@ -1,17 +1,16 @@
 //
 //  PhotoViewerView.swift
-//  PoimiApp — the full-screen photo viewer (issue #36, D10/D22).
+//  PoimiApp — the full-screen photo viewer (issue #36, D10/D22; pager #80).
 //
 //  The borderline-call tier of the two-tier picking model: a swipeable pager over the album's
-//  candidate ids (the shared list on the coordinator), reached via the `.zoom` transition from the
-//  grid cell. You swipe between photos and SELECT IN PLACE; the grid restores to the photo you
-//  ended on and the selection is preserved — both ride shared state (`lastViewedID` + the
-//  `SelectionStore`), so "open to decide" is itself a fast multi-select path, not a dead end.
+//  candidate ids. You swipe between photos and SELECT IN PLACE; the selection is preserved on the
+//  shared `SelectionStore`, so "open to decide" is itself a fast multi-select path, not a dead end.
 //
-//  Each page is progressive: it paints the cached thumbnail immediately, then swaps to the
-//  full-resolution image when it lands. Pinch-zoom / pan / double-tap-to-point land here (part 2a);
-//  the filmstrip scrubber, the per-photo day label, and a zoom-aware swipe-down-to-dismiss are #36
-//  part 2b (a free-floating swipe-down would fight panning a zoomed photo, so the chevron exits).
+//  The pager is a `UIPageViewController` (`PhotoPagerView`) — UIKit cleanly separates horizontal
+//  paging from the vertical swipe-down-to-dismiss (SwiftUI's paging scroll claimed the drag, turning
+//  a dismiss into a sideswipe), and it windows itself so a thousands-photo album never materialises
+//  a giant stack. This view owns the chrome (day label + position + select; tally + filmstrip) that
+//  floats over the pager, and the shared `currentID` that the pager, filmstrip, and chrome track.
 //
 
 import SwiftUI
@@ -22,122 +21,79 @@ struct PhotoViewerView: View {
     let startID: String
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
+    @Environment(\.thumbnailProvider) private var thumbnails
     @State private var currentID: String
-    /// The full candidate list (for the "N of M" position) + an id→global-index map (O(1) lookup).
-    /// Resolved once on appear; falls back to just this photo when there's no live review context.
-    @State private var allIDs: [String] = []
-    @State private var indexByID: [String: Int] = [:]
-    /// A bounded *window* of `allIDs` around the current photo — what the pager and filmstrip actually
-    /// render. A `LazyHStack` positioned at a mid-list id materializes its WHOLE prefix to get there
-    /// (`.scrollPosition` and `scrollTo` both do) — over a few-thousand-photo album that built
-    /// thousands of full-screen pages and froze the viewer. The window keeps it to a few dozen and
-    /// slides as you swipe, so positioning only ever builds a handful of pages.
-    @State private var pages: [String] = []
+    /// A bounded window of candidates around the current photo — for the FILMSTRIP only. The pager
+    /// (UIPageViewController) windows itself, but the filmstrip is a SwiftUI `LazyHStack` whose
+    /// `.scrollPosition` to a mid-list id would materialise its whole prefix; the window keeps it
+    /// to a few dozen thumbnails and slides as you swipe.
+    @State private var filmstripPages: [String] = []
 
-    /// Window shape: symmetric buffers so swiping back rebuilds the window as rarely as swiping
-    /// forward (an asymmetric buffer re-slid every few photos one way). Positioning into the window
-    /// is cheap regardless of where `currentID` lands because the window stays SMALL — the prefix
-    /// walk that froze the viewer is a property of a thousands-item stack, not of the local index.
-    /// `rebuildMargin` triggers a slide a few pages before either end.
-    private let windowBack = 34
-    private let windowForward = 34
-    private let rebuildMargin = 4
+    private let windowBack = 25
+    private let windowForward = 25
+    private let rebuildMargin = 5
 
     init(startID: String) {
         self.startID = startID
         _currentID = State(initialValue: startID)
     }
 
-    /// `.scrollPosition(id:)` works in `String?`; map it onto the non-optional `currentID` (a nil
-    /// scroll target — momentarily between pages — leaves the last page id in place).
-    private var pageBinding: Binding<String?> {
-        Binding(get: { currentID }, set: { if let id = $0 { currentID = id } })
+    /// Every candidate, in order — the pager's universe; falls back to just this photo with no live
+    /// review context. (COW array, so passing it to the pager is cheap.)
+    private var allIDs: [String] {
+        coordinator.reviewOrderedIDs.contains(startID) ? coordinator.reviewOrderedIDs : [startID]
     }
 
     var body: some View {
-        // A lazy horizontal paging scroll: `LazyHStack` only materializes the visible + adjacent
-        // pages (so a thousands-photo album stays light), `.scrollTargetBehavior(.paging)` snaps
-        // page-to-page, and `.scrollPosition(id:)` both restores the opening page and two-way-binds
-        // the current one. Each page is a `ZoomableScrollView` (pinch-zoom / pan / double-tap).
-        //
-        // Positioning is done by `.scrollPosition(id:)` ALONE — deliberately NOT a `ScrollViewReader`
-        // `scrollTo`. Over a whole album (thousands of candidates) `scrollTo` to a mid-list id walks
-        // the lazy stack from the start, materializing every page up to the target — full-screen
-        // pages × thousands froze the app on device. `.scrollPosition(id:)` lands on the bound id
-        // lazily, without building the prefix.
-        ScrollView(.horizontal) {
-            LazyHStack(spacing: 0) {
-                ForEach(pages, id: \.self) { id in
-                    PhotoPage(id: id, accessibilityLabel: photoAXLabel(for: id))
-                        .containerRelativeFrame(.horizontal)
-                        .id(id)
-                }
-            }
-            .scrollTargetLayout()
-        }
-        .scrollTargetBehavior(.paging)
-        .scrollPosition(id: pageBinding)
-        .scrollIndicators(.hidden)
-        .background(Color.black)
-        .ignoresSafeArea()
-        .overlay(alignment: .top) { topBar }
-        .overlay(alignment: .bottom) { bottomBar }
-        .toolbar(.hidden, for: .navigationBar)
-        // Keep the shared anchor on the photo in view, so the grid restores here and the `.zoom`
-        // return pairs with this cell; and slide the window before a swipe runs off its end.
-        .onChange(of: currentID) {
-            Perf.measure("viewer.onChange→\(currentID.suffix(8))") {
+        PhotoPagerView(
+            allIDs: allIDs,
+            currentID: $currentID,
+            cachedThumb: { thumbnails.cachedThumbnail(for: $0, targetSize: CGSize(width: 400, height: 400)) },
+            loadFull: { await thumbnails.fullImage(for: $0, targetSize: $1) },
+            axLabel: { photoAXLabel(for: $0) },
+            onDismiss: { coordinator.pop() })
+            .background(Color.black)
+            .ignoresSafeArea()
+            .overlay(alignment: .top) { topBar }
+            .overlay(alignment: .bottom) { bottomBar }
+            .toolbar(.hidden, for: .navigationBar)
+            // Track the on-screen photo (grid restore anchor) and slide the filmstrip window with it.
+            .onChange(of: currentID) {
                 coordinator.lastViewedID = currentID
-                slideWindowIfNeeded()
+                slideFilmstripIfNeeded()
             }
-        }
-        .onAppear {
-            Perf.event("viewer.onAppear (open span end)")
-            Perf.measure("viewer.onAppear build") {
-                let list = coordinator.reviewOrderedIDs.contains(startID) ? coordinator.reviewOrderedIDs : [startID]
-                allIDs = list
-                indexByID = Dictionary(list.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
-                rebuildWindow(around: startID)
-            }
-        }
-        .onDisappear { Perf.event("viewer.onDisappear") }
+            .onAppear { rebuildFilmstrip(around: startID) }
     }
 
-    // MARK: Windowing (bound the LazyHStack so positioning never builds thousands of pages)
+    // MARK: Filmstrip window (the pager windows itself; this is just for the SwiftUI strip)
 
-    /// Rebuild `pages` as the slice of `allIDs` spanning `windowBack` before `id` … `windowForward`
-    /// after it (clamped to the list). No-op when the slice is unchanged, so re-centering at the very
-    /// start/end of the album doesn't churn state.
-    private func rebuildWindow(around id: String) {
-        guard let idx = indexByID[id] else {
-            if pages != [id] { pages = [id] }
+    private func rebuildFilmstrip(around id: String) {
+        let ids = allIDs
+        guard let idx = ids.firstIndex(of: id) else {
+            if filmstripPages != [id] { filmstripPages = [id] }
             return
         }
-        let range = viewerWindow(count: allIDs.count, around: idx, back: windowBack, forward: windowForward)
-        let next = Array(allIDs[range])
-        if next != pages {
-            pages = next   // `.scrollPosition(id:)` keeps `currentID` put across this
-            Perf.event("viewer.window \(range.lowerBound)..<\(range.upperBound) n=\(next.count) @\(id.suffix(8))")
-        }
+        let range = viewerWindow(count: ids.count, around: idx, back: windowBack, forward: windowForward)
+        let next = Array(ids[range])
+        if next != filmstripPages { filmstripPages = next }
     }
 
-    /// When the current photo nears either end of the window, re-center the window on it. Most swipes
-    /// sit mid-window and do nothing; a slide only fires every ~`windowForward` photos.
-    private func slideWindowIfNeeded() {
-        guard let local = pages.firstIndex(of: currentID) else {
-            rebuildWindow(around: currentID)
+    private func slideFilmstripIfNeeded() {
+        guard let local = filmstripPages.firstIndex(of: currentID) else {
+            rebuildFilmstrip(around: currentID)
             return
         }
-        if local < rebuildMargin || local > pages.count - 1 - rebuildMargin {
-            rebuildWindow(around: currentID)
+        if local < rebuildMargin || local > filmstripPages.count - 1 - rebuildMargin {
+            rebuildFilmstrip(around: currentID)
         }
     }
 
     // MARK: Chrome (floats on scrims over the photo — Liquid Glass behavior)
 
     private var topBar: some View {
+        let ids = allIDs
         let isSelected = selection.contains(currentID)
-        let position = (indexByID[currentID] ?? 0) + 1
+        let position = (ids.firstIndex(of: currentID) ?? 0) + 1
         return HStack(spacing: 12) {
             Button { coordinator.pop() } label: {
                 Image(systemName: "chevron.left")
@@ -147,7 +103,7 @@ struct PhotoViewerView: View {
             .contentShape(Rectangle())
             .accessibilityLabel("Back to the grid")
             Spacer()
-            positionLabel(position)
+            positionLabel(position, of: ids.count)
             Spacer()
             Button { selection.toggle(currentID) } label: {
                 selectionGlyph(isSelected).frame(minWidth: 44, minHeight: 44)
@@ -168,9 +124,8 @@ struct PhotoViewerView: View {
     /// The centered title: the current photo's calendar day over its position in the album, e.g.
     /// "Sat, Jul 5" / "12 of 53" (design WZ-0). With no review context the day map is empty, so it
     /// degrades to just the position.
-    private func positionLabel(_ position: Int) -> some View {
+    private func positionLabel(_ position: Int, of count: Int) -> some View {
         let day = dayLabel(for: currentID)
-        let count = allIDs.count   // position is over the whole album, not the render window
         return VStack(spacing: 1) {
             if !day.isEmpty {
                 Text(day)
@@ -196,10 +151,11 @@ struct PhotoViewerView: View {
 
     /// The per-page VoiceOver label: "Photo, Sat, Jul 5, 7 of 13" (day dropped if unavailable).
     private func photoAXLabel(for id: String) -> String {
-        let position = (indexByID[id] ?? 0) + 1
+        let ids = allIDs
+        let position = (ids.firstIndex(of: id) ?? 0) + 1
         let day = dayLabel(for: id)
-        return day.isEmpty ? "Photo, \(position) of \(allIDs.count)"
-                           : "Photo, \(day), \(position) of \(allIDs.count)"
+        return day.isEmpty ? "Photo, \(position) of \(ids.count)"
+                           : "Photo, \(day), \(position) of \(ids.count)"
     }
 
     @ViewBuilder
@@ -222,7 +178,7 @@ struct PhotoViewerView: View {
     private var bottomBar: some View {
         VStack(spacing: 12) {
             tally
-            Filmstrip(pages: pages, currentID: $currentID)
+            Filmstrip(pages: filmstripPages, currentID: $currentID)
         }
         .padding(.top, 18)
         .padding(.bottom, 12)
@@ -250,53 +206,10 @@ struct PhotoViewerView: View {
     }
 }
 
-/// One full-screen page: progressive thumbnail → full-resolution, fit to the screen on black.
-private struct PhotoPage: View {
-    let id: String
-    /// The day + position, prebuilt by the viewer (which holds the day map + index) so the photo
-    /// element carries real context for VoiceOver — "Photo, Sat, Jul 5, 7 of 13" — not just "Photo".
-    let accessibilityLabel: String
-    @Environment(\.thumbnailProvider) private var thumbnails
-    @Environment(\.displayScale) private var displayScale
-    @State private var image: UIImage?
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Color.black
-                if let image {
-                    ZoomableScrollView(image: image)   // pinch-zoom / pan / double-tap
-                } else {
-                    ProgressView()
-                        .controlSize(.large)
-                        .tint(.white)
-                }
-            }
-            .frame(width: geo.size.width, height: geo.size.height)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilityLabel)
-            .task(id: id) {
-                Perf.event("page.task \(id.suffix(8))")   // a page materialized — should be only a few
-                // Paint the already-decoded thumbnail first (no black flash), then the full-res.
-                if image == nil,
-                   let cached = thumbnails.cachedThumbnail(for: id, targetSize: CGSize(width: 400, height: 400)) {
-                    image = cached
-                }
-                let pixels = CGSize(width: geo.size.width * displayScale, height: geo.size.height * displayScale)
-                let started = Perf.begin()
-                let full = await thumbnails.fullImage(for: id, targetSize: pixels)
-                Perf.endIO("page.fullImage \(id.suffix(8))", since: started)
-                if let full { image = full }
-            }
-        }
-    }
-}
-
 /// The bounded window of indices to render around `index` in a list of `count` — `back` before and
 /// `forward` after, clamped to `0..<count`. Pulled out of the view (like `clampedColumnCount` /
-/// `PrefetchWindow`) so the freeze-fix invariant is unit-tested without rendering: the slice ALWAYS
-/// contains `index` and never exceeds `back + forward + 1`. A flipped bound here brings back the
-/// mid-list materialisation hang the windowing exists to prevent — hence the guard.
+/// `PrefetchWindow`) so the invariant is unit-tested without rendering: the slice ALWAYS contains
+/// `index` and never exceeds `back + forward + 1`.
 func viewerWindow(count: Int, around index: Int, back: Int, forward: Int) -> Range<Int> {
     guard count > 0 else { return 0..<0 }
     let clamped = min(max(index, 0), count - 1)

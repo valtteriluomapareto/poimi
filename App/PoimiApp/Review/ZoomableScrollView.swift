@@ -10,24 +10,11 @@
 //  exactly why UIKit is used here rather than hand-rolled SwiftUI gestures.
 //
 
-import SwiftUI
 import UIKit
 
-struct ZoomableScrollView: UIViewRepresentable {
-    /// The image to display, loaded (progressively) by the SwiftUI page and handed in here.
-    let image: UIImage?
-
-    func makeUIView(context: Context) -> ZoomableImageScrollView {
-        ZoomableImageScrollView()
-    }
-
-    func updateUIView(_ view: ZoomableImageScrollView, context: Context) {
-        if view.image !== image { view.image = image }
-    }
-}
-
-/// A self-laying-out zoomable image scroll view. Sizing happens in `layoutSubviews` (when real
-/// bounds exist), avoiding the UIViewRepresentable frame-timing pitfall.
+/// A self-laying-out zoomable image scroll view, used directly as each page's view in the
+/// `UIPageViewController` pager (`PhotoPagerView`). Sizing happens in `layoutSubviews` (when real
+/// bounds exist), avoiding the frame-timing pitfall of configuring it up front.
 final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
     private let imageView = UIImageView()
 
