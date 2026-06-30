@@ -29,8 +29,6 @@ struct ReviewGridView: View {
     let subtitle: String
     /// Open a cell full-screen (the parent pushes the viewer, #36).
     let openAsset: (String) -> Void
-    /// Namespace pairing the cell with the `.zoom` viewer destination (#36).
-    let zoomNamespace: Namespace.ID
     /// The cell to restore scroll position to (updated on tap / by the viewer on swipe).
     @Binding var scrollAnchorID: String?
 
@@ -40,6 +38,12 @@ struct ReviewGridView: View {
 
     @State private var columnCount = 3
     @State private var pinchBaseline = 3
+    /// The grid's LIVE scroll position — a LOCAL state, deliberately NOT the shared
+    /// `coordinator.lastViewedID`. A two-way `.scrollPosition` bound straight to that observable made
+    /// the grid write it on every scroll frame; the viewer + `.zoom` source observe it, so a return
+    /// transition churned layout in a feedback loop (the "update multiple times per frame" / gesture
+    /// gate timeout on device). We restore FROM `scrollAnchorID` on appear and write it only on a tap.
+    @State private var scrollID: String?
     @State private var visibleIDs: Set<String> = []
     @State private var window = PrefetchWindow(orderedIDs: [])
     // Generation-guarded prefetch: a single in-flight updater loops until it has applied the latest
@@ -83,7 +87,7 @@ struct ReviewGridView: View {
         // it's the orientation device; losing it mid-scroll would defeat the point. A `.bar` backing
         // gives scroll-edge legibility over bright thumbnails (ReviewHeader owns it).
         .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(subtitle: subtitle) }
-        .scrollPosition(id: $scrollAnchorID, anchor: .center)
+        .scrollPosition(id: $scrollID, anchor: .center)
         // Reduce Motion → no density-change animation (the cross-fade is the system default).
         .animation(reduceMotion ? nil : .snappy, value: columnCount)
         .gesture(
@@ -101,8 +105,15 @@ struct ReviewGridView: View {
                 .onEnded { _ in pinchBaseline = columnCount }
         )
         .onAppear {
-            rebuildWindow()
-            scheduleRecomputeWindow()
+            Perf.event("grid.onAppear (dismiss span end)")
+            Perf.measure("grid.onAppear restore→\(scrollAnchorID.map { String($0.suffix(8)) } ?? "nil")") {
+                // Restore to the last-viewed photo once (it's usually already on screen — the grid
+                // stays put under the pushed viewer — so this is a no-op scroll in the common case,
+                // and never the two-way write that looped).
+                scrollID = scrollAnchorID
+                rebuildWindow()
+                scheduleRecomputeWindow()
+            }
         }
         .onChange(of: visibleIDs) { scheduleRecomputeWindow() }
         .onChange(of: columnCount) { scheduleRecomputeWindow() }
@@ -125,14 +136,16 @@ struct ReviewGridView: View {
             dayLabel: dayLabel,
             load: load,
             cachedImage: cachedImage,
-            onOpen: { scrollAnchorID = id; openAsset(id) },
-            zoomNamespace: zoomNamespace)
+            onOpen: { Perf.event("grid.tap \(id.suffix(8))"); scrollAnchorID = id; openAsset(id) })
             .onAppear { visibleIDs.insert(id) }
             .onDisappear { visibleIDs.remove(id) }
     }
 
     private func load(_ id: String) async -> UIImage? {
-        await thumbnails.thumbnail(for: id, targetSize: thumbnailTarget)
+        let started = Perf.begin()
+        let image = await thumbnails.thumbnail(for: id, targetSize: thumbnailTarget)
+        Perf.endIO("grid.cell.load \(id.suffix(8))", since: started)
+        return image
     }
 
     /// Synchronous cache lookup at the cell's request size — a hit lets a recycled cell skip the
@@ -160,7 +173,9 @@ struct ReviewGridView: View {
             while applied != windowGeneration {
                 applied = windowGeneration
                 let slice = window.slice(visibleIDs: visibleIDs, columnCount: columnCount, rowMargin: windowRowMargin)
+                let started = Perf.begin()
                 await thumbnails.updateCachingWindow(to: slice)
+                Perf.endIO("grid.updateCachingWindow n=\(slice.count)", since: started)
             }
             windowUpdating = false
         }

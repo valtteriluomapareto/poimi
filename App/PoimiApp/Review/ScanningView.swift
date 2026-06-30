@@ -18,8 +18,6 @@ import Curation
 
 struct ScanningView: View {
     let project: CurationProject
-    /// Owned by `AppRootView` so grid cells and the photo viewer share one `.zoom` namespace (#36).
-    let zoomNamespace: Namespace.ID
     @Environment(\.photoLibrary) private var library
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
@@ -36,7 +34,11 @@ struct ScanningView: View {
         @Bindable var coordinator = coordinator
         return content(scrollAnchor: $coordinator.lastViewedID)
             .navigationTitle(project.title)
-            .navigationBarTitleDisplayMode(.large)
+            // Inline, not large: a collapsing large title fought the pinned `.safeAreaInset` tally
+            // header and the section headers in the same top zone (the "glitch between the title and
+            // the first group" seen on device) and drove the Liquid Glass nav backdrop into an
+            // observation feedback loop. The ReviewHeader below carries the album context prominently.
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { reviewChrome }
             // Keyed by project id so re-targeting (e.g. iPad detail column) reloads for the new
             // album rather than showing the previous one's candidates.
@@ -132,7 +134,6 @@ struct ScanningView: View {
                 groups: groups,
                 subtitle: headerSubtitle(groups),
                 openAsset: { coordinator.openPhoto($0) },
-                zoomNamespace: zoomNamespace,
                 scrollAnchorID: scrollAnchor)
 
         case .empty:

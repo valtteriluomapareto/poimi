@@ -19,10 +19,6 @@ struct AppRootView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(ProjectStore.self) private var projectStore
     @Environment(\.horizontalSizeClass) private var sizeClass
-    /// Owned here (above both destinations) so the grid cell's `matchedTransitionSource` and the
-    /// viewer's `.navigationTransition(.zoom)` share one namespace and pair (#36, D10).
-    @Namespace private var zoomNamespace
-
     var body: some View {
         Group {
             switch coordinator.rootPhase {
@@ -84,17 +80,18 @@ struct AppRootView: View {
             }
         case .review(let id, _):
             if let project = project(id) {
-                // Scanning → grid (#34/#35); the grid's cells source the `.zoom` from this namespace.
-                ScanningView(project: project, zoomNamespace: zoomNamespace)
+                ScanningView(project: project)   // scanning → grid (#34/#35)
             } else {
                 RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
                                  detail: "This album is no longer in your library.")
             }
         case .photo(let assetID):
-            // The viewer zooms from/back to the cell of whatever photo is in view (`lastViewedID`,
-            // which the viewer keeps current as it swipes); falls back to the tapped id.
+            // Plain push/pop — NOT `.navigationTransition(.zoom(...))`. On device the zoom kept
+            // re-running the (lazy, thousands-of-cells) grid mid-transition: it couldn't find a
+            // stable `matchedTransitionSource` so it fell back, and the grid re-layout thrashed its
+            // prefetch ("update multiple times per frame") into a hang. A standard push leaves the
+            // grid static underneath and is rock-solid. The zoom-from-cell is a revisitable polish.
             PhotoViewerView(startID: assetID)
-                .navigationTransition(.zoom(sourceID: coordinator.lastViewedID ?? assetID, in: zoomNamespace))
         case .export(let id):
             RoutePlaceholder(symbol: "rectangle.stack.badge.plus", title: "Export",
                              detail: "album \(id.uuidString.prefix(8)) (#39)")

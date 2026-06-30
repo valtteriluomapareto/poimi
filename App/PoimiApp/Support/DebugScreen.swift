@@ -203,7 +203,6 @@ struct DebugAlbumPickerHostView: View {
 /// thumbnails with a few cells pre-selected (so selection encoding shows).
 struct DebugScanningHostView: View {
     @Environment(\.photoLibrary) private var library
-    @Namespace private var zoomNamespace
     // Retained so the in-memory container (owned by the stores) outlives `.task` — otherwise it
     // deallocates, resets its context, and destroys `project` out from under ScanningView.
     @State private var projectStore: ProjectStore?
@@ -217,7 +216,7 @@ struct DebugScanningHostView: View {
     var body: some View {
         Group {
             if let selectionStore, let coordinator, let project {
-                NavigationStack { ScanningView(project: project, zoomNamespace: zoomNamespace) }
+                NavigationStack { ScanningView(project: project) }
                     .environment(selectionStore)
                     .environment(coordinator)
             } else {

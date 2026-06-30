@@ -30,8 +30,6 @@ struct ReviewGridCell: View {
     let cachedImage: (String) -> UIImage?
     /// Open this cell full-screen (the parent pushes the viewer + records the scroll anchor, #36).
     let onOpen: () -> Void
-    /// Pairs the cell with the `.zoom` viewer destination (#36).
-    let zoomNamespace: Namespace.ID
 
     @Environment(SelectionStore.self) private var selection
     @State private var image: UIImage?
@@ -46,20 +44,25 @@ struct ReviewGridCell: View {
         // cache hit (no placeholder flash), else the placeholder. A cache read is O(1) — not the
         // "heavy work in a body" the smoothness convention forbids.
         let display = thumbnailDisplay(loadedID: loadedID, cellID: id, loaded: image, cached: cachedImage(id))
-        ZStack {
-            Color(.secondarySystemBackground)
-            switch display {
-            case .image(let uiImage):
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-            case .placeholder:
-                ProgressView()
-                    .controlSize(.small)
+        // A flexible square sized by the column width (`Color` has no intrinsic size, so the photo's
+        // own dimensions can't drive layout). The photo OVERLAYS that square and is clipped to it, so
+        // a landscape/portrait shot fills + crops instead of overflowing into the neighbouring cell
+        // (the earlier `ZStack { … }.aspectRatio.clipped()` let `scaledToFill`'s natural size leak when
+        // the grid proposed an unbounded height).
+        Color(.secondarySystemBackground)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                switch display {
+                case .image(let uiImage):
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                case .placeholder:
+                    ProgressView()
+                        .controlSize(.small)
+                }
             }
-        }
-        .aspectRatio(1, contentMode: .fit)   // fixed square (resolved)
-        .clipped()
+            .clipped()
         .overlay {
             if isSelected {
                 Color.black.opacity(0.28)   // dim — redundant with the badge (D9)
@@ -78,7 +81,6 @@ struct ReviewGridCell: View {
         }
         // Badge top-trailing (Paper design): the gold check sits in the top-right corner.
         .overlay(alignment: .topTrailing) { selectionBadge(isSelected) }
-        .matchedTransitionSource(id: id, in: zoomNamespace)
         .contentShape(Rectangle())
         .onTapGesture { onOpen() }
         // VoiceOver: double-tap opens; a named rotor action selects (the badge is a touch target).

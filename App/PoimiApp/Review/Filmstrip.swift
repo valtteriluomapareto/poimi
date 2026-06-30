@@ -22,39 +22,40 @@ struct Filmstrip: View {
     @Binding var currentID: String
     @Environment(SelectionStore.self) private var selection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Drives the strip's scroll position; follows `currentID` one-way. Kept separate so a free-drag
+    /// scrolls the strip (browsing) WITHOUT changing the displayed photo — only a tap commits.
+    @State private var stripID: String?
 
     private let thumbSize: CGFloat = 44
     private let currentSize: CGFloat = 56
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 6) {
-                    ForEach(pages, id: \.self) { id in
-                        thumb(id).id(id)
-                    }
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 6) {
+                ForEach(pages, id: \.self) { id in
+                    thumb(id).id(id)
                 }
-                .padding(.horizontal, 16)
-                .scrollTargetLayout()
             }
-            .scrollIndicators(.hidden)
-            .frame(height: currentSize)
-            // A visual accelerator only: every thumb would be a focusable button, flooding VoiceOver
-            // with ~1 per photo and duplicating the main pager (the real AX content surface). AT users
-            // page the photo, read position from the "N of M" label, and pick with the top-bar toggle.
-            .accessibilityHidden(true)
-            .onAppear {
-                // Defer one runloop: scrolling to a mid-strip id before the LazyHStack has laid out
-                // the row leaves it pinned at the start, so the current thumb isn't centered.
-                DispatchQueue.main.async { proxy.scrollTo(currentID, anchor: .center) }
-            }
-            .onChange(of: currentID) {
-                // Non-essential motion: jump straight to center under Reduce Motion, slide otherwise.
-                if reduceMotion {
-                    proxy.scrollTo(currentID, anchor: .center)
-                } else {
-                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(currentID, anchor: .center) }
-                }
+            .padding(.horizontal, 16)
+            .scrollTargetLayout()
+        }
+        .scrollIndicators(.hidden)
+        .frame(height: currentSize)
+        // A visual accelerator only: every thumb would be a focusable button, flooding VoiceOver
+        // with ~1 per photo and duplicating the main pager (the real AX content surface). AT users
+        // page the photo, read position from the "N of M" label, and pick with the top-bar toggle.
+        .accessibilityHidden(true)
+        // Center the current thumb via `.scrollPosition` (lazy), NOT `scrollTo`: over a whole album a
+        // `scrollTo` to a mid-strip id materializes every thumb up to it, each firing a thumbnail
+        // request — thousands at once. This positions lazily and never builds the prefix.
+        .scrollPosition(id: $stripID, anchor: .center)
+        .onAppear { stripID = currentID }
+        .onChange(of: currentID) {
+            // Re-center on a pager swipe / tap. Non-essential motion: jump under Reduce Motion.
+            if reduceMotion {
+                stripID = currentID
+            } else {
+                withAnimation(.easeOut(duration: 0.2)) { stripID = currentID }
             }
         }
     }
@@ -116,7 +117,9 @@ private struct FilmstripThumb: View {
             .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isCurrent)
             .task(id: id) {
                 let px = side * displayScale
+                let started = Perf.begin()
                 image = await thumbnails.thumbnail(for: id, targetSize: CGSize(width: px, height: px))
+                Perf.endIO("filmstrip.thumb \(id.suffix(8))", since: started)
             }
     }
 }
