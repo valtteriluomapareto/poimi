@@ -41,6 +41,10 @@ struct ReviewGridView: View {
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(DoneStore.self) private var done
+    /// Day-groups the user has temporarily expanded via "Show all" even though they're done — UI
+    /// only (not persisted). A section renders collapsed iff it's done AND not in this set.
+    @State private var manuallyExpanded: Set<String> = []
 
     @State private var columnCount = 3
     @State private var pinchBaseline = 3
@@ -74,17 +78,26 @@ struct ReviewGridView: View {
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
+            // A stack of CLUSTER blocks (idea ③): each is a header + either the gapless cell grid
+            // (open) or a thumbnail peek (done → collapsed). A done cluster shrinks to a peek so the
+            // wall declutters as you finish runs; "Show all" re-opens one without un-marking it. (Not
+            // a single pinned-header LazyVGrid anymore — a full-width peek can't live in grid columns,
+            // and the design is discrete cluster blocks.)
+            LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(groups) { group in
-                    // Format the day title once per group (not per cell), and hand it to both the
-                    // header and the cells' VoiceOver labels for orientation.
+                    // Format the day title once per group (not per cell) — header + cell a11y labels.
                     let title = DayGroupHeader.title(for: group)
-                    Section {
-                        ForEach(group.assetIDs, id: \.self) { id in
-                            cell(for: id, dayLabel: title).id(id)
+                    ReviewSectionHeader(group: group, title: title,
+                                        isDone: done.isDone(group),
+                                        onToggleDone: { toggleDone(group) })
+                    if isCollapsed(group) {
+                        CollapsedSectionPeek(ids: group.assetIDs) { manuallyExpanded.insert(group.id) }
+                    } else {
+                        LazyVGrid(columns: columns, spacing: spacing) {
+                            ForEach(group.assetIDs, id: \.self) { id in
+                                cell(for: id, dayLabel: title).id(id)
+                            }
                         }
-                    } header: {
-                        ReviewSectionHeader(group: group, title: title)
                     }
                 }
             }
@@ -120,6 +133,7 @@ struct ReviewGridView: View {
                 // viewer, and an explicit re-center jumped on selection (#81).
                 if scrollTarget == nil, let day = scrollToDay,
                    let target = groups.first(where: { $0.days.contains(day) }) {
+                    if done.isDone(target) { manuallyExpanded.insert(target.id) }   // expand so its cells render
                     scrollTarget = target.assetIDs.first
                 }
                 rebuildWindow()
@@ -138,6 +152,20 @@ struct ReviewGridView: View {
         // NB: no cache reset on disappear — pushing the #36 viewer fires onDisappear, and resetting
         // there would cold-reload every thumbnail on return. The prefetch window bounds growth; a
         // full reset is tied to leaving review entirely (with the viewer / deactivation, later).
+    }
+
+    // MARK: Collapse (idea ③)
+
+    /// A done section renders collapsed unless the user re-opened it via "Show all".
+    private func isCollapsed(_ group: DayGroup) -> Bool {
+        done.isDone(group) && !manuallyExpanded.contains(group.id)
+    }
+
+    /// Toggle a section done. Clearing the manual-expand override means done→collapsed and
+    /// undone→open follow naturally from `isCollapsed`.
+    private func toggleDone(_ group: DayGroup) {
+        done.toggle(group)
+        manuallyExpanded.remove(group.id)
     }
 
     // MARK: Cell
@@ -196,38 +224,53 @@ struct ReviewGridView: View {
     }
 }
 
-/// One pinned day-group header. Observes the `SelectionStore` itself (for the live per-section
+/// One day-group (cluster) header. Observes the `SelectionStore` itself (for the live per-section
 /// selected/total summary + the select-all toggle) so the parent grid body stays independent of
-/// `selected`. The title is formatted once by the grid and passed in.
+/// `selected`. A leading ✓/○ circle marks the section done (which collapses it, idea ③). The title
+/// is formatted once by the grid and passed in.
 private struct ReviewSectionHeader: View {
     let group: DayGroup
     let title: String
+    let isDone: Bool
+    let onToggleDone: () -> Void
     @Environment(SelectionStore.self) private var selection
 
     var body: some View {
         let selectedCount = selection.selected.intersection(group.assetIDs).count
         let allSelected = selectedCount == group.count
-        HStack(spacing: 6) {
-            // A neutral busy-day marker — gold is reserved for the interactive accent (selection /
-            // tally / export), so a non-interactive day indicator shouldn't borrow it.
-            if group.isBusyDay {
-                Circle().fill(.secondary).frame(width: 6, height: 6)
-            }
+        HStack(spacing: 8) {
+            doneToggle
             Text(title)
                 .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isDone ? .secondary : .primary)   // a done run reads quieter
             Text("· \(group.count)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
-            sectionToggle(allSelected: allSelected)
+            if !isDone { sectionToggle(allSelected: allSelected) }   // select-all only matters while open
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.leading, 8)
+        .padding(.trailing, 12)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.bar)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(title). \(group.count) photos, \(selectedCount) selected.")
+        .accessibilityLabel("\(title). \(group.count) photos, \(selectedCount) selected.\(isDone ? " Done." : "")")
         .accessibilityAddTraits(.isHeader)
+    }
+
+    /// The done circle — green ✓ when done, empty ○ otherwise. ≥44pt tap target. Marking done
+    /// collapses the section (idea ③).
+    private var doneToggle: some View {
+        Button(action: onToggleDone) {
+            Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+                .font(.title3)
+                .foregroundStyle(isDone ? Color.green : .secondary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isDone ? "Mark \(title) not done" : "Mark \(title) done")
     }
 
     /// Select-all / deselect-all for this day-group (the contextual bulk action, #35). Bulk ops

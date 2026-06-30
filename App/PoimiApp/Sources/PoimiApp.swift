@@ -24,6 +24,7 @@ struct PoimiApp: App {
     private let modelContainer: ModelContainer
     @State private var projectStore: ProjectStore
     @State private var selectionStore: SelectionStore
+    @State private var doneStore: DoneStore
     @State private var coordinator: AppCoordinator
     @Environment(\.scenePhase) private var scenePhase
 
@@ -39,6 +40,7 @@ struct PoimiApp: App {
         modelContainer = container
         _projectStore = State(initialValue: ProjectStore(container: container))
         _selectionStore = State(initialValue: SelectionStore(container: container))
+        _doneStore = State(initialValue: DoneStore(container: container))
         _coordinator = State(initialValue: AppCoordinator(library: photoLibrary))
         Log.app.notice("Poimi launched")
     }
@@ -50,6 +52,7 @@ struct PoimiApp: App {
                 .environment(\.thumbnailProvider, thumbnailProvider)
                 .environment(projectStore)
                 .environment(selectionStore)
+                .environment(doneStore)
                 .environment(coordinator)
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active {
@@ -59,6 +62,7 @@ struct PoimiApp: App {
                         // `.background`. (A jetsam kill mid-foreground still loses the last
                         // `debounce` window; acceptable at v1.)
                         selectionStore.flushNow()
+                        doneStore.flushNow()
                     } else {
                         // Re-read authorization on resume (D6): the user may have changed it in
                         // Settings (the recovery deep-link path) while we were backgrounded.

@@ -131,3 +131,46 @@ private struct OverviewThumb: View {
             }
     }
 }
+
+/// The collapsed state of a done cluster in the review grid (idea ③): a peek of the first few photos
+/// + an overflow count + "Show all". Tapping anywhere re-opens the cluster (without un-marking done).
+struct CollapsedSectionPeek: View {
+    let ids: [String]
+    let onShowAll: () -> Void
+
+    private let thumbSize: CGFloat = 56
+    private let maxThumbs = 5
+
+    var body: some View {
+        Button(action: onShowAll) {
+            HStack(spacing: 6) {
+                ForEach(Array(ids.prefix(maxThumbs)), id: \.self) { id in
+                    OverviewThumb(id: id, size: thumbSize)
+                }
+                if ids.count > maxThumbs {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color(.tertiarySystemBackground))
+                        .overlay {
+                            Text("+\(ids.count - maxThumbs)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        .frame(width: thumbSize, height: thumbSize)
+                }
+                Spacer(minLength: 8)
+                HStack(spacing: 2) {
+                    Text("Show all")
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Show all \(ids.count) photos in this section")
+    }
+}

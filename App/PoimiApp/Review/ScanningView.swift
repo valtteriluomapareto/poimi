@@ -23,6 +23,7 @@ struct ScanningView: View {
     @Environment(\.photoLibrary) private var library
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
+    @Environment(DoneStore.self) private var doneStore
     @State private var store: CandidateStore?
     /// The album the current `store` loaded — so a reused view instance reloads for a NEW album
     /// rather than republishing the previous one's candidates (the iPad detail-column retarget, #42).
@@ -42,9 +43,10 @@ struct ScanningView: View {
             // Keyed by project id so re-targeting (e.g. iPad detail column) reloads for the new
             // album rather than showing the previous one's candidates.
             .task(id: project.id) {
-                // Hydrate the selection for this project (idempotent — activate() no-ops if it's
-                // already active, so re-entry never clobbers unflushed picks).
+                // Hydrate the selection + done-state for this project (idempotent — activate() no-ops
+                // if already active, so re-entry never clobbers unflushed picks/done-days).
                 selection.activate(project)
+                doneStore.activate(project)
                 // Reload when the album actually changed (or first load); reuse only survives a
                 // benign re-appear of the SAME album, so returning from the viewer doesn't re-scan.
                 // Gating on project identity (not `.idle`) stops a reused view instance from serving
