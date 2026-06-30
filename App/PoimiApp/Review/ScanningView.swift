@@ -29,10 +29,7 @@ struct ScanningView: View {
     @State private var indicatorVisible = false
 
     var body: some View {
-        // The grid's scroll anchor is the coordinator's `lastViewedID` (shared with the viewer), so
-        // returning from a photo restores the scroll to it (D22).
-        @Bindable var coordinator = coordinator
-        return content(scrollAnchor: $coordinator.lastViewedID)
+        content()
             .navigationTitle(project.title)
             // Inline, not large: a collapsing large title fought the pinned `.safeAreaInset` tally
             // header and the section headers in the same top zone (the "glitch between the title and
@@ -103,7 +100,7 @@ struct ScanningView: View {
     }
 
     @ViewBuilder
-    private func content(scrollAnchor: Binding<String?>) -> some View {
+    private func content() -> some View {
         switch store?.phase ?? .idle {
         case .idle, .scanning:
             ZStack {
@@ -128,13 +125,11 @@ struct ScanningView: View {
 
         case .ready(let groups):
             // The store already grouped the candidates into adaptive day-groups, ONCE, when the pass
-            // settled (Finding 1). The grid renders them directly — this branch re-evaluates on a
-            // scroll-anchor write, so it must not do the O(n log n) grouping work itself.
+            // settled (Finding 1). The grid renders them directly and never recomputes the grouping.
             ReviewGridView(
                 groups: groups,
                 subtitle: headerSubtitle(groups),
-                openAsset: { coordinator.openPhoto($0) },
-                scrollAnchorID: scrollAnchor)
+                openAsset: { coordinator.openPhoto($0) })
 
         case .empty:
             ContentUnavailableView {
