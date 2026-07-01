@@ -4,14 +4,14 @@
 //  design 3BL, the 5-persona-panel recommendation).
 //
 //  Opening an album lands here. It scans the candidate set, groups it into the same adaptive
-//  day-clusters the review grid uses, and presents: a big title, the running "N / target" tally,
-//  a per-cluster bar chart (one bar per cluster, height ∝ photos, colour = review state), and a
-//  dense vertical list of every cluster under sticky month headers. Tapping a cluster drills into
-//  the review grid scrolled to that cluster's first day.
+//  day-clusters the review grid uses, and presents: a big title, the running "N / target" tally, a
+//  month coverage chart (one bar per month, stacked by review state), and a dense list of every
+//  cluster under sticky month headers. Tapping a cluster drills into the grid at that cluster.
 //
-//  This reframes the earlier month-card overview (design 19P) at CLUSTER granularity — density and
-//  coverage in one view, matching how the grid already thinks in day-clusters. Each cluster's state
-//  (done / in-progress / untouched) is `Curation.ClusterState`, a pure derivation from picks + done.
+//  This reframes the earlier month-card overview (design 19P) into a cluster index: the LIST is at
+//  day-cluster granularity (how the grid thinks), while the chart aggregates to months for a
+//  fits-on-screen coverage glance. State (done / in-progress / untouched) is `Curation.ClusterState`,
+//  a pure derivation from picks + done.
 //
 //  The cluster index (grouping + formatting) is built ONCE in `.task` into `@State`, never in a `body`
 //  (the no-grouping-in-views guard + no-heavy-work-in-body); picked counts + done are read where drawn.
@@ -133,7 +133,7 @@ struct AlbumOverviewView: View {
             ReviewTally()   // "147 / 200" + bar + "N left" — reads the SelectionStore
             // The chart earns its place only with more than one cluster to distribute.
             if index.totalClusters > 1 {
-                ClusterBarChart(sections: index.sections, maxCount: index.maxCount)
+                MonthCoverageChart(sections: index.sections)
             }
         }
         .padding(.horizontal, 20)
@@ -177,11 +177,10 @@ struct MonthSection: Identifiable {
     var rows: [ClusterRow]
 }
 
-/// The finished overview data: month-sectioned clusters + the totals the header/chart need.
+/// The finished overview data: month-sectioned clusters + the cluster total the header needs.
 struct ClusterIndex {
     let sections: [MonthSection]
     let totalClusters: Int
-    let maxCount: Int     // the busiest cluster's photo count — the chart's height baseline
 }
 
 /// Builds the month-sectioned cluster index from the store's already-grouped `[DayGroup]`. Pure, and
@@ -200,9 +199,7 @@ enum ClusterIndexBuilder {
         let initials = localizedCalendar.veryShortMonthSymbols
 
         var sections: [MonthSection] = []
-        var maxCount = 1
         for group in groups {
-            maxCount = max(maxCount, group.count)
             let row = ClusterRow(id: group.id,
                                  group: group,
                                  title: DayGroupHeader.title(for: group, calendar: calendar, locale: locale),
@@ -227,74 +224,7 @@ enum ClusterIndexBuilder {
                 sections.append(MonthSection(id: key, title: title, initial: initial, rows: [row]))
             }
         }
-        return ClusterIndex(sections: sections, totalClusters: groups.count, maxCount: maxCount)
-    }
-}
-
-// MARK: - The per-cluster bar chart
-
-/// One fixed-width bar per cluster, height ∝ photos, colour = review state (green done / gold
-/// in-progress / grey untouched), grouped into month columns with a month initial beneath each.
-/// A whole year is often 100+ clusters, so the strip scrolls HORIZONTALLY (oldest → newest) rather
-/// than compressing to an unreadable comb; a sparse album is just a short left-aligned strip. Reads
-/// the stores itself (state is live) so the overview body stays selection-independent. Orientation
-/// only — `accessibilityHidden`; the rows below carry the per-cluster detail.
-struct ClusterBarChart: View {
-    let sections: [MonthSection]
-    let maxCount: Int
-    @Environment(SelectionStore.self) private var selection
-    @Environment(DoneStore.self) private var doneStore
-
-    private let barWidth: CGFloat = 6
-    private let barSpacing: CGFloat = 2
-    private let monthGap: CGFloat = 8
-    private let maxBarHeight: CGFloat = 72
-    /// The header insets its content 20pt; the chart cancels that (below) to scroll edge-to-edge, then
-    /// re-applies it here so the first bar still aligns under the title and the last scrolls off-screen.
-    private let edgeInset: CGFloat = 20
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .bottom, spacing: monthGap) {
-                ForEach(sections) { section in
-                    VStack(spacing: 6) {
-                        HStack(alignment: .bottom, spacing: barSpacing) {
-                            ForEach(section.rows) { row in
-                                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                    .fill(color(for: row))
-                                    .frame(width: barWidth, height: barHeight(row.count))
-                            }
-                        }
-                        .frame(height: maxBarHeight, alignment: .bottom)
-                        Text(section.initial)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding(.horizontal, edgeInset)
-        }
-        .frame(height: maxBarHeight + 18)
-        .padding(.horizontal, -edgeInset)   // full-bleed within the header's 20pt inset
-        .accessibilityHidden(true)
-    }
-
-    private func barHeight(_ count: Int) -> CGFloat {
-        max(3, maxBarHeight * CGFloat(count) / CGFloat(max(maxCount, 1)))
-    }
-
-    private func color(for row: ClusterRow) -> Color {
-        switch ClusterState.of(isDone: doneStore.isDone(row.group), pickedCount: pickedCount(row)) {
-        case .done: return .brandGreen
-        case .inProgress: return .accentColor
-        case .untouched: return Color(.systemGray3)
-        }
-    }
-
-    // O(cluster size) per bar; a selection/done write re-renders every bar. Fine because the overview
-    // isn't the rapid-toggle surface (picking happens in the grid) — precompute a map if that changes.
-    private func pickedCount(_ row: ClusterRow) -> Int {
-        row.group.assetIDs.reduce(into: 0) { if selection.selected.contains($1) { $0 += 1 } }
+        return ClusterIndex(sections: sections, totalClusters: groups.count)
     }
 }
 

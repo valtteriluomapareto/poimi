@@ -42,7 +42,6 @@ struct ClusterIndexBuilderTests {
         #expect(index.sections.map(\.initial) == ["F", "M"])
         #expect(index.sections.map { $0.rows.count } == [2, 1])
         #expect(index.totalClusters == 3)
-        #expect(index.maxCount == 8)                       // the busiest cluster — the chart's baseline
     }
 
     @Test("each row carries its formatted title, representative thumb, and drill target")
@@ -102,6 +101,5 @@ struct ClusterIndexBuilderTests {
         let index = ClusterIndexBuilder.build(from: [], calendar: cal, locale: locale)
         #expect(index.sections.isEmpty)
         #expect(index.totalClusters == 0)
-        #expect(index.maxCount == 1)   // the chart's height baseline never divides by zero
     }
 }
