@@ -54,7 +54,7 @@ struct AppCoordinatorTests {
         #expect(coord.path == [.albumOverview(id)])
     }
 
-    @Test("review / photo / export push onto the path in order")
+    @Test("review / export push onto the path in order; the photo viewer is a cover, not a push")
     func pushDestinations() {
         let coord = coordinator(.authorized)
         let id = UUID()
@@ -62,7 +62,8 @@ struct AppCoordinatorTests {
         coord.openReview(id, day: .undated)
         coord.openPhoto("asset/1")
         coord.openExport(id)
-        #expect(coord.path == [.albumOverview(id), .review(id, .undated), .photo("asset/1"), .export(id)])
+        #expect(coord.path == [.albumOverview(id), .review(id, .undated), .export(id)])   // photo NOT in the path
+        #expect(coord.presentedPhotoID == "asset/1")                                       // it's a cover
     }
 
     @Test("opening a project resets a deeper path — switching albums starts fresh")
@@ -74,6 +75,7 @@ struct AppCoordinatorTests {
         coord.openPhoto("x")
         coord.openProject(b)
         #expect(coord.path == [.albumOverview(b)])
+        #expect(coord.presentedPhotoID == nil)   // switching albums dismisses an open viewer
     }
 
     @Test("pop removes the last route; popToRoot clears; both safe when empty")
@@ -100,6 +102,7 @@ struct AppCoordinatorTests {
         coord.openPhoto("z")
         coord.restore(lastOpenedProjectID: id)
         #expect(coord.path == [.albumOverview(id)])
+        #expect(coord.presentedPhotoID == nil)   // restore dismisses an open viewer
         coord.restore(lastOpenedProjectID: nil)
         #expect(coord.path.isEmpty)
     }
@@ -123,7 +126,7 @@ struct AppCoordinatorTests {
         // Scrolled-to-a-day vs unscrolled must be distinct, or pushing one over the other no-ops.
         #expect(Route.review(id, .undated) != Route.review(id, nil))
         #expect(Route.albumOverview(id) != Route.albumOverview(other))   // different albums
-        #expect(Route.review(id, nil) != Route.photo("x"))               // cross-case
+        #expect(Route.review(id, nil) != Route.export(id))               // cross-case
         #expect(Route.albumOverview(id) == Route.albumOverview(id))      // same → equal
         #expect(Route.albumOverview(id).hashValue == Route.albumOverview(id).hashValue)
     }
@@ -138,16 +141,41 @@ struct AppCoordinatorTests {
         #expect(coord.path.last == .review(id, day))
     }
 
-    @Test("openPhoto records lastViewedID and pushes the photo route (viewer + scroll anchor, #36)")
+    @Test("openPhoto records lastViewedID + presents the viewer as a sheet, not a path push (#36)")
     func openPhotoRecordsLastViewed() {
         let coord = coordinator(.authorized)
         let id = UUID()
         coord.openProject(id)
         coord.openReview(id)
         coord.openPhoto("asset/42")
-        // lastViewedID is the grid's scroll-restore anchor (D22) + the `.zoom` source; set on open.
-        #expect(coord.lastViewedID == "asset/42")
-        #expect(coord.path.last == .photo("asset/42"))
+        #expect(coord.lastViewedID == "asset/42")        // the grid's scroll-restore anchor (D22)
+        #expect(coord.presentedPhotoID == "asset/42")    // the viewer is a sheet …
+        #expect(coord.path.last == .review(id, nil))     // … not pushed onto the path
+    }
+
+    @Test("dismissPhoto closes the viewer sheet but leaves the grid's path untouched (#36)")
+    func dismissPhotoKeepsPath() {
+        let coord = coordinator(.authorized)
+        let id = UUID()
+        coord.openProject(id)
+        coord.openReview(id)
+        coord.openPhoto("asset/7")
+        coord.dismissPhoto()
+        #expect(coord.presentedPhotoID == nil)                          // viewer closed …
+        #expect(coord.path == [.albumOverview(id), .review(id, nil)])   // … grid stays exactly where it was
+    }
+
+    @Test("pop leaves an open viewer alone; popToRoot dismisses it (#36)")
+    func popVsPopToRootWithOpenViewer() {
+        let coord = coordinator(.authorized)
+        let id = UUID()
+        coord.openProject(id)
+        coord.openReview(id)
+        coord.openPhoto("asset/9")
+        coord.pop()                                    // a within-albums back …
+        #expect(coord.presentedPhotoID == "asset/9")   // … does NOT touch the viewer
+        coord.popToRoot()
+        #expect(coord.presentedPhotoID == nil)         // back to the library root dismisses it
     }
 
     @Test("the review candidate list is shared so the viewer can page through it (#36)")

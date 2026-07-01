@@ -4,13 +4,14 @@ A map of the Poimi design file in **Paper** — every artboard, what it shows, a
 issues + the current build. This is the index for agents/humans to find a screen's design before
 implementing it.
 
-- **Index created:** 2026-06-29 · **updated:** 2026-07-01 (review grid shipped as a **code-led
+- **Index created:** 2026-06-29 · **updated:** 2026-07-01 (added the **Now-Playing viewer** iteration
+  `2ZC-0` — a modal-card redesign of the photo viewer, in review; plus the review-grid **code-led
   accordion**, #89 merged — see the `2VR-0` note + Reconciliation status). A snapshot — re-verify
   against Paper before relying on a specific detail; the file evolves.
   > **Code-led screens:** the review grid evolved past its Paper design during device testing (the
   > accordion, below). Where a shipped screen diverges from its artboard, this index — not Paper — is
   > the source of truth for *what shipped*; the artboard records the original design intent.
-- **File:** "Poimi" · page "Page 1" (`1-0`) · **33 artboards** (27 product screens + a 6-artboard
+- **File:** "Poimi" · page "Page 1" (`1-0`) · **34 artboards** (28 product screens + a 6-artboard
   v1.1 idea-backlog exploration cluster, below)
 - **URL:** https://app.paper.design/file/01KVSFMATJM712ABNQ5D0YDR1T/1-0
 - **File ID:** `01KVSFMATJM712ABNQ5D0YDR1T`
@@ -52,7 +53,8 @@ full 999. The repo's Asset Catalog + styleguide.md mirror these.
 | Review grid — notes ✓ | `Y4-0` | 460×422 | Annotated spec for the above (two-tier triage; day-groups; selection encoding; top chrome; select-mode is a sibling). | — |
 | **Select mode** | `14C-0` | 390×844 | Active multi-select entered from the grid: a quick-select badge on **every** cell, **drag-to-multi-select**, per-day + whole-range Select-all, top toolbar (count + progress + Deselect-all). Same selection encoding. | #35 (deferred drag-select) · **not built** |
 | Select mode — notes ✓ | `11J-0` | 460×443 | Annotated spec for Select mode. | — |
-| **Photo viewer · swipe + select** | `WZ-0` | 390×844 | Full-bleed photo; top bar = back · "Sat 5 Jul / 12 of 53" · gold check toggle; bottom = live "148/200 picked" + a **filmstrip scrubber** (current enlarged, picked thumbs checked). Reached via the `.zoom` transition; returns to the same cell. | #36 · **built** (pt1 nav+zoom-in, pt2a pinch/pan/double-tap, pt2b day label + filmstrip; live drag-scrub + zoom-aware swipe-down deferred) |
+| **Photo viewer · swipe + select** | `WZ-0` | 390×844 | *(Original v1 design.)* Full-bleed photo; top bar = back · "Sat 5 Jul / 12 of 53" · gold check toggle; bottom = live "148/200 picked" + a **filmstrip scrubber** (current enlarged, picked thumbs checked). Reached via the `.zoom` transition; returns to the same cell. | #36 · **built, then redesigned** → superseded by the Now-Playing card `2ZC-0` (below) |
+| **Photo viewer · Now Playing** ✓ | `2ZC-0` | 390×844 | **Redesign (in review):** the viewer as an Apple-Music-"single-song" **modal card** — pull-down to dismiss (grabber). **Ambient wash** = a heavy blur of the current photo tinting the whole card; the **photo is the centred "art"** (large rounded, shadowed, in a black frame) with the controls in a band **beneath** it (never overlapping). Band = day + "N of M" (left) · gold tally (right); a big centred **Pick hero** capsule (glass "Pick" → prominent gold "Picked"); the **filmstrip** scrubber. | #36 · **design proposed** (device-iteration redesign; code WIP on branch) |
 | Photo viewer — notes ✓ | `YU-0` | 460×422 | Annotated spec for the viewer (open-to-decide is itself a multi-select path). | — |
 
 ## Overview explorations — choose one (#37, 390×844)

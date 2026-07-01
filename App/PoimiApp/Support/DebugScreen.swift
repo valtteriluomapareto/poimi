@@ -345,7 +345,10 @@ struct DebugPhotoViewerHostView: View {
     var body: some View {
         Group {
             if let coordinator, let selectionStore {
-                NavigationStack { PhotoViewerView(startID: Self.startID) }
+                // Presented directly (not in a sheet) so the capture is deterministic — the viewer's
+                // ambient + layout render full-screen; on device it's a `.sheet` card (grabber, corners,
+                // pull-to-dismiss add only sheet chrome, no content change).
+                PhotoViewerView(startID: Self.startID)
                     .environment(coordinator)
                     .environment(selectionStore)
             } else {

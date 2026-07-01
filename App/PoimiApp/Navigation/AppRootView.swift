@@ -4,8 +4,8 @@
 //
 //  Binds the `AppCoordinator`: the root phase (onboarding/recovery/albums) is auth-driven, and
 //  the albums phase is one logical `Route` path expressed in two containers — compact
-//  `NavigationStack` (with the `.zoom` push for review→photo) and regular `NavigationSplitView`
-//  whose detail column hosts its own stack so the zoom transition still applies.
+//  `NavigationStack` and regular `NavigationSplitView` whose detail column hosts its own stack. The
+//  photo viewer is a `.sheet` (a Now-Playing-style modal card, pull-down to dismiss) over this, not a route.
 //
 //  The destination views here are **labeled stubs**: #30 builds the spine; the real screens
 //  replace each stub (onboarding/recovery #31, albums #32, overview #37, review #35, photo #36,
@@ -37,6 +37,18 @@ struct AppRootView: View {
         // the initial `.active`, so this `.task` is the launch read; @main's scenePhase handler
         // covers the resume re-read (the Settings round-trip).
         .task { await coordinator.refreshAuthorization() }
+        // The photo viewer (#36) is a MODAL SHEET (a Now-Playing-style card) — it rises from the bottom
+        // and you pull it down to dismiss (grabber + interactive drag, owned by the sheet). Never the
+        // sideways nav-pop a path push animates. The grid stays mounted beneath, exactly where you left
+        // it. Presented content inherits the environment (like AlbumsView's sheet).
+        .sheet(isPresented: Binding(
+            get: { coordinator.presentedPhotoID != nil },
+            set: { if !$0 { coordinator.dismissPhoto() } }   // one dismiss path → keeps the Perf span closed
+        )) {
+            if let id = coordinator.presentedPhotoID {
+                PhotoViewerView(startID: id)
+            }
+        }
     }
 
     // Compact (iPhone): one NavigationStack rooted at the album library.
@@ -86,13 +98,6 @@ struct AppRootView: View {
                 RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
                                  detail: "This album is no longer in your library.")
             }
-        case .photo(let assetID):
-            // Plain push/pop — NOT `.navigationTransition(.zoom(...))`. On device the zoom kept
-            // re-running the (lazy, thousands-of-cells) grid mid-transition: it couldn't find a
-            // stable `matchedTransitionSource` so it fell back, and the grid re-layout thrashed its
-            // prefetch ("update multiple times per frame") into a hang. A standard push leaves the
-            // grid static underneath and is rock-solid. The zoom-from-cell is a revisitable polish.
-            PhotoViewerView(startID: assetID)
         case .export(let id):
             RoutePlaceholder(symbol: "rectangle.stack.badge.plus", title: "Export",
                              detail: "album \(id.uuidString.prefix(8)) (#39)")

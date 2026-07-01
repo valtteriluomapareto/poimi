@@ -3,7 +3,9 @@
 //  PoimiApp — the typed navigation path (issue #30, D20; architecture §11).
 //
 //  The navigation stack roots at the album library and pushes through:
-//      albums → albumOverview(projectID) → review(dayKey?) → photo(zoom) → export
+//      albums → albumOverview(projectID) → review(dayKey?) → export
+//  The photo viewer is NOT a path route — it's a `.sheet` (a Now-Playing-style modal card, pull-down
+//  to dismiss), driven by `AppCoordinator.presentedPhotoID`.
 //  Review routes by `DayKey`, never a section id (sections are a computed view, §13). Routes
 //  key by the project's stable `id: UUID` (itself `Hashable`/`Codable`) — not its SwiftData
 //  `PersistentIdentifier` — so a path stays valid across re-fetches and could be persisted.
@@ -17,8 +19,6 @@ enum Route: Hashable {
     case albumOverview(UUID)
     /// The review/selection grid for an album, optionally scrolled to a day-group.
     case review(UUID, DayKey?)
-    /// The full-screen photo viewer (the `.zoom` destination), keyed by asset id.
-    case photo(String)
     /// The export / completion step for an album.
     case export(UUID)
 }
