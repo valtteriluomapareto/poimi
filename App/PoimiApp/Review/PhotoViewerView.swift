@@ -22,6 +22,7 @@ struct PhotoViewerView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @Environment(\.thumbnailProvider) private var thumbnails
+    @Environment(\.displayScale) private var displayScale
     @State private var currentID: String
     /// A bounded window of candidates around the current photo — for the FILMSTRIP only. The pager
     /// (UIPageViewController) windows itself, but the filmstrip is a SwiftUI `LazyHStack` whose
@@ -51,18 +52,23 @@ struct PhotoViewerView: View {
             cachedThumb: { thumbnails.cachedThumbnail(for: $0, targetSize: CGSize(width: 400, height: 400)) },
             loadFull: { await thumbnails.fullImage(for: $0, targetSize: $1) },
             axLabel: { photoAXLabel(for: $0) },
+            onTapPhoto: { selection.toggle($0) },   // single-tap the photo = pick (2nd path; the Pick button is primary)
             onDismiss: { coordinator.pop() })
             .background(Color.black)
             .ignoresSafeArea()
             .overlay(alignment: .top) { topBar }
             .overlay(alignment: .bottom) { bottomBar }
             .toolbar(.hidden, for: .navigationBar)
-            // Track the on-screen photo (grid restore anchor) and slide the filmstrip window with it.
+            // Track the on-screen photo (grid restore anchor) and slide + warm the filmstrip with it.
             .onChange(of: currentID) {
                 coordinator.lastViewedID = currentID
                 slideFilmstripIfNeeded()
+                prefetchFilmstrip(around: currentID)
             }
-            .onAppear { rebuildFilmstrip(around: startID) }
+            .onAppear {
+                rebuildFilmstrip(around: startID)
+                prefetchFilmstrip(around: startID)
+            }
     }
 
     // MARK: Filmstrip window (the pager windows itself; this is just for the SwiftUI strip)
@@ -88,11 +94,37 @@ struct PhotoViewerView: View {
         }
     }
 
+    /// Warm the filmstrip's lead thumbs at the STRIP's ~56pt size, ahead of appearance. The grid's
+    /// 400² caching window doesn't serve these small requests, so without this each thumb pops in
+    /// on-demand as it scrolls in (the "strip updates slowly" lag). Only the not-yet-cached leading
+    /// ids are requested; combined with the filmstrip's cache-first paint, warmed thumbs appear instantly.
+    private func prefetchFilmstrip(around id: String) {
+        let ids = allIDs
+        guard let idx = ids.firstIndex(of: id) else { return }
+        // ±8 covers the ~7–9 thumbs visible in the strip plus a small lead in each swipe direction.
+        let lead = viewerWindow(count: ids.count, around: idx, back: 8, forward: 8)
+        let px = Filmstrip.thumbnailLoadSide * displayScale   // shared size → warms the strip's exact cache key
+        let size = CGSize(width: px, height: px)
+        let provider = thumbnails
+        let targets = ids[lead].filter { provider.cachedThumbnail(for: $0, targetSize: size) == nil }
+        guard !targets.isEmpty else { return }
+        // `.utility`: never steal PhotoKit/actor time from the current photo's full-res load (that's
+        // what the user is waiting for). Not cancelled on a further swipe — overlapping batches just
+        // warm the cache and the cache-first filter above dedups next time; cancelling would only lose
+        // warmth on a fast swipe.
+        Task(priority: .utility) {
+            await withTaskGroup(of: Void.self) { group in
+                for tid in targets {
+                    group.addTask { _ = await provider.thumbnail(for: tid, targetSize: size) }
+                }
+            }
+        }
+    }
+
     // MARK: Chrome (floats on scrims over the photo — Liquid Glass behavior)
 
     private var topBar: some View {
         let ids = allIDs
-        let isSelected = selection.contains(currentID)
         let position = (ids.firstIndex(of: currentID) ?? 0) + 1
         return HStack(spacing: 12) {
             Button { coordinator.pop() } label: {
@@ -105,14 +137,9 @@ struct PhotoViewerView: View {
             Spacer()
             positionLabel(position, of: ids.count)
             Spacer()
-            Button { selection.toggle(currentID) } label: {
-                selectionGlyph(isSelected).frame(minWidth: 44, minHeight: 44)
-            }
-            .contentShape(Rectangle())
-            .accessibilityLabel("Select photo")
-            .accessibilityValue(isSelected ? "selected" : "")
-            .accessibilityAddTraits(.isToggle)
-            .sensoryFeedback(.selection, trigger: isSelected)
+            // Balances the back button so the position stays centered. Selecting moved OUT of this
+            // top-right corner (the worst one-handed reach) to the bottom-bar "Pick" button.
+            Color.clear.frame(width: 44, height: 44)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
@@ -158,26 +185,40 @@ struct PhotoViewerView: View {
                            : "Photo, \(day), \(position) of \(ids.count)"
     }
 
-    @ViewBuilder
-    private func selectionGlyph(_ isSelected: Bool) -> some View {
-        if isSelected {
-            // Gold circle, dark check — the same affordance as the grid (styleguide §1).
-            Image(systemName: "checkmark.circle.fill")
-                .font(.title)
-                .foregroundStyle(Color.onAccent, Color.accentColor)
-        } else {
-            Image(systemName: "circle")
-                .font(.title)
-                .foregroundStyle(.white)
-                .shadow(radius: 2)
+    /// The primary select action — a big, fixed, thumb-reachable toggle in the bottom bar (moved from
+    /// the top-right corner, the worst one-handed reach, per the viewer UX review). Selecting is the
+    /// viewer's most-frequent act ("open to decide"), so it gets the reachable spot; gold-filled +
+    /// dark check when picked, an outlined "Pick" otherwise — the grid's selection encoding (styleguide
+    /// §1), and "Pick/Picked" matches the tally's vocabulary. The filmstrip stays navigation-only (it
+    /// already reflects picks via each thumb's gold check).
+    private var pickButton: some View {
+        let isSelected = selection.contains(currentID)
+        return Button { selection.toggle(currentID) } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                Text(isSelected ? "Picked" : "Pick")
+            }
+            .font(.headline)
+            .foregroundStyle(isSelected ? Color.onAccent : .white)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 12)
+            .background { Capsule().fill(isSelected ? Color.accentColor : Color.white.opacity(0.18)) }
+            .overlay { if !isSelected { Capsule().strokeBorder(.white.opacity(0.6), lineWidth: 1) } }
         }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: isSelected)
+        .accessibilityLabel("Pick photo")
+        .accessibilityValue(isSelected ? "Picked" : "Not picked")
+        .accessibilityAddTraits(.isToggle)
     }
 
-    /// The live tally over the filmstrip scrubber (design WZ-0). The strip both orients (where am I,
-    /// what's picked) and jumps; the tally keeps the running count visible while you scrub.
+    /// The live tally + the primary Pick toggle over the filmstrip scrubber (design WZ-0, revised).
+    /// The strip orients (where am I, what's picked) and jumps; the tally keeps the running count
+    /// visible; the Pick button is the thumb-reachable pick action.
     private var bottomBar: some View {
         VStack(spacing: 12) {
             tally
+            pickButton
             Filmstrip(pages: filmstripPages, currentID: $currentID)
         }
         .padding(.top, 18)

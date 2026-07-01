@@ -29,6 +29,8 @@ struct PhotoPagerView: UIViewControllerRepresentable {
     let loadFull: (String, CGSize) async -> UIImage?
     /// VoiceOver label for a page.
     let axLabel: (String) -> String
+    /// A single tap on a page's photo → toggle that id's selection (the secondary select path).
+    let onTapPhoto: (String) -> Void
     /// Commit the swipe-down dismiss (pop the viewer).
     let onDismiss: () -> Void
 
@@ -75,7 +77,8 @@ struct PhotoPagerView: UIViewControllerRepresentable {
             return PhotoPageController(id: id,
                                        cachedThumb: parent.cachedThumb,
                                        loadFull: parent.loadFull,
-                                       axLabel: parent.axLabel(id))
+                                       axLabel: parent.axLabel(id),
+                                       onTap: parent.onTapPhoto)
         }
 
         // MARK: Data source — prev / next over `allIDs`
@@ -171,12 +174,17 @@ final class PhotoPageController: UIViewController {
     init(id: String,
          cachedThumb: @escaping (String) -> UIImage?,
          loadFull: @escaping (String, CGSize) async -> UIImage?,
-         axLabel: String) {
+         axLabel: String,
+         onTap: @escaping (String) -> Void) {
         self.id = id
         self.cachedThumb = cachedThumb
         self.loadFull = loadFull
         self.label = axLabel
         super.init(nibName: nil, bundle: nil)
+        // Capture the `onTap` PARAMETER + the value `id` — never `self` (no controller↔scrollView↔
+        // closure cycle). Set here, not in a later lifecycle hook where `onTap` would resolve to a
+        // stored `self.onTap` and capture self.
+        scrollView.onSingleTap = { [id] in onTap(id) }
     }
 
     @available(*, unavailable)
