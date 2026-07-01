@@ -26,8 +26,12 @@ struct Filmstrip: View {
     /// scrolls the strip (browsing) WITHOUT changing the displayed photo — only a tap commits.
     @State private var stripID: String?
 
+    /// The size the strip loads + caches thumbs at (the current thumb's on-screen side). Shared with
+    /// the viewer's prefetch so both warm the SAME cache key — if they drift, the prefetch silently
+    /// misses and the lag fix becomes a no-op.
+    static let thumbnailLoadSide: CGFloat = 56
     private let thumbSize: CGFloat = 44
-    private let currentSize: CGFloat = 56
+    private let currentSize = Filmstrip.thumbnailLoadSide
 
     var body: some View {
         ScrollView(.horizontal) {
@@ -117,8 +121,14 @@ private struct FilmstripThumb: View {
             .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isCurrent)
             .task(id: id) {
                 let px = side * displayScale
+                let target = CGSize(width: px, height: px)
+                // Cache-first: a warmed thumb (the viewer prefetches the lead window, or a re-appearance)
+                // paints instantly — no gray flash — then the async load refreshes it.
+                if image == nil, let cached = thumbnails.cachedThumbnail(for: id, targetSize: target) {
+                    image = cached
+                }
                 let started = Perf.begin()
-                image = await thumbnails.thumbnail(for: id, targetSize: CGSize(width: px, height: px))
+                image = await thumbnails.thumbnail(for: id, targetSize: target)
                 Perf.endIO("filmstrip.thumb \(id.suffix(8))", since: started)
             }
     }

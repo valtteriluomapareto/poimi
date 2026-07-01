@@ -18,6 +18,10 @@ import UIKit
 final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
     private let imageView = UIImageView()
 
+    /// A single tap on the photo (the viewer's secondary select accelerator — the bottom "Pick" button
+    /// is the primary). Fires only after the double-tap-to-zoom has failed, so a zoom never also selects.
+    var onSingleTap: (() -> Void)?
+
     /// Setting a new image resets the zoom and re-lays out (the page may be recycled onto a new id,
     /// or swapped thumbnail → full-res).
     var image: UIImage? {
@@ -50,6 +54,18 @@ final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         addGestureRecognizer(doubleTap)
+
+        let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
+        singleTap.numberOfTapsRequired = 1
+        singleTap.require(toFail: doubleTap)   // a double-tap-zoom must not also fire select
+        addGestureRecognizer(singleTap)
+    }
+
+    @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {
+        // Only select at fit — a tap while zoomed-in is inspecting a detail, not deciding (the Keep
+        // button still selects while zoomed).
+        guard zoomScale <= minimumZoomScale else { return }
+        onSingleTap?()
     }
 
     @available(*, unavailable)
