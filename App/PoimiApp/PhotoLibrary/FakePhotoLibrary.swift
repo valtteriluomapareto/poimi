@@ -139,6 +139,39 @@ extension FakePhotoLibrary {
         return assets
     }
 
+    /// A spread-out year of clusters (Feb → Nov, varying sizes) for eyeballing the cluster-index
+    /// Overview (#37, design 3BL): enough day-clusters across enough months that the bar chart reads
+    /// as a real year skyline and the month sections stack. Ids are `fake/ov/<month>-<day>-<i>` so the
+    /// screenshot host can pick / mark-done specific clusters to show all three states.
+    static func overviewSeed() -> [AssetRef] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        // Midday, so a UTC-anchored seed rendered under the viewer's `.current` calendar never rolls a
+        // photo across midnight into the next day (which would split one cluster into two).
+        func date(_ month: Int, _ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2025, month: month, day: day, hour: 12))!
+        }
+        var assets: [AssetRef] = []
+        func cluster(_ month: Int, _ day: Int, _ count: Int) {
+            for index in 0..<count {
+                assets.append(AssetRef(id: "fake/ov/\(month)-\(day)-\(index)",
+                                       captureDate: date(month, day),
+                                       pixelSize: PixelSize(width: 4032, height: 3024)))
+            }
+        }
+        cluster(2, 1, 47)    // Feb 1
+        cluster(2, 8, 31)    // Feb 8
+        cluster(2, 14, 62)   // Feb 14
+        cluster(3, 1, 24)    // Mar 1
+        cluster(3, 9, 18)    // Mar 9
+        cluster(5, 10, 40)   // May 10
+        cluster(7, 4, 55)    // Jul 4
+        cluster(7, 5, 44)    // Jul 5
+        cluster(9, 20, 22)   // Sep 20
+        cluster(11, 3, 16)   // Nov 3
+        return assets
+    }
+
     /// `count` dated assets spread evenly across 2025, oldest → newest (all within the year,
     /// so a year-range fetch returns the whole set).
     static func scaleSeed(_ count: Int) -> [AssetRef] {
