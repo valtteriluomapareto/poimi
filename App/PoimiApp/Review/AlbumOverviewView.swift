@@ -133,9 +133,6 @@ struct AlbumOverviewView: View {
             ReviewTally()   // "147 / 200" + bar + "N left" — reads the SelectionStore
             // The chart earns its place only with more than one cluster to distribute.
             if index.totalClusters > 1 {
-                Text("Bar height is photos — green is done, gold in progress.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
                 ClusterBarChart(sections: index.sections, maxCount: index.maxCount)
             }
         }
@@ -236,30 +233,28 @@ enum ClusterIndexBuilder {
 
 // MARK: - The per-cluster bar chart
 
-/// One bar per cluster, height ∝ photos, colour = review state (green done / gold in-progress /
-/// grey untouched). Bars are grouped into month columns with a month initial beneath each — density
-/// and coverage in one glance. Reads the stores itself (state is live), so the overview body stays
-/// selection-independent. Orientation only — `accessibilityHidden`; the rows below carry the detail.
+/// One fixed-width bar per cluster, height ∝ photos, colour = review state (green done / gold
+/// in-progress / grey untouched), grouped into month columns with a month initial beneath each.
+/// A whole year is often 100+ clusters, so the strip scrolls HORIZONTALLY (oldest → newest) rather
+/// than compressing to an unreadable comb; a sparse album is just a short left-aligned strip. Reads
+/// the stores itself (state is live) so the overview body stays selection-independent. Orientation
+/// only — `accessibilityHidden`; the rows below carry the per-cluster detail.
 struct ClusterBarChart: View {
     let sections: [MonthSection]
     let maxCount: Int
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
 
+    private let barWidth: CGFloat = 6
     private let barSpacing: CGFloat = 2
-    private let monthGap: CGFloat = 7
+    private let monthGap: CGFloat = 8
     private let maxBarHeight: CGFloat = 72
-    /// Cap the bar width so a sparse album (2–3 clusters) reads as a small left-aligned chart, not
-    /// giant slabs — mirrors the old coverage histogram's width cap.
-    private let maxBarWidth: CGFloat = 14
+    /// The header insets its content 20pt; the chart cancels that (below) to scroll edge-to-edge, then
+    /// re-applies it here so the first bar still aligns under the title and the last scrolls off-screen.
+    private let edgeInset: CGFloat = 20
 
     var body: some View {
-        let totalBars = sections.reduce(0) { $0 + $1.rows.count }
-        GeometryReader { geo in
-            let barGaps = barSpacing * CGFloat(max(totalBars - sections.count, 0))
-            let monthGaps = monthGap * CGFloat(max(sections.count - 1, 0))
-            let fitted = (geo.size.width - barGaps - monthGaps) / CGFloat(max(totalBars, 1))
-            let barWidth = min(maxBarWidth, max(3, fitted))
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .bottom, spacing: monthGap) {
                 ForEach(sections) { section in
                     VStack(spacing: 6) {
@@ -277,9 +272,10 @@ struct ClusterBarChart: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, edgeInset)
         }
         .frame(height: maxBarHeight + 18)
+        .padding(.horizontal, -edgeInset)   // full-bleed within the header's 20pt inset
         .accessibilityHidden(true)
     }
 
