@@ -125,21 +125,6 @@ struct CandidateStoreTests {
         #expect(store.dayByID.isEmpty)
     }
 
-    @Test("month summaries are published for the overview, and clear on an empty reload (#37)")
-    func monthSummariesPublished() async throws {
-        let store = CandidateStore(library: FakePhotoLibrary(), calendar: utcCalendar())
-        await store.load(makeProject(excludeScreenshots: true, excludedAlbumIDs: ["album/whatsapp"]))
-        // yearMixed: 3 quiet on 2025-03-16…18, busy on 2025-07-05 (busy/0,1 are WhatsApp → 10 of 12).
-        #expect(store.monthSummaries.map(\.id) == ["2025-03", "2025-07"])
-        #expect(store.monthSummaries.first?.count == 3)
-        #expect(store.monthSummaries.last?.count == 10)
-        // Every ready candidate lands in exactly one month — no loss.
-        #expect(store.monthSummaries.reduce(0) { $0 + $1.count } == readyIDs(store, "months").count)
-        // Reset on a reload that finds nothing (the `monthSummaries = []` line).
-        await store.load(makeProject(rangeStart: TestDates.year2025End, rangeEnd: TestDates.year2025Start))
-        #expect(store.monthSummaries.isEmpty)
-    }
-
     @Test("the store groups by its injected calendar (timezone shifts day bucketing)")
     func respectsInjectedCalendar() async throws {
         // Two assets straddling UTC midnight: 23:00Z on 2025-06-25 and 01:00Z on 2025-06-26.

@@ -13,9 +13,8 @@
 //  coverage in one view, matching how the grid already thinks in day-clusters. Each cluster's state
 //  (done / in-progress / untouched) is `Curation.ClusterState`, a pure derivation from picks + done.
 //
-//  The cluster index (grouping + label/month formatting) is built ONCE in `.task` into `@State`, never
-//  in a `body` (the no-grouping-in-views guard + the no-heavy-work-in-body rule); `body` only maps the
-//  finished rows to views. Per-cluster picked counts + done are read from the stores where drawn.
+//  The cluster index (grouping + formatting) is built ONCE in `.task` into `@State`, never in a `body`
+//  (the no-grouping-in-views guard + no-heavy-work-in-body); picked counts + done are read where drawn.
 //
 
 import SwiftUI
@@ -39,6 +38,8 @@ struct AlbumOverviewView: View {
             // No visible nav title — the big title lives in the scroll header (like the design); the
             // nav bar keeps just the back button.
             .navigationBarTitleDisplayMode(.inline)
+            // Done-state here is display-only — the Overview doesn't reconcile (the grid does, on entry),
+            // so a photo added to a done day can lag its seal here until you drill in. Rare, acceptable.
             .task(id: project.id) {
                 selection.activate(project)     // hydrate persisted picks so the counts are live
                 doneStore.activate(project)     // hydrate marked-done days so the state colours are live
@@ -166,7 +167,8 @@ struct ClusterRow: Identifiable {
     let count: Int
     /// The representative thumbnail — the cluster's first asset.
     let thumbID: String?
-    /// The drill target — the cluster's first day (nil for the undated bucket → opens at the top).
+    /// The drill target — the cluster's first day. For the undated bucket this is `.undated`, which
+    /// the grid resolves to the undated cluster (so the drill lands on it, not the top).
     let firstDay: DayKey?
 }
 
@@ -293,8 +295,8 @@ struct ClusterBarChart: View {
         }
     }
 
-    // O(cluster size); the overview is not the rapid-toggle surface (picking happens in the drilled-in
-    // grid), so recomputing on a selection change here is not on a hot path.
+    // O(cluster size) per bar; a selection/done write re-renders every bar. Fine because the overview
+    // isn't the rapid-toggle surface (picking happens in the grid) — precompute a map if that changes.
     private func pickedCount(_ row: ClusterRow) -> Int {
         row.group.assetIDs.reduce(into: 0) { if selection.selected.contains($1) { $0 += 1 } }
     }
