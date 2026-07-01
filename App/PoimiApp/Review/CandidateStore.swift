@@ -93,7 +93,9 @@ final class CandidateStore {
                 excludedAssetIDs: excludedAssetIDs)
             // Group once, here — the grid renders the groups directly and never recomputes them
             // (Finding 1). Concatenating the groups' `assetIDs` reproduces the chronological slice.
-            let groups = DayGrouping.groups(for: candidates, calendar: calendar)
+            // The busy-day threshold is ADAPTIVE — derived from this album's own photo density (mean
+            // per active day, clamped) — so "busy" tracks how much this person shoots, not a fixed 10.
+            let groups = DayGrouping.groups(adaptiveFor: candidates, calendar: calendar)
             // Per-photo day map for the viewer's label (#36), built from the same candidates +
             // calendar so it agrees with the grouping (a busy day and the viewer read the same day).
             // In practice every value is a real day: a range fetch never returns a nil-capture-date

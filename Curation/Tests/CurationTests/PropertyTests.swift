@@ -115,11 +115,14 @@ struct PropertyTests {
         var rng = SeededRNG(seed: UInt64(seed))
         let gap = Int.random(in: 1...6, using: &rng)        // calendar days between two quiet days
         let tolerance = Int.random(in: 0...6, using: &rng)
-        let first = AssetRef(id: "a", captureDate: base)
-        let second = AssetRef(id: "b", captureDate: c.date(byAdding: .day, value: gap, to: base)!)
+        let secondDay = c.date(byAdding: .day, value: gap, to: base)!
+        // ≥ minStandaloneQuietRun photos each side so the tiny-run fold doesn't override the gap rule —
+        // this property is about the gap rule alone (a small day would fold back into its neighbour).
+        let first = (0..<12).map { AssetRef(id: "a\($0)", captureDate: base) }
+        let second = (0..<12).map { AssetRef(id: "b\($0)", captureDate: secondDay) }
 
         // threshold high → both days are sub-threshold (quiet); only the gap rule can split them.
-        let groups = DayGrouping.groups(for: [first, second], threshold: 100,
+        let groups = DayGrouping.groups(for: first + second, threshold: 100,
                                         gapToleranceDays: tolerance, calendar: c)
         #expect(groups.count == (gap <= tolerance ? 1 : 2))
     }

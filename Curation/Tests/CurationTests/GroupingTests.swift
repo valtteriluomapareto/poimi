@@ -81,14 +81,14 @@ struct DayGroupingTests {
 
     @Test("a calendar gap beyond tolerance breaks the quiet run")
     func gapBreaksRun() {
-        let input = [
-            asset("a", 2025, 3, 1, calendar: cal),
-            asset("b", 2025, 3, 10, calendar: cal)   // 9-day gap > tolerance(1)
-        ]
-        let groups = DayGrouping.groups(for: input, calendar: cal)
+        // ≥ minStandaloneQuietRun photos each side (and a high threshold keeps them quiet), so the
+        // tiny-run fold doesn't re-merge them — this isolates the gap rule itself (a small day would
+        // fold back into its neighbour).
+        let input = (0..<12).map { asset("a\($0)", 2025, 3, 1, calendar: cal) }
+            + (0..<12).map { asset("b\($0)", 2025, 3, 10, calendar: cal) }   // 9-day gap > tolerance(1)
+        let groups = DayGrouping.groups(for: input, threshold: 50, gapToleranceDays: 1, calendar: cal)
         #expect(groups.count == 2)
-        let allQuiet = groups.allSatisfy { !$0.isBusyDay }
-        #expect(allQuiet)
+        #expect(groups.allSatisfy { !$0.isBusyDay })
     }
 
     @Test("a busy day breaks a surrounding quiet run into three groups")
