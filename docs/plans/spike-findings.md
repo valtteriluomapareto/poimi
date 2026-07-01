@@ -18,7 +18,7 @@ left for later, is below.
 | Question | Verdict | Evidence |
 |---|---|---|
 | **Tap mapping** (#5★ — the primary gate) | **Badge-select + cell-opens.** Tap the badge → select; tap the rest → open full-screen. | On-device A/B against the same real year; whole-cell-select + long-press-to-open lost ("the select with badge feels better"). Canonical in styleguide §6. |
-| **Cell shape** | **Square.** | On-device ("square is good"); the aspect path was dropped. |
+| **Cell shape** | **Square.** | On-device ("square is good"); the aspect path was dropped. *(Later refined: a ~3pt gutter + ~6pt corner rounding, Apple-Photos-style — still square. See styleguide §3/§4.)* |
 | **Column density** | **3 columns on iPhone**, pinch-adjustable. | Confirmed on-device. iPad wants more (adaptive). |
 | **Badge hit target** | **A ≥44pt corner zone works** — no mis-fire during fast triage. | On-device. |
 | **Scroll-restore** | **Good** — returning from full-screen lands on the photo you swiped to, cleanly, with the zoom transition. | On-device, with `.scrollPosition(id:)` + the pager writing the page back. |

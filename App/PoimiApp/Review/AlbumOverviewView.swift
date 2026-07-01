@@ -22,6 +22,7 @@ struct AlbumOverviewView: View {
     @Environment(\.photoLibrary) private var library
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var store: CandidateStore?
     /// Gate the scanning indicator behind a short grace delay so an instant scan never flashes it.
     @State private var indicatorVisible = false
@@ -86,13 +87,14 @@ struct AlbumOverviewView: View {
     private func overview(summaries: [MonthSummary], dayByID: [String: DayKey]) -> some View {
         let total = summaries.reduce(0) { $0 + $1.count }
         return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 header(total: total, summaries: summaries)
                 ForEach(summaries) { month in
                     monthRow(month, dayByID: dayByID)
-                    Divider()
+                        .padding(.horizontal, 16)
                 }
             }
+            .padding(.bottom, 24)
         }
     }
 
@@ -120,37 +122,72 @@ struct AlbumOverviewView: View {
             // Drill into the review grid scrolled to this month's first day-group.
             coordinator.openReview(project.id, day: month.assetIDs.first.flatMap { dayByID[$0] })
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(name)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)   // a long month name at AX type sizes shrinks, not clips
-                    Spacer(minLength: 12)
-                    Text("\(picked) picked")
-                        .font(.subheadline.weight(.semibold))
-                        // `.primary` when there are picks (semibold carries the emphasis), NOT gold:
-                        // small gold text on the light row fails the styleguide §1 contrast caveat —
-                        // gold is reserved for graphical marks (the histogram fill, the check badges).
-                        .foregroundStyle(picked > 0 ? .primary : .secondary)
-                        .monospacedDigit()
-                    Text("· \(month.count)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
+            VStack(alignment: .leading, spacing: 12) {
+                monthHeader(name: name, picked: picked, count: month.count)
                 OverviewThumbnailStrip(ids: month.assetIDs)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .contentShape(Rectangle())
+            .padding(16)
+            // An elevated rounded card per month (replaces the divider-separated flow) — the Liquid
+            // Glass "information on rounded surfaces" language, carried from the viewer / grid.
+            .background(Color(.secondarySystemBackground),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(name), \(picked) of \(month.count) picked")
         .accessibilityHint("Opens this month in review")
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// The month-card header. At accessibility Dynamic-Type sizes it reflows to a stacked layout (name
+    /// wrapping on top, counts + chevron below) rather than shrinking the user's chosen size — mirrors
+    /// `ReviewSectionHeader` (we WRAP, never `minimumScaleFactor`).
+    @ViewBuilder
+    private func monthHeader(name: String, picked: Int, count: Int) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(name).font(.title3.weight(.semibold)).foregroundStyle(.primary)   // wraps, doesn't shrink
+                HStack(spacing: 5) {
+                    pickedText(picked); countText(count)
+                    Spacer(minLength: 0)
+                    monthChevron
+                }
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(name)
+                    .font(.title3.weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
+                Spacer(minLength: 12)
+                pickedText(picked); countText(count); monthChevron
+            }
+        }
+    }
+
+    // `.primary` when there are picks (semibold carries the emphasis), NOT gold: small gold text fails
+    // the styleguide §1 contrast caveat — gold is reserved for graphical marks (histogram, check badges).
+    private func pickedText(_ picked: Int) -> some View {
+        Text("\(picked) picked")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(picked > 0 ? .primary : .secondary)
+            .lineLimit(1)
+            .monospacedDigit()
+    }
+
+    private func countText(_ count: Int) -> some View {
+        Text("· \(count)")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .monospacedDigit()
+    }
+
+    /// A quiet disclosure so a tappable row reads as tappable (Music-style row). Decorative — the row
+    /// Button carries the a11y label/traits and `children: .ignore` keeps this out of VoiceOver.
+    private var monthChevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.tertiary)
     }
 }
 

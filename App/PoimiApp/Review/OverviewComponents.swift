@@ -24,9 +24,8 @@ struct CoverageHistogram: View {
     var body: some View {
         if summaries.count > 1 {   // a single month has nothing to distribute
             VStack(alignment: .leading, spacing: 10) {
-                Text("WHERE YOUR PHOTOS PILE UP")
-                    .font(.caption2.weight(.semibold))
-                    .tracking(0.6)
+                Text("Where your photos pile up")
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                 bars
                 if let insight { Text(insight).font(.footnote).foregroundStyle(.secondary) }
@@ -92,13 +91,21 @@ struct CoverageHistogram: View {
 struct OverviewThumbnailStrip: View {
     let ids: [String]
 
-    private let thumbSize: CGFloat = 30
-    private let maxThumbs = 11
+    // Fewer, larger, more-rounded thumbs read as "art cards" (not a favicon row) — the Liquid Glass
+    // polish. Capped at 6, but fit to the actual width so a narrow pane (e.g. an iPad Slide Over) shows
+    // fewer rather than clipping — matching CollapsedSectionPeek's fit-the-width approach.
+    private let thumbSize: CGFloat = 44
+    private let thumbSpacing: CGFloat = 6
+    private let maxThumbs = 6
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(Array(ids.prefix(maxThumbs)), id: \.self) { id in
-                OverviewThumb(id: id, size: thumbSize)
+        GeometryReader { geo in
+            let fit = max(1, Int((geo.size.width + thumbSpacing) / (thumbSize + thumbSpacing)))
+            HStack(spacing: thumbSpacing) {
+                ForEach(Array(ids.prefix(min(fit, maxThumbs))), id: \.self) { id in
+                    OverviewThumb(id: id, size: thumbSize, cornerRadius: 10)
+                }
+                Spacer(minLength: 0)
             }
         }
         .frame(height: thumbSize)
@@ -108,15 +115,17 @@ struct OverviewThumbnailStrip: View {
 private struct OverviewThumb: View {
     let id: String
     let size: CGFloat
-    /// Proportional to `size` — a 5pt radius reads tighter on a 56pt peek thumb than on the 30pt strip.
-    var cornerRadius: CGFloat = 5
+    /// Set by the caller — the 44pt strip and 56pt peek use different radii for their sizes.
+    let cornerRadius: CGFloat
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.displayScale) private var displayScale
     @State private var image: UIImage?
 
     var body: some View {
+        // `tertiarySystemFill` (not `secondarySystemBackground`) so an unloaded thumb still reads as a
+        // slot on the month card, which is itself `secondarySystemBackground` — else it's an invisible hole.
         RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(Color(.secondarySystemBackground))
+            .fill(Color(.tertiarySystemFill))
             .overlay {
                 if let image { Image(uiImage: image).resizable().scaledToFill() }
             }
