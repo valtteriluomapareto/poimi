@@ -57,7 +57,7 @@ extraction is ready once the catalog exists.
 - **Phase 3 — CI, only when volume justifies:** `localize.yml` (below) with the completeness gate +
   a real pseudoloc pass.
 - **Phase 4 — release notes + store metadata:** Claude drafts English notes from the changelog →
-  translate → upload via the **App Store Connect API** behind a manual-approval gate.
+  translate → upload via **`fastlane deliver`** behind a manual-approval gate.
 
 ## The write path (deterministic — do NOT hand-edit the JSON)
 - **Delta detection = read-only** parse of the `.xcstrings` JSON (`jq`/script) → the per-locale set of
@@ -106,10 +106,12 @@ extraction is ready once the catalog exists.
 ## Tools (dependency-minimal)
 - **`xcodebuild -exportLocalizations`/`-importLocalizations`** — the **primary** write path (XLIFF).
 - **`jq` + a small script** — read-only delta detection + validation (no new library).
-- **App Store Connect API** (a small script) — **preferred over `fastlane`** to stay lean; `fastlane
-  deliver` is an option but a heavy Ruby/gems dep (dev-only, so acceptable, but ASC-API is leaner). If
-  fastlane: it needs a `Deliverfile`/metadata bootstrap, ASC locale-code mapping (`en-US` vs `en-GB`), an
-  editable app version, and note it **skips release notes on a first App Store version**.
+- **`fastlane deliver`** — App Store metadata + release notes. **Preferred over a hand-rolled ASC-API
+  script**: it's dev/release tooling (never in the shipped binary), so the app's dependency-minimalism rule
+  (about the app's SPM deps) doesn't apply — and it already solves the fragile plumbing (ES256-JWT auth, the
+  editable-version lookup, `appStoreVersionLocalizations`, locale-code mapping `en-US`/`en-GB`, the
+  first-version-skips-notes wrinkle). A hand-rolled ASC-API script is the fallback only if avoiding the Ruby
+  dep outweighs the plumbing it saves (not recommended). Needs a `Deliverfile`/metadata bootstrap.
 - **Xcode pseudolocalization** (Accented / Double-Length) — but only useful with a **concrete screenshot/UI
   test pass** under those languages; as a bare mention it catches nothing.
 - **Claude** — headless Claude Code (repo-aware) or an API script (fed the content).
@@ -118,7 +120,9 @@ extraction is ready once the catalog exists.
 - **No custom "no hardcoded user-facing string" CI guard** — fiddly + false-positive-prone in SwiftUI
   (user-facing `Text` vs SF Symbol names vs a11y ids vs debug strings). Pseudoloc + the review habit catch
   un-externalized strings for far less maintenance.
-- **fastlane demoted** to optional (ASC API preferred).
+- **fastlane is the ASC recommendation** (reversed from the first draft): it's dev tooling, not a shipped
+  SPM dep — the minimalism rule is about the app binary — and a hand-rolled ASC-API script just
+  re-implements the JWT + version-state plumbing `deliver` already solves.
 - **English-notes-from-commits** kept as a bonus, not a first build (writing 2–3 lines isn't the bottleneck).
 
 ## Decisions
@@ -135,13 +139,19 @@ extraction is ready once the catalog exists.
 ## Implementation detail (illustrative — plan only, not committed)
 
 Concrete sketches so this is build-ready when v1 English is stable. Paths assume `Scripts/localize/`.
+**Helpers are stdlib-only** (shell + Python `xml.etree`/`json`/`re` — no pip toolchain); the translator is
+**`claude -p`** (the sanctioned, repo-aware tool), not an SDK. Versions/paths below are **build-time
+placeholders** (they'll drift before this is built), not pinned values.
 
 ### 1. Project bootstrap (Phase 1, one-time)
 - In Xcode: **File ▸ New ▸ File ▸ String Catalog** → `App/PoimiApp/Resources/Localizable.xcstrings`, added
   to the app target. (`SWIFT_EMIT_LOC_STRINGS = YES` is already set, so a build auto-extracts.)
 - Add **`fi`** to the project's localizations (Project ▸ Info ▸ Localizations) → writes `fi` into
-  `knownRegions` in `project.pbxproj`.
+  `knownRegions`. The **pbxproj is hand-authored** (no XcodeGen) — keep the diff to that one change +
+  `plutil -lint` after (repo discipline).
 - Add an **`InfoPlist.xcstrings`** for `NSPhotoLibraryUsageDescription` (+ any other Info.plist UI strings).
+- **Author plurals** for the count strings — **English itself needs `one`/`other`** ("1 photo" / "2 photos"),
+  today flat format strings; move them to the catalog's `variations.plural` (not just a flat `%lld`).
 - Retro-audit the **non-`Text` strings** — every `accessibilityLabel/Value/Hint` and any `Text(variable)`:
   ```swift
   // before
@@ -152,49 +162,61 @@ Concrete sketches so this is build-ready when v1 English is stable. Paths assume
   ```
 
 ### 2. Delta detection + the XLIFF round-trip
-Export is Xcode-owned (safe); it also **re-extracts** strings from source, so it doubles as the refresh:
 ```sh
-# Export → an .xcloc bundle per language; untranslated units have empty/`state="new"` <target>s.
-xcodebuild -exportLocalizations \
-  -project App/PoimiApp.xcodeproj \
-  -localizationPath ./loc-export \
-  -exportLanguage fi
-# → ./loc-export/fi.xcloc/Localized Contents/fi.xliff
-
-#  … fill empty <target>s (step 3) …
-
-# Import back — Xcode writes the catalog canonically (no hand-edited JSON drift).
-xcodebuild -importLocalizations \
-  -project App/PoimiApp.xcodeproj \
-  -localizationPath ./loc-export/fi.xcloc
+xcodebuild -exportLocalizations -project App/PoimiApp.xcodeproj -localizationPath ./loc -exportLanguage fi
+#   → ./loc/fi.xcloc/Localized Contents/fi.xliff   ;   … fill state="new" units (step 3) …
+xcodebuild -importLocalizations -project App/PoimiApp.xcodeproj -localizationPath ./loc/fi.xcloc
 ```
-The **delta** = the XLIFF trans-units with no/`new` target. (For read-only reporting, `.xcstrings` is JSON:
-`jq -r '.strings|to_entries[]|select((.value.localizations.fi.stringUnit.state // "missing")|test("missing|new|needs_review"))|.key' Localizable.xcstrings` — but never write it by hand; use XLIFF import.)
+- **Export re-extracts current source strings *into the XLIFF*** (so the delta reflects new `Text()` even
+  if the committed `.xcstrings` is stale) — but it does **not** rewrite the committed catalog; that happens
+  on **import**. `-exportLanguage fi` requires `fi` already in `knownRegions` (§1). A **brand-new locale's
+  first export = the whole catalog** (full first run; per-delta after).
+- The **delta = units with `state="new"`/`needs_review`** — untranslated units export with `<target>` =
+  source + `state="new"`, *not* empty; key on state. **Gitignore `./loc`** so the export bundle isn't committed.
+- (Report-only, plural-blind: `jq '… .localizations.fi.stringUnit.state …'` on the JSON has no `stringUnit`
+  for plural-varied keys, so don't build the delta on it — the real delta is the XLIFF. Reading the JSON is
+  fine; never *write* it by hand.)
 
-### 3. Translate the XLIFF (Claude)
-`translate-xliff.py` — parse the XLIFF, collect empty-target units (`source` + `note`), one Claude call,
-write `<target>`s back. CI-portable (Anthropic API, fed the content explicitly — a raw script does *not*
-auto-see the repo); headless `claude -p` is the repo-aware alternative for the manual MVP.
-```python
-# prompt (glossary + style prepended, from localization/glossary.md + style.md):
-SYSTEM = """Translate Poimi's iOS UI strings to Finnish (fi). Rules:
-- "Poimi" is the APP NAME — never translate it.
-- Preserve every format specifier (%lld, %@, %1$@, %2$@) EXACTLY and IN THE SAME ORDER.
-- UI strings are buttons/labels — keep them short.
-- Tone: calm, plain, human; sentence case; no exclamation marks.
-- <glossary + album=albumi, never 'vuosikirja'/yearbook, …>
-Return ONLY JSON {"<trans-unit id>": "<fi translation>"}."""
-# → anthropic.messages.create(model="claude-...", system=SYSTEM, messages=[{... the units as JSON ...}])
-# → write each translation into the matching <target state="translated">, then xcodebuild -importLocalizations
+### 3. Translate the XLIFF (`claude -p`)
+`translate-xliff.py` (stdlib `xml.etree` — **handle the XLIFF 1.2 namespace** `urn:oasis:names:tc:xliff:document:1.2`)
+collects `state="new"` units (`source` + `note`), shells out to **`claude -p`** with the glossary/style
+prepended, writes `<target state="translated">` back, then `-importLocalizations`. The `claude -p` call is
+an **injectable seam** (a stub translator for tests — §8), so no SDK/pip dep.
 ```
+prompt (glossary + style prepended, from localization/glossary.md + style.md):
+"Translate Poimi's iOS UI strings to Finnish (fi). Rules:
+ - 'Poimi' is the APP NAME — never translate it.
+ - Preserve every format specifier (%lld, %@, %1$@, %2$@) EXACTLY and IN THE SAME ORDER.
+ - UI strings are buttons/labels — keep them short.  Tone: calm, plain, sentence case, no '!'.
+ - <glossary: album = albumi, never 'vuosikirja'/yearbook; …>
+ Return ONLY JSON {"<trans-unit id>": "<fi translation>"}."   ← the units passed as JSON
+```
+- **The first `fi` baseline doesn't need the script** — Xcode's catalog editor or a one-shot `claude -p`
+  paste is simpler; `translate-xliff.py` earns its keep on **ongoing deltas**.
 
-### 4. Validation (`validate.py`, gates the PR)
-- **Placeholders — identity + order**, not counts: `re.findall(r'%(?:\d+\$)?[@a-zA-Z]', s)` on source vs
-  target must be an equal *sequence*.
-- **Plurals**: any `variations.plural` key must carry every CLDR category the language needs (`fi`: `one`,
-  `other`; e.g. `ar`: 6). Fail if a category is missing.
-- **Completeness gate (shipped locales only)**: re-export after import; if any unit for a *shipped* locale
-  is still empty/`new` → **exit non-zero** (block). *In-progress* locales are exempt (English fallback OK).
+### 4. Validation (`validate.py`, gates the PR) — checks presence + format, NOT correctness (that's the native reviewer)
+- **Placeholders — full printf grammar, identity + order.** The naive `%(?:\d+\$)?[@a-zA-Z]` is
+  **INSUFFICIENT** — it mis-parses `%lld` (grabs `%l`) and misses width/`.precision`. Requirement: match
+  flags/width/`.precision`/length-modifiers/conversion, e.g.
+  `%(?:\d+\$)?[-+ 0#]*\d*(?:\.\d+)?(?:hh|h|ll|l|q|L|z|j|t)?[@diouxXeEfgGaAcsSpn]`; **exclude `%%`**; source vs
+  target must be an equal *sequence*. Require **positional args (`%1$@`)** in any source with ≥2 specifiers
+  (else a word-order reorder of `%@ of %@` is undetectable).
+- **Plurals**: `variations.plural` must carry every CLDR category the target needs. **en + fi are both
+  `one`/`other` (near-trivial)** — this validator is really for future tier-1 locales (ar = 6, ru/pl = 3–4),
+  whose extra categories **can't be added via the XLIFF round-trip** (no trans-units for them) → a
+  direct-catalog path when those land. Source list: a small hardcoded CLDR table.
+- **Completeness gate**: reads the `.xcstrings` **JSON state directly** (no heavy re-export); covers **both
+  `Localizable` and `InfoPlist`**. For a **shipped** locale, any `new`/missing unit → **exit non-zero**
+  (block); **in-progress** locales exempt (English fallback OK).
+
+### The source of truth — `localization/locales.yml`
+The gates above are prose without one config to mechanize "shipped vs in-progress" and "verified baseline":
+```yaml
+en: { status: source }
+fi: { status: in-progress, baseline_signed_off_at: null }   # → status: shipped + a commit/tag once a native speaker signs off
+```
+`status` drives the completeness gate; `baseline_signed_off_at` gates *auto-review of deltas* vs
+*native-review-required* (a null baseline ⇒ the whole locale needs human sign-off, not just the delta).
 
 ### 5. CI — `.github/workflows/localize.yml` (Phase 3)
 ```yaml
@@ -206,34 +228,37 @@ concurrency: { group: localize, cancel-in-progress: false }   # one at a time �
 permissions: { contents: write, pull-requests: write }        # minimal scope
 jobs:
   translate:
-    runs-on: macos-15                                          # Xcode 26 image
+    runs-on: macos-15                # reuse ci.yml's runner + Xcode-select step — don't re-pin (these drift)
     steps:
-      - uses: actions/checkout@v4
-      - run: sudo xcode-select -s /Applications/Xcode_26.app
+      - uses: actions/checkout@v4    # (image / action versions are placeholders — copy ci.yml's at build time)
       - run: xcodebuild -exportLocalizations -project App/PoimiApp.xcodeproj -localizationPath ./loc -exportLanguage fi
       - run: python3 Scripts/localize/translate-xliff.py "./loc/fi.xcloc/Localized Contents/fi.xliff" --glossary localization/
         env: { ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} }
       - run: xcodebuild -importLocalizations -project App/PoimiApp.xcodeproj -localizationPath ./loc/fi.xcloc
       - run: python3 Scripts/localize/validate.py
       - run: |                                                 # branch/PR for human (+ native) sign-off
+          git diff --quiet -- 'App/PoimiApp/**/*.xcstrings' && { echo "no delta"; exit 0; }   # empty-delta guard
           git switch -c "i18n/auto-${{ github.run_id }}"
           git commit -am "chore(i18n): fi translations"
+          git push -u origin HEAD                             # gh pr create needs the branch on the remote
           gh pr create -t "chore(i18n): fi translations" -b "Auto-translated delta — needs native-speaker review." -l i18n
         env: { GH_TOKEN: ${{ github.token }} }
 ```
+(`./loc` is gitignored so the export bundle isn't swept into `commit -am`.)
 > Secret guard: a `push`-to-`main` trigger doesn't run on fork PRs, so the API key isn't exposed to
 > forks. If a `pull_request` trigger is ever added, gate the translate step on
 > `github.event.pull_request.head.repo.full_name == github.repository`.
 
-### 6. Release notes + store metadata (Phase 4)
+### 6. Release notes + store metadata (Phase 4) — use `fastlane deliver`
 - English notes: `claude -p` over `git log <lastTag>..HEAD` (merged PR titles) → 2–3 lines → translate to
-  each locale (same engine) → write `metadata/<locale>/release_notes.txt` (+ subtitle/keywords/description).
-- Upload via the **App Store Connect API** (a script, no fastlane): ES256-JWT (issuer id + key id + `.p8`,
-  `aud: appstoreconnect-v1`) → GET the editable `appStoreVersion` → PATCH each
-  `appStoreVersionLocalizations/{id}` `whatsNew` (+ locale metadata). Behind a **manual-approval
-  environment**. (`fastlane deliver` wraps all of this if the JWT/version-state plumbing isn't worth
-  hand-rolling — the tradeoff is the heavy Ruby dep vs a ~100-line script. Note deliver *skips* notes on a
-  first-ever version.)
+  each locale (same engine) → write `fastlane/metadata/<locale>/{release_notes,subtitle,keywords,description}.txt`.
+- **Upload with `fastlane deliver`** behind a **manual-approval environment**. `fastlane` is dev/release
+  tooling (never in the shipped binary), so the app's dependency-minimalism rule doesn't apply — and it
+  already solves the plumbing a hand-rolled script would re-implement: ES256-JWT auth, **creating/finding
+  the editable `PREPARE_FOR_SUBMISSION` version** (it may not exist between releases — you must create it
+  first), traversing `appStoreVersionLocalizations` → `whatsNew`, locale-code mapping (`en-US`/`en-GB`), and
+  the *skips-notes-on-a-first-version* wrinkle. (A hand-rolled ASC-API script is the fallback only if the
+  Ruby dep is unacceptable — not recommended.)
 
 ### 7. Manual MVP (Phase 2 — the whole loop, run by hand at release)
 ```sh
@@ -241,12 +266,17 @@ Scripts/localize/translate.sh fi   # = export → translate-xliff.py (claude -p)
 # then: review the diff, get a native-speaker OK on a new locale's baseline, commit, open a PR.
 ```
 
-### 8. Tests (ship with the scripts)
-Fixture `.xcstrings`/XLIFF in each state — a new key, an edited key, a missing plural category, a
-swapped-placeholder target, a complete locale — assert: delta detection finds exactly the untranslated
-keys; the completeness gate fails a partial *shipped* locale and passes an in-progress one; the
-placeholder/plural validators reject the bad fixtures. Plus the release-notes changelog-extraction +
-file-placement plumbing (the LLM output isn't unit-testable; the plumbing is).
+### 8. Tests (stdlib, ship with the scripts; translator stubbed)
+Fixture `.xcstrings`/XLIFF, asserting both fail AND pass/ignore paths:
+- **delta detection**: finds `new`/`needs_review` units, **ignores already-`translated` keys** (the core
+  "only deltas" promise), and handles a plural key.
+- **completeness gate**: **fails a partial *shipped* locale**, **passes an *in-progress* one**, covers `InfoPlist`.
+- **placeholder validator**: rejects a dropped / added / type-changed / reordered specifier — incl. a
+  **`%lld` fixture** (would have caught the regex bug); accepts `%%`.
+- **plural validator**: rejects a missing category; **accepts a complete one**.
+- **release-notes plumbing**: changelog extraction + file placement (LLM output stubbed).
+The `claude -p` call is an **injectable stub** (echo/pseudo translator) so the export→translate→import
+round-trip is testable without a live API call.
 
 ## Risks / notes
 - The **retro string audit** is the real up-front cost (a11y strings especially) — deferred to Phase 1
