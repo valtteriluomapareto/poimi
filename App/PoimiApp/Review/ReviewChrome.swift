@@ -17,8 +17,8 @@ import Curation
 
 /// The header pinned beneath the large nav title: a metadata subtitle + the full-width tally. Pinned
 /// (not scrolled) so the tally stays glanceable while you scroll the grid — it's the orientation
-/// device. A `.bar` backing gives the scroll-edge legibility over bright thumbnails for free and
-/// adapts under Reduce Transparency.
+/// device. A Liquid Glass backing (`glassBarBackground`) refracts the photos passing under it and
+/// keeps the tally legible over bright thumbnails; Reduce Transparency falls back to a solid surface.
 struct ReviewHeader: View {
     /// The album name — the screen's identity (the nav title is blanked so this is the one title).
     let title: String
@@ -44,11 +44,11 @@ struct ReviewHeader: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // `.bar`: the system bar material — translucent, scroll-edge-legible over bright thumbnails,
-        // adapts under Reduce Transparency. No hard `Divider()` (a legacy table-header look); the
-        // material edge carries the separation. (A full iOS 26 glassEffect scroll-edge is a device-
-        // iteration item — no precedent in-app + can't be verified statically + glitch-adjacent.)
-        .background(.bar)
+        // iOS 26 Liquid Glass, pinned over the scrolling photo wall (refracts the thumbnails passing
+        // under it — the effect the interim `.bar` only approximated). `extendTop` bleeds it up under
+        // the status bar + (backdrop-hidden) nav bar, so the whole top is one continuous glass surface
+        // — no bright photo band above the header. Reduce Transparency → solid surface (styleguide §5).
+        .glassBarBackground(extendTop: true)
     }
 }
 
@@ -135,4 +135,61 @@ struct ReviewToolbarActions: View {
             Text("This deselects all \(picked) photos. Your photos aren't deleted — but you'd pick this album again from scratch.")
         }
     }
+}
+
+/// iOS 26 Liquid Glass backing for the pinned TOP header (title + tally) — glass refracts the thumbnails
+/// passing under it and carries its own adaptive contrast for the text on top. `extendTop` bleeds the
+/// glass up under the status bar + (backdrop-hidden) nav bar, so the whole top is one continuous surface
+/// to the edge — no bright photo band above the header. Under Reduce Transparency it swaps to a solid
+/// surface + a `Color(.separator)` hairline (styleguide §5 — an accessibility axis, exempt from the
+/// pure-glass rule; a solid color, NOT a `.regularMaterial` version fallback, so the guard stays satisfied).
+/// (Day-group headers use `glassChip()` below, not this — they're capsules, not a full-width bar.)
+private struct GlassBarBackground: ViewModifier {
+    var extendTop = false
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        switch (extendTop, reduceTransparency) {
+        case (false, false):
+            content.glassEffect(.regular, in: Rectangle())
+        case (true, false):
+            // `Color.clear` is a shaped empty view to hang glass on; it draws nothing, the glass does.
+            content.background { Color.clear.glassEffect(.regular, in: Rectangle()).ignoresSafeArea(edges: .top) }
+        case (false, true):
+            content.background(Color(.secondarySystemBackground)).overlay(alignment: .bottom) { hairline }
+        case (true, true):
+            content.background { Color(.secondarySystemBackground).ignoresSafeArea(edges: .top) }
+                .overlay(alignment: .bottom) { hairline }
+        }
+    }
+
+    /// The §5 Reduce-Transparency separator: once the glass edge is gone, this carries the header/photo
+    /// boundary.
+    private var hairline: some View { Rectangle().fill(Color(.separator)).frame(height: 0.5) }
+}
+
+/// Liquid Glass backing for a floating chip (the day-group header's day + Select-all capsules). Capsule
+/// glass; under Reduce Transparency it swaps to a solid capsule + `Color(.separator)` hairline — every
+/// custom glass surface owns its RT appearance (styleguide §5). Wrap co-located chips in a
+/// `GlassEffectContainer` so their glass samples as one lens, never glass-on-glass (§5).
+private struct GlassChipBackground: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content
+                .background(Color(.secondarySystemBackground), in: .capsule)
+                .overlay { Capsule().strokeBorder(Color(.separator), lineWidth: 0.5) }
+        } else {
+            content.glassEffect(.regular, in: .capsule)
+        }
+    }
+}
+
+extension View {
+    /// Liquid Glass backing for the pinned TOP header; `extendTop` bleeds it to the very top edge.
+    func glassBarBackground(extendTop: Bool = false) -> some View { modifier(GlassBarBackground(extendTop: extendTop)) }
+    /// Liquid Glass backing for a floating day-group chip (capsule) — RT-safe. Group co-located chips
+    /// in a `GlassEffectContainer`.
+    func glassChip() -> some View { modifier(GlassChipBackground()) }
 }

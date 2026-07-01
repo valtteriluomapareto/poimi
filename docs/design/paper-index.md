@@ -5,14 +5,14 @@ issues + the current build. This is the index for agents/humans to find a screen
 implementing it.
 
 - **Index created:** 2026-06-29 · **updated:** 2026-07-01 (added the **Now-Playing viewer** `2ZC-0`
-  and two **Liquid Glass** polish mocks — **Overview** `30R-0` + **Review grid** `34O-0` — that carry
-  the viewer's language to the other screens, in review; plus the review-grid **code-led accordion**,
-  #89 merged — see the `2VR-0` note + Reconciliation status). A snapshot — re-verify against Paper
-  before relying on a specific detail; the file evolves.
+  and **Liquid Glass** polish mocks **Overview** `30R-0` + **Review grid** `34O-0` — the glass work
+  shipped in PRs #98/#99; plus a **paged-clusters concept** exploration — **Clusters index** `36R-0`
+  + **Cluster grid page** `39D-0` — and the review-grid **code-led accordion**, #89 merged. A
+  snapshot — re-verify against Paper before relying on a specific detail; the file evolves.
   > **Code-led screens:** the review grid evolved past its Paper design during device testing (the
   > accordion, below). Where a shipped screen diverges from its artboard, this index — not Paper — is
   > the source of truth for *what shipped*; the artboard records the original design intent.
-- **File:** "Poimi" · page "Page 1" (`1-0`) · **36 artboards** (30 product screens + a 6-artboard
+- **File:** "Poimi" · page "Page 1" (`1-0`) · **41 artboards** (34 product screens + a 6-artboard
   v1.1 idea-backlog exploration cluster, below)
 - **URL:** https://app.paper.design/file/01KVSFMATJM712ABNQ5D0YDR1T/1-0
 - **File ID:** `01KVSFMATJM712ABNQ5D0YDR1T`
@@ -53,6 +53,8 @@ full 999. The repo's Asset Catalog + styleguide.md mirror these.
 | **Review grid** ✓ | `129-0` | 390×844 | Large album title + metadata subtitle ("1,847 photos · Jan–Dec 2025") + **full-width tally** ("147/200 · 73 left") under it; **Export** top-right. **Gapless** square cells; selected = **gold check top-right + green border + dim**. Pinned day-group headers ("Sat 5 Jul · 53"). | #35 · **built, then evolved (code-led)** → shipped as an **accordion** (one cluster open at a time; done decoupled → seal badge + end-of-cluster "Mark as done"; bold pinned-header title with the nav title blanked). See D35 + Reconciliation status. |
 | **Review grid · Liquid Glass** ✓ | `34O-0` | 390×844 | **Polish mock (in review):** the grid carried toward the viewer's Liquid Glass language — frosted-glass pinned header + day-group headers (translucent + hairline, so photos refract through when pinned over a scroll; the real effect is the on-device `glassEffect` upgrade — subtle in a static mock), "album" copy ("Best of 2025", the "Yearbook" term dropped), and **Apple-Photos-style cells: a small (~3px) gap + small (~6px) corner rounding**, edge-to-edge 3-up — **revising** the spike's gapless/square decision (styleguide §3/§4/§6; update on sign-off). Gold-check/green-border selection retained. | #35 · **design proposed** |
 | Review grid — notes ✓ | `Y4-0` | 460×422 | Annotated spec for the above (two-tier triage; day-groups; selection encoding; top chrome; select-mode is a sibling). | — |
+| **Clusters · index (paged concept)** ✓ | `36R-0` | 390×844 | **Concept exploration (in review):** an alternative to the single-scroll accordion — a **two-level** model. This is Level 1: a scrollable list of *collapsed* cluster cards (day · count · done seal · N-kept · photo peek), the "map" of the whole album. Tapping a cluster drills into its grid page (`39D-0`). Solves "how do I see all clusters" when the grid becomes a paged view. | #35 · **concept** |
+| **Cluster grid · page (paged concept)** ✓ | `39D-0` | 390×844 | **Concept exploration (in review):** Level 2 of the paged model — one cluster's photos fill a full page; **swipe sideways** to the adjacent cluster (page dots + a next-cluster edge peek signal it). Glass nav = ‹ back-to-index · day · "N / total" cluster position; "Mark day done" advances to the next page. Reuses the shipped gap+rounded cells + gold-check selection. | #35 · **concept** |
 | **Select mode** | `14C-0` | 390×844 | Active multi-select entered from the grid: a quick-select badge on **every** cell, **drag-to-multi-select**, per-day + whole-range Select-all, top toolbar (count + progress + Deselect-all). Same selection encoding. | #35 (deferred drag-select) · **not built** |
 | Select mode — notes ✓ | `11J-0` | 460×443 | Annotated spec for Select mode. | — |
 | **Photo viewer · swipe + select** | `WZ-0` | 390×844 | *(Original v1 design.)* Full-bleed photo; top bar = back · "Sat 5 Jul / 12 of 53" · gold check toggle; bottom = live "148/200 picked" + a **filmstrip scrubber** (current enlarged, picked thumbs checked). Reached via the `.zoom` transition; returns to the same cell. | #36 · **built, then redesigned** → superseded by the Now-Playing card `2ZC-0` (below) |
@@ -71,6 +73,9 @@ lands. (Names describe each treatment.)
 |---|---|---|
 | Overview · by month | `16A-0` | Month-grouped summary rows. |
 | Overview · thumbnail rows | `19P-0` | Horizontal thumbnail rows per group. **Chosen + built (#37).** |
+| **Overview · cluster index** ✓ | `3BL-0` | **Concept (in review) — 5-persona-panel recommendation.** Reframes the Overview from "months → drill in" to a complete, scannable **index of ALL day-clusters**: header (title · gold tally · bar) → a **per-cluster bar chart** (one bar per day-group, height ∝ photos, colour = state: green done / gold in-progress / grey untouched — the current Overview's histogram kept, but at cluster granularity, doing density + coverage at once) → a **dense vertical cluster list** with sticky month headers (thumb · day · "N picked · total" · green done-seal · chevron). Answers "see all clusters + what's left" without horizontal shelves; taps drill into the cluster grid. |
+| **Overview · calendar heatmap** ✓ | `3ED-0` | **Concept (in review) — variant.** A year "skyline" heatmap: one cell per day-group, columns = months (height ∝ cluster count), tinted by state (green done / gold in-progress / grey untouched). Superb whole-year shape + coverage at a glance, but abstract — no per-cluster label/thumb and not directly actionable; best as a *companion* to the index, not the sole Overview. (Panel noted it mis-models adaptive clusters if done per-day.) |
+| Cluster index — notes ✓ | `3IF-0` | Annotated spec for the cluster-index concept: **(1) cluster state** — the 3-state rule (done = marked done · in-progress = not-done + ≥1 pick · untouched = not-done + 0 picks), a pure derivation from picks + done (no view-tracking); **(2) defining a cluster** — the open decision to replace the static busy-day threshold (10) with a **dynamic** one, `clamp(photosPerActiveDay, 9, 100)`, incl. mean-vs-percentile, active-days-only, clamps, and "spike on the real library" (D27). |
 | **Overview · Liquid Glass** ✓ | `30R-0` | **Polish mock (in review)** of `19P-0` toward the viewer's language: month rows become **elevated rounded cards** (dividers dropped), thumbnails grow into **larger rounded art cards**, each row gains a **`>` chevron** (tappable affordance), histogram label softened to sentence-case. Same dark palette + gold tally + histogram. |
 | Overview · location bars | `1DE-0` | Location-grouped bars (ties to the v1.1 location subsystem). |
 | Overview · sideways bars | `1H3-0` | Sideways/horizontal progress bars per group. |

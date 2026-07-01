@@ -43,6 +43,12 @@ struct ScanningView: View {
             // observation feedback loop. The ReviewHeader below carries the album context prominently.
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { reviewChrome }
+            // Hide the system nav backdrop so the ReviewHeader's own glass (extended to the top edge)
+            // is the single continuous glass surface up there — back/Clear/Export float on it, with no
+            // bright photo band between the nav bar and the header. We supply a STATIC glass (not the
+            // system backdrop reacting to a collapsing title), which removes the specific feedback loop
+            // below — verified on device (no scroll flicker); re-check if the top-title layout changes.
+            .toolbarBackground(.hidden, for: .navigationBar)
             // Keyed by project id so re-targeting (e.g. iPad detail column) reloads for the new
             // album rather than showing the previous one's candidates.
             .task(id: project.id) {
