@@ -126,14 +126,14 @@ struct AlbumOverviewView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(project.title)
                     .font(.largeTitle.bold())
-                Text("\(index.totalClusters) day-group\(index.totalClusters == 1 ? "" : "s") · \(periodLabel)")
+                Text("\(index.totalClusters) day\(index.totalClusters == 1 ? "" : "s") · \(periodLabel)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             ReviewTally()   // "147 / 200" + bar + "N left" — reads the SelectionStore
             // The chart earns its place only with more than one cluster to distribute.
             if index.totalClusters > 1 {
-                Text("Each bar is a day-group — height is photos, green is done, gold in progress.")
+                Text("Bar height is photos — green is done, gold in progress.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 ClusterBarChart(sections: index.sections, maxCount: index.maxCount)
