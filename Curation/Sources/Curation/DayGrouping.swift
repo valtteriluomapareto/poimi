@@ -30,7 +30,9 @@ public struct DayGroup: Sendable, Identifiable, Equatable, Codable {
     /// The ordered asset ids in this group (a contiguous slice of the input).
     public let assetIDs: [String]
     /// The calendar days this group spans — the key surface for the §20 completion
-    /// derivation (`section.days ⊆ doneDays`).
+    /// derivation (`section.days ⊆ doneDays`). Chronological, but a quiet run may be
+    /// NON-contiguous: a tiny stranded day folds in across a gap (`foldTinyQuietRuns`),
+    /// so don't assume consecutive days — use `days.first`/`days.last` for a range label.
     public let days: [DayKey]
     /// A single busy day (≥ N) standing alone, vs a merged quiet run.
     public let isBusyDay: Bool
@@ -47,10 +49,21 @@ public struct DayGroup: Sendable, Identifiable, Equatable, Codable {
 }
 
 public enum DayGrouping {
-    /// Default busy-day threshold (project-phases: N ≈ 10/day).
+    /// Default busy-day threshold (project-phases: N ≈ 10/day). The static fallback; production uses
+    /// `adaptiveThreshold(for:)` instead so the "busy day" bar tracks how much this person shoots.
     public static let defaultThreshold = 10
     /// Max calendar gap (in days) before a quiet run breaks. `1` = consecutive/next-day.
     public static let defaultGapToleranceDays = 1
+    /// Clamp bounds for `adaptiveThreshold` (busy-day DETECTION): a handful of photos is never a "busy
+    /// day" (floor); a heavy-shooting year still gets standalone days, not one giant run (ceiling).
+    /// Distinct from `minStandaloneQuietRun` below — that governs a quiet run's *section-worthiness*,
+    /// this governs whether a *single day* is busy. (They're adjacent small numbers on purpose, not a typo.)
+    public static let minAdaptiveThreshold = 9
+    public static let maxAdaptiveThreshold = 100
+    /// A quiet run with fewer photos than this is too small to be its own section — if the gap rule
+    /// stranded it (a lone low-photo day between runs), it folds into the adjacent quiet run instead.
+    /// (On-device call: 10 — a section worth its own header/peek/mark-done should hold ~10+ photos.)
+    public static let minStandaloneQuietRun = 10
 
     /// Group a chronological slice into adaptive day-groups.
     ///
@@ -118,6 +131,7 @@ public enum DayGrouping {
             previous = key
         }
         flushQuietRun()
+        groups = foldTinyQuietRuns(groups)
 
         if !undatedIDs.isEmpty {
             groups.append(DayGroup(
@@ -128,6 +142,62 @@ public enum DayGrouping {
             ))
         }
         return groups
+    }
+
+    /// The adaptive busy-day threshold: the **mean photos per ACTIVE day** (a calendar day with ≥1
+    /// dated photo), clamped to `[minAdaptiveThreshold, maxAdaptiveThreshold]`. Photo-per-day counts are
+    /// right-skewed (a few big trip days), so the mean sits *above* the typical day — only
+    /// heavier-than-usual days clear the bar and stand alone, while ordinary days merge into runs, which
+    /// is the intent. Undated assets and empty calendar days are excluded (they'd drag the mean down).
+    /// Empty / all-undated input → the floor. Pure + deterministic; a percentile is the tunable
+    /// alternative centre if we later want to move the bar (spike, D27).
+    public static func adaptiveThreshold(for assets: [AssetRef], calendar: Calendar = .current) -> Int {
+        var countByDay: [DayKey: Int] = [:]
+        for asset in assets {
+            let key = asset.dayKey(in: calendar)
+            guard key != .undated else { continue }
+            countByDay[key, default: 0] += 1
+        }
+        guard !countByDay.isEmpty else { return minAdaptiveThreshold }
+        let mean = Double(countByDay.values.reduce(0, +)) / Double(countByDay.count)
+        // Rounded to nearest; the [floor, ceiling] clamp makes the tie-direction moot.
+        return Swift.min(maxAdaptiveThreshold, Swift.max(minAdaptiveThreshold, Int(mean.rounded())))
+    }
+
+    /// Convenience: group using the album's OWN adaptive busy-day threshold — the production entry, so a
+    /// caller can't silently fall back to the static `defaultThreshold`. (Tests pass an explicit
+    /// `threshold:` to `groups(for:…)` to pin exact behaviour.)
+    public static func groups(
+        adaptiveFor assets: [AssetRef],
+        gapToleranceDays: Int = defaultGapToleranceDays,
+        calendar: Calendar = .current
+    ) -> [DayGroup] {
+        groups(for: assets,
+               threshold: adaptiveThreshold(for: assets, calendar: calendar),
+               gapToleranceDays: gapToleranceDays,
+               calendar: calendar)
+    }
+
+    /// Fold a tiny isolated quiet run (a low-photo day the gap rule stranded — e.g. a lone 2-photo day
+    /// between two runs) into the immediately-preceding quiet run, so it isn't its own section. Only a
+    /// dated quiet run with `< minStandaloneQuietRun` photos folds, and only into a preceding dated
+    /// quiet run — a run bounded by a busy day (or at the very start) stays as-is (there, standing
+    /// alone reads fine). This deliberately overrides the gap rule for these orphans: the merged run's
+    /// day span may cross the gap, which reads as one quiet stretch. Busy days are never touched.
+    private static func foldTinyQuietRuns(_ groups: [DayGroup]) -> [DayGroup] {
+        var out: [DayGroup] = []
+        for group in groups {
+            if let last = out.last, !last.isBusyDay, !group.isBusyDay, group.count < minStandaloneQuietRun {
+                out[out.count - 1] = DayGroup(
+                    id: last.id,
+                    assetIDs: last.assetIDs + group.assetIDs,
+                    days: last.days + group.days,
+                    isBusyDay: false)
+            } else {
+                out.append(group)
+            }
+        }
+        return out
     }
 
     /// Defensive chronological sort: oldest → newest, undated (nil capture date) last,
