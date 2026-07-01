@@ -33,6 +33,9 @@ struct ReviewGridCell: View {
 
     @Environment(SelectionStore.self) private var selection
     @State private var image: UIImage?
+    /// Small corner rounding, Apple-Photos-style — pairs with the grid's small inter-cell gap. Both
+    /// selection overlays (dim, border) round to the same radius so they hug the clipped photo.
+    private let cornerRadius: CGFloat = 6
     /// The id that `image` was loaded for. On recycle the cell instance is reused with a new `id`
     /// while `image` still holds the previous asset's thumbnail, so this guards against painting a
     /// stale image — we trust `image` only when it matches the current `id`.
@@ -62,21 +65,23 @@ struct ReviewGridCell: View {
                         .controlSize(.small)
                 }
             }
-            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay {
             if isSelected {
-                Color.black.opacity(0.28)   // dim — redundant with the badge (D9)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.black.opacity(0.28))   // dim — redundant with the badge (D9)
                     .allowsHitTesting(false)
             }
         }
         .overlay {
             if isSelected {
-                // The third selection layer (styleguide §6 / Paper design): a green inset border.
-                // Structural — the gold check stays the affordance — but in a gapless grid the border
-                // is what reads a selected cell at a glance. `strokeBorder` insets so it isn't clipped;
-                // non-interactive so its ring can't absorb an edge tap (→ open/select). The BRAND green
-                // (§6 secondary), so it doesn't read as a different green next to the done seal.
-                Rectangle().strokeBorder(Color.brandGreen, lineWidth: 2)
+                // The third selection layer (styleguide §6): a green inset border. The gold check stays
+                // the affordance; the border marks the selected cell at a glance (now that the grid has
+                // gaps, separation comes from the gutter, so this reads purely as selection). Rounds to
+                // the cell radius; `strokeBorder` insets so it isn't clipped; non-interactive so its ring
+                // can't absorb an edge tap. BRAND green (§6 secondary), matching the done seal.
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(Color.brandGreen, lineWidth: 2)
                     .allowsHitTesting(false)
             }
         }

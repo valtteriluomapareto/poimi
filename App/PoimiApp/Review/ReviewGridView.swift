@@ -76,7 +76,7 @@ struct ReviewGridView: View {
     /// cross a cell boundary) skips the actor hop instead of re-sending the same window every frame.
     @State private var lastAppliedSlice: [String] = []
 
-    private let spacing: CGFloat = 0   // gapless photo wall (Paper design / styleguide §3)
+    private let spacing: CGFloat = 3   // small inter-cell gap, Apple-Photos-style (revises the gapless §3)
     private let minColumns = 2
     private let windowRowMargin = 2
     /// Oversized vs the on-screen point size on purpose (Retina + density headroom).

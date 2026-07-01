@@ -29,7 +29,7 @@ every other cluster is a collapsed peek. "Done" is its own state (a green seal b
 │   ▣ ▣ ▣ ▣ ▣ ▣  (width-filled peek thumbs)      │     tap header/peek to open
 │ ⌄ Sat, Jul 5            · 24      Select all   │  ← OPEN cluster (chevron ⌄)
 │  ┌────┬────┬────┐                              │
-│  │ ▣✓ │  ◯ │  ◯ │   gapless square cells       │  ← gold check top-right
+│  │ ▣✓ │  ◯ │  ◯ │   square cells · ~3pt gap    │  ← gold check top-right
 │  └────┴────┴────┘                              │
 │              [ Mark as done ]                  │  ← end-of-cluster button → collapse + advance
 │ › Jun 2 – Jun 9     0 of 18 kept               │  ← next collapsed cluster
@@ -42,7 +42,7 @@ every other cluster is a collapsed peek. "Done" is its own state (a green seal b
   day-groups** (Curation `DayGrouping`) with **pinned section headers**. Busy days stand alone;
   quiet days merge into a run. Grouping is computed **once** in `CandidateStore` when the fetch
   settles — never in a view `body` (guard: `check-no-grouping-in-views.sh`).
-- **Square cells** (resolved by the spike — square scans fastest), **gapless** (0-pt gutter — a photo wall, styleguide §3 / Paper design).
+- **Square cells** (resolved by the spike — square scans fastest), with a **~3pt gutter + ~6pt corner rounding** (Apple-Photos-style; revised from the initial gapless wall — styleguide §3/§4).
 - **Pinch-to-adjust density**, default **3 columns** on iPhone, clamped to **2–5** (compact) so the
   44pt badge never swallows the cell; iPad goes denser. Density change animates `.snappy`, gated off
   under Reduce Motion.

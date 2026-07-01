@@ -23,7 +23,7 @@
 | Role | Token | Notes |
 |---|---|---|
 | Screen background (setup/list) | `Color(.systemBackground)` / grouped variants in `Form`/`List` | Notes-calm; let whitespace carry layout. |
-| Grid backdrop (gutters behind cells) | `Color(.systemBackground)` | Near-invisible 2pt gutters; the grid reads edge-to-edge. |
+| Grid backdrop (gutters behind cells) | `Color(.systemBackground)` | ~3pt gutters between rounded cells (Apple-Photos-style, §3). |
 | Thumbnail placeholder | `Color(.systemGray6)` | Neutral, before progressive load resolves. |
 | Primary text | `.primary` | Titles, counts. |
 | Secondary text | `.secondary` | Group counts, captions, supporting copy. |
@@ -92,7 +92,7 @@ Where green appears (colour only — no motifs):
 | Token | Value | Use |
 |---|---|---|
 | Base unit | **8pt** | Multiples for padding/stacks (4 for fine, 8/16/24 for layout). |
-| Grid gutter (inter-item + line) | **0 (gapless)** *(provisional)* | Tested in Paper — gapless reads as one immersive photo wall (Photos *Library* feel); selection borders carry cell separation. May revisit a 1–2pt gutter; fine-tune later. |
+| Grid gutter (inter-item + line) | **~3pt** | Small inter-cell gap, Apple-Photos-style (**revised** from the initial gapless wall — the owner's on-device call). The gutter carries cell separation, so the green selection border reads purely as a selection cue. |
 | Default columns — iPhone | **3 (~128pt cell)** | Large enough to make obvious calls; **pinch-adjustable 2–5** (more on iPad). *(3 confirmed in the spike, #6 — [spike-findings](../plans/spike-findings.md).)* |
 | Columns — iPad / regular width | adaptive `LazyVGrid` | Scales with available width; more columns. |
 | Setup/list padding | system `Form`/`List` insets + generous section spacing | Notes-calm. |
@@ -106,7 +106,7 @@ Where green appears (colour only — no motifs):
 
 - **Concentricity.** Nested rounded shapes share a center: inner radius = outer radius − inset. Match custom glass surfaces to their container's radius.
 - **Continuous corners** (`RoundedRectangle(cornerRadius:style: .continuous)`) everywhere we round — the Apple superellipse, not a circular arc.
-- **Grid cells: square, not rounded** (edge-to-edge, Photos-style) — the selection overlay carries the affordance, not a card shape. *(Square vs aspect-ratio **resolved by the spike → square**, author's on-device verdict; aspect dropped.)*
+- **Grid cells: square, with a small ~6pt corner rounding + a ~3pt gutter** (Apple-Photos-style; **revised** from the initial edge-to-edge/no-rounding wall). The 1:1 square aspect is unchanged (spike-resolved); the rounding + gutter are the owner's on-device refinement. The gold check remains the affordance. *(Square vs aspect-ratio **resolved by the spike → square**; aspect dropped.)*
 - **Glass tally + export region:** one continuous rounded-rect / capsule; radius set on the `GlassEffectContainer` shape, content radii derived concentrically.
 - **Detail cards / sheets:** system default continuous radii.
 
@@ -130,7 +130,7 @@ Where green appears (colour only — no motifs):
 
 **Redundant encoding — never color alone** (HIG; accessible in grayscale).
 
-- **Selected cell** *(resolved in Paper, provisional — fine-tune later)* = three layers: a **gold (Cloudberry) `checkmark.circle.fill`** badge (top-trailing) as the primary affordance · a **narrow ~1.5px green (`--color-secondary-dark`) inset border** defining the cell edge (does real work in the gapless grid) · a **subtle dim (~18% scrim)**. The *check + dim* satisfy the never-color-alone rule; the green border is a quiet structural accent, the **gold check carries the contrast** on any photo (incl. green/foliage, where a green check alone would vanish).
+- **Selected cell** *(resolved in Paper, provisional — fine-tune later)* = three layers: a **gold (Cloudberry) `checkmark.circle.fill`** badge (top-trailing) as the primary affordance · a **2px green (`--color-secondary-dark`) inset border** hugging the cell's rounded edge (marks the selected cell; with the ~3pt gutter now separating cells, this reads purely as selection) · a **subtle dim (~18% scrim)**. The *check + dim* satisfy the never-color-alone rule; the green border is a quiet structural accent, the **gold check carries the contrast** on any photo (incl. green/foliage, where a green check alone would vanish).
 - **Why gold check, green border:** a green *check* blends on green photos; warm gold pops universally. The green *border* is narrow enough to read as structure, not chrome, and brings the brand colour into selection subtly. *(This is the deliberate exception to "green stays out of review-grid chrome" — see §1.)*
 - **Unselected cell** = empty **`circle`** badge (low-emphasis, appears in select contexts) — the affordance is discoverable but quiet.
 - **Hit area** for the badge = the whole corner, ≥44pt, independent of the glyph size.
@@ -188,7 +188,7 @@ The atoms/molecules to build first in Paper, each with its states (this is what 
 
 1. **Color swatches** — semantic roles + the chosen accent (light & dark).
 2. **Type ramp** — every row from §2, at default and one AX size (showing the tally reflow).
-3. **Spacing & grid** — the 8pt rhythm, 2pt gutter, 3-column iPhone grid block.
+3. **Spacing & grid** — the 8pt rhythm, ~3pt gutter, 3-column iPhone grid block.
 4. **Grid cell** — default / selected (check + dim) / loading (placeholder→sharpen).
 5. **Quick-select badge** — selected / unselected, with the ≥44pt hit area shown.
 6. **Day-group header** — single-day and date-range variants with count.

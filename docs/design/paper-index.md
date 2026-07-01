@@ -4,14 +4,15 @@ A map of the Poimi design file in **Paper** — every artboard, what it shows, a
 issues + the current build. This is the index for agents/humans to find a screen's design before
 implementing it.
 
-- **Index created:** 2026-06-29 · **updated:** 2026-07-01 (added the **Now-Playing viewer** iteration
-  `2ZC-0` — a modal-card redesign of the photo viewer, in review; plus the review-grid **code-led
-  accordion**, #89 merged — see the `2VR-0` note + Reconciliation status). A snapshot — re-verify
-  against Paper before relying on a specific detail; the file evolves.
+- **Index created:** 2026-06-29 · **updated:** 2026-07-01 (added the **Now-Playing viewer** `2ZC-0`
+  and two **Liquid Glass** polish mocks — **Overview** `30R-0` + **Review grid** `34O-0` — that carry
+  the viewer's language to the other screens, in review; plus the review-grid **code-led accordion**,
+  #89 merged — see the `2VR-0` note + Reconciliation status). A snapshot — re-verify against Paper
+  before relying on a specific detail; the file evolves.
   > **Code-led screens:** the review grid evolved past its Paper design during device testing (the
   > accordion, below). Where a shipped screen diverges from its artboard, this index — not Paper — is
   > the source of truth for *what shipped*; the artboard records the original design intent.
-- **File:** "Poimi" · page "Page 1" (`1-0`) · **34 artboards** (28 product screens + a 6-artboard
+- **File:** "Poimi" · page "Page 1" (`1-0`) · **36 artboards** (30 product screens + a 6-artboard
   v1.1 idea-backlog exploration cluster, below)
 - **URL:** https://app.paper.design/file/01KVSFMATJM712ABNQ5D0YDR1T/1-0
 - **File ID:** `01KVSFMATJM712ABNQ5D0YDR1T`
@@ -50,11 +51,12 @@ full 999. The repo's Asset Catalog + styleguide.md mirror these.
 | Screen | Node | Size | Content | Issue · build |
 |---|---|---|---|---|
 | **Review grid** ✓ | `129-0` | 390×844 | Large album title + metadata subtitle ("1,847 photos · Jan–Dec 2025") + **full-width tally** ("147/200 · 73 left") under it; **Export** top-right. **Gapless** square cells; selected = **gold check top-right + green border + dim**. Pinned day-group headers ("Sat 5 Jul · 53"). | #35 · **built, then evolved (code-led)** → shipped as an **accordion** (one cluster open at a time; done decoupled → seal badge + end-of-cluster "Mark as done"; bold pinned-header title with the nav title blanked). See D35 + Reconciliation status. |
+| **Review grid · Liquid Glass** ✓ | `34O-0` | 390×844 | **Polish mock (in review):** the grid carried toward the viewer's Liquid Glass language — frosted-glass pinned header + day-group headers (translucent + hairline, so photos refract through when pinned over a scroll; the real effect is the on-device `glassEffect` upgrade — subtle in a static mock), "album" copy ("Best of 2025", the "Yearbook" term dropped), and **Apple-Photos-style cells: a small (~3px) gap + small (~6px) corner rounding**, edge-to-edge 3-up — **revising** the spike's gapless/square decision (styleguide §3/§4/§6; update on sign-off). Gold-check/green-border selection retained. | #35 · **design proposed** |
 | Review grid — notes ✓ | `Y4-0` | 460×422 | Annotated spec for the above (two-tier triage; day-groups; selection encoding; top chrome; select-mode is a sibling). | — |
 | **Select mode** | `14C-0` | 390×844 | Active multi-select entered from the grid: a quick-select badge on **every** cell, **drag-to-multi-select**, per-day + whole-range Select-all, top toolbar (count + progress + Deselect-all). Same selection encoding. | #35 (deferred drag-select) · **not built** |
 | Select mode — notes ✓ | `11J-0` | 460×443 | Annotated spec for Select mode. | — |
 | **Photo viewer · swipe + select** | `WZ-0` | 390×844 | *(Original v1 design.)* Full-bleed photo; top bar = back · "Sat 5 Jul / 12 of 53" · gold check toggle; bottom = live "148/200 picked" + a **filmstrip scrubber** (current enlarged, picked thumbs checked). Reached via the `.zoom` transition; returns to the same cell. | #36 · **built, then redesigned** → superseded by the Now-Playing card `2ZC-0` (below) |
-| **Photo viewer · Now Playing** ✓ | `2ZC-0` | 390×844 | **Redesign (in review):** the viewer as an Apple-Music-"single-song" **modal card** — pull-down to dismiss (grabber). **Ambient wash** = a heavy blur of the current photo tinting the whole card; the **photo is the centred "art"** (large rounded, shadowed, in a black frame) with the controls in a band **beneath** it (never overlapping). Band = day + "N of M" (left) · gold tally (right); a big centred **Pick hero** capsule (glass "Pick" → prominent gold "Picked"); the **filmstrip** scrubber. | #36 · **design proposed** (device-iteration redesign; code WIP on branch) |
+| **Photo viewer · Now Playing** ✓ | `2ZC-0` | 390×844 | **Redesign (in review):** the viewer as an Apple-Music-"single-song" **modal card** — pull-down to dismiss (grabber). **Ambient wash** = a heavy blur of the current photo tinting the whole card; the **photo is the centred "art"** (large rounded, shadowed, in a black frame) with the controls in a band **beneath** it (never overlapping). Band = day + "N of M" (left) · gold tally (right); a big centred **Pick hero** capsule (glass "Pick" → prominent gold "Picked"); the **filmstrip** scrubber. | #36 · **built + shipped** (PR #98) |
 | Photo viewer — notes ✓ | `YU-0` | 460×422 | Annotated spec for the viewer (open-to-decide is itself a multi-select path). | — |
 
 ## Overview explorations — choose one (#37, 390×844)
@@ -68,7 +70,8 @@ lands. (Names describe each treatment.)
 | Screen | Node | Treatment |
 |---|---|---|
 | Overview · by month | `16A-0` | Month-grouped summary rows. |
-| Overview · thumbnail rows | `19P-0` | Horizontal thumbnail rows per group. |
+| Overview · thumbnail rows | `19P-0` | Horizontal thumbnail rows per group. **Chosen + built (#37).** |
+| **Overview · Liquid Glass** ✓ | `30R-0` | **Polish mock (in review)** of `19P-0` toward the viewer's language: month rows become **elevated rounded cards** (dividers dropped), thumbnails grow into **larger rounded art cards**, each row gains a **`>` chevron** (tappable affordance), histogram label softened to sentence-case. Same dark palette + gold tally + histogram. |
 | Overview · location bars | `1DE-0` | Location-grouped bars (ties to the v1.1 location subsystem). |
 | Overview · sideways bars | `1H3-0` | Sideways/horizontal progress bars per group. |
 | Overview · hybrid | `1LA-0` | A hybrid of the above. |
