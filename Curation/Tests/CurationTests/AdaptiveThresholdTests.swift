@@ -149,13 +149,71 @@ struct TinyQuietRunFoldingTests {
         #expect(groups[0].isBusyDay == false)
     }
 
-    @Test("a tiny quiet run at the very start stays its own group (nothing precedes it)")
-    func doesNotFoldLeadingTinyRun() {
-        // The `out.last == nil` branch — a leading orphan has no preceding run to fold into.
+    @Test("a leading tiny quiet run (nothing precedes it) folds FORWARD into the next quiet run")
+    func foldsLeadingTinyRunForward() {
+        // No preceding run to fold back into, so pass 2 folds it forward into the following quiet run.
         let input = onDay(2, 2025, 1, 1, "tiny") + onDay(12, 2025, 1, 5, "a")
         let groups = DayGrouping.groups(for: input, threshold: 30, gapToleranceDays: 1, calendar: c)
+        #expect(groups.count == 1)
+        #expect(groups[0].days == [dk(2025, 1, 1), dk(2025, 1, 5)])
+        #expect(groups[0].count == 14)
+        #expect(groups[0].isBusyDay == false)
+    }
+
+    @Test("a tiny run wedged after a busy day folds FORWARD into the next quiet run, not into the busy day")
+    func foldsAfterBusyForwardIntoQuiet() {
+        // The reported "6-photo cluster after a busy day" case: it can't fold back (prev is busy), so it
+        // folds forward into the following quiet run — the busy day is left intact.
+        let input = onDay(40, 2025, 1, 1, "busy") + onDay(6, 2025, 1, 4, "tiny") + onDay(12, 2025, 1, 8, "next")
+        let groups = DayGrouping.groups(for: input, threshold: 30, gapToleranceDays: 1, calendar: c)
         #expect(groups.count == 2)
-        #expect(groups[0].days == [dk(2025, 1, 1)])
-        #expect(groups[0].count == 2)
+        #expect(groups[0].isBusyDay == true)
+        #expect(groups[0].days == [dk(2025, 1, 1)])                  // busy day untouched
+        #expect(groups[1].days == [dk(2025, 1, 4), dk(2025, 1, 8)])  // tiny folded forward into the next run
+        #expect(groups[1].count == 18)
+        #expect(groups[1].isBusyDay == false)
+    }
+
+    @Test("a leading tiny run with a busy next neighbour stays put — it never skips the busy day to reach a quiet run")
+    func leadingTinyDoesNotSkipBusyToReachQuiet() {
+        // tiny → busy → quiet: the tiny can't fold back (nothing precedes) and pass 2 gives up when the
+        // next group is busy (it never reaches past the busy day to the quiet run beyond it).
+        let input = onDay(6, 2025, 1, 1, "tiny") + onDay(40, 2025, 1, 4, "busy") + onDay(12, 2025, 1, 8, "quiet")
+        let groups = DayGrouping.groups(for: input, threshold: 30, gapToleranceDays: 1, calendar: c)
+        #expect(groups.count == 3)
+        #expect(groups[0].days == [dk(2025, 1, 1)])                  // tiny stays put
+        #expect(groups[0].count == 6)
+        #expect(groups[0].isBusyDay == false)
+        #expect(groups[1].isBusyDay == true)
+        #expect(groups[2].days == [dk(2025, 1, 8)])                  // quiet run untouched, not merged with the tiny
+    }
+
+    @Test("two tiny runs after a busy day chain together (pass 1), then fold FORWARD into the next quiet run (pass 2)")
+    func twoTiniesAfterBusyChainThenFoldForward() {
+        // busy → tiny(3) → tiny(4) → quiet(12): pass 1 folds the second tiny into the first (both quiet)
+        // → a 7-photo run still < floor; pass 2 then folds that forward into the following quiet run.
+        // Pins that the backward-chain and the forward-fold compose, and the busy day is left intact.
+        let input = onDay(40, 2025, 1, 1, "busy") + onDay(3, 2025, 1, 4, "t1")
+            + onDay(4, 2025, 1, 7, "t2") + onDay(12, 2025, 1, 10, "next")
+        let groups = DayGrouping.groups(for: input, threshold: 30, gapToleranceDays: 1, calendar: c)
+        #expect(groups.count == 2)
+        #expect(groups[0].isBusyDay == true)
+        #expect(groups[0].days == [dk(2025, 1, 1)])                  // busy day untouched
+        #expect(groups[1].days == [dk(2025, 1, 4), dk(2025, 1, 7), dk(2025, 1, 10)])
+        #expect(groups[1].count == 19)                              // 3 + 4 + 12
+        #expect(groups[1].isBusyDay == false)
+    }
+
+    @Test("a tiny run bracketed by busy days on both sides stays standalone (no quiet neighbour)")
+    func tinyBetweenBusyDaysStays() {
+        // Neither fold applies (both neighbours busy) — genuinely isolated; never merged into a busy day.
+        let input = onDay(40, 2025, 1, 1, "b1") + onDay(6, 2025, 1, 4, "tiny") + onDay(40, 2025, 1, 8, "b2")
+        let groups = DayGrouping.groups(for: input, threshold: 30, gapToleranceDays: 1, calendar: c)
+        #expect(groups.count == 3)
+        #expect(groups[0].isBusyDay == true)
+        #expect(groups[1].days == [dk(2025, 1, 4)])
+        #expect(groups[1].count == 6)
+        #expect(groups[1].isBusyDay == false)
+        #expect(groups[2].isBusyDay == true)
     }
 }
