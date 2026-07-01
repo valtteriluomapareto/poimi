@@ -128,8 +128,8 @@ struct ReviewGridView: View {
             .scrollTargetLayout()
         }
         // Pinned under the (inline) nav title so the tally stays glanceable while scrolling the grid —
-        // it's the orientation device; losing it mid-scroll would defeat the point. A `.bar` backing
-        // gives scroll-edge legibility over bright thumbnails (ReviewHeader owns it).
+        // it's the orientation device; losing it mid-scroll would defeat the point. ReviewHeader owns
+        // its Liquid Glass backing (extended to the top edge, behind the backdrop-hidden nav bar).
         .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(title: title, subtitle: subtitle) }
         // Tracks position; we only issue a one-shot scrollTo for the #37 drill (onAppear). No
         // re-applied target, so select-all / mark-done re-layouts never snap the grid (#81/#82).
@@ -344,59 +344,62 @@ private struct ReviewSectionHeader: View {
     var body: some View {
         let selectedCount = selection.selected.intersection(group.assetIDs).count
         let allSelected = selectedCount == group.count
-        layout(selectedCount: selectedCount, allSelected: allSelected)
-            .padding(.leading, 8)
-            .padding(.trailing, 12)
+        // No full-width background: the day header is FLOATING GLASS CHIPS over the photos (like the
+        // viewer's controls), so the TOP header stays the ONE full-width glass surface — no second slab
+        // mashed against it (device feedback). Each chip's own glass backs its text over photos (when
+        // pinned) AND the plain background (at rest), in light + dark, via glass vibrancy — an adaptive
+        // material a fixed scrim couldn't match. Photos scroll through the transparent gaps around them.
+        dayHeaderContent(selectedCount: selectedCount, allSelected: allSelected)
+            .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.bar)
             .accessibilityElement(children: .contain)
             .accessibilityAddTraits(.isHeader)
     }
 
-    /// At accessibility Dynamic Type sizes the one-line row can't hold [chevron][title][count][Select
-    /// all], so the day label — the point of the pinned header (#35 orientation) — would truncate.
-    /// Stack it: the open-toggle (chevron + wrapping title) on top, count + Select-all below. We WRAP,
-    /// never `minimumScaleFactor` (shrinking the user's chosen size is itself an a11y regression).
-    @ViewBuilder
-    private func layout(selectedCount: Int, allSelected: Bool) -> some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 4) {
-                openToggle { HStack(spacing: 8) { disclosure; titleText; if isDone { doneBadge }; Spacer(minLength: 0) } }
+    /// Leading day chip + trailing Select-all chip, floating over the photos. At accessibility
+    /// Dynamic-Type sizes they stack (they'd otherwise crowd one line) — we WRAP, never
+    /// `minimumScaleFactor` (shrinking the user's chosen size is itself an a11y regression).
+    private func dayHeaderContent(selectedCount: Int, allSelected: Bool) -> some View {
+        // One GlassEffectContainer so the two co-located chips sample as a single lens (styleguide §5:
+        // group co-located glass, never two independent glass surfaces side by side).
+        GlassEffectContainer(spacing: 8) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    dayChip(selectedCount: selectedCount)
+                    if isOpen { selectAllChip(allSelected: allSelected) }
+                }
+            } else {
                 HStack(spacing: 8) {
-                    countText(selectedCount)
+                    dayChip(selectedCount: selectedCount)
                     Spacer(minLength: 0)
-                    if isOpen { sectionToggle(allSelected: allSelected) }
+                    if isOpen { selectAllChip(allSelected: allSelected) }
                 }
-            }
-        } else {
-            HStack(spacing: 8) {
-                openToggle {
-                    HStack(spacing: 8) {
-                        disclosure; titleText; countText(selectedCount); if isDone { doneBadge }
-                        Spacer(minLength: 0)
-                    }
-                }
-                if isOpen { sectionToggle(allSelected: allSelected) }
             }
         }
     }
 
-    /// The tap target that opens/collapses the cluster — wraps the chevron+title+count region (NOT the
-    /// whole row, so Select-all stays its own button). Carries the header's descriptive a11y + an
-    /// expanded/collapsed value.
-    private func openToggle<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        let selectedCount = selection.selected.intersection(group.assetIDs).count
-        return Button(action: onToggleOpen) {
-            content().contentShape(Rectangle())
+    /// The open/collapse control — a floating glass capsule holding the disclosure chevron, day title,
+    /// count, and (for a done day) the green seal. Tapping it opens/collapses the cluster. Its glass
+    /// backs the text; photos scroll through the transparent area around it when pinned.
+    private func dayChip(selectedCount: Int) -> some View {
+        Button(action: onToggleOpen) {
+            HStack(spacing: 6) {
+                disclosure; titleText; countText(selectedCount); if isDone { doneBadge }
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)              // ≥44pt touch floor (HIG)
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(title). \(group.count) photos, \(selectedCount) selected.\(isDone ? " Done." : "")")
+        .glassChip()
+        // "kept" (not "selected") to match the visible collapsed count and the app's pick vocabulary.
+        .accessibilityLabel("\(title). \(selectedCount) of \(group.count) kept.\(isDone ? " Done." : "")")
         .accessibilityValue(isOpen ? "Expanded" : "Collapsed")
         .accessibilityHint("Double tap to \(isOpen ? "collapse" : "open") this day")
     }
 
-    /// Disclosure chevron — signals the row expands; rotates down when open.
+    /// Disclosure chevron — signals the chip expands; rotates down when open.
     private var disclosure: some View {
         Image(systemName: "chevron.right")
             .font(.caption.weight(.semibold))
@@ -434,22 +437,23 @@ private struct ReviewSectionHeader: View {
             .accessibilityHidden(true)
     }
 
-    /// Select-all / deselect-all for this day-group (the contextual bulk action, #35). Bulk ops
-    /// schedule a single debounced flush.
-    private func sectionToggle(allSelected: Bool) -> some View {
+    /// Select-all / deselect-all for this day-group — its own floating glass chip (the contextual bulk
+    /// action, #35). Bulk ops schedule a single debounced flush.
+    private func selectAllChip(allSelected: Bool) -> some View {
         Button {
             if allSelected { selection.deselect(group.assetIDs) } else { selection.select(group.assetIDs) }
         } label: {
             Text(allSelected ? "Deselect all" : "Select all")
                 .font(.footnote.weight(.semibold))
-                .frame(minHeight: 44)        // a bulk action must match the touch-target floor (WCAG 2.5.8)
-                .contentShape(Rectangle())
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)        // touch-target floor (WCAG 2.5.8)
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        // Primary label color, NOT the gold accent: gold is for graphical marks — small gold text on
-        // the light `.bar` header fails the contrast caveat (styleguide §1). Position + weight signal
-        // that it's tappable.
+        // Primary label (glass vibrancy), NOT the gold accent: gold is for graphical marks — small gold
+        // text fails the contrast caveat (styleguide §1). Position + weight signal it's tappable.
         .foregroundStyle(.primary)
+        .glassChip()
         .accessibilityLabel(allSelected ? "Deselect all in \(title)" : "Select all in \(title)")
     }
 }
