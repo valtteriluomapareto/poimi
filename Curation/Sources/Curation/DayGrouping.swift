@@ -178,26 +178,57 @@ public enum DayGrouping {
                calendar: calendar)
     }
 
-    /// Fold a tiny isolated quiet run (a low-photo day the gap rule stranded — e.g. a lone 2-photo day
-    /// between two runs) into the immediately-preceding quiet run, so it isn't its own section. Only a
-    /// dated quiet run with `< minStandaloneQuietRun` photos folds, and only into a preceding dated
-    /// quiet run — a run bounded by a busy day (or at the very start) stays as-is (there, standing
-    /// alone reads fine). This deliberately overrides the gap rule for these orphans: the merged run's
-    /// day span may cross the gap, which reads as one quiet stretch. Busy days are never touched.
+    /// Fold a tiny isolated quiet run (a low-photo day the gap rule stranded — e.g. a lone 6-photo run
+    /// between a busy day and another run) into an adjacent quiet run, so it isn't its own section.
+    /// A dated quiet run with `< minStandaloneQuietRun` photos folds into the preceding quiet run if
+    /// there is one (pass 1, backward), else into the FOLLOWING quiet run (pass 2, forward — this
+    /// catches a tiny run at the very start, or one wedged after a busy day). Busy days are never
+    /// touched (folding a 6-photo orphan into a 40-photo day would erase that day's identity), so a
+    /// tiny run with no quiet neighbour on EITHER side stays standalone — genuinely bracketed by busy
+    /// days, or at the album's edge next to a busy day, or the sole group. This deliberately overrides
+    /// the gap rule for these orphans: the merged run's day span may cross the gap, which reads as one
+    /// quiet stretch.
     private static func foldTinyQuietRuns(_ groups: [DayGroup]) -> [DayGroup] {
-        var out: [DayGroup] = []
+        // Pass 1 — fold each tiny quiet run into the PRECEDING quiet run.
+        var back: [DayGroup] = []
         for group in groups {
-            if let last = out.last, !last.isBusyDay, !group.isBusyDay, group.count < minStandaloneQuietRun {
-                out[out.count - 1] = DayGroup(
-                    id: last.id,
-                    assetIDs: last.assetIDs + group.assetIDs,
-                    days: last.days + group.days,
-                    isBusyDay: false)
+            if let last = back.last, !last.isBusyDay, !group.isBusyDay, group.count < minStandaloneQuietRun {
+                back[back.count - 1] = mergedQuietRun(last, group)
             } else {
-                out.append(group)
+                back.append(group)
             }
         }
-        return out
+        // Pass 2 — a tiny quiet run that couldn't fold back (leading, or after a busy day) folds
+        // FORWARD into the following quiet run. `pending` holds it until the next group is seen. Pass 1
+        // already chained any consecutive tiny quiet runs into one, so `pending` is only ever set right
+        // after a busy day or at the start — the busy-flush + trailing-flush branches cover every exit.
+        var forward: [DayGroup] = []
+        var pending: DayGroup?
+        for group in back {
+            if let held = pending {
+                pending = nil
+                if !group.isBusyDay {
+                    forward.append(mergedQuietRun(held, group))   // held precedes group → chronological
+                    continue
+                }
+                forward.append(held)                              // next is busy → give up, flush standalone
+            }
+            if !group.isBusyDay, group.count < minStandaloneQuietRun {
+                pending = group
+            } else {
+                forward.append(group)
+            }
+        }
+        if let held = pending { forward.append(held) }            // trailing tiny, no following quiet → stays
+        return forward
+    }
+
+    /// Merge two adjacent (chronologically ordered `earlier` → `later`) groups into one quiet run.
+    private static func mergedQuietRun(_ earlier: DayGroup, _ later: DayGroup) -> DayGroup {
+        DayGroup(id: earlier.id,
+                 assetIDs: earlier.assetIDs + later.assetIDs,
+                 days: earlier.days + later.days,
+                 isBusyDay: false)
     }
 
     /// Defensive chronological sort: oldest → newest, undated (nil capture date) last,
