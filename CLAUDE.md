@@ -179,8 +179,9 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
   cache (state, never bytes) and the v1.1 **location-preprocessing** subsystem (live clustering +
   the geocoded-name cache as the only network-bound thing worth persisting, the D18 pattern).
 - **[docs/plans/localization.md](docs/plans/localization.md)** — the multi-locale plan (#95): a String
-  Catalog foundation + GitHub Actions × Claude translating deltas + `fastlane` release notes, built to
-  minimize manual maintenance. Proposal — open decisions (locales, trust model, ASC timing) at the end.
+  Catalog foundation + Claude translating only deltas (manual at release first, CI later) + ASC-API
+  release notes/metadata, minimizing manual maintenance. **Deferred spec** — Phase 0 (catalog +
+  localizable-by-default) now; the rest behind "v1 English stable." Open decisions at the end.
 - **[docs/design/design-language.md](docs/design/design-language.md)** — the visual/interaction
   north star (Liquid Glass, SwiftUI-first, adaptive iPad).
 - **[docs/design/styleguide.md](docs/design/styleguide.md)** — concrete tokens (color, type,

@@ -1,114 +1,139 @@
 # Localization plan — multi-locale UI + automated translation & release notes
 
-**Status:** plan / not yet built. Tracks [#95]. How Poimi supports multiple languages while
-**minimizing manual maintenance** — translation and release notes automated via GitHub Actions +
-Claude + open CLI tools, dependency-minimal. The open decisions at the end are logged as `D39+` once
-confirmed; this doc is the proposal.
+**Status: DEFERRED SPEC — not build-it-now.** Tracks [#95]. Revised after a 3-persona + Codex review
+(see PR #96). **Precondition: don't build the automation until the v1 English UI is stable** — export
+(#39), select-mode (#91), settings (#41), iPad (#42) are unbuilt and the surface is still moving (the
+accordion landed mid-Phase-2). Building translation infra now means maintaining it while what it
+translates keeps changing.
+
+**What IS worth doing now** is only the near-zero-cost foundation (create the String Catalog + make new
+strings localizable-by-default). Everything else is staged behind "v1 English shipped," and the *first*
+translation engine is a **manual script run at release**, not CI — the pipeline is graduated to only when
+release-frequency × locale-count justifies it. Decisions logged as `D39+` once confirmed.
 
 ## Goals
-
 - Ship Poimi in multiple locales/languages.
-- **Minimize manual maintenance** — no hand-translating each UI string; consistency without re-deciding.
-- **Automate release notes** across languages (today: a lot of manual work on every update).
+- **Minimize manual maintenance** — translate only deltas; consistency without re-deciding.
+- **Automate release notes + store metadata** across languages.
 
 ## Foundation — a String Catalog (the enabler)
+Adopt **`Localizable.xcstrings`** (the Xcode 15+ String Catalog — *build-time tooling*, not an iOS-26
+runtime feature; runs back to old iOS. iOS 26 is just our floor). It's a JSON file Xcode auto-populates
+from `Text("…")` / `String(localized:)`, tracking a per-locale translation *state* — the machine surface
+that makes delta-detection + automation possible. Base/development language is **English**;
+**"Poimi"** (display name) is never translated.
 
-Migrate user-facing strings to **`Localizable.xcstrings`** (the Xcode 15+/iOS 26-native String
-Catalog). Everything downstream depends on this:
+**The real audit surface is the *non-`Text`* strings.** Correcting the first draft: `Text("\(x) of \(y) kept")`
+auto-extracts fine as a **format key** (`%lld of %lld kept`) — that's the *easy* part. The miss-risk is
+the **~21 `accessibilityLabel/Value/Hint` sites** (plain interpolated `String`s → do **not**
+auto-extract → each needs `String(localized:)`), plus **variable/composed `Text(title)`** whose value
+must be localized at its source. The app target already has `SWIFT_EMIT_LOC_STRINGS = YES`, so
+extraction is ready once the catalog exists.
 
-- It's a single **JSON** file Xcode auto-populates from `Text("…")` / `String(localized:)`, tracking a
-  per-locale translation *state*. So a script can find exactly which keys are untranslated per locale
-  and write translations back — the machine surface that makes automation possible.
-- The base / development language is **English** (the current UI). **"Poimi"** (the app name) is never
-  translated.
+**Invariant:** user-facing strings live in the **app layer only**; `Curation` stays string-free
+(reinforces D14/D21 — today it has only a dev-facing `debugDescription`).
 
-### Groundwork (one-time)
+## Scope — localize more than release notes
+1. **`Localizable.xcstrings`** — the UI.
+2. **`InfoPlist` strings** — the **`NSPhotoLibraryUsageDescription`** permission prompt is user-facing
+   and **App Review requires it localized** (a separate catalog/`.strings` surface; a first-draft omission).
+3. **App Store metadata per locale** — subtitle, **keywords** (our docs flag discoverability given the
+   opaque name), description, promo, *and* release notes — not release notes alone.
+4. **Localized screenshots** — reuse the DEBUG screenshot harness with `-AppleLanguages (fi)` to eyeball
+   real translations + capture per-locale App Store shots.
+5. **`knownRegions` / `CFBundleLocalizations`** gain each target locale (setup step).
 
-- **String audit** — externalize every user-facing string. Most are already `Text("…")` (auto-extracted
-  for free); the real work is the **interpolated** ones (`"\(picked) of \(count) kept"`,
-  `"\(remaining) left"`) → localized format strings (the catalog handles positional args + plural
-  variations). Dates/numbers are already locale-safe via `FormatStyle`.
-- **Glossary + style guide** (`localization/glossary.md`, `localization/style.md`) — the versioned
-  translation prompt AND the reviewer's rubric: brand terms untranslated ("Poimi"); the
-  **album-not-yearbook** rule per language; tone (calm, plain, human).
-- **CI guard** — a "no hardcoded user-facing string" check (in the spirit of the four existing guards)
-  + **pseudolocalization** in CI (Accented / Double-Length) to catch un-externalized strings + truncation.
+## Phasing (reframed: minimal now, graduate later)
+- **Phase 0 — now, cheap:** create `Localizable.xcstrings` + add to the target; adopt
+  **localizable-by-default** (every new screen uses `Text`/`String(localized:)` from the start); state
+  the Curation-string-free invariant. English-only. Near-zero marginal cost; avoids a bigger retro.
+- **Phase 1 — after v1 English is stable:** one **bulk retro-audit** (focus: the a11y/non-`Text`
+  strings) + `InfoPlist` localization + register the first locales in `knownRegions` + write the
+  **glossary + style guide** (`localization/glossary.md`, `style.md`).
+- **Phase 2 — MANUAL translation MVP (no CI):** a script run **at release**: export → detect delta →
+  Claude translates the delta (fed the catalog + glossary explicitly) → import → validate → open a PR;
+  **native-speaker sign-off** on each new locale's baseline. Delivers ~all the value with none of the
+  CI cost.
+- **Phase 3 — CI, only when volume justifies:** `localize.yml` (below) with the completeness gate +
+  a real pseudoloc pass.
+- **Phase 4 — release notes + store metadata:** Claude drafts English notes from the changelog →
+  translate → upload via the **App Store Connect API** behind a manual-approval gate.
 
-## Workflow ① — UI string translation (`.github/workflows/localize.yml`)
+## The write path (deterministic — do NOT hand-edit the JSON)
+- **Delta detection = read-only** parse of the `.xcstrings` JSON (`jq`/script) → the per-locale set of
+  new/missing keys.
+- **Write-back = the official XLIFF round-trip**: `xcodebuild -exportLocalizations -project … -localizationPath …`
+  → translate the XLIFF → `-importLocalizations`. Xcode owns the mutation (a raw `jq` write drifts from
+  Xcode's normalization → churn/conflicts). **Extract/refresh the catalog in CI before diffing** (new
+  `Text()` only lands on a build). Serialize the workflow (`concurrency` group) + rebase — a source-string
+  change racing a translation PR conflicts on the single catalog.
 
-Trigger: a push to `main` touching `Localizable.xcstrings` (or manual / scheduled).
+## Translation engine (Claude)
+- **Manual MVP / headless Claude Code:** with the repo checked out it *sees* the catalog + prior
+  translations + glossary → consistent terminology + UI-aware brevity.
+- **A raw Anthropic-API script does NOT auto-see the repo** — it must explicitly read + pass the
+  catalog/glossary in the prompt.
+- **CI (Phase 3):** `ANTHROPIC_API_KEY` secret, **minimal `contents`/`pull-requests` permissions**, and a
+  **guard against secret exposure on fork-PR triggers**.
 
-1. **Diff** the catalog → the per-locale set of new/missing/`"new"`-state keys — the **delta only**, so
-   cost scales with *changes*, not with the number of languages.
-2. Feed the delta + each key's comment + the glossary + style guide to **Claude** → translations, with
-   **placeholders / format specifiers preserved**.
-3. **Write back** into the catalog; **validate** — placeholder counts match the source, nothing missing,
-   a length heuristic for UI-critical keys.
-4. Open a **PR** (`chore(i18n): fr, de, …`). A **second Claude pass reviews** it (back-translation,
-   tone, fit) and comments; a human approves. (Approve-not-write is the maintenance win.)
-
-## Workflow ② — release notes (`.github/workflows/release-notes.yml`)
-
-Trigger: a GitHub Release published (or a tag).
-
-1. Claude **drafts the English notes from the merged PRs / commits** since the last tag (semi-automates
-   even the English) — or hand-edit them.
-2. **Translate** to every locale → `fastlane/metadata/<locale>/release_notes.txt`.
-3. **`fastlane deliver`** / the App Store Connect API uploads the metadata, behind a **manual-approval
-   GitHub environment** — a store-facing push is never fully unattended.
-
-## Claude's roles
-
-- **Translator (CI, headless):** with the repo checked out it sees the *whole* catalog + prior
-  translations + the glossary, so terminology stays consistent and it reasons about UI context ("this
-  is a button — keep it short"). Better than naive per-string API calls.
-- **Reviewer:** a QA pass on the translation PR.
-- **Release-notes author:** a diff → English notes → N languages.
+## Trust & QA gates (before shipping any non-English locale)
+- **Native-speaker baseline sign-off, per locale.** Claude-translate + Claude-review is a same-model
+  echo chamber, and a non-speaker "approval" only confirms placeholders — a fluent-but-wrong string would
+  ship. Require a human who reads the language to sign off the **baseline** (+ high-visibility strings:
+  onboarding, permission prompt, App Store copy); small **deltas over a verified baseline** may then ride
+  the auto-review.
+- **Hard completeness gate for *shipped* locales** — iOS silently falls back to English, so a partial
+  locale ships English-mixed with no error. Distinguish **in-progress** (fallback OK, not shipped) from
+  **shipped** (100% coverage, **CI-blocking**).
+- **Real truncation verification** — a length heuristic passes strings that still clip a fixed-width
+  button (Pick / Select all / the tally). Add a per-locale **screenshot/device pass** of the tight
+  screens for launch locales. NB reconcile with **D26** (pixel-snapshot testing deferred): a *narrow*
+  localization-screenshot check or a manual per-locale pass, not the full snapshot tier.
+- **Plural-category validation** — generate + validate the catalog's `variations.plural` cases per
+  target language's CLDR rules (Arabic = 6 forms), not a flat `other`.
+- **Placeholder validation = exact identity/type/ORDER**, not counts (`%1$@`/`%2$@` swapped passes a
+  count check); preserve plural-variation structure.
+- **Back-translation + uncertainty flags** — round-trip (target→English, diff vs source) to catch meaning
+  drift; have the translator flag idioms/ambiguous source → route only those to a human.
+- **Meaning-drift re-flag** — tie the catalog **`comment:` (context) field** to re-flagging: a changed
+  comment re-opens the key (a same-text/shifted-meaning string otherwise stays wrong + unflagged).
+- **Periodic full-catalog reviewer pass** — deltas-only lets tone drift; a scheduled full pass keeps voice
+  consistent.
+- **Tests for the new scripts** — the delta-detection + write-back + validation are the code the repo
+  owns, and this project ships tests with code. Fixture-based: `.xcstrings` in each state (new/edited key,
+  missing plural category, mismatched placeholder, complete) + the release-notes plumbing.
 
 ## Tools (dependency-minimal)
+- **`xcodebuild -exportLocalizations`/`-importLocalizations`** — the **primary** write path (XLIFF).
+- **`jq` + a small script** — read-only delta detection + validation (no new library).
+- **App Store Connect API** (a small script) — **preferred over `fastlane`** to stay lean; `fastlane
+  deliver` is an option but a heavy Ruby/gems dep (dev-only, so acceptable, but ASC-API is leaner). If
+  fastlane: it needs a `Deliverfile`/metadata bootstrap, ASC locale-code mapping (`en-US` vs `en-GB`), an
+  editable app version, and note it **skips release notes on a first App Store version**.
+- **Xcode pseudolocalization** (Accented / Double-Length) — but only useful with a **concrete screenshot/UI
+  test pass** under those languages; as a bare mention it catches nothing.
+- **Claude** — headless Claude Code (repo-aware) or an API script (fed the content).
 
-- **`xcodebuild -exportLocalizations` / `-importLocalizations`** — the official XLIFF round-trip, if
-  preferred over editing `.xcstrings` directly.
-- **`fastlane deliver`** — App Store metadata + release notes (the mature, standard choice).
-- **`jq` + a small script** — query / patch the catalog JSON (no new library — fits dependency-minimalism).
-- **Xcode pseudolocalization** (Accented / Double-Length) — CI truncation + un-externalized-string check.
-- **Claude** in CI (headless Claude Code, or a script on the Anthropic API) — translate + review + notes.
+## Cut / simplified from the first draft (per the review)
+- **No custom "no hardcoded user-facing string" CI guard** — fiddly + false-positive-prone in SwiftUI
+  (user-facing `Text` vs SF Symbol names vs a11y ids vs debug strings). Pseudoloc + the review habit catch
+  un-externalized strings for far less maintenance.
+- **fastlane demoted** to optional (ASC API preferred).
+- **English-notes-from-commits** kept as a bonus, not a first build (writing 2–3 lines isn't the bottleneck).
 
-## Guardrails
-
-- **Placeholders / format specifiers preserved** — validated, not trusted.
-- **Glossary** — brand terms untranslated; terminology consistency; the no-yearbook rule per language.
-- **Length budget** for UI-critical strings (buttons, the tally) + pseudoloc as the net.
-- **Human-in-the-loop** — translations land as PRs; store pushes are gated.
-- **RTL** (Arabic / Hebrew, if targeted) — SwiftUI largely handles it; verify layout.
-
-## Low-maintenance by design
-
-Deltas only · glossary-driven consistency · approve-not-write PRs · notes generated from the changelog
-· pseudoloc as the regression net.
-
-## Phasing
-
-- **Phase 1 — foundation:** String Catalog migration + string audit + glossary/style + the CI guard +
-  pseudoloc. Still English-only, but every string externalized.
-- **Phase 2 — translation workflow:** `localize.yml` + the Claude translator + validation + reviewer;
-  add the first locales.
-- **Phase 3 — release notes:** `release-notes.yml` + `fastlane deliver` / ASC API + the approval gate.
-
-## Open decisions (recommended defaults — confirm before building)
-
-1. **Initial locales** — *recommend* base `en` + **`fi`** to start (founder's language / likely first
-   market), then expand to a tier-1 set (`de` / `fr` / `es` / `ja` / …). Cost is per-delta, so adding
-   languages later is cheap.
-2. **Trust model** — *recommend* **always PR-review** translations initially; move to
-   auto-merge-behind-checks for low-risk keys once trust builds.
-3. **ASC automation timing** — *recommend* build the **in-repo half first** (catalog + release-notes
-   files, Phases 1–2); wire `fastlane deliver` + the ASC API-key secret + the gate in Phase 3.
+## Open decisions (recommended defaults — confirm to lock)
+1. **Initial locales** — recommend base `en` + **`fi`** first, then a tier-1 set (`de`/`fr`/`es`/`ja`/…).
+   Cost is per-delta, so adding languages later is cheap.
+2. **Trust model** — recommend **native-speaker sign-off for each launch locale's baseline**, then
+   auto-review for incremental deltas over that verified baseline.
+3. **ASC automation** — recommend the **in-repo half first** (catalog + notes files); wire the ASC-API
+   upload + key + gate in Phase 4.
+4. **Now vs deferred** — recommend doing **Phase 0 only now** (catalog + localizable-by-default) and
+   deferring Phases 1–4 behind "v1 English stable."
 
 ## Risks / notes
-
-- The **string audit** is the real up-front cost — it touches every user-facing view.
-- **Plurals / grammatical gender** — the catalog's variations handle plurals; some languages need care
-  (Claude + the catalog's variation support).
-- **Machine-translation quality** — the glossary + the reviewer pass + human approval are the
-  mitigations; not fully hands-off for a shipping product, but close.
+- The **retro string audit** is the real up-front cost (a11y strings especially) — deferred to Phase 1
+  so it isn't re-done as unbuilt screens land.
+- **Machine-translation quality** — glossary + native baseline sign-off + human gate are the mitigations;
+  close to hands-off for *deltas*, never fully hands-off for a *new locale's baseline*.
+- **RTL / grammatical gender** — parked; if Arabic/Hebrew enter scope, add a mirrored-layout pass.
