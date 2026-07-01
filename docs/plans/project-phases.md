@@ -261,10 +261,11 @@ The screens and interactions that need a Paper design, tagged by the phase/versi
 The grid is one chronological flow (capture date, oldest → newest) split into **adaptive day-groups** — a deterministic, location-free heuristic that makes events stand out while keeping quiet stretches compact. It replaces month grouping (which models a family's year badly: life clusters by event, not calendar, and a flat monthly quota over-serves quiet months and under-serves the vacation).
 
 **The rule:**
-- Threshold **N = 10 photos/day** (a tunable constant; **held in the spike**).
+- **Adaptive threshold N** — the spike's static N≈10 became a per-album value: the **mean photos per active day**, clamped to `[9, 100]` (`adaptiveThreshold(for:)`). A light shooter's "busy" is a heavy shooter's "quiet", so scaling N to the album's own density keeps events popping in both. The clamp bounds keep a sparse album from making every day busy and a firehose from making none.
 - A calendar day with **≥ N** photos → **its own group** ("Sat 5 Jul · 53").
 - A maximal run of **consecutive days each with < N** photos → **merged into one group** ("16–18 Mar · 7").
 - A run breaks on (a) a busy day, or (b) a calendar gap with no photos beyond a small tolerance — so quiet runs stay tight (no "Days 2–40" spanning an empty month). The gap tolerance (default 1 day) held in the spike; still tunable.
+- **Tiny-run folding** — a quiet run the gap rule stranded with **< 10 photos** (`minStandaloneQuietRun`) isn't worth its own section, so it folds into an adjacent quiet run: **backward** into the preceding quiet run, or (if it's leading or wedged after a busy day) **forward** into the following one. Busy days are never absorbed — folding a 6-photo orphan into a 40-photo day would erase that day's identity — so a tiny run with no quiet neighbour on either side stays standalone. The merged span may cross the gap, reading as one quiet stretch.
 - **No per-group target/quota** — show the count only; the running **total** is the authoritative constraint (D5).
 - Labels are date-based for v1 (single day vs date range); event/place names arrive with the location feature.
 
@@ -273,7 +274,7 @@ The grid is one chronological flow (capture date, oldest → newest) split into 
 - **Events emerge for free** — a trip is a run of busy days, each its own section; a lazy week collapses into one. Better than months, with none of the cost.
 - **A clean stepping stone** — when location/event grouping lands (v1.1), consecutive busy days at one place collapse into a named "Italy trip"; the day-group is the fallback when there's no location.
 
-**Spike verdict:** the adaptive day-grouping made a real year manageable — events pop, quiet runs merge — and **N≈10 + the gap rule held** ([spike-findings.md](./spike-findings.md)).
+**Spike verdict:** the adaptive day-grouping made a real year manageable — events pop, quiet runs merge — and **N≈10 + the gap rule held** ([spike-findings.md](./spike-findings.md)). Two on-device refinements followed: N became **per-album adaptive** (mean photos/active day, clamped) rather than a fixed constant, and stranded sub-10 quiet runs now **fold into a neighbour** (both directions) instead of standing alone.
 
 ## Ordering at a glance
 
