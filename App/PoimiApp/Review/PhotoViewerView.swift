@@ -2,15 +2,16 @@
 //  PhotoViewerView.swift
 //  PoimiApp — the full-screen photo viewer (issue #36, D10/D22; pager #80).
 //
-//  The borderline-call tier of the two-tier picking model: a swipeable pager over the album's
-//  candidate ids. You swipe between photos and SELECT IN PLACE; the selection is preserved on the
-//  shared `SelectionStore`, so "open to decide" is itself a fast multi-select path, not a dead end.
+//  Presented as a MODAL CARD (a `.sheet`, #36 revision) — it rises from the bottom, carries a grabber,
+//  and you pull it down to dismiss: the "single-song" Now-Playing feel. The photo is CENTRED like album
+//  art in a rounded card, the controls sit in a band BENEATH it (never overlapping the image), and the
+//  background is an ambient blur of the current photo, so the card takes on the image's colour.
 //
-//  The pager is a `UIPageViewController` (`PhotoPagerView`) — UIKit cleanly separates horizontal
-//  paging from the vertical swipe-down-to-dismiss (SwiftUI's paging scroll claimed the drag, turning
-//  a dismiss into a sideswipe), and it windows itself so a thousands-photo album never materialises
-//  a giant stack. This view owns the chrome (day label + position + select; tally + filmstrip) that
-//  floats over the pager, and the shared `currentID` that the pager, filmstrip, and chrome track.
+//  The photo is a `UIPageViewController` pager (`PhotoPagerView`) windowing the album's candidates —
+//  swipe the photo to page (like swapping tracks). The sheet owns the vertical pull-to-dismiss: a
+//  down-drag on an un-zoomed photo isn't claimed by the horizontal pager or the base-zoom-disabled
+//  inner scroll, so the sheet's interactive dismiss gets it (once zoomed, the inner scroll pans instead
+//  and the sheet defers). Pinch / double-tap zoom and tap-to-pick still work per page.
 //
 
 import SwiftUI
@@ -23,12 +24,15 @@ struct PhotoViewerView: View {
     @Environment(SelectionStore.self) private var selection
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var currentID: String
     /// A bounded window of candidates around the current photo — for the FILMSTRIP only. The pager
-    /// (UIPageViewController) windows itself, but the filmstrip is a SwiftUI `LazyHStack` whose
-    /// `.scrollPosition` to a mid-list id would materialise its whole prefix; the window keeps it
-    /// to a few dozen thumbnails and slides as you swipe.
+    /// windows itself; the filmstrip is a SwiftUI `LazyHStack` whose `.scrollPosition` to a mid-list id
+    /// would materialise its whole prefix, so this keeps it to a few dozen thumbs and slides as you swipe.
     @State private var filmstripPages: [String] = []
+    /// A copy of the current photo painting the sheet's ambient background (the Now-Playing colour
+    /// wash). Loaded cache-first at the grid's 400² key, so it's usually instant.
+    @State private var ambientImage: UIImage?
 
     private let windowBack = 25
     private let windowForward = 25
@@ -46,29 +50,168 @@ struct PhotoViewerView: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            photoCard
+            chrome
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The ambient wash is a plain background (not `.presentationBackground`) so it renders both
+        // inside the real sheet AND when the screenshot harness hosts the view directly. It's opaque,
+        // so it fully backs the card; the sheet chrome (corners, grabber, pull-to-dismiss) comes from
+        // the detent + drag-indicator below, which are no-ops outside a sheet.
+        .background { ambientBackground }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        // The ambient wash follows the photo (cache-first; auto-cancels on a further page turn).
+        .task(id: currentID) {
+            let size = CGSize(width: 400, height: 400)
+            if let cached = thumbnails.cachedThumbnail(for: currentID, targetSize: size) {
+                ambientImage = cached
+            } else {
+                let loaded = await thumbnails.thumbnail(for: currentID, targetSize: size)
+                guard !Task.isCancelled else { return }   // a fast page-turn cancelled us — don't paint a stale wash
+                ambientImage = loaded
+            }
+        }
+        // Track the on-screen photo (grid restore anchor) and slide + warm the filmstrip with it.
+        .onChange(of: currentID) {
+            coordinator.lastViewedID = currentID
+            slideFilmstripIfNeeded()
+            prefetchFilmstrip(around: currentID)
+        }
+        .onAppear {
+            rebuildFilmstrip(around: startID)
+            prefetchFilmstrip(around: startID)
+        }
+    }
+
+    // MARK: The centred photo — the "album art": a rounded, shadowed pager the chrome never overlaps.
+
+    private var photoCard: some View {
         PhotoPagerView(
             allIDs: allIDs,
             currentID: $currentID,
             cachedThumb: { thumbnails.cachedThumbnail(for: $0, targetSize: CGSize(width: 400, height: 400)) },
             loadFull: { await thumbnails.fullImage(for: $0, targetSize: $1) },
             axLabel: { photoAXLabel(for: $0) },
-            onTapPhoto: { selection.toggle($0) },   // single-tap the photo = pick (2nd path; the Pick button is primary)
-            onDismiss: { coordinator.pop() })
-            .background(Color.black)
-            .ignoresSafeArea()
-            .overlay(alignment: .top) { topBar }
-            .overlay(alignment: .bottom) { bottomBar }
-            .toolbar(.hidden, for: .navigationBar)
-            // Track the on-screen photo (grid restore anchor) and slide + warm the filmstrip with it.
-            .onChange(of: currentID) {
-                coordinator.lastViewedID = currentID
-                slideFilmstripIfNeeded()
-                prefetchFilmstrip(around: currentID)
+            onTapPhoto: { selection.toggle($0) })   // single-tap the photo = pick (2nd path; the Pick button is primary)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .shadow(color: .black.opacity(0.35), radius: 20, y: 8)
+            .padding(.horizontal, 12)
+            .padding(.top, 28)   // clears the sheet grabber (harmless inset in the harness)
+            .frame(maxHeight: .infinity)
+    }
+
+    // MARK: The control band beneath the photo (title · tally · the Pick hero · the filmstrip scrubber)
+
+    private var chrome: some View {
+        VStack(spacing: 16) {
+            titleRow
+            pickButton
+            Filmstrip(pages: filmstripPages, currentID: $currentID)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 8)
+    }
+
+    /// The current photo's day + position (like a track title / subtitle) with the live tally trailing.
+    /// At accessibility Dynamic-Type sizes the tally drops BELOW the title instead of sharing one line
+    /// (mirrors `ReviewSectionHeader` — shrinking the user's chosen size is itself an a11y regression,
+    /// so we reflow, not squeeze). With no review context the day map is empty → just the position.
+    @ViewBuilder
+    private var titleRow: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 6) {
+                titleBlock
+                tallyLabel
             }
-            .onAppear {
-                rebuildFilmstrip(around: startID)
-                prefetchFilmstrip(around: startID)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(.white)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                titleBlock
+                Spacer(minLength: 0)
+                tallyLabel
             }
+            .foregroundStyle(.white)
+        }
+    }
+
+    /// The day (title) over "N of M" (subtitle); day dropped when there's no review context.
+    private var titleBlock: some View {
+        let ids = allIDs
+        let position = (ids.firstIndex(of: currentID) ?? 0) + 1
+        let day = dayLabel(for: currentID)
+        return VStack(alignment: .leading, spacing: 2) {
+            if !day.isEmpty {
+                Text(day)
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            Text("\(position) of \(ids.count)")
+                .font(day.isEmpty ? .title3.weight(.semibold) : .subheadline)
+                .foregroundStyle(day.isEmpty ? .white : .white.opacity(0.7))
+                .monospacedDigit()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(day.isEmpty ? "Photo \(position) of \(ids.count)"
+                                        : "\(day), photo \(position) of \(ids.count)")
+    }
+
+    /// The live target tally, glanceable beside the title (gold count / target — echoes the grid tally).
+    private var tallyLabel: some View {
+        let progress = selection.progress
+        return (Text("\(progress.picked)").foregroundStyle(Color.accentColor).fontWeight(.semibold)
+            + Text(" / \(progress.target)").foregroundStyle(.white.opacity(0.6)))
+            .font(.subheadline)
+            .monospacedDigit()
+            .accessibilityLabel("\(progress.picked) of \(progress.target) picked")
+    }
+
+    /// The primary pick action — the Now-Playing "play" analog: a big glass toggle centred under the
+    /// photo. Clear glass "Pick" when unpicked; a prominent GOLD "Picked" (dark check) when picked —
+    /// gold is the interactive accent (styleguide §1/§6), matching the grid's gold check, and
+    /// "Pick/Picked" matches the tally's vocabulary. Tapping the photo is the secondary accelerator;
+    /// the filmstrip stays navigation-only (each thumb already carries its own gold check).
+    @ViewBuilder
+    private var pickButton: some View {
+        let isSelected = selection.contains(currentID)
+        let button = Button { selection.toggle(currentID) } label: {
+            Label(isSelected ? "Picked" : "Pick",
+                  systemImage: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.headline)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 4)
+        }
+        .controlSize(.large)
+        .sensoryFeedback(.selection, trigger: isSelected)
+        .accessibilityLabel("Pick photo")
+        .accessibilityValue(isSelected ? "Picked" : "Not picked")
+        .accessibilityAddTraits(.isToggle)
+
+        if isSelected {
+            button.buttonStyle(.glassProminent).tint(Color.accentColor).foregroundStyle(Color.onAccent)
+        } else {
+            button.buttonStyle(.glass).foregroundStyle(.white)
+        }
+    }
+
+    // MARK: Ambient background — a heavy blur of the current photo (the card's colour wash)
+
+    private var ambientBackground: some View {
+        ZStack {
+            Color.black
+            if let ambientImage {
+                Image(uiImage: ambientImage)
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 44, opaque: true)
+                    .overlay(Color.black.opacity(0.5))
+            }
+        }
+        .ignoresSafeArea()
     }
 
     // MARK: Filmstrip window (the pager windows itself; this is just for the SwiftUI strip)
@@ -121,56 +264,6 @@ struct PhotoViewerView: View {
         }
     }
 
-    // MARK: Chrome (floats on scrims over the photo — Liquid Glass behavior)
-
-    private var topBar: some View {
-        let ids = allIDs
-        let position = (ids.firstIndex(of: currentID) ?? 0) + 1
-        return HStack(spacing: 12) {
-            Button { coordinator.pop() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.title3.weight(.semibold))
-                    .frame(minWidth: 44, minHeight: 44)   // ≥44pt hit target (HIG)
-            }
-            .contentShape(Rectangle())
-            .accessibilityLabel("Back to the grid")
-            Spacer()
-            positionLabel(position, of: ids.count)
-            Spacer()
-            // Balances the back button so the position stays centered. Selecting moved OUT of this
-            // top-right corner (the worst one-handed reach) to the bottom-bar "Pick" button.
-            Color.clear.frame(width: 44, height: 44)
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-        .background(scrim(.top))
-    }
-
-    /// The centered title: the current photo's calendar day over its position in the album, e.g.
-    /// "Sat, Jul 5" / "12 of 53" (design WZ-0). With no review context the day map is empty, so it
-    /// degrades to just the position.
-    private func positionLabel(_ position: Int, of count: Int) -> some View {
-        let day = dayLabel(for: currentID)
-        return VStack(spacing: 1) {
-            if !day.isEmpty {
-                Text(day)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)   // a long day at AX type sizes shrinks, not crowds the buttons
-            }
-            Text("\(position) of \(count)")
-                .font(day.isEmpty ? .subheadline.weight(.medium) : .caption)
-                .foregroundStyle(.white.opacity(day.isEmpty ? 1 : 0.75))
-                .monospacedDigit()
-        }
-        .shadow(color: .black.opacity(0.4), radius: 2)   // legible over a bright photo, like the glyphs
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(day.isEmpty ? "Photo \(position) of \(count)"
-                                        : "\(day), photo \(position) of \(count)")
-    }
-
     /// The current photo's day, "" when there's no review context (the day map is empty).
     private func dayLabel(for id: String) -> String {
         coordinator.reviewDayByID[id].map { DayGroupHeader.dayLabel(for: $0) } ?? ""
@@ -183,67 +276,6 @@ struct PhotoViewerView: View {
         let day = dayLabel(for: id)
         return day.isEmpty ? "Photo, \(position) of \(ids.count)"
                            : "Photo, \(day), \(position) of \(ids.count)"
-    }
-
-    /// The primary select action — a big, fixed, thumb-reachable toggle in the bottom bar (moved from
-    /// the top-right corner, the worst one-handed reach, per the viewer UX review). Selecting is the
-    /// viewer's most-frequent act ("open to decide"), so it gets the reachable spot; gold-filled +
-    /// dark check when picked, an outlined "Pick" otherwise — the grid's selection encoding (styleguide
-    /// §1), and "Pick/Picked" matches the tally's vocabulary. The filmstrip stays navigation-only (it
-    /// already reflects picks via each thumb's gold check).
-    private var pickButton: some View {
-        let isSelected = selection.contains(currentID)
-        return Button { selection.toggle(currentID) } label: {
-            HStack(spacing: 8) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                Text(isSelected ? "Picked" : "Pick")
-            }
-            .font(.headline)
-            .foregroundStyle(isSelected ? Color.onAccent : .white)
-            .padding(.horizontal, 28)
-            .padding(.vertical, 12)
-            .background { Capsule().fill(isSelected ? Color.accentColor : Color.white.opacity(0.18)) }
-            .overlay { if !isSelected { Capsule().strokeBorder(.white.opacity(0.6), lineWidth: 1) } }
-        }
-        .buttonStyle(.plain)
-        .sensoryFeedback(.selection, trigger: isSelected)
-        .accessibilityLabel("Pick photo")
-        .accessibilityValue(isSelected ? "Picked" : "Not picked")
-        .accessibilityAddTraits(.isToggle)
-    }
-
-    /// The live tally + the primary Pick toggle over the filmstrip scrubber (design WZ-0, revised).
-    /// The strip orients (where am I, what's picked) and jumps; the tally keeps the running count
-    /// visible; the Pick button is the thumb-reachable pick action.
-    private var bottomBar: some View {
-        VStack(spacing: 12) {
-            tally
-            pickButton
-            Filmstrip(pages: filmstripPages, currentID: $currentID)
-        }
-        .padding(.top, 18)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity)
-        .background(scrim(.bottom))
-    }
-
-    private var tally: some View {
-        let progress = selection.progress
-        return (Text("\(progress.picked)").fontWeight(.semibold)
-            + Text(" / \(progress.target) picked").foregroundStyle(.white.opacity(0.7)))
-            .font(.subheadline)
-            .monospacedDigit()
-            .foregroundStyle(.white)
-            .accessibilityLabel("\(progress.picked) of \(progress.target) picked")
-    }
-
-    private func scrim(_ edge: VerticalEdge) -> some View {
-        let stops: [Gradient.Stop] = edge == .top
-            ? [.init(color: .black.opacity(0.45), location: 0), .init(color: .clear, location: 1)]
-            : [.init(color: .clear, location: 0), .init(color: .black.opacity(0.45), location: 1)]
-        return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
     }
 }
 

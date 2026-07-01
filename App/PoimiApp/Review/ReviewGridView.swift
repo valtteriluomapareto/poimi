@@ -61,6 +61,11 @@ struct ReviewGridView: View {
     @State private var scrollPosition = ScrollPosition()
     /// Choose the initial open cluster once per appearance (first-unreviewed, or the #37 drill target).
     @State private var didInitialOpen = false
+    /// A #37 drill target to scroll to AFTER its cluster has opened + laid out (set by
+    /// `chooseInitialCluster`, applied by the `.task` below). Scrolling synchronously in `onAppear`
+    /// targeted a cell that wasn't laid out yet (the section was still collapsed that instant) → a
+    /// blank grid until a manual scroll, on a large library.
+    @State private var pendingScrollID: String?
     @State private var visibleIDs: Set<String> = []
     @State private var window = PrefetchWindow(orderedIDs: [])
     // Generation-guarded prefetch: a single in-flight updater loops until it has applied the latest
@@ -129,6 +134,14 @@ struct ReviewGridView: View {
         // Tracks position; we only issue a one-shot scrollTo for the #37 drill (onAppear). No
         // re-applied target, so select-all / mark-done re-layouts never snap the grid (#81/#82).
         .scrollPosition($scrollPosition, anchor: .top)
+        // The #37 drill scroll, deferred: runs AFTER the target cluster has opened (`expandedGroupID`
+        // applied) and laid out, so the cell exists to scroll to — a synchronous onAppear scroll hit a
+        // not-yet-laid-out cell and left the grid blank until a manual scroll (large-library device bug).
+        .task(id: pendingScrollID) {
+            guard let id = pendingScrollID else { return }
+            scrollPosition.scrollTo(id: id, anchor: .top)
+            pendingScrollID = nil
+        }
         // Reduce Motion → no density-change animation (the cross-fade is the system default).
         .animation(reduceMotion ? nil : .snappy, value: columnCount)
         // Success haptic when a day is marked done (count up), a light tap on undo. Keyed here because
@@ -189,11 +202,11 @@ struct ReviewGridView: View {
     /// first UNREVIEWED cluster (resume), else the first. The drill scrolls to its cluster; a plain
     /// initial open doesn't (the grid sits at the top, done peeks above the open cluster).
     private func chooseInitialCluster() {
-        if let day = scrollToDay, let target = groups.first(where: { $0.days.contains(day) }) {
-            open(target)
-        } else {
-            expandedGroupID = (groups.first(where: { !done.isDone($0) }) ?? groups.first)?.id
-        }
+        // Decision extracted to `initialCluster` (tested); the drill target scrolls only once it's
+        // laid out — the deferred `.task(id: pendingScrollID)` fires the scroll, fixing the blank grid.
+        let choice = initialCluster(groups: groups, scrollToDay: scrollToDay, isDone: { done.isDone($0) })
+        expandedGroupID = choice.expandedID
+        pendingScrollID = choice.pendingScrollID
     }
 
     /// Tapping a cluster's header or peek toggles it: open it (auto-collapsing whoever was open), or —
@@ -447,4 +460,20 @@ private struct ReviewSectionHeader: View {
 /// contract (the grid derives both from the size class).
 func clampedColumnCount(_ proposed: Double, min minColumns: Int, max maxColumns: Int) -> Int {
     Swift.min(maxColumns, Swift.max(minColumns, Int(proposed.rounded())))
+}
+
+/// Decide which cluster to open (and whether to scroll to it) on first appear / album switch — pulled
+/// out of the View so the drill-vs-resume decision is unit-tested (the `@State` writes stay in
+/// `chooseInitialCluster`). A #37 drill (`scrollToDay` matching a group) opens that group AND targets
+/// its first cell for a scroll (the caller defers that to a `.task`, after layout — the fix for the
+/// blank-until-manual-scroll bug); otherwise open the first UNREVIEWED cluster (resume), else the
+/// first, and DON'T scroll (the grid sits at the top). `pendingScrollID` is nil unless we drilled to a
+/// group that actually has a first asset id — an empty group scrolls nowhere.
+func initialCluster(groups: [DayGroup], scrollToDay: DayKey?,
+                    isDone: (DayGroup) -> Bool) -> (expandedID: String?, pendingScrollID: String?) {
+    if let day = scrollToDay, let target = groups.first(where: { $0.days.contains(day) }) {
+        return (target.id, target.assetIDs.first)
+    }
+    let resume = groups.first(where: { !isDone($0) }) ?? groups.first
+    return (resume?.id, nil)
 }

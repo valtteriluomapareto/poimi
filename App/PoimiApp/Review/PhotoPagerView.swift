@@ -3,10 +3,10 @@
 //  PoimiApp — the photo viewer's horizontal pager (#80; #36 viewer).
 //
 //  A `UIPageViewController`-backed pager. SwiftUI's paging `ScrollView` couldn't share a screen with
-//  a vertical swipe-to-dismiss: the scroll greedily claimed the drag, so a downward swipe degraded
-//  into a sideswipe. UIKit arbitrates the two axes cleanly — the page controller's internal scroll
-//  owns horizontal paging, and a dismiss pan (gated to begin only on a vertical-dominant drag of an
-//  un-zoomed photo, with the page scroll `require(toFail:)`'d behind it) owns the vertical.
+//  the enclosing sheet's vertical pull-to-dismiss: the scroll greedily claimed the drag, so a downward
+//  swipe degraded into a sideswipe. UIKit arbitrates cleanly — the page controller's internal scroll
+//  owns HORIZONTAL paging only; a VERTICAL down-drag on an un-zoomed photo is claimed by neither it nor
+//  the base-zoom-disabled inner scroll, so the presenting sheet's interactive dismiss gets it (#36).
 //
 //  It's also inherently windowed: the page controller only holds the current page ± its neighbours
 //  (built on demand from the data source), so the few-thousand-photo materialisation hang that the
@@ -31,8 +31,6 @@ struct PhotoPagerView: UIViewControllerRepresentable {
     let axLabel: (String) -> String
     /// A single tap on a page's photo → toggle that id's selection (the secondary select path).
     let onTapPhoto: (String) -> Void
-    /// Commit the swipe-down dismiss (pop the viewer).
-    let onDismiss: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -47,7 +45,6 @@ struct PhotoPagerView: UIViewControllerRepresentable {
         if let first = context.coordinator.makePage(for: currentID) {
             pager.setViewControllers([first], direction: .forward, animated: false)
         }
-        context.coordinator.installDismissGesture()
         return pager
     }
 
@@ -63,8 +60,7 @@ struct PhotoPagerView: UIViewControllerRepresentable {
                                  animated: !UIAccessibility.isReduceMotionEnabled)   // RM → jump, don't slide
     }
 
-    final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate,
-                             UIGestureRecognizerDelegate {
+    final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
         var parent: PhotoPagerView
         weak var pager: UIPageViewController?
 
@@ -105,55 +101,6 @@ struct PhotoPagerView: UIViewControllerRepresentable {
             parent.currentID = id
         }
 
-        // MARK: Swipe-down-to-dismiss
-        func installDismissGesture() {
-            guard let pager else { return }
-            let pan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan(_:)))
-            pan.delegate = self
-            pan.maximumNumberOfTouches = 1   // dismiss is one-finger; don't begin on a two-finger pinch-start
-            pager.view.addGestureRecognizer(pan)
-            // Page scroll waits on this pan: a vertical drag keeps the pan alive (page scroll blocked,
-            // no sideswipe); a horizontal drag fails the pan (shouldBegin=false) and pages normally.
-            // The internal queuing scroll is an undocumented subview, so search the tree and make a
-            // regression loud rather than silently losing the arbitration.
-            if let scroll = Self.firstScrollView(in: pager.view) {
-                scroll.panGestureRecognizer.require(toFail: pan)
-            } else {
-                assertionFailure("UIPageViewController internal scroll not found; dismiss arbitration degraded")
-            }
-        }
-
-        /// Depth-first search for the shallowest `UIScrollView` (the page controller's queuing scroll,
-        /// a direct subview today — recursed so a future nesting doesn't silently break the lookup).
-        private static func firstScrollView(in view: UIView) -> UIScrollView? {
-            for subview in view.subviews {
-                if let scroll = subview as? UIScrollView { return scroll }
-            }
-            for subview in view.subviews {
-                if let scroll = firstScrollView(in: subview) { return scroll }
-            }
-            return nil
-        }
-
-        private var currentPageZoomed: Bool {
-            (pager?.viewControllers?.first as? PhotoPageController)?.isZoomed ?? false
-        }
-
-        func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-            guard let pan = recognizer as? UIPanGestureRecognizer,
-                  let view = pan.view, !currentPageZoomed else { return false }
-            // Ignore drags that start on the bottom chrome (the filmstrip) — reaching for it to scrub
-            // shouldn't dismiss.
-            if pan.location(in: view).y > view.bounds.height - 140 { return false }
-            let velocity = pan.velocity(in: view)
-            return velocity.y > 0 && abs(velocity.y) > abs(velocity.x)   // downward, vertical-dominant
-        }
-
-        @objc func handleDismissPan(_ pan: UIPanGestureRecognizer) {
-            guard pan.state == .ended, let view = pan.view else { return }
-            let translation = pan.translation(in: view), velocity = pan.velocity(in: view)
-            if translation.y > 120 || velocity.y > 900 { parent.onDismiss() }
-        }
     }
 }
 
@@ -168,8 +115,6 @@ final class PhotoPageController: UIViewController {
     private let label: String
     private var loadTask: Task<Void, Never>?
     private var didLoadFull = false
-
-    var isZoomed: Bool { scrollView.zoomScale > scrollView.minimumZoomScale }
 
     init(id: String,
          cachedThumb: @escaping (String) -> UIImage?,

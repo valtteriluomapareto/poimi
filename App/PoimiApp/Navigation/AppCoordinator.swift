@@ -37,9 +37,14 @@ final class AppCoordinator {
     var reviewDayByID: [String: DayKey] = [:]
 
     /// The asset last viewed in the grid / viewer. The grid restores its scroll to it on return
-    /// from the viewer (D22) and the viewer keys its `.zoom` source off it; set on cell tap and
-    /// updated as the viewer swipes. Shared so scroll position survives the round-trip.
+    /// from the viewer (D22); set on cell tap and updated as the viewer swipes. Shared so scroll
+    /// position survives the round-trip.
     var lastViewedID: String?
+
+    /// The photo viewer, presented as a `.sheet` (a Now-Playing-style modal card) rather than a path
+    /// push — you pull it DOWN to dismiss (the sheet owns the interactive drag), never a sideways
+    /// nav-pop (#36). `nil` when closed; the grid stays mounted underneath, exactly where you left it.
+    var presentedPhotoID: String?
 
     init(library: any PhotoLibraryProviding) {
         self.library = library
@@ -71,6 +76,7 @@ final class AppCoordinator {
     /// Open an album to its overview (the level above the selection grid). Resets the path so
     /// switching albums from the library starts a fresh stack.
     func openProject(_ id: UUID) {
+        presentedPhotoID = nil          // dismiss any open viewer when switching albums
         path = [.albumOverview(id)]
     }
 
@@ -79,12 +85,20 @@ final class AppCoordinator {
         path.append(.review(projectID, day))
     }
 
-    /// Push the full-screen photo viewer (the `.zoom` destination). Records the asset as last-viewed
-    /// so the `.zoom` source + the grid's scroll restore are anchored to it from the outset.
+    /// Present the photo viewer as a `.sheet` (not a path push — see `presentedPhotoID`).
+    /// Records the asset as last-viewed so the grid's scroll anchor is set from the outset.
     func openPhoto(_ assetID: String) {
         Perf.event("openPhoto \(assetID.suffix(8))")   // start of the open span (→ viewer.onAppear)
         lastViewedID = assetID
-        path.append(.photo(assetID))
+        presentedPhotoID = assetID
+    }
+
+    /// Dismiss the photo-viewer sheet — the single dismiss path (the sheet's `isPresented` binding
+    /// routes its pull-down here), so the open→dismiss Perf span stays closed. The grid stays mounted
+    /// underneath, revealed exactly where you left it.
+    func dismissPhoto() {
+        Perf.event("dismissPhoto (→ grid revealed)")
+        presentedPhotoID = nil
     }
 
     /// Push the export / completion step.
@@ -92,14 +106,17 @@ final class AppCoordinator {
         path.append(.export(projectID))
     }
 
+    /// Pop one route off the path (a within-albums back, e.g. review → overview). Does NOT touch the
+    /// viewer sheet — that's `dismissPhoto()`'s job (the viewer is no longer a path route).
     func pop() {
         guard !path.isEmpty else { return }
-        Perf.event("pop from \(path.count) (dismiss span →)")   // start of the dismiss span (→ grid.onAppear)
+        Perf.event("pop from \(path.count)")
         path.removeLast()
     }
 
     /// Back to the albums library root.
     func popToRoot() {
+        presentedPhotoID = nil
         path.removeAll()
     }
 
@@ -108,6 +125,7 @@ final class AppCoordinator {
     /// Re-open the last-opened album on launch (the album-library "resume" entry). A `nil` id
     /// (no prior project) lands on the library root.
     func restore(lastOpenedProjectID id: UUID?) {
+        presentedPhotoID = nil
         guard let id else {
             path.removeAll()
             return
