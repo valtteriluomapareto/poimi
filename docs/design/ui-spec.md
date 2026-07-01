@@ -12,21 +12,27 @@ not new decisions.
 > obvious calls, the full-screen viewer (#36) for borderline ones. The grid must make *most* calls
 > possible without opening anything.
 
-## Anatomy
+## Anatomy (accordion — D35)
+
+The grid is an **accordion**: exactly one day-group cluster is open (its full photo grid) at a time;
+every other cluster is a collapsed peek. "Done" is its own state (a green seal badge), set by a
+**"Mark as done" button at the end of an open cluster** — it does NOT drive the collapse.
 
 ```
 ┌─────────────────────────────────────────────┐
-│                              Clear   ⤴ Export │  ← nav trailing actions
-│  Best of 2025                                 │  ← large nav title (album name)
-│  1,847 photos · Jan 2025 – Dec 2025           │  ┐ scroll-top header
-│  147 / 200  ▓▓▓▓▓▓▓░░░░░░░░░░  73 left         │  ┘ (subtitle + full-width tally)
+│                              Clear   ⤴ Export │  ← nav trailing actions (nav TITLE blanked)
+│  Best of 2025                                 │  ┐ pinned header (ReviewHeader):
+│  1,847 photos · Jan 2025 – Dec 2025           │  │ BOLD album title + subtitle
+│  147 / 200  ▓▓▓▓▓▓▓░░░░░░░░░░  73 left         │  ┘ + full-width tally
 ├─────────────────────────────────────────────┤
-│  • Sat, Jul 5            · 24      Select all │  ← pinned day-group header
+│ › Mar 16 – Mar 18   2 of 3 kept  ✓            │  ← collapsed cluster (chevron ›, done seal ✓)
+│   ▣ ▣ ▣ ▣ ▣ ▣  (width-filled peek thumbs)      │     tap header/peek to open
+│ ⌄ Sat, Jul 5            · 24      Select all   │  ← OPEN cluster (chevron ⌄)
 │  ┌────┬────┬────┐                              │
 │  │ ▣✓ │  ◯ │  ◯ │   gapless square cells       │  ← gold check top-right
 │  └────┴────┴────┘                              │
-│  Mar 16 – Mar 18         · 3      Select all   │  ← merged quiet run
-│  …                                            │
+│              [ Mark as done ]                  │  ← end-of-cluster button → collapse + advance
+│ › Jun 2 – Jun 9     0 of 18 kept               │  ← next collapsed cluster
 └─────────────────────────────────────────────┘
 ```
 
@@ -43,15 +49,40 @@ not new decisions.
 - **Scroll-driven prefetch**: the visible range ± a row margin feeds the thumbnail seam's caching
   window (generation-guarded so out-of-order actor updates can't cache a stale slice).
 
-## Header
+## Header — the open/collapse control
 
-`• <title> · <count>   [Select all / Deselect all]`
+`[chevron] <title> <count/kept>  [done ✓ badge]   [Select all]`
 
-- Title formatted from the group's `days` (`DayGroupHeader`): single day → "Sat, Jul 5"; merged run
-  → "Mar 16 – Mar 18"; the undated bucket → "Undated".
-- The busy-day marker is a **neutral** dot (gold is reserved for the interactive accent).
-- `· count` is the **post-filter** reviewable count (no quota — D5).
-- **Select all / Deselect all** toggles the whole group (one debounced flush).
+- Tapping the header (its left region) **opens** the cluster (auto-collapsing whoever was open) or,
+  if it's already the open one, **collapses** it. A **disclosure chevron** (rotates down when open)
+  is the affordance — it replaced the old busy-day dot.
+- Title formatted from the group's `days` (`DayGroupHeader`): "Sat, Jul 5" / "Mar 16 – Mar 18" /
+  "Undated".
+- Count: **open** → `· <total>` (the cells show their own selection); **collapsed** → `<N> of <M>
+  kept` (the pick result, since the cells aren't visible). Post-filter counts (no quota — D5).
+- A **green seal badge** (`checkmark.seal.fill`, `brandGreen`) marks a done day at a glance, even
+  collapsed — non-interactive; marking done is the footer button, not this badge.
+- **Select all / Deselect all** shows only while the cluster is **open** (one debounced flush) — a
+  *separate* button from the open-toggle, so a Select-all tap can't also collapse the cluster.
+
+## Collapse & mark-as-done (accordion, D35)
+
+- **One open at a time.** `expandedGroupID` (a single id) drives collapse — a cluster is collapsed
+  iff it isn't the open one. Opening scrolls it to the top; initial open = the first **unreviewed**
+  cluster (a soft resume). Only the open cluster loads full-res (400²) cells; collapsed clusters
+  render a peek of small (56pt) thumbs — a real perf bound.
+- **Peek** (collapsed footer): a width-filled strip of the day's photos (as many 56pt thumbs as
+  fit — geometry-driven, no fixed cap). Done clusters lead with the kept photos and dim the rest;
+  not-done clusters show a plain full-opacity chronological preview. No "Show all"/"+N" (the chevron
+  + header count carry it).
+- **"Mark as done"** (open footer, AFTER the photos — discoverable once you've reviewed the day): a
+  centered brand-green button. It sets the day's done-state, collapses the cluster (seal badge), and
+  **advances to the next unreviewed cluster** (success haptic). Done is DECOUPLED from collapse — a
+  re-opened done cluster's button reads "Mark as not done".
+- **Persistence**: day-granularity done-state (`DoneStore` → `CurationProject.doneDays`, D32(d));
+  the `Completion.reopening` reconcile re-opens a done day that later gained a photo (D38).
+- **Scroll**: iOS-18 `ScrollPosition`, one-shot `scrollTo` only — no maintained target, so a
+  select-all / mark-done re-layout never snaps the grid (D36).
 
 ## Selection (D9)
 
@@ -61,42 +92,56 @@ not new decisions.
   1. a **gold circle with a dark check** (top-right) — *the affordance* (foreground on the gold
      accent is dark, not white, styleguide §1),
   2. a **dim** overlay,
-  3. a **~2px green inset border** — structural only (the one sanctioned green in grid chrome).
+  3. a **2px green inset border** (`brandGreen`) — structural. (Green is no longer *only* the
+     selection hairline: it now also marks **done** — the header seal badge, the "Mark as done"
+     button, and the at-target tally bar — the "green = kept / finished" vocabulary, styleguide §6.
+     The border uses the same `brandGreen`, unified with those.)
 - Source of truth is the in-memory `Set` in `SelectionStore` (D15); cells + headers observe it
   directly, so a toggle re-renders only visible cells, never the whole grid.
 
 ## Top chrome
 
-At the **top**, not a floating bottom bar (which would fight the scroll/select gestures). A
-**large nav title** (the album name) + a **scroll-top header** beneath it (`ReviewHeader`):
+At the **top**, not a floating bottom bar (which would fight the scroll/select gestures). The **nav
+title is blanked** once the grid is up; the album name shows as a **bold title in the pinned
+`ReviewHeader`** instead — a full large nav title fought the pinned header and drove the glass nav
+backdrop into an observation feedback loop on device, so the identity title moved into the scroll-top
+header. Beneath the title:
 
 - **Subtitle**: `<count> photos · <period>` (e.g. "1,847 photos · Jan 2025 – Dec 2025"). The period
   is the album's range; the exclusive end is stepped back a day so a 2025 album reads "… – Dec 2025".
 - **Tally**: `picked / target` in `monospacedDigit` + a **full-width** progress bar + "`N left`"
-  (gold; green at target; fill floored to a visible sliver once there's any pick). The orientation
-  device. **AX reflow**: at accessibility text sizes the bar drops, numerals only (the dense
-  bar-on-chrome is the likeliest Dynamic-Type contrast failure).
-- The header is **pinned** under the title (`.safeAreaInset(.top)`, `.bar` backing) so the tally
-  stays glanceable while scrolling — it's the orientation device. The large title collapses to the
-  inline album name; **Export** stays in the nav bar; day-group section headers pin too.
+  (accent gold; **`brandGreen` at target**; fill floored to a visible sliver once there's any pick).
+  The orientation device. **AX reflow**: at accessibility text sizes the bar drops, numerals only.
+- The header is **pinned** (`.safeAreaInset(.top)`, **`.bar`** backing — a deliberate v1 interim; a
+  full iOS-26 glassEffect scroll-edge is deferred as a device-iteration item) so the tally stays
+  glanceable while scrolling. Day-group section headers pin too.
 - **Export** (nav top-right): the primary action; disabled until ≥1 photo is picked. Routes to #39.
-- **Clear** (nav top-right, destructive): shown only when there is a selection. *(Per the Paper
-  design, bulk Clear/Select-all ultimately move to the separate Select mode; kept here transitionally
-  until that screen is built so there's no interim capability gap.)*
+- **Clear** (nav top-right, destructive): shown only when there is a selection; **confirms before
+  wiping** (a `confirmationDialog` — a stray tap used to clear every pick with no undo). *(Per the
+  Paper design, bulk Clear/Select-all ultimately move to the separate Select mode; kept here
+  transitionally until that screen is built.)*
 
 ## Accessibility
 
 - Each cell: one element, label "Photo, <day>", a selected trait, a **default action** (open) + a
   named **Select/Deselect** action.
-- Each header: an `.isHeader` element with a live "<title>. N photos, M selected." summary.
-- Reduce Motion (no density animation) and Reduce Transparency (the standard bar + `.bar` headers
-  adapt for free — no custom glass to make opaque) are built in.
+- Each header: an `.isHeader` container; its open-toggle is a **button** with a "<title>. N photos,
+  M selected. [Done.]" label + an **Expanded/Collapsed value** + an open/collapse hint. Select-all is
+  a separate child button. Marking a day done posts a "Marked done" announcement (the footer button
+  is removed as it advances, so focus would otherwise be lost).
+- **Dynamic Type**: the header reflows to a vertical stack at accessibility sizes (title wraps, never
+  `minimumScaleFactor`); the tally drops its bar; the "Mark as done" button is a ≥44pt control.
+- Reduce Motion (no collapse/density animation) and Reduce Transparency (the `.bar` headers adapt for
+  free — no custom glass to make opaque) are built in.
 
 ## Deferred (tracked)
 
 - **Drag-to-multi-select** across cells — the badge-select already gives fast single-tap
   multi-select; the drag gesture (and its conflict-handling with scroll/pinch) is a follow-up.
 - **`performAccessibilityAudit()` per screen** — needs a UI-test target; rides the E2E tier (#43).
-- **The `.zoom` expand/return** pairing — the grid sets `matchedTransitionSource`; the paired
-  destination + swipe-and-select land with the viewer (#36).
+- **Glass scroll-edge chrome** — the header is `.bar` today; a real iOS-26 `glassEffect` scroll-edge
+  is a device-iteration follow-up (no in-app precedent; can't verify the blur from a screenshot).
 - **Windowed-by-index snapshot + D29 access-counting guard** (#47).
+
+*(Resolved since first draft: the `.zoom` expand/return was tried and **dropped** for a plain push
+after on-device jank, #84; the viewer + filmstrip shipped, #36.)*

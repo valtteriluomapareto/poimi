@@ -30,7 +30,7 @@
 | Tertiary / hints | `.tertiary` | De-emphasized metadata. |
 | Separators | `Color(.separator)` | Only where structure truly needs a line (prefer space). |
 | **Primary** accent — **Cloudberry (lakka)** | Asset Catalog `AccentColor`, light+dark | Selection check, tally progress, export/primary actions. **Decided: warm golden berry — see below.** |
-| **Secondary** — **Leaf green** | `--color-secondary` (`#3F5E37` / `#7DA164`) | **Brand/identity only:** app icon, onboarding, empty/complete states. **Never review-grid chrome.** See below. |
+| **Secondary** — **Leaf green** | `--color-secondary` (`#3F5E37` / `#7DA164`, asset `BrandGreen`) | **Brand/identity + "kept / finished":** app icon, onboarding, empty/complete states; and in the review grid the **selection border**, the **done seal badge**, the **"Mark as done" button**, and the **at-target tally bar** — the "green marks what you kept/finished" role (D35). Gold stays the *interactive* accent; green marks *state*. See below. |
 | Destructive / clear | `.red` (system) | "Clear selection" and the like, sparingly. |
 
 **Accent — decided: Cloudberry / *lakka* (warm golden berry).** A photo grid is already maximally colorful, so the accent stays *quiet* and earns its few appearances (the selection check, the running-tally progress, the export button). We chose a warm golden berry tone because it is doubly on-concept: **Poimi means "pick!"** and in Finland that means **berries** — *lakka* (cloudberry) is "Finnish gold." It carries the warm, characterful identity (the original warm-clay instinct) while tying the colour straight to the name. *(Explored across three boards in Paper: a warm-clay family, cool/neutral directions — system blue, teal, indigo, graphite — and a berry set — lingonberry, raspberry, bilberry, blackcurrant, cloudberry.)*
@@ -61,7 +61,7 @@ Where green appears (colour only — no motifs):
 - **Sidebar / albums** — a subtle green status dot for the active album.
 - **Empty & complete states** — the optional "target reached / album ready" affirmation (gold counts *up*; green marks the *finish*).
 - **App icon** — **deferred (iterate later).** The icon may draw on the gold/green palette, but the mark itself is an open question — and it is **not** berry/nature.
-- **Selection border — one deliberate exception:** a **narrow ~1.5px green hairline** outlines a selected grid cell (§6). It's a structural accent only; the **gold check remains the affordance** and the tally/Export stay gold. Apart from this hairline, green stays out of the review-grid chrome so the photos lead.
+- **Green in the grid — "kept / finished" (updated D35):** a **2px `brandGreen` inset border** outlines a selected cell (§6); the **gold check remains the affordance** and the tally/Export stay gold. Beyond the border, green now also marks *state* in the grid — the **done seal badge**, the **"Mark as done" button**, and the **at-target tally bar**. Rule of thumb: **gold = interaction, green = state (selected / kept / done)**. Everything green uses the one `brandGreen` token (no system `Color.green`) so the greens don't compete.
 - **No nature imagery anywhere** — colour as a hint, nothing literal.
 
 ---

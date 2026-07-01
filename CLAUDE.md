@@ -21,14 +21,22 @@ third-party dependencies under incompatible licenses.
 
 ## Status
 
-**Phase 2 (the v1 critical path) is in progress.** Built so far: the pure `Curation` domain,
-the PhotoKit seam (`PhotoLibraryProviding` + `System`/`Fake` impls), the integration test tier,
-dev tooling (OSLog + screenshot harness), the state foundation (`CurationProject` +
-`ProjectStore`/`SelectionStore`), the **navigation coordinator** (#30), and the **onboarding +
-authorization flow** (#31). `@main` now launches the real coordinator-driven `AppRootView`
-(onboarding → permission → albums); the screens below `albums` are labeled stubs until their
-issues land (#32 albums list, #35 review grid, …). The throwaway Phase-0 **Spike** has served its
-purpose (it seeded the real review grid, #35) and has now been **deleted**.
+**Phase 2 (the v1 critical path) is in progress.** Built: the pure `Curation` domain, the PhotoKit
+seam (`PhotoLibraryProviding` + `System`/`Fake` impls), the integration test tier, dev tooling
+(OSLog + screenshot harness), the state stores (`CurationProject`, `ProjectStore`, `SelectionStore`,
+`DoneStore`), the **navigation coordinator** (#30), **onboarding + authorization** (#31), the
+**albums library** (#32), **new-album setup + exclude-picker** (#33), the **scan surface** (#34),
+the **review grid** (#35), the **photo viewer** (#36), the **Overview** (#37), and most of
+**mark-as-done** (#38). `@main` launches the real coordinator-driven `AppRootView` (onboarding →
+permission → albums → the built screens).
+
+The **review grid is an accordion**: exactly one day-group cluster is open (its full grid) at a time
+and every other is a collapsed peek; "done" is its own state (a green seal badge), decoupled from
+collapse, set by a **"Mark as done" button at the end of an open cluster** that collapses it and
+advances to the next unreviewed cluster (`DoneStore` + `Completion.reopening` reconcile). Still open
+on the v1 path: **select-mode / drag-multi-select** (deferred from #35), **export + completion**
+(#39), empty/error hardening (#40), **settings** (#41), **iPad** split-view (#42), **E2E** (#43).
+The throwaway Phase-0 **Spike** was deleted (it seeded #35).
 Phase/issue plan: [docs/plans/project-phases.md](docs/plans/project-phases.md).
 
 ## Repo map
@@ -162,7 +170,7 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
 - **[docs/plans/architecture.md](docs/plans/architecture.md)** — the technical design (modules,
   data flow, PhotoKit actor, persistence, navigation, the album-library + mark-as-done subsystems).
 - **[docs/plans/plan-review-decisions.md](docs/plans/plan-review-decisions.md)** — the **decisions
-  log (D1–D34)**: the authoritative record of what was decided and why. Referenced everywhere as `D#`.
+  log (D1–D38)**: the authoritative record of what was decided and why. Referenced everywhere as `D#`.
 - **[docs/plans/project-phases.md](docs/plans/project-phases.md)** — the build sequence + GitHub
   issue tables + the design inventory + the timeline-grouping spec.
 - **[docs/plans/development-guidelines.md](docs/plans/development-guidelines.md)** — testability,
@@ -177,6 +185,7 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
 - **[docs/design/ui-spec.md](docs/design/ui-spec.md)** — per-screen UI spec (the review screen so
   far): anatomy, grid/header/selection/chrome, a11y, deferrals (spike-then-document, D27).
 - **[docs/design/paper-index.md](docs/design/paper-index.md)** — index of the Paper design file: all
-  27 artboards (node IDs, content, issue + build status). Keep current when working with Paper.
+  33 artboards — 27 product screens + a 6-artboard v1.1 exploration cluster (node IDs, content,
+  issue + build status). Keep current when working with Paper.
 - **[docs/plans/spike-findings.md](docs/plans/spike-findings.md)** — the closed Phase-0 evidence
   (picking interaction, grouping, scale) that seeded Phase 1/2.

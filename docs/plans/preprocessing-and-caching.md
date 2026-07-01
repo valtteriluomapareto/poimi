@@ -21,9 +21,13 @@ Pragmatic Developer, and an Algorithms expert; their corrections are folded in**
 
 - **Photos are sacrosanct (D8/D31).** Only `localIdentifier`s persist; never bytes.
 - **We persist project *state*, not the materialized working set.** `CurationProject` holds config +
-  progress (debounced picked-id snapshot D15, done-days, resume pointer). The **candidate set is
-  fetched live every open** (`CandidateStore.load`) and held only in memory; thumbnails are cached
-  **in memory only** (`PHCachingImageManager` + the bounded `ThumbnailMemoryCache`).
+  progress (debounced picked-id snapshot D15, done-days, resume pointer) plus one derived baseline:
+  **`reviewedIDsByDay`** — a `[DayKey → ids]` snapshot of the candidate set at the last load, the
+  input to the "done-but-changed" reconcile (D38). It fits this section's rule (a *diff baseline*, not
+  loaded data; ids only, `.externalStorage`, recomputed each load) and re-opens a done day that gained
+  a photo. The **candidate set is fetched live every open** (`CandidateStore.load`) and held only in
+  memory; thumbnails are cached **in memory only** (`PHCachingImageManager` + the bounded
+  `ThumbnailMemoryCache`).
 - **The lazy direction (D17/D29).** The grid's data source is a *windowed* `AssetRef` snapshot served
   from the actor by index range, with an access-counting guard (D29) that fails if the whole fetch
   result is materialized. (Today `SystemPhotoLibrary.fetchAssets` still materializes a flat array —
@@ -404,3 +408,11 @@ should respect. All are *additive over the date day-groups* (D33), and none chan
     unchanged → the prefetch `orderedIDs` would go stale); the generation-guarded prefetch updater
     already absorbs the expand burst; compute the representative set once, never in a `body`; and an
     anchor inside a collapsed section won't resolve for `.scrollPosition` restore (#36).
+  - **Shipped (D35, #89) — the accordion threads this needle.** The v1 grid is now an accordion: one
+    cluster open (its **full** grid — every photo visible to be chosen, so no selection-by-omission),
+    the rest collapsed to peeks that are **one tap away**. It carries forward the "collapse the
+    *finished*, never the *unreviewed*" form (done is its own state, §13) but adds one-open-at-a-time
+    **focus** (only the open cluster loads full-res — the perf win) rather than pre-deciding which
+    photos you see. The technical hooks above are implemented: collapse is driven by `expandedGroupID`
+    and rebuilds the window on change; scroll uses iOS-18 **`ScrollPosition`** (D36), which sidesteps
+    the collapsed-anchor `.scrollPosition` problem.

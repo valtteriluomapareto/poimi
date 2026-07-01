@@ -4,8 +4,12 @@ A map of the Poimi design file in **Paper** — every artboard, what it shows, a
 issues + the current build. This is the index for agents/humans to find a screen's design before
 implementing it.
 
-- **Index created:** 2026-06-29 · **updated:** 2026-06-30 (Overview #37 → 19P thumbnail rows, built).
-  A snapshot — re-verify against Paper before relying on a specific detail; the file evolves.
+- **Index created:** 2026-06-29 · **updated:** 2026-07-01 (review grid shipped as a **code-led
+  accordion**, #89 merged — see the `2VR-0` note + Reconciliation status). A snapshot — re-verify
+  against Paper before relying on a specific detail; the file evolves.
+  > **Code-led screens:** the review grid evolved past its Paper design during device testing (the
+  > accordion, below). Where a shipped screen diverges from its artboard, this index — not Paper — is
+  > the source of truth for *what shipped*; the artboard records the original design intent.
 - **File:** "Poimi" · page "Page 1" (`1-0`) · **33 artboards** (27 product screens + a 6-artboard
   v1.1 idea-backlog exploration cluster, below)
 - **URL:** https://app.paper.design/file/01KVSFMATJM712ABNQ5D0YDR1T/1-0
@@ -44,7 +48,7 @@ full 999. The repo's Asset Catalog + styleguide.md mirror these.
 
 | Screen | Node | Size | Content | Issue · build |
 |---|---|---|---|---|
-| **Review grid** ✓ | `129-0` | 390×844 | Large album title + metadata subtitle ("1,847 photos · Jan–Dec 2025") + **full-width tally** ("147/200 · 73 left") under it; **Export** top-right. **Gapless** square cells; selected = **gold check top-right + green border + dim**. Pinned day-group headers ("Sat 5 Jul · 53"). | #35 · **built + reconciled to this** |
+| **Review grid** ✓ | `129-0` | 390×844 | Large album title + metadata subtitle ("1,847 photos · Jan–Dec 2025") + **full-width tally** ("147/200 · 73 left") under it; **Export** top-right. **Gapless** square cells; selected = **gold check top-right + green border + dim**. Pinned day-group headers ("Sat 5 Jul · 53"). | #35 · **built, then evolved (code-led)** → shipped as an **accordion** (one cluster open at a time; done decoupled → seal badge + end-of-cluster "Mark as done"; bold pinned-header title with the nav title blanked). See D35 + Reconciliation status. |
 | Review grid — notes ✓ | `Y4-0` | 460×422 | Annotated spec for the above (two-tier triage; day-groups; selection encoding; top chrome; select-mode is a sibling). | — |
 | **Select mode** | `14C-0` | 390×844 | Active multi-select entered from the grid: a quick-select badge on **every** cell, **drag-to-multi-select**, per-day + whole-range Select-all, top toolbar (count + progress + Deselect-all). Same selection encoding. | #35 (deferred drag-select) · **not built** |
 | Select mode — notes ✓ | `11J-0` | 460×443 | Annotated spec for Select mode. | — |
@@ -82,7 +86,7 @@ lands. (Names describe each treatment.)
 
 | Screen | Node | Content | Issue · build |
 |---|---|---|---|
-| Mark as done · sections | `26X-0` | Marking day-groups done + resume affordance. | #38 · not built |
+| Mark as done · sections | `26X-0` | Marking day-groups done + resume affordance. | #38 · **partial** — the done-state + *inline* mark-as-done shipped in the accordion grid (end-of-cluster button + seal badge + advance-to-next); the separate **sections-list / resume screen** here is not built (tracked by the new resume issue). |
 | Completion · year is ready | `2DN-0` | The album-complete / export-success moment. | #39 · not built |
 | Album settings | `2F1-0` | Per-album settings (958 tall). | #41 · not built |
 | State · scanning (long fetch) | `2HZ-0` | The long-scan indicator state. | #34 · built (`ScanningView` scanning phase) |
@@ -99,14 +103,18 @@ Visual explorations of the §15 idea backlog ([../plans/preprocessing-and-cachin
 | ① Trip tints · C liquid glass | `2OZ-0` | exploration | Frosted pill floating over the photos. |
 | ① Trip tints · D vertical gradient | `2RA-0` | exploration | Ambient top-to-bottom gradient that morphs between clusters; no strips. (Tints the photos — the §15 trade-off.) |
 | ② Verbal trip summary | `2TE-0` | **liked** | Deterministic caption ("Mostly at home, with stops in …") under the album identity — template voice, not LLM. |
-| ③ Collapse done runs | `2VR-0` | **built (v1, date day-groups)** | Done clusters collapse to a dimmed ✓ header + thumb peek + "Show all"; the open cluster keeps its full grid. **Mark-as-done** (the done-circle, matching `26X-0`) is the collapse trigger, backed by `DoneStore`/`Completion`. Built on the review grid's date day-groups; per-cluster *location* summaries ride v1.1. Only *done* runs collapse, never the unreviewed. |
+| ③ Collapse done runs | `2VR-0` | **explored → superseded by the accordion (D35)** | Explored done-driven collapse: a done-circle trigger, dimmed ✓ header + "Show all"/"+N" peeks, location clusters. The shipped v1 grid **pivoted to an accordion** (D35, device-validated): one cluster open at a time, done **decoupled** from collapse (a seal badge + an end-of-cluster "Mark as done" button that advances to the next unreviewed), no "Show all", width-filled peeks, date day-groups. `DoneStore`/`Completion` still back it. The done-circle-drives-collapse trigger here is **superseded**; a Paper refresh is pending (grid is code-led for now). |
 
 Caveat: ① found no good-enough treatment (tinting a gapless photo grid recolors the photos being judged); ② and ③ are the keepers. None are v1 commitments — they inform the v1.1 location work.
 
 ## Reconciliation status
 
-The **Review grid** (`129-0`) was reconciled in #35-part-4 (this branch): large title + subtitle +
-full-width tally header, gold check top-right, gapless cells, green border. The **Photo viewer**
-(`WZ-0`, #36) is built (nav + `.zoom`, pinch/pan/double-tap, day label + filmstrip scrubber). **Select
-mode** (`14C-0`, with drag-to-multi-select) is the next build with a design ready. The **Overview**
-direction (#37) is an open design choice among the six explorations.
+The **picking core is built.** The **Review grid** (`129-0`, #35) shipped and then evolved: device
+testing replaced `2VR-0`'s done-driven collapse with a **code-led accordion** (D35) — one cluster
+open at a time, collapsed peeks, disclosure-chevron headers, an end-of-cluster "Mark as done" button
+that advances to the next unreviewed cluster, done-state decoupled (green seal badge), a bold
+pinned-header title with the nav title blanked. The **Photo viewer** (`WZ-0`, #36) is built (nav +
+zoom, pinch/pan/double-tap, day label + filmstrip; the `.zoom` transition was dropped for a plain
+push after on-device jank, #84). The **Overview** (#37) is built to **`19P-0`** (thumbnail rows +
+coverage histogram). The one picking-core design still unbuilt is **Select mode / drag-to-multi-select**
+(`14C-0`, deferred from #35) — flagged the top UX win by the HIG + UX expert reviews.
