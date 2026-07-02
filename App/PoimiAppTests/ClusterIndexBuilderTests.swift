@@ -99,6 +99,19 @@ struct ClusterIndexBuilderTests {
         let index = ClusterIndexBuilder.build(from: [], calendar: cal, locale: locale)
         #expect(index.sections.isEmpty)
         #expect(index.totalClusters == 0)
+        #expect(index.totalDays == 0)
+    }
+
+    @Test("totalDays counts each dated day (a folded run's days all count); undated isn't a day")
+    func totalDaysCountsDays() {
+        let run = DayGroup(id: "run", assetIDs: ["r0", "r1", "r2"],
+                           days: [.day(year: 2025, month: 1, day: 30), .day(year: 2025, month: 2, day: 2)],
+                           isBusyDay: false)
+        let undated = DayGroup(id: "u", assetIDs: ["u0"], days: [.undated], isBusyDay: false)
+        let index = ClusterIndexBuilder.build(from: [run, group("b", 2025, 3, 5, count: 8), undated],
+                                              calendar: cal, locale: locale)
+        #expect(index.totalClusters == 3)   // three clusters (incl. undated)
+        #expect(index.totalDays == 3)       // run's 2 days + busy's 1; undated contributes no day
     }
 }
 
@@ -192,5 +205,43 @@ struct ChartBucketingTests {
         let bars = buckets([group("a", 2025, 3, 1, count: 5), undated])
         #expect(bars.count == 1)                          // just the one dated cluster
         #expect(bars.first?.count == 5)                   // its 5 photos (undated's not counted)
+    }
+
+    @Test("a weekly span too short for 8 weeks floors to exactly minBuckets slices, every photo placed")
+    func weeklySpanFloorsToMinBuckets() {
+        // Jan 1 → Jan 20 ≈ 19 days → weekly (~3 weeks < 8) → floors to 8 day-slices (a denser slice
+        // layout than the ~5-week case, so it also guards against two slice-starts collapsing).
+        let bars = buckets([group("a", 2025, 1, 1, count: 10), group("b", 2025, 1, 20, count: 8)])
+        #expect(bars.count == ChartBucketing.minBuckets)
+        #expect(bars.reduce(0) { $0 + $1.count } == 18)   // both clusters land in a slice
+    }
+
+    @Test("a single dated cluster yields exactly one bar (the view gates the chart above one cluster)")
+    func singleClusterOneBar() {
+        let bars = buckets([group("a", 2025, 5, 10, count: 12)])
+        #expect(bars.count == 1)
+        #expect(bars.first?.count == 12)
+    }
+
+    @Test("date ticks follow the caller's locale (order/separator differ), never month letters")
+    func dateTicksAreLocalized() {
+        let groups = [group("a", 2025, 6, 2, count: 10), group("b", 2025, 6, 20, count: 8)]
+        func ticks(_ id: String) -> [String] {
+            ClusterIndexBuilder.build(from: groups, calendar: cal, locale: Locale(identifier: id))
+                .chartBuckets.compactMap(\.tick)
+        }
+        let en = ticks("en_US"), fi = ticks("fi_FI")
+        #expect(!en.isEmpty)
+        #expect((en + fi).allSatisfy { !$0.contains(where: \.isLetter) })   // numeric in both
+        #expect(en != fi)                                                   // e.g. "6/2" vs "2.6."
+    }
+
+    @Test("a ~5-month album crosses week→month, giving monthly bars with month-letter ticks")
+    func multiMonthUsesMonthlyBars() {
+        // Feb 10 → Jun 20 ≈ 130 days (≥ 126) → monthly unit; ≥ 2 months → single-letter month ticks.
+        let bars = buckets([group("a", 2025, 2, 10, count: 5), group("b", 2025, 6, 20, count: 8)])
+        let ticks = bars.compactMap(\.tick)
+        #expect(ticks.count >= 2)
+        #expect(ticks.allSatisfy { $0.count == 1 })       // month initials, not numeric dates
     }
 }

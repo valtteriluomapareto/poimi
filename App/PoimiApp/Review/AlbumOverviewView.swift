@@ -5,13 +5,13 @@
 //
 //  Opening an album lands here. It scans the candidate set, groups it into the same adaptive
 //  day-clusters the review grid uses, and presents: a big title, the running "N / target" tally, a
-//  coverage chart (one bar per adaptive time slice — month/week/day by span — stacked by review state),
+//  coverage chart (one bar per adaptive time slice — month/week/day by span — shaded gold by density),
 //  and a dense list of every cluster under sticky month headers. Tapping a cluster drills into the grid.
 //
 //  This reframes the earlier month-card overview (design 19P) into a cluster index: the LIST is at
-//  day-cluster granularity (how the grid thinks), while the chart aggregates to months for a
-//  fits-on-screen coverage glance. State (done / in-progress / untouched) is `Curation.ClusterState`,
-//  a pure derivation from picks + done.
+//  day-cluster granularity (how the grid thinks); the chart is a fits-on-screen density skyline over
+//  adaptive time slices. Review state (done / in-progress / untouched, `Curation.ClusterState`) lives
+//  in the list (seals + picked counts), NOT the chart, which is pure density.
 //
 //  The cluster index (grouping + formatting) is built ONCE in `.task` into `@State`, never in a `body`
 //  (the no-grouping-in-views guard + no-heavy-work-in-body); picked counts + done are read where drawn.
@@ -126,7 +126,7 @@ struct AlbumOverviewView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(project.title)
                     .font(.largeTitle.bold())
-                Text("\(index.totalClusters) day\(index.totalClusters == 1 ? "" : "s") · \(periodLabel)")
+                Text("\(index.totalDays) day\(index.totalDays == 1 ? "" : "s") · \(periodLabel)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -186,11 +186,13 @@ struct ChartBucket: Identifiable {
 }
 
 /// The finished overview data: month-sectioned clusters (the list), adaptive time buckets (the chart),
-/// and the cluster total the header needs.
+/// and the header totals. `totalDays` is the number of distinct dated days that hold photos (a folded
+/// quiet run counts each of its days), so the "N days" header is honest; `totalClusters` gates the chart.
 struct ClusterIndex {
     let sections: [MonthSection]
     let chartBuckets: [ChartBucket]
     let totalClusters: Int
+    let totalDays: Int
 }
 
 /// Builds the overview view-model from the store's already-grouped `[DayGroup]`. Pure, and called once
@@ -229,9 +231,13 @@ enum ClusterIndexBuilder {
                 sections.append(MonthSection(id: key, title: title, rows: [row]))
             }
         }
+        // Distinct dated days with photos (a folded quiet run contributes each of its days) — the honest
+        // "N days" count; the undated bucket isn't a real day.
+        let totalDays = groups.reduce(0) { $0 + ($1.isUndated ? 0 : $1.days.count) }
         return ClusterIndex(sections: sections,
                             chartBuckets: ChartBucketing.buckets(for: rows, calendar: calendar, locale: locale),
-                            totalClusters: groups.count)
+                            totalClusters: groups.count,
+                            totalDays: totalDays)
     }
 }
 

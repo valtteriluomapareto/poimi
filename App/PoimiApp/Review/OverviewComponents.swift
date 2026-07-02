@@ -22,8 +22,8 @@ struct OverviewThumb: View {
     @State private var image: UIImage?
 
     var body: some View {
-        // `tertiarySystemFill` (not `secondarySystemBackground`) so an unloaded thumb still reads as a
-        // slot on the month card, which is itself `secondarySystemBackground` — else it's an invisible hole.
+        // `tertiarySystemFill` so an unloaded thumb still reads as a slot on the (systemBackground) row,
+        // not an invisible hole.
         RoundedRectangle(cornerRadius: cornerRadius)
             .fill(Color(.tertiarySystemFill))
             .overlay {
@@ -134,6 +134,7 @@ enum ChartBucketing {
         }
         // Floor: a short/awkward span splits into `minBuckets` roughly-equal day-slices so the chart
         // fills out. Only when the span holds that many day-boundaries (else keep the finer unit as-is).
+        // A floored (single-month) span then also drives `axisTicks` to numeric-date labels, not letters.
         guard starts.count < minBuckets, spanDays >= minBuckets - 1 else { return starts }
         let dayStart = calendar.startOfDay(for: firstDate)
         let totalDays = spanDays + 1
@@ -180,13 +181,11 @@ struct CoverageChart: View {
     /// empty slice draws nothing (a gap). A one-photo slice still floors to a visible sliver.
     @ViewBuilder
     private func bar(count: Int, of maxCount: Int) -> some View {
-        if count > 0 {
+        if count > 0 {   // an empty slice draws nothing → a gap (the column still reserves its width)
             let ratio = Double(count) / Double(maxCount)
             RoundedRectangle(cornerRadius: 2, style: .continuous)
                 .fill(Color.accentColor.opacity(0.5 + 0.5 * ratio))
                 .frame(height: max(3, maxBarHeight * CGFloat(ratio)))
-        } else {
-            Color.clear.frame(height: 0)
         }
     }
 }
