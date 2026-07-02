@@ -59,8 +59,10 @@ enum DebugScreen: String, CaseIterable {
     /// picks) so the "Your album is ready" state + stat card render (#39).
     case export
     /// The per-album settings form — an in-memory project + authorized fake, so the grouped form
-    /// (name / period / saves-to / app / reset+delete) renders against real data (#41, design 2F1).
+    /// (name / period / saves-to / reset+delete) renders against real data (#41, design 2F1).
     case settings
+    /// The app-level settings screen — Photos access + About, against an authorized fake (design 3N9).
+    case appsettings
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -99,6 +101,7 @@ struct DebugScreenHost: View {
         case .overviewshort: DebugOverviewShortHostView()
         case .export: DebugExportHostView()
         case .settings: DebugSettingsHostView()
+        case .appsettings: DebugAppSettingsHostView()
         }
     }
 }
@@ -530,6 +533,30 @@ struct DebugSettingsHostView: View {
         calendar.timeZone = TimeZone(identifier: "UTC")!
         return calendar
     }()
+}
+
+/// Hosts the app-level settings screen (design 3N9) against an authorized fake — so the Photos-access
+/// row renders its "Full" (green) status alongside the About rows (version / license / source).
+struct DebugAppSettingsHostView: View {
+    @State private var coordinator: AppCoordinator?
+    private static let fake = FakePhotoLibrary(status: .authorized)
+
+    var body: some View {
+        Group {
+            if let coordinator {
+                NavigationStack { AppSettingsView() }
+                    .environment(coordinator)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            let coord = AppCoordinator(library: Self.fake)
+            await coord.refreshAuthorization()      // → .authorized, so Photos access shows "Full"
+            coordinator = coord
+            Log.app.notice("screenshot-ready: \(DebugScreen.appsettings.rawValue, privacy: .public)")
+        }
+    }
 }
 
 /// Hosts the full-screen photo viewer (#36) over the deterministic fake tiles: a coordinator seeded

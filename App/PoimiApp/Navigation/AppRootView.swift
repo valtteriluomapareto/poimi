@@ -112,6 +112,8 @@ struct AppRootView: View {
                 RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
                                  detail: "This album is no longer in your library.")
             }
+        case .appSettings:
+            AppSettingsView()   // app-level: Photos access + About
         }
     }
 }

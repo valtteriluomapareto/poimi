@@ -57,8 +57,10 @@ struct AlbumOverviewView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 16) {
+                        // A sliders "adjustments" icon (NOT a cog) — the cog is app-level settings on the
+                        // album library; per-album settings gets its own glyph so the two never look alike.
                         Button { coordinator.openSettings(project.id) } label: {
-                            Image(systemName: "gearshape")
+                            Image(systemName: "slider.horizontal.3")
                         }
                         .accessibilityLabel("Album settings")
                         Button("Export") { coordinator.openExport(project.id) }

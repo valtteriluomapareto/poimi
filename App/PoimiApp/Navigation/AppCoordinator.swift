@@ -111,6 +111,11 @@ final class AppCoordinator {
         path.append(.settings(projectID))
     }
 
+    /// Push the app-level settings screen (Photos access + About) — not album-scoped.
+    func openAppSettings() {
+        path.append(.appSettings)
+    }
+
     /// Pop one route off the path (a within-albums back, e.g. review → overview). Does NOT touch the
     /// viewer sheet — that's `dismissPhoto()`'s job (the viewer is no longer a path route).
     func pop() {

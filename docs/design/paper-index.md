@@ -4,9 +4,11 @@ A map of the Poimi design file in **Paper** — every artboard, what it shows, a
 issues + the current build. This is the index for agents/humans to find a screen's design before
 implementing it.
 
-- **Index created:** 2026-06-29 · **updated:** 2026-07-02 (**#41 album settings** — `2F1-0` built as
-  `AlbumSettingsView`, per-album only; its **"App"** section (Photos access / About) omitted as
-  app-level, not per-album. **#39 export + completion** — reworked
+- **Index created:** 2026-06-29 · **updated:** 2026-07-02 (**app-level settings** — new `3N9-0` "App
+  settings" (Photos access + About: version / license / source), built as `AppSettingsView`, reached
+  from the albums-home **cog** (the per-album Overview uses a **sliders** icon). **#41 album settings**
+  — `2F1-0` built as `AlbumSettingsView`, per-album only; its **"App"** section (Photos access /
+  About) moved to `3N9-0`. **#39 export + completion** — reworked
   `2DN-0` (system background, no emblem, dropped "Open in Photos" — no public deep-link API) + new
   export states **working** `3KG-0`, **error** `3LO-0`, **re-export** `3J8-0`; the **cluster-index
   Overview** `3BL-0` shipped as the built Overview (#103). Earlier 2026-07-01: added the **Now-Playing viewer** `2ZC-0`
@@ -106,7 +108,8 @@ lands. (Names describe each treatment.)
 | **Export · working** ✓ | `3KG-0` | The transient "Creating your album…" state — gold spinner + "Adding your N photos to <album>." No actions. | #39 · **built** |
 | **Export · re-export** ✓ | `3J8-0` | The idempotent re-run: "Album updated · added N, now M" + the stat card + Back to albums. | #39 · **built** |
 | **Export · error** ✓ | `3LO-0` | Recoverable failure (neutral dark, amber warning): "Couldn't create the album" + **Try again** · **Create a new album instead** (when a re-export's album was deleted) · Back to albums. | #39 · **built** |
-| Album settings | `2F1-0` | Per-album settings (958 tall): name / period / saves-to / reset+delete. | #41 · built (`AlbumSettingsView`); design's "App" section (Photos access, About) **omitted** — app-level, not per-album |
+| Album settings | `2F1-0` | Per-album settings (958 tall), titled **"Album settings"**: name / period / saves-to / reset+delete. | #41 · built (`AlbumSettingsView`); design's "App" section (Photos access, About) **omitted** — app-level, moved to `3N9-0` |
+| App settings | `3N9-0` | App-level settings: **Access** (Photos access → Full/Limited/Off + Settings deep-link) + **About** (Version / License AGPL-3.0 / Source code → GitHub). Reached from the albums-home cog. | built (`AppSettingsView`); the "App" section relocated out of `2F1-0` |
 | State · scanning (long fetch) | `2HZ-0` | The long-scan indicator state. | #34 · built (`ScanningView` scanning phase) |
 | State · empty range | `2JE-0` | Empty/no-photos-in-range state. | #40 · built minimally (`.empty` in `ScanningView`) |
 

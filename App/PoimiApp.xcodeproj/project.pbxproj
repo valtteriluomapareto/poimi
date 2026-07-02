@@ -49,6 +49,7 @@
 		00000000C00000000000B0CD /* OverviewComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0CD /* OverviewComponents.swift */; };
 		00000000C00000000000B0CE /* ExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0CE /* ExportView.swift */; };
 		00000000D00000000000B0D1 /* AlbumSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000D00000000000A0D1 /* AlbumSettingsView.swift */; };
+		00000000D00000000000B0D2 /* AppSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000D00000000000A0D2 /* AppSettingsView.swift */; };
 		000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000043 /* PhotoLibraryConformanceTests.swift */; };
 		000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */; };
 		00000000400000000000004E /* ProjectStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000004D /* ProjectStoreTests.swift */; };
@@ -68,6 +69,7 @@
 		00000000400000000000006E /* ClusterIndexBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000006D /* ClusterIndexBuilderTests.swift */; };
 		000000004000000000000070 /* ExportStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000006F /* ExportStoreTests.swift */; };
 		000000004000000000000072 /* AlbumSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000071 /* AlbumSettingsTests.swift */; };
+		000000004000000000000074 /* AppSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000073 /* AppSettingsTests.swift */; };
 		000000004000000000000066 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000065 /* TestSupport.swift */; };
 /* End PBXBuildFile section */
 
@@ -132,6 +134,7 @@
 		00000000C00000000000A0CD /* OverviewComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewComponents.swift; sourceTree = "<group>"; };
 		00000000C00000000000A0CE /* ExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportView.swift; sourceTree = "<group>"; };
 		00000000D00000000000A0D1 /* AlbumSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumSettingsView.swift; sourceTree = "<group>"; };
+		00000000D00000000000A0D2 /* AppSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsView.swift; sourceTree = "<group>"; };
 		000000004000000000000042 /* PoimiAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PoimiAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000004000000000000043 /* PhotoLibraryConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryConformanceTests.swift; sourceTree = "<group>"; };
 		000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrarySeedTests.swift; sourceTree = "<group>"; };
@@ -152,6 +155,7 @@
 		00000000400000000000006D /* ClusterIndexBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterIndexBuilderTests.swift; sourceTree = "<group>"; };
 		00000000400000000000006F /* ExportStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportStoreTests.swift; sourceTree = "<group>"; };
 		000000004000000000000071 /* AlbumSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumSettingsTests.swift; sourceTree = "<group>"; };
+		000000004000000000000073 /* AppSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsTests.swift; sourceTree = "<group>"; };
 		000000004000000000000065 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -325,6 +329,7 @@
 			isa = PBXGroup;
 			children = (
 				00000000D00000000000A0D1 /* AlbumSettingsView.swift */,
+				00000000D00000000000A0D2 /* AppSettingsView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -351,6 +356,7 @@
 				00000000400000000000006D /* ClusterIndexBuilderTests.swift */,
 				00000000400000000000006F /* ExportStoreTests.swift */,
 				000000004000000000000071 /* AlbumSettingsTests.swift */,
+				000000004000000000000073 /* AppSettingsTests.swift */,
 				000000004000000000000065 /* TestSupport.swift */,
 			);
 			path = PoimiAppTests;
@@ -492,6 +498,7 @@
 				00000000C00000000000B0CD /* OverviewComponents.swift in Sources */,
 				00000000C00000000000B0CE /* ExportView.swift in Sources */,
 				00000000D00000000000B0D1 /* AlbumSettingsView.swift in Sources */,
+				00000000D00000000000B0D2 /* AppSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -518,6 +525,7 @@
 				00000000400000000000006E /* ClusterIndexBuilderTests.swift in Sources */,
 				000000004000000000000070 /* ExportStoreTests.swift in Sources */,
 				000000004000000000000072 /* AlbumSettingsTests.swift in Sources */,
+				000000004000000000000074 /* AppSettingsTests.swift in Sources */,
 				000000004000000000000066 /* TestSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

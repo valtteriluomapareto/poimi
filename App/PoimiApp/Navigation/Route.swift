@@ -23,6 +23,8 @@ enum Route: Hashable {
     case export(UUID)
     /// The album's settings — edit name / period / target / exclusions / destination, or reset / delete (#41).
     case settings(UUID)
+    /// App-level settings — Photos access + About (version / license / source). Not album-scoped.
+    case appSettings
 }
 
 /// The app's root phase, derived from authorization (D6). Onboarding/permission sit *above* the

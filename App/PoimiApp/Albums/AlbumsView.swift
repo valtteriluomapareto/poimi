@@ -60,6 +60,11 @@ struct AlbumsView: View {
         }
         .navigationTitle("Albums")
         .toolbar {
+            // The cog = APP-level settings (Photos access, About). The per-album settings screen uses a
+            // sliders "adjustments" icon on the Overview instead, so the two never look alike.
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Settings", systemImage: "gearshape") { coordinator.openAppSettings() }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button("New album", systemImage: "plus") { showingSetup = true }
             }
@@ -75,7 +80,8 @@ struct AlbumsView: View {
             }
             Button("Cancel", role: .cancel) { albumToDelete = nil }
         } message: { project in
-            Text("Removes the album and its ^[\(project.persistedPickedCount) pick](inflect: true). Your Photos library isn't touched.")
+            Text("Removes the album and its ^[\(project.persistedPickedCount) pick](inflect: true). "
+                + "Your Photos library isn't touched.")
         }
         .confirmationDialog("Reset picks?", isPresented: resetConfirmation,
                             titleVisibility: .visible, presenting: albumToReset) { project in
