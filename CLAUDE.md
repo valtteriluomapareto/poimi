@@ -37,11 +37,13 @@ advances to the next unreviewed cluster (`DoneStore` + `Completion.reopening` re
 **Overview** is a **cluster index** (design 3BL): a per-day-cluster list + a coverage chart of
 adaptive time buckets shaded gold by density. **Export** writes the picks into a native Photos album
 (create-or-find + dupe-guard, one-way — D31) then shows the completion screen (`ExportStore` +
-`ExportView`). **Settings** (#41) is **per-album** only — name / period / target / exclusions /
-destination + Reset picks / Delete album (`AlbumSettingsView`, reached via the Overview's gear);
-app-level settings (Photos access, About) are deliberately NOT here (they belong on a future
-app-settings screen). Still open on the v1 path: **select-mode / drag-multi-select** (deferred from
-#35), empty/error hardening (#40), an **app-level settings** screen, **iPad** split-view (#42), **E2E** (#43).
+`ExportView`). There are **two** settings screens, deliberately split and given distinct icons so they
+never look alike: **per-album settings** (#41, `AlbumSettingsView`) — name / period / target /
+exclusions / destination + Reset picks / Delete album, reached from the Overview's **sliders
+"adjustments"** icon; and **app-level settings** (`AppSettingsView`) — Photos access + About
+(version / license / source), reached from the albums home's **cog**. Still open on the v1 path:
+**select-mode / drag-multi-select** (deferred from #35), empty/error hardening (#40), **iPad**
+split-view (#42), **E2E** (#43).
 The throwaway Phase-0 **Spike** was deleted (it seeded #35).
 Phase/issue plan: [docs/plans/project-phases.md](docs/plans/project-phases.md).
 
@@ -58,7 +60,7 @@ App/
     State/                     ProjectStore, SelectionStore (@MainActor @Observable)
     Navigation/                Route, AppCoordinator, AppRootView (the adaptive spine, #30)
     Onboarding/                OnboardingView, AccessRecoveryView (first-run + auth, #31)
-    Settings/                  AlbumSettingsView (per-album edit / reset / delete, #41)
+    Settings/                  AlbumSettingsView (per-album, #41) + AppSettingsView (app-level: access/about)
     Support/                   Log (OSLog), DebugScreen (screenshot harness)
     Resources/                 Assets.xcassets (AccentColor, BrandGreen, OnAccent, AppIcon)
   PoimiAppTests/               integration tier (Swift Testing, runs on a sim)

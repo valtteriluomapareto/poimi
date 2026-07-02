@@ -1,0 +1,96 @@
+//
+//  AppSettingsView.swift
+//  PoimiApp — app-level settings (Paper artboard "App settings" 3N9-0).
+//
+//  App-WIDE settings, distinct from the per-album `AlbumSettingsView` (#41): the Photos-access
+//  status + deep-link (the permission is app-wide, not per-album) and About (version / license /
+//  source). Reached from the album library's cog; the per-album screen uses a sliders "adjustments"
+//  icon instead, so the two entry points never look alike.
+//
+//  Thin by design: it reads the coordinator's authorization and opens URLs — no stores, no model.
+//
+
+import SwiftUI
+import UIKit          // UIApplication.openSettingsURLString (the constant only — no UIKit UI)
+import Curation       // LibraryAuthorization
+
+struct AppSettingsView: View {
+    @Environment(AppCoordinator.self) private var coordinator
+    @Environment(\.openURL) private var openURL
+
+    /// The public source repository — Poimi is dual-licensed (AGPL-3.0 + commercial), curating in the open.
+    private static let sourceURL = URL(string: "https://github.com/valtteriluomapareto/poimi")!
+
+    var body: some View {
+        Form {
+            Section("Access") {
+                // App-wide permission → tapping deep-links to the system Settings (we can't re-prompt);
+                // on return, the app's scenePhase re-read routes onward if it changed (§10, like recovery).
+                Button(action: openPhotosSettings) {
+                    LabeledContent("Photos access") {
+                        let display = PhotosAccessDisplay.forAuthorization(coordinator.authorization)
+                        Label(display.label, systemImage: display.symbol)   // icon leads → "✓ Full"
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(accessTint)
+                    }
+                }
+                .tint(.primary)   // a settings row, not a call-to-action — don't tint the label blue
+            }
+
+            Section("About") {
+                LabeledContent("Version", value: appVersion)
+                LabeledContent("License", value: "AGPL-3.0")
+                Button { openURL(Self.sourceURL) } label: {
+                    LabeledContent("Source code") {
+                        // Text then an up-right glyph → reads "GitHub ↗" (opens Safari), not an in-app push.
+                        HStack(spacing: 4) {
+                            Text("GitHub")
+                            Image(systemName: "arrow.up.right")
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .tint(.primary)
+            }
+        }
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func openPhotosSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        openURL(url)
+    }
+
+    /// The marketing version (`CFBundleShortVersionString`), e.g. "0.1.0".
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    }
+
+    /// Status colour: full = brand green (the "all set"), limited = gold (attention), off = neutral.
+    private var accessTint: Color {
+        switch coordinator.authorization {
+        case .authorized: .brandGreen
+        case .limited: .accentColor
+        case .denied, .restricted: .secondary
+        case .notDetermined: .secondary
+        }
+    }
+}
+
+/// Pure, testable display for the Photos-access row — the status label + SF Symbol keyed by
+/// authorization. Kept out of the view (the `RecoveryGuidance` pattern, §10) so the status→label
+/// mapping is unit-tested without rendering. The tint (a SwiftUI `Color`) stays in the view.
+struct PhotosAccessDisplay: Equatable {
+    let label: String
+    let symbol: String
+
+    static func forAuthorization(_ status: LibraryAuthorization) -> PhotosAccessDisplay {
+        switch status {
+        case .authorized: PhotosAccessDisplay(label: "Full", symbol: "checkmark.circle.fill")
+        case .limited: PhotosAccessDisplay(label: "Limited", symbol: "checkmark.circle")
+        case .denied, .restricted: PhotosAccessDisplay(label: "Off", symbol: "exclamationmark.circle")
+        case .notDetermined: PhotosAccessDisplay(label: "Not set", symbol: "circle")
+        }
+    }
+}

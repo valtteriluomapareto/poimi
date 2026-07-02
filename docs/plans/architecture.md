@@ -193,9 +193,13 @@ so a later debounced flush can't resurrect the just-cleared picks. Delete deacti
 `coordinator.popToRoot()`s back to the library; a teardown guard skips the `onDisappear` save of the
 now-deleted project.
 
-**App-level settings are NOT here.** Photos access and About are app-wide, not per-album; the 2F1
-design's "App" section belongs on a separate app-settings screen (reached from the album library),
-deliberately omitted from this per-album screen.
+**App-level settings are a SEPARATE screen.** Photos access and About are app-wide, not per-album, so
+they live on `AppSettingsView` (`Route.appSettings`, no project id), reached from the album library's
+**cog** — Photos-access status + Settings deep-link (§10) and About (version / license / source-repo
+link). The pure status→label mapping is `PhotosAccessDisplay` (the `RecoveryGuidance` pattern). The two
+settings screens carry **distinct icons** so they never look alike: the per-album Overview uses a
+**sliders "adjustments"** glyph (`slider.horizontal.3`); the app-level entry uses a **cog**
+(`gearshape`). The screen is thin — it reads the coordinator's authorization and opens URLs, no stores.
 
 ## Data model — v1 SwiftData entities
 
