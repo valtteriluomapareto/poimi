@@ -54,18 +54,21 @@ struct AlbumOverviewView: View {
             // the running tally, so it's the natural "I'm done → make the album" spot; the gear reaches
             // per-album settings (#41). No "Clear" here — clearing all picks now lives in Settings as
             // "Reset picks"; Clear stays in the review grid for per-session use.
+            // TWO separate trailing items, not one HStack in a single item: iOS 26 then lays them out in
+            // its own Liquid Glass group with standard insets, instead of the glass hugging a hand-rolled
+            // HStack tightly against the capsule edges (the icon + "Export" looked cramped otherwise).
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 16) {
-                        // A sliders "adjustments" icon (NOT a cog) — the cog is app-level settings on the
-                        // album library; per-album settings gets its own glyph so the two never look alike.
-                        Button { coordinator.openSettings(project.id) } label: {
-                            Image(systemName: "slider.horizontal.3")
-                        }
-                        .accessibilityLabel("Album settings")
-                        Button("Export") { coordinator.openExport(project.id) }
-                            .disabled(selection.progress.picked == 0)
+                    // A sliders "adjustments" icon (NOT a cog) — the cog is app-level settings on the album
+                    // library; per-album settings gets its own glyph so the two never look alike.
+                    Button { coordinator.openSettings(project.id) } label: {
+                        Image(systemName: "slider.horizontal.3")
                     }
+                    .accessibilityLabel("Album settings")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Export") { coordinator.openExport(project.id) }
+                        .disabled(selection.progress.picked == 0)
                 }
             }
             // Done-state here is display-only — the Overview doesn't reconcile (the grid does, on entry),
