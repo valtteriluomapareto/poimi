@@ -4,7 +4,9 @@ A map of the Poimi design file in **Paper** — every artboard, what it shows, a
 issues + the current build. This is the index for agents/humans to find a screen's design before
 implementing it.
 
-- **Index created:** 2026-06-29 · **updated:** 2026-07-02 (**app-level settings** — new `3N9-0` "App
+- **Index created:** 2026-06-29 · **updated:** 2026-07-02 (**#40 empty/error hardening** — `2JE-0`
+  built as the actionable empty state (`ReviewEmptyView`); the scan's empty/failure states now
+  distinguish reasons + are always recoverable. **app-level settings** — new `3N9-0` "App
   settings" (Photos access + About: version / license / source), built as `AppSettingsView`, reached
   from the albums-home **cog** (the per-album Overview uses a **sliders** icon). **#41 album settings**
   — `2F1-0` built as `AlbumSettingsView`, per-album only; its **"App"** section (Photos access /
@@ -111,7 +113,7 @@ lands. (Names describe each treatment.)
 | Album settings | `2F1-0` | Per-album settings (958 tall), titled **"Album settings"**: name / period / saves-to / reset+delete. | #41 · built (`AlbumSettingsView`); design's "App" section (Photos access, About) **omitted** — app-level, moved to `3N9-0` |
 | App settings | `3N9-0` | App-level settings: **Access** (Photos access → Full/Limited/Off + Settings deep-link) + **About** (Version / License AGPL-3.0 / Source code → GitHub). Reached from the albums-home cog. | built (`AppSettingsView`); the "App" section relocated out of `2F1-0` |
 | State · scanning (long fetch) | `2HZ-0` | The long-scan indicator state. | #34 · built (`ScanningView` scanning phase) |
-| State · empty range | `2JE-0` | Empty/no-photos-in-range state. | #40 · built minimally (`.empty` in `ScanningView`) |
+| State · empty range | `2JE-0` | The actionable empty state: "Nothing to pick here" + range-aware message + **Change range** / **Review excluded albums** (both → album settings). | #40 · **built** (`ReviewEmptyView`, shared by `ScanningView` + Overview); reasons `.noPhotosInRange` / `.allExcluded` |
 
 ## Idea backlog (v1.1) — Paper explorations (390×844)
 

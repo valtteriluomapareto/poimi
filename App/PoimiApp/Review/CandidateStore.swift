@@ -32,6 +32,25 @@ import Curation
 @MainActor
 @Observable
 final class CandidateStore {
+    /// Why a settled pass has no candidates — so the empty state can be actionable (#40, design 2JE):
+    /// point at the range vs the exclusions rather than a generic dead-end.
+    enum EmptyReason: Equatable {
+        /// The date range itself yielded no photos (or the range is inverted). Fix: widen the range.
+        case noPhotosInRange
+        /// Photos existed in range, but every one was filtered out (screenshots / excluded albums).
+        /// Fix: relax the exclusions.
+        case allExcluded
+    }
+
+    /// Why a pass failed — a transient load error (retry) vs photo access lost mid-session (recover).
+    enum FailureReason: Equatable {
+        /// The fetch threw while access is still granted — likely iCloud/network. Retryable.
+        case loadError
+        /// The fetch threw AND photo access is no longer authorized (revoked mid-session, D6/§10).
+        /// A retry can't succeed — the app should route to the recovery screen.
+        case accessLost
+    }
+
     /// The phases the scanning surface renders. `Equatable` so the view (and tests) can compare
     /// without unwrapping the associated groups.
     enum Phase: Equatable {
@@ -41,9 +60,9 @@ final class CandidateStore {
         /// construction (empty → `.empty`). The review grid renders these directly — grouping is
         /// done here, once, not in the view (Finding 1).
         case ready([DayGroup])
-        /// Nothing matched the range and filters — a real, expected outcome, not an error.
-        case empty
-        case failed
+        /// Nothing matched the range and filters — a real, expected outcome, not an error (#40).
+        case empty(EmptyReason)
+        case failed(FailureReason)
     }
 
     private(set) var phase: Phase = .idle
@@ -74,7 +93,7 @@ final class CandidateStore {
         // end < start, so guard before constructing it. Setup disables Create on an inverted range
         // (#33), but a malformed persisted project must degrade to "empty", never crash.
         guard project.rangeEnd > project.rangeStart else {
-            phase = .empty
+            phase = .empty(.noPhotosInRange)
             return
         }
         let interval = DateInterval(start: project.rangeStart, end: project.rangeEnd)
@@ -99,10 +118,20 @@ final class CandidateStore {
             dayByID = Dictionary(
                 candidates.map { ($0.id, DayKey(date: $0.captureDate, calendar: calendar)) },
                 uniquingKeysWith: { first, _ in first })
-            phase = groups.isEmpty ? .empty : .ready(groups)
+            if groups.isEmpty {
+                // Distinguish WHY it's empty so the state is actionable (#40): the range yielded
+                // nothing (widen it) vs photos existed but were all filtered out (relax exclusions).
+                phase = .empty(fetched.isEmpty ? .noPhotosInRange : .allExcluded)
+            } else {
+                phase = .ready(groups)
+            }
         } catch {
             Log.photoLibrary.error("CandidateStore.load failed: \(String(describing: error), privacy: .public)")
-            phase = .failed
+            // A transient load error is retryable; but if access was revoked mid-session the fetch
+            // fails for good — re-check authorization so the view can route to recovery instead of a
+            // retry that can't succeed (#40, D6/§10).
+            let stillAuthorized = await library.authorizationStatus() == .authorized
+            phase = .failed(stillAuthorized ? .loadError : .accessLost)
         }
     }
 }

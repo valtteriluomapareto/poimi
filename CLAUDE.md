@@ -41,8 +41,11 @@ adaptive time buckets shaded gold by density. **Export** writes the picks into a
 never look alike: **per-album settings** (#41, `AlbumSettingsView`) — name / period / target /
 exclusions / destination + Reset picks / Delete album, reached from the Overview's **sliders
 "adjustments"** icon; and **app-level settings** (`AppSettingsView`) — Photos access + About
-(version / license / source), reached from the albums home's **cog**. Still open on the v1 path:
-**select-mode / drag-multi-select** (deferred from #35), empty/error hardening (#40), **iPad**
+(version / license / source), reached from the albums home's **cog**. **Empty + error states** (#40)
+are hardened: the scan's empty state is **actionable** (distinguishes "no photos in range" from "all
+excluded" → Change range / Review excluded albums, design 2JE) and its failure state distinguishes a
+transient load error (retry) from **access revoked mid-session** (routes to recovery) — never a
+dead-end. Still open on the v1 path: **select-mode / drag-multi-select** (deferred from #35), **iPad**
 split-view (#42), **E2E** (#43).
 The throwaway Phase-0 **Spike** was deleted (it seeded #35).
 Phase/issue plan: [docs/plans/project-phases.md](docs/plans/project-phases.md).

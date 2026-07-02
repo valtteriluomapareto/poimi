@@ -61,25 +61,36 @@ struct ScanningView: View {
                 // Gating on project identity (not `.idle`) stops a reused view instance from serving
                 // the previous album's candidates + day map to the viewer (#42).
                 if store == nil || loadedProjectID != project.id {
-                    let fresh = CandidateStore(library: library)
-                    store = fresh
+                    store = CandidateStore(library: library)
                     loadedProjectID = project.id
-                    await fresh.load(project)
-                    // Reconcile done-state against the freshly-loaded candidates: a done day that
-                    // gained a photo since the last load re-opens, so the collapse never hides a new
-                    // unreviewed photo (D32(d)). Only on a real .ready load — an empty/failed load
-                    // would record a bogus (empty) baseline and re-open everything next time.
-                    if case .ready = fresh.phase {
-                        doneStore.reconcile(currentIDsByDay: Self.idsByDay(fresh.dayByID))
-                    }
-                }
-                // Publish the candidate list + per-photo day map so the photo viewer can page
-                // through it and label each photo's day (#36).
-                if case .ready(let groups) = store?.phase {
-                    coordinator.reviewOrderedIDs = groups.flatMap(\.assetIDs)
-                    coordinator.reviewDayByID = store?.dayByID ?? [:]
+                    await scan()
+                } else {
+                    publishForViewer()   // benign re-appear (same album) — republish for the viewer
                 }
             }
+    }
+
+    /// Run (or re-run, e.g. a "Try again") the fetch pass, then reconcile done-state and publish the
+    /// candidate list for the viewer. Reuses the current `store` so a retry re-scans the same album.
+    private func scan() async {
+        guard let store else { return }
+        await store.load(project)
+        // Reconcile done-state against the freshly-loaded candidates: a done day that gained a photo
+        // since the last load re-opens, so the collapse never hides a new unreviewed photo (D32(d)).
+        // Only on a real .ready load — an empty/failed load would record a bogus (empty) baseline.
+        if case .ready = store.phase {
+            doneStore.reconcile(currentIDsByDay: Self.idsByDay(store.dayByID))
+        }
+        publishForViewer()
+    }
+
+    /// Publish the candidate list + per-photo day map so the photo viewer can page through it and
+    /// label each photo's day (#36). A no-op until the pass is `.ready`.
+    private func publishForViewer() {
+        if case .ready(let groups) = store?.phase {
+            coordinator.reviewOrderedIDs = groups.flatMap(\.assetIDs)
+            coordinator.reviewDayByID = store?.dayByID ?? [:]
+        }
     }
 
     /// The Export/Clear chrome, shown only once the grid is up (`.ready`). The large nav title keeps
@@ -161,22 +172,17 @@ struct ScanningView: View {
                 openAsset: { coordinator.openPhoto($0) },
                 scrollToDay: scrollToDay)
 
-        case .empty:
-            ContentUnavailableView {
-                Label("No photos in range", systemImage: "photo.on.rectangle")
-            } description: {
-                Text("Nothing matched this album's date range and filters.")
-            }
+        case .empty(let reason):
+            ReviewEmptyView(
+                reason: reason, rangeStart: project.rangeStart, rangeEnd: project.rangeEnd,
+                onChangeRange: { coordinator.openSettings(project.id) },
+                onReviewExclusions: { coordinator.openSettings(project.id) })
 
-        case .failed:
-            ContentUnavailableView {
-                Label("Couldn't load your photos", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text("Something went wrong while scanning your library. Try again.")
-            } actions: {
-                Button("Try again") { Task { await store?.load(project) } }
-                    .buttonStyle(.borderedProminent)
-            }
+        case .failed(.loadError):
+            ReviewLoadFailedView(onRetry: { Task { await scan() } })
+
+        case .failed(.accessLost):
+            ReviewAccessLostView()
         }
     }
 }

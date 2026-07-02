@@ -83,16 +83,24 @@ struct AlbumOverviewView: View {
                 // First load, or the period changed → re-scan from scratch (a retained .ready store holds
                 // the OLD range's clusters). Otherwise reuse the loaded store and just (re)build the index.
                 if store == nil || scannedRange != range {
-                    let fresh = CandidateStore(library: library)
-                    store = fresh
+                    store = CandidateStore(library: library)
                     scannedRange = range
-                    index = nil
-                    await fresh.load(project)
-                }
-                if case .ready(let groups) = store?.phase {
+                    await scan()
+                } else if index == nil, case .ready(let groups) = store?.phase {
                     index = ClusterIndexBuilder.build(from: groups)
                 }
             }
+    }
+
+    /// Run (or re-run, e.g. a "Try again") the fetch pass and rebuild the cluster index from the result.
+    /// Reuses the current `store` so a retry re-scans the same album.
+    private func scan() async {
+        guard let store else { return }
+        index = nil
+        await store.load(project)
+        if case .ready(let groups) = store.phase {
+            index = ClusterIndexBuilder.build(from: groups)
+        }
     }
 
     @ViewBuilder
@@ -106,21 +114,15 @@ struct AlbumOverviewView: View {
             } else {
                 scanningIndicator   // groups settled but the index build hasn't run yet (one tick)
             }
-        case .empty:
-            ContentUnavailableView {
-                Label("No photos in range", systemImage: "photo.on.rectangle")
-            } description: {
-                Text("Nothing matched this album's date range and filters.")
-            }
-        case .failed:
-            ContentUnavailableView {
-                Label("Couldn't load your photos", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text("Something went wrong while scanning your library. Try again.")
-            } actions: {
-                Button("Try again") { Task { await store?.load(project) } }
-                    .buttonStyle(.borderedProminent)
-            }
+        case .empty(let reason):
+            ReviewEmptyView(
+                reason: reason, rangeStart: project.rangeStart, rangeEnd: project.rangeEnd,
+                onChangeRange: { coordinator.openSettings(project.id) },
+                onReviewExclusions: { coordinator.openSettings(project.id) })
+        case .failed(.loadError):
+            ReviewLoadFailedView(onRetry: { Task { await scan() } })
+        case .failed(.accessLost):
+            ReviewAccessLostView()
         }
     }
 

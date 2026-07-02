@@ -214,51 +214,65 @@ struct CandidateStoreTests {
         let project = makeProject(excludeScreenshots: true)
         let store = CandidateStore(library: library)
         await store.load(project)
-        #expect(store.phase == .empty)
+        // Photos existed in range but were all filtered out → `.allExcluded` (relax the exclusions),
+        // distinct from "no photos in that period" below.
+        #expect(store.phase == .empty(.allExcluded))
     }
 
-    @Test("a range matching nothing settles on .empty (not an error)")
+    @Test("a range matching nothing settles on .empty(.noPhotosInRange) (not an error)")
     func emptyOutOfRange() async throws {
         let start = Date(timeIntervalSince1970: 1_893_456_000)   // 2030-01-01Z
         let end = Date(timeIntervalSince1970: 1_925_000_000)
         let project = makeProject(rangeStart: start, rangeEnd: end)
         let store = CandidateStore(library: FakePhotoLibrary())
         await store.load(project)
-        #expect(store.phase == .empty)
+        // The range fetch itself returned nothing → `.noPhotosInRange` (widen the range).
+        #expect(store.phase == .empty(.noPhotosInRange))
     }
 
-    @Test("a zero-length or inverted range degrades to .empty without trapping DateInterval")
+    @Test("a zero-length or inverted range degrades to .empty(.noPhotosInRange) without trapping DateInterval")
     func emptyDegenerateRange() async throws {
         // Equal bounds (zero length).
         let zero = makeProject(rangeStart: TestDates.year2025Start, rangeEnd: TestDates.year2025Start)
         let zeroStore = CandidateStore(library: FakePhotoLibrary())
         await zeroStore.load(zero)
-        #expect(zeroStore.phase == .empty)
+        #expect(zeroStore.phase == .empty(.noPhotosInRange))
 
         // Inverted (end before start) — would trap `DateInterval(start:end:)` if not guarded.
         let inverted = makeProject(rangeStart: TestDates.year2025End, rangeEnd: TestDates.year2025Start)
         let invertedStore = CandidateStore(library: FakePhotoLibrary())
         await invertedStore.load(inverted)
-        #expect(invertedStore.phase == .empty)
+        #expect(invertedStore.phase == .empty(.noPhotosInRange))
     }
 
-    @Test("a fetch failure surfaces as .failed")
+    @Test("a fetch failure while still authorized surfaces as .failed(.loadError)")
     func failure() async throws {
         let project = makeProject()
         let store = CandidateStore(library: FailingLibrary())
         await store.load(project)
-        #expect(store.phase == .failed)
+        #expect(store.phase == .failed(.loadError))
         #expect(store.dayByID.isEmpty)   // a failed pass leaves no (stale) day map behind
     }
 
-    @Test("a failure while resolving excluded albums also surfaces as .failed")
+    @Test("a fetch failure with access no longer authorized surfaces as .failed(.accessLost)")
+    func failureAccessLost() async throws {
+        // Access revoked mid-session: the fetch throws AND authorization is no longer full, so a
+        // retry can't succeed — the store distinguishes this so the view routes to recovery (§10).
+        let project = makeProject()
+        let library = FakePhotoLibrary(status: .denied, fetchError: FakePhotoLibrary.FakeError.fetchFailed)
+        let store = CandidateStore(library: library)
+        await store.load(project)
+        #expect(store.phase == .failed(.accessLost))
+    }
+
+    @Test("a failure while resolving excluded albums also surfaces as .failed(.loadError)")
     func failureResolvingExclusions() async throws {
         // The fetch succeeds but the second await (assetIDs) throws — a real PhotoKit error can
         // surface there too, and it must still become .failed (not a half-applied .ready).
         let project = makeProject(excludedAlbumIDs: ["album/whatsapp"])
         let store = CandidateStore(library: FailingMembershipLibrary())
         await store.load(project)
-        #expect(store.phase == .failed)
+        #expect(store.phase == .failed(.loadError))
     }
 
     @Test("re-loading after .failed restarts the pass and reaches .ready (the documented retry)")
@@ -268,8 +282,8 @@ struct CandidateStoreTests {
         let project = makeProject()
         let store = CandidateStore(library: RecoveringLibrary())
         await store.load(project)
-        #expect(store.phase == .failed)          // first attempt throws
-        await store.load(project)                // retry
+        #expect(store.phase == .failed(.loadError))   // first attempt throws (still authorized)
+        await store.load(project)                     // retry
         if case .ready = store.phase {} else {
             Issue.record("expected .ready after retry, got \(store.phase)")
         }
@@ -325,5 +339,29 @@ private actor FailingMembershipLibrary: PhotoLibraryProviding {
     func export(assetIDs: Set<String>, toAlbumNamed name: String,
                 existingAlbumID: String?) async throws -> ExportResult {
         throw ExportError.writeFailed
+    }
+}
+
+/// The actionable empty-state copy (#40, design 2JE) — distinct, reason-specific guidance.
+@Suite("Review empty-state copy (#40)")
+struct ReviewEmptyCopyTests {
+
+    @Test("each reason maps to distinct, actionable copy referencing the range's inclusive last day")
+    func copy() {
+        let start = TestDates.year2025Start
+        let end = TestDates.year2025End   // 2026-01-01Z exclusive → inclusive last day is 2025-12-31
+        let cal = utcCalendar()
+        let noPhotos = ReviewEmptyCopy.forReason(.noPhotosInRange, rangeStart: start, rangeEnd: end, calendar: cal)
+        let allExcluded = ReviewEmptyCopy.forReason(.allExcluded, rangeStart: start, rangeEnd: end, calendar: cal)
+
+        #expect(noPhotos.title == "Nothing to pick here")
+        #expect(allExcluded.title == "Nothing to pick here")
+        // Assert the distinguishing phrase, not the formatted date (which varies by locale).
+        #expect(noPhotos.message.contains("wider date range"))
+        #expect(allExcluded.message.contains("excluded album"))
+        #expect(noPhotos.message != allExcluded.message)
+        // Names the inclusive last day (2025), never the exclusive 2026 bound — guards the −1-day step.
+        #expect(!noPhotos.message.contains("2026"))
+        #expect(!allExcluded.message.contains("2026"))
     }
 }

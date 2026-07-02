@@ -161,6 +161,16 @@ struct ExportView: View {
                     .multilineTextAlignment(.center)
                 statCard(stats)
                     .padding(.top, 12)
+                // Partial first export: some picks couldn't be resolved (deleted/offline since picking),
+                // so the album has fewer than picked. Say so honestly rather than overstating the count.
+                if !wasReExport, result.added < stats.totalPicked {
+                    Text("^[\(stats.totalPicked - result.added) photo](inflect: true) "
+                        + "couldn't be added — no longer in your library.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 4)
+                }
                 // Where the payoff landed — iOS has no public deep-link to a specific album, so point
                 // the user at Photos by name rather than a button that can't reach it.
                 Text("Find it in Photos, in the album “\(project.title)”.")

@@ -63,6 +63,11 @@ enum DebugScreen: String, CaseIterable {
     case settings
     /// The app-level settings screen — Photos access + About, against an authorized fake (design 3N9).
     case appsettings
+    /// The review scan's EMPTY state (#40, design 2JE): an in-range library that's all excluded → the
+    /// actionable "Nothing to pick here" (Change range / Review excluded albums).
+    case empty
+    /// The review scan's FAILURE state (#40): a seeded fetch error → the recoverable "Couldn't load".
+    case scanfailed
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -102,6 +107,8 @@ struct DebugScreenHost: View {
         case .export: DebugExportHostView()
         case .settings: DebugSettingsHostView()
         case .appsettings: DebugAppSettingsHostView()
+        case .empty: DebugEmptyHostView()
+        case .scanfailed: DebugScanFailedHostView()
         }
     }
 }
@@ -281,6 +288,111 @@ struct DebugScanningHostView: View {
 
     static let yearStart = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01Z
     static let yearEnd = Date(timeIntervalSince1970: 1_767_225_600)     // 2026-01-01Z
+}
+
+/// Hosts the review scan's EMPTY state (#40, design 2JE): the only in-range asset is a screenshot and
+/// screenshots are excluded, so every candidate is filtered out (`.allExcluded`) and the actionable
+/// "Nothing to pick here" (Change range / Review excluded albums) renders instead of a dead-end.
+struct DebugEmptyHostView: View {
+    @State private var projectStore: ProjectStore?
+    @State private var selectionStore: SelectionStore?
+    @State private var doneStore: DoneStore?
+    @State private var coordinator: AppCoordinator?
+    @State private var project: CurationProject?
+
+    private static let fake = FakePhotoLibrary(
+        assets: [AssetRef(id: "fake/onlyshot",
+                          captureDate: Date(timeIntervalSince1970: 1_745_000_000),   // 2025-04-18Z
+                          isScreenshot: true)],
+        albums: [], membership: [:])
+
+    var body: some View {
+        Group {
+            if let selectionStore, let doneStore, let coordinator, let project {
+                NavigationStack { ScanningView(project: project) }
+                    .environment(\.photoLibrary, Self.fake)
+                    .environment(selectionStore)
+                    .environment(doneStore)
+                    .environment(coordinator)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            guard let container = try? AppModelContainer.make(inMemory: true) else {
+                Log.app.error("DebugEmptyHostView: failed to build the in-memory container")
+                return
+            }
+            let projects = ProjectStore(container: container)
+            let selection = SelectionStore(container: container)
+            let done = DoneStore(container: container)
+            let created = projects.create(
+                title: "Best of 2025",
+                rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
+                targetCount: 100, excludeScreenshots: true)
+            selection.activate(created)
+            done.activate(created)
+            projectStore = projects
+            selectionStore = selection
+            doneStore = done
+            coordinator = AppCoordinator(library: Self.fake)
+            project = created
+
+            let probe = CandidateStore(library: Self.fake)   // settle before signalling (mirrors the view's load)
+            await probe.load(created)
+            Log.app.notice("screenshot-ready: \(DebugScreen.empty.rawValue, privacy: .public)")
+        }
+    }
+}
+
+/// Hosts the review scan's FAILURE state (#40): the fake is seeded to throw on fetch (still authorized),
+/// so `ScanningView` renders the recoverable "Couldn't load your photos · Try again".
+struct DebugScanFailedHostView: View {
+    @State private var projectStore: ProjectStore?
+    @State private var selectionStore: SelectionStore?
+    @State private var doneStore: DoneStore?
+    @State private var coordinator: AppCoordinator?
+    @State private var project: CurationProject?
+
+    private static let fake = FakePhotoLibrary(fetchError: FakePhotoLibrary.FakeError.fetchFailed)
+
+    var body: some View {
+        Group {
+            if let selectionStore, let doneStore, let coordinator, let project {
+                NavigationStack { ScanningView(project: project) }
+                    .environment(\.photoLibrary, Self.fake)
+                    .environment(selectionStore)
+                    .environment(doneStore)
+                    .environment(coordinator)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            guard let container = try? AppModelContainer.make(inMemory: true) else {
+                Log.app.error("DebugScanFailedHostView: failed to build the in-memory container")
+                return
+            }
+            let projects = ProjectStore(container: container)
+            let selection = SelectionStore(container: container)
+            let done = DoneStore(container: container)
+            let created = projects.create(
+                title: "Best of 2025",
+                rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
+                targetCount: 100)
+            selection.activate(created)
+            done.activate(created)
+            projectStore = projects
+            selectionStore = selection
+            doneStore = done
+            coordinator = AppCoordinator(library: Self.fake)
+            project = created
+
+            let probe = CandidateStore(library: Self.fake)
+            await probe.load(created)   // → .failed(.loadError); the view renders the same
+            Log.app.notice("screenshot-ready: \(DebugScreen.scanfailed.rawValue, privacy: .public)")
+        }
+    }
 }
 
 /// Hosts the cluster-index overview (#37, design 3BL) over a spread-out year of fake clusters: the
