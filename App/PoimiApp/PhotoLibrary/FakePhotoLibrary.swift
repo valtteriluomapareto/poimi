@@ -25,6 +25,10 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     /// Album id → the asset ids it contains, so the exclude-album filter can be exercised (D25).
     private let membership: [String: Set<String>]
     private var status: LibraryAuthorization
+    /// When set, `fetchAssets` throws it — so the scan-failure path (`CandidateStore.failed`) is
+    /// reachable in tests/harness. Combined with a non-`.authorized` `status` it models access
+    /// revoked mid-session (the `.accessLost` reason); with `.authorized`, a transient load error.
+    private let fetchError: (any Error)?
     /// Albums created by `export` (in-memory) — id → (name, member ids). Models the create-or-find +
     /// dupe-guard so the export flow is deterministic for tests + screenshots (#39).
     private var exportedAlbums: [String: (name: String, ids: Set<String>)] = [:]
@@ -34,13 +38,18 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
         assets: [AssetRef] = FakePhotoLibrary.yearMixedSeed(),
         albums: [AlbumRef] = FakePhotoLibrary.defaultAlbums,
         membership: [String: Set<String>] = FakePhotoLibrary.defaultMembership,
-        status: LibraryAuthorization = .authorized
+        status: LibraryAuthorization = .authorized,
+        fetchError: (any Error)? = nil
     ) {
         self.seededAssets = assets
         self.seededAlbums = albums
         self.membership = membership
         self.status = status
+        self.fetchError = fetchError
     }
+
+    /// A generic fetch failure the fake can be seeded to throw (transient load error / lost access).
+    enum FakeError: Error { case fetchFailed }
 
     func authorizationStatus() async -> LibraryAuthorization { status }
 
@@ -53,12 +62,13 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     }
 
     func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {
+        if let fetchError { throw fetchError }   // seeded failure → exercises the scan-error path
         // SHARED CONTRACT with SystemPhotoLibrary (the conformance invariant, D24): a bounded
         // interval fetch returns only **dated** assets in `[start, end)`, oldest → newest.
         // A nil-`creationDate` (undated) asset is NOT matched by PhotoKit's range predicate,
         // so it isn't returned here either — undated assets reach the "Undated" section via a
         // separate path in Phase 2, never through a range fetch.
-        seededAssets
+        return seededAssets
             .filter { asset in
                 guard let date = asset.captureDate else { return false }
                 return date >= interval.start && date < interval.end

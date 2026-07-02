@@ -214,51 +214,89 @@ struct CandidateStoreTests {
         let project = makeProject(excludeScreenshots: true)
         let store = CandidateStore(library: library)
         await store.load(project)
-        #expect(store.phase == .empty)
+        // Photos existed in range but were all filtered out → `.allExcluded` (relax the exclusions),
+        // distinct from "no photos in that period" below.
+        #expect(store.phase == .empty(.allExcluded))
     }
 
-    @Test("a range matching nothing settles on .empty (not an error)")
+    @Test("a range matching nothing settles on .empty(.noPhotosInRange) (not an error)")
     func emptyOutOfRange() async throws {
         let start = Date(timeIntervalSince1970: 1_893_456_000)   // 2030-01-01Z
         let end = Date(timeIntervalSince1970: 1_925_000_000)
         let project = makeProject(rangeStart: start, rangeEnd: end)
         let store = CandidateStore(library: FakePhotoLibrary())
         await store.load(project)
-        #expect(store.phase == .empty)
+        // The range fetch itself returned nothing → `.noPhotosInRange` (widen the range).
+        #expect(store.phase == .empty(.noPhotosInRange))
     }
 
-    @Test("a zero-length or inverted range degrades to .empty without trapping DateInterval")
+    @Test("a zero-length or inverted range degrades to .empty(.noPhotosInRange) without trapping DateInterval")
     func emptyDegenerateRange() async throws {
         // Equal bounds (zero length).
         let zero = makeProject(rangeStart: TestDates.year2025Start, rangeEnd: TestDates.year2025Start)
         let zeroStore = CandidateStore(library: FakePhotoLibrary())
         await zeroStore.load(zero)
-        #expect(zeroStore.phase == .empty)
+        #expect(zeroStore.phase == .empty(.noPhotosInRange))
 
         // Inverted (end before start) — would trap `DateInterval(start:end:)` if not guarded.
         let inverted = makeProject(rangeStart: TestDates.year2025End, rangeEnd: TestDates.year2025Start)
         let invertedStore = CandidateStore(library: FakePhotoLibrary())
         await invertedStore.load(inverted)
-        #expect(invertedStore.phase == .empty)
+        #expect(invertedStore.phase == .empty(.noPhotosInRange))
     }
 
-    @Test("a fetch failure surfaces as .failed")
+    @Test("a fetch failure while still authorized surfaces as .failed(.loadError)")
     func failure() async throws {
         let project = makeProject()
         let store = CandidateStore(library: FailingLibrary())
         await store.load(project)
-        #expect(store.phase == .failed)
+        #expect(store.phase == .failed(.loadError))
         #expect(store.dayByID.isEmpty)   // a failed pass leaves no (stale) day map behind
     }
 
-    @Test("a failure while resolving excluded albums also surfaces as .failed")
+    @Test("a fetch failure with access no longer authorized surfaces as .failed(.accessLost)")
+    func failureAccessLost() async throws {
+        // Access revoked mid-session: the fetch throws AND authorization is no longer full, so a
+        // retry can't succeed — the store distinguishes this so the view routes to recovery (§10).
+        let project = makeProject()
+        let library = FakePhotoLibrary(status: .denied, fetchError: FakePhotoLibrary.FakeError.fetchFailed)
+        let store = CandidateStore(library: library)
+        await store.load(project)
+        #expect(store.phase == .failed(.accessLost))
+    }
+
+    @Test("a fetch failure under .limited access is also .accessLost (the app needs FULL access)")
+    func failureAccessLostWhenLimited() async throws {
+        // The likelier real mid-session change: the user switches Photos to "selected" (`.limited`).
+        // The app can't curate a whole year from a subset, so `.limited` is treated as access lost.
+        let project = makeProject()
+        let library = FakePhotoLibrary(status: .limited, fetchError: FakePhotoLibrary.FakeError.fetchFailed)
+        let store = CandidateStore(library: library)
+        await store.load(project)
+        #expect(store.phase == .failed(.accessLost))
+    }
+
+    @Test("a reload that fails clears the day map from the prior .ready pass (reset-then-throw)")
+    func dayMapClearedOnFailedReload() async throws {
+        // The load()-top reset must clear a populated map even when the reload then FAILS (the catch
+        // path), so a stale map can't mislabel the viewer. Drive .ready → .failed on one store.
+        let project = makeProject(excludeScreenshots: false)
+        let store = CandidateStore(library: DegradingLibrary())
+        await store.load(project)                    // succeeds → dayByID populated
+        #expect(!store.dayByID.isEmpty)
+        await store.load(project)                    // second fetch throws → failed
+        #expect(store.phase == .failed(.loadError))
+        #expect(store.dayByID.isEmpty)               // reset cleared the prior pass's map
+    }
+
+    @Test("a failure while resolving excluded albums also surfaces as .failed(.loadError)")
     func failureResolvingExclusions() async throws {
         // The fetch succeeds but the second await (assetIDs) throws — a real PhotoKit error can
         // surface there too, and it must still become .failed (not a half-applied .ready).
         let project = makeProject(excludedAlbumIDs: ["album/whatsapp"])
         let store = CandidateStore(library: FailingMembershipLibrary())
         await store.load(project)
-        #expect(store.phase == .failed)
+        #expect(store.phase == .failed(.loadError))
     }
 
     @Test("re-loading after .failed restarts the pass and reaches .ready (the documented retry)")
@@ -268,8 +306,8 @@ struct CandidateStoreTests {
         let project = makeProject()
         let store = CandidateStore(library: RecoveringLibrary())
         await store.load(project)
-        #expect(store.phase == .failed)          // first attempt throws
-        await store.load(project)                // retry
+        #expect(store.phase == .failed(.loadError))   // first attempt throws (still authorized)
+        await store.load(project)                     // retry
         if case .ready = store.phase {} else {
             Issue.record("expected .ready after retry, got \(store.phase)")
         }
@@ -310,6 +348,25 @@ private actor RecoveringLibrary: PhotoLibraryProviding {
     }
 }
 
+/// A library that SUCCEEDS on the first fetch then throws — the inverse of `RecoveringLibrary`, to
+/// drive `.ready` → `.failed` on one store (proves the load()-top day-map reset on the catch path).
+private actor DegradingLibrary: PhotoLibraryProviding {
+    private var attempts = 0
+    func authorizationStatus() async -> LibraryAuthorization { .authorized }
+    func requestAuthorization() async -> LibraryAuthorization { .authorized }
+    func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {
+        attempts += 1
+        if attempts == 1 { return FakePhotoLibrary.yearMixedSeed().filter { $0.captureDate != nil } }
+        throw PhotoLibraryError.fetchFailed
+    }
+    func albums() async throws -> [AlbumRef] { [] }
+    func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> { [] }
+    func export(assetIDs: Set<String>, toAlbumNamed name: String,
+                existingAlbumID: String?) async throws -> ExportResult {
+        throw ExportError.writeFailed
+    }
+}
+
 /// A library whose range fetch succeeds but whose membership resolution throws — to prove the
 /// pipeline's *second* await also maps to `.failed`.
 private actor FailingMembershipLibrary: PhotoLibraryProviding {
@@ -325,5 +382,31 @@ private actor FailingMembershipLibrary: PhotoLibraryProviding {
     func export(assetIDs: Set<String>, toAlbumNamed name: String,
                 existingAlbumID: String?) async throws -> ExportResult {
         throw ExportError.writeFailed
+    }
+}
+
+/// The actionable empty-state copy (#40, design 2JE) — distinct, reason-specific guidance.
+@Suite("Review empty-state copy (#40)")
+struct ReviewEmptyCopyTests {
+
+    @Test("each reason maps to distinct, actionable copy referencing the range's inclusive last day")
+    func copy() {
+        let start = TestDates.year2025Start
+        let end = TestDates.year2025End   // 2026-01-01Z exclusive → inclusive last day is 2025-12-31
+        let cal = utcCalendar()
+        let noPhotos = ReviewEmptyCopy.forReason(.noPhotosInRange, rangeStart: start, rangeEnd: end, calendar: cal)
+        let allExcluded = ReviewEmptyCopy.forReason(.allExcluded, rangeStart: start, rangeEnd: end, calendar: cal)
+
+        // Distinct titles per reason — the two empty states read as genuinely different, not one screen.
+        #expect(noPhotos.title == "No photos in this range")
+        #expect(allExcluded.title == "Everything's filtered out")
+        #expect(noPhotos.title != allExcluded.title)
+        // Assert the distinguishing phrase, not the formatted date (which varies by locale).
+        #expect(noPhotos.message.contains("wider date range"))
+        #expect(allExcluded.message.contains("excluded album"))
+        #expect(noPhotos.message != allExcluded.message)
+        // Names the inclusive last day (2025), never the exclusive 2026 bound — guards the −1-day step.
+        #expect(!noPhotos.message.contains("2026"))
+        #expect(!allExcluded.message.contains("2026"))
     }
 }
