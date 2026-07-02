@@ -23,6 +23,7 @@ struct AlbumSettingsView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
+    @Environment(\.scenePhase) private var scenePhase
 
     /// The album being edited. `@Bindable` so Form controls bind straight to the persisted model —
     /// it's `@Observable`, so a bound edit updates it (and any live view) immediately.
@@ -33,12 +34,16 @@ struct AlbumSettingsView: View {
 
     @State private var confirmingReset = false
     @State private var confirmingDelete = false
-    /// Set just before a delete pops the screen, so the teardown `onDisappear` doesn't try to save a
-    /// project that's already been removed from the context.
+    /// Set just before a delete pops the screen, so the teardown save doesn't touch a project that's
+    /// already been removed from the context.
     @State private var isDeleting = false
+    /// The title as it was when the screen opened — restored if the user leaves the name blank, so
+    /// clearing the field is a no-op rather than a silent rename to a placeholder.
+    @State private var titleOnOpen: String
 
     init(project: CurationProject, calendar: Calendar = .current) {
         _project = Bindable(wrappedValue: project)
+        _titleOnOpen = State(initialValue: project.title)
         self.calendar = calendar
     }
 
@@ -91,14 +96,11 @@ struct AlbumSettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        // Apply-on-leave: force a durable save (title/range/exclusions/destination) and re-sync the
-        // live tally's target for the Overview behind. Skipped when we're mid-delete (the project is gone).
-        .onDisappear {
-            guard !isDeleting else { return }
-            if project.title.trimmingCharacters(in: .whitespaces).isEmpty { project.title = "Untitled album" }
-            store.saveEdits(to: project)
-            selection.retarget(project)
-        }
+        // Apply-on-leave AND on backgrounding: `onDisappear` alone isn't a reliable durable-save point
+        // (it doesn't fire if the app is backgrounded — then force-quit — while this screen is up), which
+        // would silently fall back to the deferred autosave we're avoiding. So persist on both.
+        .onDisappear { persistEdits() }
+        .onChange(of: scenePhase) { _, phase in if phase != .active { persistEdits() } }
         // Keep the tally correct the instant the stepper moves (the target is cached in SelectionStore).
         .onChange(of: project.targetCount) { selection.retarget(project) }
         .confirmationDialog("Reset picks?", isPresented: $confirmingReset, titleVisibility: .visible) {
@@ -114,6 +116,20 @@ struct AlbumSettingsView: View {
         } message: {
             Text("Removes the album from Poimi. The Photos album it created and your originals are never touched.")
         }
+    }
+
+    // MARK: - Persistence
+
+    /// Force a durable save of the in-place edits (title / range / exclusions / destination) and re-sync
+    /// the live tally's target for the Overview behind. A blank name restores the title the screen opened
+    /// with (clearing the field is a no-op, not a silent rename). Skipped mid-delete — the project is gone.
+    private func persistEdits() {
+        guard !isDeleting else { return }
+        if project.title.trimmingCharacters(in: .whitespaces).isEmpty {
+            project.title = titleOnOpen.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled album" : titleOnOpen
+        }
+        store.saveEdits(to: project)
+        selection.retarget(project)
     }
 
     // MARK: - Destructive actions
@@ -171,6 +187,11 @@ struct AlbumSettingsView: View {
     }
 
     private var excludedValue: String {
-        project.excludedAlbumIDs.isEmpty ? "None" : "\(project.excludedAlbumIDs.count)"
+        let count = project.excludedAlbumIDs.count
+        switch count {
+        case 0: return "None"
+        case 1: return "1 album"
+        default: return "\(count) albums"
+        }
     }
 }

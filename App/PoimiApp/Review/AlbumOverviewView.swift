@@ -21,6 +21,14 @@ import SwiftUI
 import UIKit
 import Curation
 
+/// The `.task` identity for the Overview scan: re-scan when the album changes OR its period does (a
+/// Settings edit mutates the range on this same project), so the cluster index never lags the range.
+private struct OverviewScanKey: Hashable {
+    let id: UUID
+    let start: Date
+    let end: Date
+}
+
 struct AlbumOverviewView: View {
     let project: CurationProject
     @Environment(\.photoLibrary) private var library
@@ -30,6 +38,10 @@ struct AlbumOverviewView: View {
     @State private var store: CandidateStore?
     /// The finished cluster index — built once when the scan settles, so `body` never groups/formats.
     @State private var index: ClusterIndex?
+    /// The date range the retained `store` was scanned for. When Settings edits the period (it mutates
+    /// this same project, so the change is observed here), this differs from the project's range and the
+    /// `.task` re-scans — otherwise the retained `.ready` store keeps serving the OLD range's clusters.
+    @State private var scannedRange: Range<Date>?
     /// Gate the scanning indicator behind a short grace delay so an instant scan never flashes it.
     @State private var indicatorVisible = false
 
@@ -56,13 +68,23 @@ struct AlbumOverviewView: View {
             }
             // Done-state here is display-only — the Overview doesn't reconcile (the grid does, on entry),
             // so a photo added to a done day can lag its seal here until you drill in. Rare, acceptable.
-            .task(id: project.id) {
+            // Keyed on the range too (not just the id): a period edit in Settings mutates this same
+            // project, so the key changes and the task re-runs, re-scanning even while Settings is still
+            // on top — so the cluster index is fresh by the time you pop back.
+            .task(id: OverviewScanKey(id: project.id, start: project.rangeStart, end: project.rangeEnd)) {
                 selection.activate(project)     // hydrate persisted picks so the counts are live
                 doneStore.activate(project)     // hydrate marked-done days so the state colours are live
-                let resolved = store ?? CandidateStore(library: library)
-                store = resolved
-                if resolved.phase == .idle { await resolved.load(project) }
-                if case .ready(let groups) = resolved.phase {
+                let range = project.rangeStart..<project.rangeEnd
+                // First load, or the period changed → re-scan from scratch (a retained .ready store holds
+                // the OLD range's clusters). Otherwise reuse the loaded store and just (re)build the index.
+                if store == nil || scannedRange != range {
+                    let fresh = CandidateStore(library: library)
+                    store = fresh
+                    scannedRange = range
+                    index = nil
+                    await fresh.load(project)
+                }
+                if case .ready(let groups) = store?.phase {
                     index = ClusterIndexBuilder.build(from: groups)
                 }
             }
