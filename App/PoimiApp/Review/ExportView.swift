@@ -1,0 +1,302 @@
+//
+//  ExportView.swift
+//  PoimiApp — album export + completion (issue #39, D19/D31/D34; design 2DN + the export-state mocks).
+//
+//  The terminal step of a curation: write the picked photos into a native Photos album, then celebrate.
+//  Reached from the review grid's Export action (`coordinator.openExport`). `ExportStore` runs the
+//  create-or-find + dupe-guarded add through the `\.photoLibrary` write seam (SystemPhotoLibrary); on
+//  success it stamps the project's `targetAlbumID` (the created album) + `markedDoneAt` (→ status .done)
+//  — a ONE-WAY copy that never reads the album back (D31). The screen is a small state machine:
+//  working → completion (first export / re-export copy) or a recoverable error.
+//
+//  Completion stats reuse the review scan's `id → DayKey` map (the coordinator's `reviewDayByID`), so
+//  the celebration needs no second scan. Review STATE (done/picked) is the list's job; here we only
+//  summarize (Picked / Reviewed / Kept, `CompletionStats`).
+//
+
+import SwiftUI
+import Curation
+
+/// Drives the export: one `run` per attempt, publishing the phase the screen renders.
+@MainActor
+@Observable
+final class ExportStore {
+    enum Phase: Equatable {
+        case exporting
+        /// Succeeded. `wasReExport` picks the "Album updated" vs "Your album is ready" copy.
+        case done(ExportResult, wasReExport: Bool)
+        /// Failed. `canCreateNew` is set when we were updating an EXISTING album (offer a fresh one).
+        case failed(ExportError, canCreateNew: Bool)
+    }
+
+    private(set) var phase: Phase = .exporting
+    private let library: any PhotoLibraryProviding
+
+    init(library: any PhotoLibraryProviding) {
+        self.library = library
+    }
+
+    /// Export `picks` into `project`'s album. `forceNewAlbum` ignores any stored `targetAlbumID` (the
+    /// error screen's "create a new album instead" recovery when the existing one is gone).
+    func run(project: CurationProject, picks: Set<String>, forceNewAlbum: Bool = false) async {
+        phase = .exporting
+        let existing = forceNewAlbum ? nil : project.targetAlbumID
+        do {
+            let result = try await library.export(
+                assetIDs: picks, toAlbumNamed: project.title, existingAlbumID: existing)
+            // Persist OUR state only: the created/found album id + the finalize stamp. Never the album
+            // contents (D31). SwiftData autosaves the @Model mutation.
+            project.targetAlbumID = result.albumID
+            if project.markedDoneAt == nil { project.markedDoneAt = Date.now }
+            phase = .done(result, wasReExport: existing != nil)
+        } catch let error as ExportError {
+            phase = .failed(error, canCreateNew: existing != nil)
+        } catch {
+            phase = .failed(.writeFailed, canCreateNew: existing != nil)
+        }
+    }
+}
+
+struct ExportView: View {
+    let project: CurationProject
+    @Environment(\.photoLibrary) private var library
+    @Environment(AppCoordinator.self) private var coordinator
+    @Environment(SelectionStore.self) private var selection
+    @Environment(DoneStore.self) private var doneStore
+    @State private var store: ExportStore?
+
+    /// Production callers pass no `store` (the `.task` creates + runs one). The screenshot harness may
+    /// inject a pre-run store so a settled state (completion / error) renders deterministically.
+    init(project: CurationProject, store: ExportStore? = nil) {
+        self.project = project
+        _store = State(initialValue: store)
+    }
+    /// Grace-gate the working spinner so an instant export never flashes it.
+    @State private var spinnerVisible = false
+
+    var body: some View {
+        content
+            // Terminal, full-bleed flow: the on-screen actions are the only way out (no nav chrome, no
+            // system back mid-write — the working state shouldn't be interruptible into a half state).
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationBarBackButtonHidden(true)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemBackground))
+            .task {
+                selection.activate(project)
+                doneStore.activate(project)
+                let resolved = store ?? ExportStore(library: library)
+                store = resolved
+                // Run once on appear; re-runs (Try again / Create new) are driven by the buttons.
+                if case .exporting = resolved.phase {
+                    await resolved.run(project: project, picks: selection.selected)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch store?.phase ?? .exporting {
+        case .exporting:
+            working
+        case .done(let result, let wasReExport):
+            completion(result: result, wasReExport: wasReExport)
+        case .failed(let error, let canCreateNew):
+            failure(error: error, canCreateNew: canCreateNew)
+        }
+    }
+
+    // MARK: Working
+
+    private var working: some View {
+        VStack(spacing: 20) {
+            // A gold indeterminate spinner (the branded loading moment).
+            ProgressView()
+                .controlSize(.large)
+                .tint(.accentColor)
+                .opacity(spinnerVisible ? 1 : 0)
+            albumLabel
+            Text(project.targetAlbumID == nil ? "Creating your album…" : "Updating your album…")
+                .font(.largeTitle.bold())
+                .multilineTextAlignment(.center)
+            Text("Adding your \(selection.selected.count.formatted()) photos to \(project.title).")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 32)
+        .task {
+            spinnerVisible = false
+            try? await Task.sleep(for: .milliseconds(300))
+            spinnerVisible = true
+        }
+    }
+
+    // MARK: Completion (success / re-export)
+
+    private func completion(result: ExportResult, wasReExport: Bool) -> some View {
+        let stats = CompletionStats(dayByID: coordinator.reviewDayByID,
+                                    doneDays: doneStore.doneDays,
+                                    selection: selection.selected)
+        return VStack(spacing: 0) {
+            Spacer(minLength: 40)
+            VStack(spacing: 16) {
+                albumLabel
+                Text(wasReExport ? "Album updated" : "Your album is ready")
+                    .font(.largeTitle.bold())
+                    .multilineTextAlignment(.center)
+                Text(completionSubtitle(result: result, wasReExport: wasReExport, stats: stats))
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                statCard(stats)
+                    .padding(.top, 12)
+            }
+            Spacer(minLength: 20)
+            actionButton("Back to albums", role: .primary) { coordinator.popToRoot() }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 16)
+    }
+
+    private func completionSubtitle(result: ExportResult, wasReExport: Bool, stats: CompletionStats) -> String {
+        if wasReExport {
+            return result.added > 0
+                ? "Added \(result.added.formatted()) photos · \(project.title) now holds \(result.total.formatted())."
+                : "\(project.title) is already up to date · \(result.total.formatted()) photos."
+        }
+        return stats.markedDone > 0
+            ? "\(stats.totalPicked.formatted()) photos, hand-picked from "
+                + "\(stats.markedDone.formatted()) — one tap at a time."
+            : "\(stats.totalPicked.formatted()) photos, hand-picked — one tap at a time."
+    }
+
+    private func statCard(_ stats: CompletionStats) -> some View {
+        HStack(spacing: 0) {
+            stat(value: stats.totalPicked.formatted(), label: "Picked", gold: false)
+            statDivider
+            stat(value: stats.markedDone.formatted(), label: "Reviewed", gold: false)
+            statDivider
+            stat(value: "\(Int((stats.fractionKept * 100).rounded()))%", label: "Kept", gold: true)
+        }
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func stat(value: String, label: String, gold: Bool) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.title2.bold())
+                .foregroundStyle(gold ? Color.accentColor : .primary)
+                .monospacedDigit()
+            Text(label)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var statDivider: some View {
+        Rectangle().fill(Color(.separator)).frame(width: 1, height: 30)
+    }
+
+    // MARK: Failure
+
+    private func failure(error: ExportError, canCreateNew: Bool) -> some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 40)
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 52, weight: .regular))
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.bottom, 8)
+                albumLabel
+                Text(project.targetAlbumID == nil ? "Couldn’t create the album" : "Couldn’t update the album")
+                    .font(.largeTitle.bold())
+                    .multilineTextAlignment(.center)
+                Text(failureMessage(error))
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            Spacer(minLength: 20)
+            VStack(spacing: 12) {
+                actionButton("Try again", role: .primary) {
+                    Task { await store?.run(project: project, picks: selection.selected) }
+                }
+                if canCreateNew {
+                    actionButton("Create a new album instead", role: .secondary) {
+                        Task { await store?.run(project: project, picks: selection.selected, forceNewAlbum: true) }
+                    }
+                }
+                actionButton("Back to albums", role: .tertiary) { coordinator.popToRoot() }
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 16)
+    }
+
+    private func failureMessage(_ error: ExportError) -> String {
+        switch error {
+        case .notAuthorized:
+            return "Poimi needs full photo access to create an album. You can grant it in Settings."
+        case .albumMissing:
+            return "The album was removed from Photos. Your picks are safe — create it again."
+        case .noAssetsResolved:
+            return "Those photos are no longer available in your library."
+        case .writeFailed:
+            return "Something went wrong adding your photos. Your picks are safe — try again."
+        }
+    }
+
+    // MARK: Shared bits
+
+    /// The album name in gold caps — "BEST OF 2025".
+    private var albumLabel: some View {
+        Text(project.title.uppercased())
+            .font(.footnote.weight(.semibold))
+            .tracking(2)
+            .foregroundStyle(Color.accentColor)
+            .lineLimit(1)
+    }
+
+    private enum ButtonRole { case primary, secondary, tertiary }
+
+    @ViewBuilder
+    private func actionButton(_ title: String, role: ButtonRole, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.body.weight(role == .tertiary ? .medium : .semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .foregroundStyle(buttonForeground(role))
+                .background(buttonBackground(role))
+                .overlay {
+                    if role == .secondary {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color(.separator), lineWidth: 1.5)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func buttonForeground(_ role: ButtonRole) -> Color {
+        switch role {
+        case .primary: return Color(.systemBackground)   // dark text on the light fill (inverts in light mode)
+        case .secondary: return .primary
+        case .tertiary: return .secondary
+        }
+    }
+
+    @ViewBuilder
+    private func buttonBackground(_ role: ButtonRole) -> some View {
+        switch role {
+        case .primary:
+            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.primary)
+        case .secondary, .tertiary:
+            Color.clear
+        }
+    }
+}

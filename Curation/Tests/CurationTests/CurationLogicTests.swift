@@ -138,6 +138,21 @@ struct CompletionTests {
         #expect(stats.totalPicked == 1)
     }
 
+    @Test("stats from the dayByID map (the completion screen's no-rescan path) match the asset-based stats")
+    func statsFromDayByID() {
+        // Same shape as `stats()`: 16th & 17th done; select one done asset + the not-done one (c).
+        let dayByID: [String: DayKey] = [
+            "a": dk(2025, 3, 16), "a2": dk(2025, 3, 16),
+            "b": dk(2025, 3, 17), "c": dk(2025, 3, 18)
+        ]
+        let doneDays: Set<DayKey> = [dk(2025, 3, 16), dk(2025, 3, 17)]
+        let stats = CompletionStats(dayByID: dayByID, doneDays: doneDays, selection: ["a", "c"])
+        #expect(stats.markedDone == 3)                        // a, a2, b
+        #expect(stats.kept == 1)                              // a
+        #expect(stats.totalPicked == 2)                       // whole selection (a + c)
+        #expect(abs(stats.fractionKept - 1.0 / 3.0) < 0.001)
+    }
+
     // THE core D32(d) guarantee: progress lives on days, so it survives regrouping.
     @Test("done-state survives a merge/split regrouping")
     func doneStateInvariantUnderRegrouping() {

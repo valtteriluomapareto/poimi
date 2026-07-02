@@ -229,7 +229,7 @@ The screens and interactions that need a Paper design, tagged by the phase/versi
 12. **Fetch / load indicator (minimal)** — simple determinate/indeterminate state while fetching the range and loading thumbnails. *(The full curate-while-scanning surface is deferred, item 23.)*
 
 ### Export *(v1)*
-13. **Export result / confirmation** — success + idempotence ("Updated Best of 2025: added 12, now 187"); re-run communicated. (In-progress is a transient state of item 12, not its own screen.)
+13. **Export result / confirmation** — success + idempotence ("Updated Best of 2025: added 12, now 187"); re-run communicated. (In-progress is a transient state of item 12, not its own screen.) **Built (#39):** a state machine — working ("Creating your album…" spinner) → completion (design 2DN, on the system background, no emblem) / re-export ("Album updated · added N, now M") / a recoverable error (Try again · **Create a new album instead** when a re-export's album was deleted · Back). Dropped the mock's "Open album in Photos" button — iOS has no public API to deep-link a *specific* album, so it ends with "Back to albums". Stats are `CompletionStats` from the coordinator's `reviewDayByID` (no re-scan).
 
 ### States *(v1 — easy to forget, design explicitly)*
 14. **Empty states** — no photos in range, everything filtered out, empty month, empty library; each actionable (e.g. relax filters), never a void grid.

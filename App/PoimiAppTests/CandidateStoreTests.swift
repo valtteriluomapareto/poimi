@@ -285,6 +285,10 @@ private actor FailingLibrary: PhotoLibraryProviding {
     }
     func albums() async throws -> [AlbumRef] { [] }
     func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> { [] }
+    func export(assetIDs: Set<String>, toAlbumNamed name: String,
+                existingAlbumID: String?) async throws -> ExportResult {
+        throw ExportError.writeFailed   // export isn't exercised by these fetch/membership doubles
+    }
 }
 
 /// A library that throws on the FIRST fetch, then succeeds — to exercise the retry-after-.failed
@@ -300,6 +304,10 @@ private actor RecoveringLibrary: PhotoLibraryProviding {
     }
     func albums() async throws -> [AlbumRef] { [] }
     func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> { [] }
+    func export(assetIDs: Set<String>, toAlbumNamed name: String,
+                existingAlbumID: String?) async throws -> ExportResult {
+        throw ExportError.writeFailed
+    }
 }
 
 /// A library whose range fetch succeeds but whose membership resolution throws — to prove the
@@ -313,5 +321,9 @@ private actor FailingMembershipLibrary: PhotoLibraryProviding {
     func albums() async throws -> [AlbumRef] { [] }
     func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> {
         throw PhotoLibraryError.fetchFailed
+    }
+    func export(assetIDs: Set<String>, toAlbumNamed name: String,
+                existingAlbumID: String?) async throws -> ExportResult {
+        throw ExportError.writeFailed
     }
 }

@@ -99,8 +99,12 @@ struct AppRootView: View {
                                  detail: "This album is no longer in your library.")
             }
         case .export(let id):
-            RoutePlaceholder(symbol: "rectangle.stack.badge.plus", title: "Export",
-                             detail: "album \(id.uuidString.prefix(8)) (#39)")
+            if let project = project(id) {
+                ExportView(project: project)   // export + completion (#39)
+            } else {
+                RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
+                                 detail: "This album is no longer in your library.")
+            }
         }
     }
 }
