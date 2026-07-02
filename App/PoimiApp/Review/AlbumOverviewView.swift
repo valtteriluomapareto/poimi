@@ -5,8 +5,8 @@
 //
 //  Opening an album lands here. It scans the candidate set, groups it into the same adaptive
 //  day-clusters the review grid uses, and presents: a big title, the running "N / target" tally, a
-//  month coverage chart (one bar per month, stacked by review state), and a dense list of every
-//  cluster under sticky month headers. Tapping a cluster drills into the grid at that cluster.
+//  coverage chart (one bar per adaptive time slice — month/week/day by span — stacked by review state),
+//  and a dense list of every cluster under sticky month headers. Tapping a cluster drills into the grid.
 //
 //  This reframes the earlier month-card overview (design 19P) into a cluster index: the LIST is at
 //  day-cluster granularity (how the grid thinks), while the chart aggregates to months for a
@@ -133,7 +133,7 @@ struct AlbumOverviewView: View {
             ReviewTally()   // "147 / 200" + bar + "N left" — reads the SelectionStore
             // The chart earns its place only with more than one cluster to distribute.
             if index.totalClusters > 1 {
-                MonthCoverageChart(sections: index.sections)
+                CoverageChart(buckets: index.chartBuckets)
             }
         }
         .padding(.horizontal, 20)
@@ -169,36 +169,42 @@ struct ClusterRow: Identifiable {
     let firstDay: DayKey?
 }
 
-/// A month's clusters under one sticky header, plus the single-letter axis initial for the chart.
+/// A month's clusters under one sticky list header.
 struct MonthSection: Identifiable {
     let id: String        // "yyyy-MM" (or "9999-99" for undated) — stable across a year boundary
     let title: String     // "February" / "Undated"
-    let initial: String   // "F" — the bar chart's month tick ("" for undated)
     var rows: [ClusterRow]
 }
 
-/// The finished overview data: month-sectioned clusters + the cluster total the header needs.
+/// One bar in the coverage chart — a contiguous time slice (day / week / month, chosen by span) with
+/// the clusters that fall in it (empty for a quiet slice) and a month-initial tick when it opens a new
+/// month. Built by `ChartBucketing`.
+struct ChartBucket: Identifiable {
+    let id: Int
+    let rows: [ClusterRow]
+    let tick: String?     // "F" when this bucket starts a new month, else nil
+}
+
+/// The finished overview data: month-sectioned clusters (the list), adaptive time buckets (the chart),
+/// and the cluster total the header needs.
 struct ClusterIndex {
     let sections: [MonthSection]
+    let chartBuckets: [ChartBucket]
     let totalClusters: Int
 }
 
-/// Builds the month-sectioned cluster index from the store's already-grouped `[DayGroup]`. Pure, and
-/// called once from `.task` (never a `body`) — it walks the chronological groups, buckets them by
-/// calendar month, and formats each label a single time.
+/// Builds the overview view-model from the store's already-grouped `[DayGroup]`. Pure, and called once
+/// from `.task` (never a `body`): it walks the chronological groups into per-month list sections + the
+/// chart's adaptive time buckets, formatting each label a single time.
 enum ClusterIndexBuilder {
     static func build(from groups: [DayGroup],
                       calendar: Calendar = .current,
                       locale: Locale = .current) -> ClusterIndex {
         var monthStyle = Date.FormatStyle.dateTime.month(.wide).locale(locale)
         monthStyle.timeZone = calendar.timeZone
-        // `veryShortMonthSymbols` reads the calendar's OWN locale — bind the passed one so the axis
-        // initials ("J F M …") match the caller's locale (and the tests are deterministic).
-        var localizedCalendar = calendar
-        localizedCalendar.locale = locale
-        let initials = localizedCalendar.veryShortMonthSymbols
 
         var sections: [MonthSection] = []
+        var rows: [ClusterRow] = []
         for group in groups {
             let row = ClusterRow(id: group.id,
                                  group: group,
@@ -206,25 +212,84 @@ enum ClusterIndexBuilder {
                                  count: group.count,
                                  thumbID: group.assetIDs.first,
                                  firstDay: group.days.first)
+            rows.append(row)
 
-            let key: String, title: String, initial: String
+            let key: String, title: String
             if !group.isUndated, let day = group.days.first, let date = day.anchorDate(in: calendar) {
-                let month = calendar.component(.month, from: date)
-                key = String(format: "%04d-%02d", calendar.component(.year, from: date), month)
+                key = String(format: "%04d-%02d",
+                             calendar.component(.year, from: date), calendar.component(.month, from: date))
                 title = date.formatted(monthStyle)
-                initial = initials.indices.contains(month - 1) ? initials[month - 1] : ""
             } else {
                 // The undated bucket (no capture date) sorts last as its own section.
-                key = "9999-99"; title = String(localized: "Undated"); initial = ""
+                key = "9999-99"; title = String(localized: "Undated")
             }
-
             if let last = sections.last, last.id == key {
                 sections[sections.count - 1].rows.append(row)
             } else {
-                sections.append(MonthSection(id: key, title: title, initial: initial, rows: [row]))
+                sections.append(MonthSection(id: key, title: title, rows: [row]))
             }
         }
-        return ClusterIndex(sections: sections, totalClusters: groups.count)
+        return ClusterIndex(sections: sections,
+                            chartBuckets: ChartBucketing.buckets(for: rows, calendar: calendar, locale: locale),
+                            totalClusters: groups.count)
+    }
+}
+
+/// The coverage chart's adaptive time buckets. Picks a calendar unit by the album's span so the bar
+/// count lands in a comfortable range — a year → months, a couple months → weeks, a short album → days
+/// — then slices the span into CONTIGUOUS buckets (empty ones included, so a quiet stretch reads as a
+/// real gap, not a collapsed skip). A month-initial tick marks each bucket that opens a new month, so
+/// the axis reads "… Feb … Mar …" at any unit. App-layer + pure (Foundation only); app-tier tested.
+enum ChartBucketing {
+    /// The calendar unit a bar spans, chosen by the album's day-span. Thresholds are tunable; quarters
+    /// aren't used (a multi-year album stays on months — rare for a "curate a year" app).
+    static func unit(spanDays: Int) -> Calendar.Component {
+        switch spanDays {
+        case ..<19: return .day           // ≤ ~18 days → up to ~19 daily bars
+        case ..<126: return .weekOfYear   // ~3–18 weeks
+        default: return .month            // ~4+ months
+        }
+    }
+
+    static func buckets(for rows: [ClusterRow], calendar: Calendar, locale: Locale) -> [ChartBucket] {
+        // Dated clusters only (the undated bucket has no place on a timeline), oldest → newest.
+        let dated = rows.compactMap { row -> (row: ClusterRow, date: Date)? in
+            guard let day = row.firstDay, let date = day.anchorDate(in: calendar) else { return nil }
+            return (row, date)
+        }
+        guard let firstDate = dated.first?.date, let lastDate = dated.last?.date else { return [] }
+        let unit = unit(spanDays: calendar.dateComponents([.day], from: firstDate, to: lastDate).day ?? 0)
+        let start = unitStart(firstDate, unit: unit, calendar: calendar)
+
+        // Assign each cluster to a bucket = whole units from the aligned start.
+        var rowsByBucket: [Int: [ClusterRow]] = [:]
+        var lastIndex = 0
+        for entry in dated {
+            let index = calendar.dateComponents([unit], from: start, to: entry.date).value(for: unit) ?? 0
+            rowsByBucket[index, default: []].append(entry.row)
+            lastIndex = max(lastIndex, index)
+        }
+
+        // `veryShortMonthSymbols` reads the calendar's OWN locale — bind the passed one so the ticks
+        // match the caller's locale (and the tests are deterministic).
+        var localizedCalendar = calendar
+        localizedCalendar.locale = locale
+        let initials = localizedCalendar.veryShortMonthSymbols
+        var buckets: [ChartBucket] = []
+        var previousMonthKey: Int?
+        for index in 0...lastIndex {
+            let bucketStart = calendar.date(byAdding: unit, value: index, to: start) ?? start
+            let month = calendar.component(.month, from: bucketStart)
+            let monthKey = calendar.component(.year, from: bucketStart) * 12 + month
+            let tick = monthKey != previousMonthKey && initials.indices.contains(month - 1) ? initials[month - 1] : nil
+            previousMonthKey = monthKey
+            buckets.append(ChartBucket(id: index, rows: rowsByBucket[index] ?? [], tick: tick))
+        }
+        return buckets
+    }
+
+    private static func unitStart(_ date: Date, unit: Calendar.Component, calendar: Calendar) -> Date {
+        calendar.dateInterval(of: unit, for: date)?.start ?? calendar.startOfDay(for: date)
     }
 }
 

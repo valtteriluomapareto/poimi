@@ -43,24 +43,26 @@ struct OverviewThumb: View {
     }
 }
 
-/// The overview's month coverage chart: one bar per calendar month, height ∝ that month's photos, each
-/// bar stacked by review state — green (done) at the base, gold (in-progress) above it, grey (untouched)
-/// on top. Density AND how much of the year is finished, in one glance, aligned with the list's month
-/// headers. A year is ≤12 bars, so it fits the width and never scrolls (the earlier per-cluster chart
-/// went 100+ bars wide) — per-cluster detail lives in the list below. Reads the stores itself (state is
-/// live) so the overview body stays selection-independent. Orientation only — `accessibilityHidden`.
-struct MonthCoverageChart: View {
-    let sections: [MonthSection]
+/// The overview's coverage chart: one bar per adaptive time bucket (day / week / month by span — see
+/// `ChartBucketing`), height ∝ that slice's photos, each bar stacked by review state — green (done) at
+/// the base, gold (in-progress) above it, grey (untouched) on top. Density AND how much is finished, in
+/// one glance; a quiet slice reads as a gap and month-initial ticks mark the axis. Fits the width at any
+/// album length — bars flex, never scroll (the earlier per-cluster chart went 100+ bars wide) — so
+/// per-cluster detail lives in the list below. Reads the stores itself (state is live) so the overview
+/// body stays selection-independent. Orientation only — `accessibilityHidden`.
+struct CoverageChart: View {
+    let buckets: [ChartBucket]
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
 
     private let maxBarHeight: CGFloat = 72
-    /// Cap the bar width so a 2–3 month album reads as a small chart, not giant slabs.
+    /// Cap the bar width so a few-bar album reads as a small chart, not giant slabs; bars thin down (via
+    /// the equal-width columns) when there are many.
     private let maxBarWidth: CGFloat = 28
 
-    private struct MonthBar: Identifiable {
-        let id: String
-        let initial: String
+    private struct Bar: Identifiable {
+        let id: Int
+        let tick: String?
         let done: Int
         let inProgress: Int
         let untouched: Int
@@ -68,29 +70,30 @@ struct MonthCoverageChart: View {
     }
 
     var body: some View {
-        // Per-month photo totals split by state, computed here (orientation; the overview isn't the
-        // rapid-toggle surface). The undated bucket (initial "") gets no bar.
-        let bars = sections.filter { !$0.initial.isEmpty }.map(monthBar)
+        // Per-bucket photo totals split by state, computed here (orientation; the overview isn't the
+        // rapid-toggle surface). An empty bucket totals 0 → a gap in the skyline.
+        let bars = buckets.map(bar)
         let unit = maxBarHeight / CGFloat(max(bars.map(\.total).max() ?? 1, 1))
-        return HStack(alignment: .bottom, spacing: 6) {
+        return HStack(alignment: .bottom, spacing: 3) {
             ForEach(bars) { bar in
                 VStack(spacing: 4) {
                     stackedBar(bar, unit: unit)
                         .frame(maxWidth: maxBarWidth)
-                    Text(bar.initial)
+                    Text(bar.tick ?? "")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .frame(height: 13)   // fixed so bar bottoms align whether or not a tick shows
                 }
                 .frame(maxWidth: .infinity)
             }
         }
-        .frame(height: maxBarHeight + 18, alignment: .bottom)
+        .frame(height: maxBarHeight + 17, alignment: .bottom)
         .accessibilityHidden(true)
     }
 
     /// Green (done) at the base, gold (in-progress), grey (untouched) on top — completion fills up from
     /// the bottom. Rounded as one bar; each present state floors at a 1pt sliver so it never vanishes.
-    private func stackedBar(_ bar: MonthBar, unit: CGFloat) -> some View {
+    private func stackedBar(_ bar: Bar, unit: CGFloat) -> some View {
         VStack(spacing: 0) {
             segment(bar.untouched, unit: unit, color: Color(.systemGray3))
             segment(bar.inProgress, unit: unit, color: .accentColor)
@@ -106,20 +109,19 @@ struct MonthCoverageChart: View {
         }
     }
 
-    private func monthBar(_ section: MonthSection) -> MonthBar {
+    private func bar(_ bucket: ChartBucket) -> Bar {
         var done = 0, inProgress = 0, untouched = 0
-        for row in section.rows {
+        for row in bucket.rows {
             switch ClusterState.of(isDone: doneStore.isDone(row.group), pickedCount: pickedCount(row)) {
             case .done: done += row.count
             case .inProgress: inProgress += row.count
             case .untouched: untouched += row.count
             }
         }
-        return MonthBar(id: section.id, initial: section.initial,
-                        done: done, inProgress: inProgress, untouched: untouched)
+        return Bar(id: bucket.id, tick: bucket.tick, done: done, inProgress: inProgress, untouched: untouched)
     }
 
-    // O(month photos) per bar; a selection/done write re-renders the chart. Fine — the overview isn't
+    // O(bucket photos) per bar; a selection/done write re-renders the chart. Fine — the overview isn't
     // the rapid-toggle surface (picking happens in the grid).
     private func pickedCount(_ row: ClusterRow) -> Int {
         row.group.assetIDs.reduce(into: 0) { if selection.selected.contains($1) { $0 += 1 } }
