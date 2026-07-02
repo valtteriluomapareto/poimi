@@ -55,6 +55,9 @@ enum DebugScreen: String, CaseIterable {
     /// The overview for a SHORT album (~5 weeks) — proves the coverage chart's minimum-bucket floor
     /// (weekly would be ~5 bars → falls back to 8 day-slices) fills the width instead of looking sparse.
     case overviewshort
+    /// The export completion screen — runs a deterministic export against the fake (all days done, some
+    /// picks) so the "Your album is ready" state + stat card render (#39).
+    case export
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -91,6 +94,7 @@ struct DebugScreenHost: View {
         case .photoviewer: DebugPhotoViewerHostView()
         case .overview: DebugOverviewHostView()
         case .overviewshort: DebugOverviewShortHostView()
+        case .export: DebugExportHostView()
         }
     }
 }
@@ -390,6 +394,77 @@ struct DebugOverviewShortHostView: View {
             let probe = CandidateStore(library: Self.fake)
             await probe.load(created)
             Log.app.notice("screenshot-ready: \(DebugScreen.overviewshort.rawValue, privacy: .public)")
+        }
+    }
+}
+
+/// Hosts the export completion (#39) over the spread-out year fake: every day marked done + a subset
+/// picked, then a real export run against the fake, so the hosted `ExportView` renders the settled
+/// "Your album is ready" state (stat card: Picked / Reviewed / Kept). The `ExportStore` is injected
+/// pre-run so the capture never races the async export.
+struct DebugExportHostView: View {
+    @State private var projectStore: ProjectStore?
+    @State private var selectionStore: SelectionStore?
+    @State private var doneStore: DoneStore?
+    @State private var coordinator: AppCoordinator?
+    @State private var project: CurationProject?
+    @State private var exportStore: ExportStore?
+
+    private static let fake = FakePhotoLibrary(assets: FakePhotoLibrary.overviewSeed())
+    private static let picks: [String] =
+        (0..<40).map { "fake/ov/2-1-\($0)" }
+        + (0..<8).map { "fake/ov/2-8-\($0)" }
+        + (0..<20).map { "fake/ov/2-14-\($0)" }
+        + (0..<12).map { "fake/ov/5-10-\($0)" }
+
+    var body: some View {
+        Group {
+            if let selectionStore, let doneStore, let coordinator, let project, let exportStore {
+                NavigationStack { ExportView(project: project, store: exportStore) }
+                    .environment(\.photoLibrary, Self.fake)
+                    .environment(selectionStore)
+                    .environment(doneStore)
+                    .environment(coordinator)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            guard let container = try? AppModelContainer.make(inMemory: true) else {
+                Log.app.error("DebugExportHostView: failed to build the in-memory container")
+                return
+            }
+            let projects = ProjectStore(container: container)
+            let selection = SelectionStore(container: container)
+            let done = DoneStore(container: container)
+            let created = projects.create(
+                title: "Best of 2025",
+                rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
+                targetCount: 100)
+            selection.activate(created)
+            Self.picks.forEach { selection.toggle($0) }
+
+            // The completion stats read the review scan's day map + done days: load candidates for the
+            // map, then mark EVERY day done (a finished album → "Reviewed" = the whole candidate set).
+            let probe = CandidateStore(library: Self.fake)
+            await probe.load(created)
+            created.doneDays = Set(probe.dayByID.values).map(\.description).sorted()
+            done.activate(created)
+
+            let coord = AppCoordinator(library: Self.fake)
+            coord.reviewDayByID = probe.dayByID
+
+            // Pre-run the export so the hosted view is already in `.done` when captured.
+            let export = ExportStore(library: Self.fake)
+            await export.run(project: created, picks: selection.selected)
+
+            projectStore = projects
+            selectionStore = selection
+            doneStore = done
+            coordinator = coord
+            project = created
+            exportStore = export
+            Log.app.notice("screenshot-ready: \(DebugScreen.export.rawValue, privacy: .public)")
         }
     }
 }

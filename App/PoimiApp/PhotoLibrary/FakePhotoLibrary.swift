@@ -25,6 +25,10 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     /// Album id → the asset ids it contains, so the exclude-album filter can be exercised (D25).
     private let membership: [String: Set<String>]
     private var status: LibraryAuthorization
+    /// Albums created by `export` (in-memory) — id → (name, member ids). Models the create-or-find +
+    /// dupe-guard so the export flow is deterministic for tests + screenshots (#39).
+    private var exportedAlbums: [String: (name: String, ids: Set<String>)] = [:]
+    private var exportSeq = 0
 
     init(
         assets: [AssetRef] = FakePhotoLibrary.yearMixedSeed(),
@@ -66,6 +70,40 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
 
     func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> {
         albumIDs.reduce(into: Set<String>()) { $0.formUnion(membership[$1] ?? []) }
+    }
+
+    func export(assetIDs: Set<String>, toAlbumNamed name: String,
+                existingAlbumID: String?) async throws -> ExportResult {
+        // Match SystemPhotoLibrary: creating/modifying an album needs FULL access (`.limited` can't).
+        guard status == .authorized else { throw ExportError.notAuthorized }
+        // Resolve against the seed (mirrors SystemPhotoLibrary fetching live PHAssets by id).
+        let resolved = assetIDs.intersection(Set(seededAssets.map(\.id)))
+        guard !resolved.isEmpty else { throw ExportError.noAssetsResolved }
+
+        let albumID: String
+        if let existing = existingAlbumID {
+            // A valid target is one we exported before OR a pre-existing album the user chose at setup
+            // (a seeded album, with its current membership). Only a truly unknown id is `.albumMissing`.
+            if exportedAlbums[existing] == nil {
+                guard seededAlbums.contains(where: { $0.id == existing }) else {
+                    throw ExportError.albumMissing
+                }
+                exportedAlbums[existing] = (name, membership[existing] ?? [])
+            }
+            albumID = existing
+        } else {
+            exportSeq += 1
+            albumID = "album/exported/\(exportSeq)"
+            exportedAlbums[albumID] = (name, [])
+        }
+        let added = resolved.subtracting(exportedAlbums[albumID]!.ids)   // dupe guard
+        exportedAlbums[albumID]!.ids.formUnion(added)
+        return ExportResult(albumID: albumID, added: added.count, total: exportedAlbums[albumID]!.ids.count)
+    }
+
+    /// Test/debug peek at a created album's membership (the export write isn't observable otherwise).
+    func exportedAssetIDs(inAlbum albumID: String) -> Set<String> {
+        exportedAlbums[albumID]?.ids ?? []
     }
 }
 

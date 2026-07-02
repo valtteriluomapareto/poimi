@@ -139,4 +139,25 @@ public struct CompletionStats: Sendable, Equatable {
         self.kept = kept
         self.totalPicked = totalPicked
     }
+
+    /// The same stats from a precomputed per-asset day map (`id → DayKey`) — the shape the review flow
+    /// already holds (the coordinator's `reviewDayByID`), so the completion screen needs no re-scan.
+    /// `totalPicked` is deliberately the WHOLE selection count (every picked id is a candidate), so it's
+    /// correct even if a picked id is absent from the map (a pick whose asset dropped out of the last
+    /// scan); `markedDone`/`kept` come from the map ∩ done days.
+    public init(
+        dayByID: [String: DayKey],
+        doneDays: Set<DayKey>,
+        selection: Set<String>
+    ) {
+        var markedDone = 0
+        var kept = 0
+        for (id, day) in dayByID where doneDays.contains(day) {
+            markedDone += 1
+            if selection.contains(id) { kept += 1 }
+        }
+        self.markedDone = markedDone
+        self.kept = kept
+        self.totalPicked = selection.count
+    }
 }

@@ -4,7 +4,10 @@ A map of the Poimi design file in **Paper** — every artboard, what it shows, a
 issues + the current build. This is the index for agents/humans to find a screen's design before
 implementing it.
 
-- **Index created:** 2026-06-29 · **updated:** 2026-07-01 (added the **Now-Playing viewer** `2ZC-0`
+- **Index created:** 2026-06-29 · **updated:** 2026-07-02 (**#39 export + completion** — reworked
+  `2DN-0` (system background, no emblem, dropped "Open in Photos" — no public deep-link API) + new
+  export states **working** `3KG-0`, **error** `3LO-0`, **re-export** `3J8-0`; the **cluster-index
+  Overview** `3BL-0` shipped as the built Overview (#103). Earlier 2026-07-01: added the **Now-Playing viewer** `2ZC-0`
   and **Liquid Glass** polish mocks **Overview** `30R-0` + **Review grid** `34O-0` — the glass work
   shipped in PRs #98/#99; plus a **paged-clusters concept** exploration — **Clusters index** `36R-0`
   + **Cluster grid page** `39D-0` — and the review-grid **code-led accordion**, #89 merged. A
@@ -97,7 +100,10 @@ lands. (Names describe each treatment.)
 | Screen | Node | Content | Issue · build |
 |---|---|---|---|
 | Mark as done · sections | `26X-0` | Marking day-groups done + resume affordance. | #38 · **partial** — the done-state + *inline* mark-as-done shipped in the accordion grid (end-of-cluster button + seal badge + advance-to-next); the separate **sections-list / resume screen** here is not built (tracked by the new resume issue). |
-| Completion · year is ready | `2DN-0` | The album-complete / export-success moment. | #39 · not built |
+| **Completion · year is ready** ✓ | `2DN-0` | The export-success moment: album name (gold caps) · "Your album is ready" · Picked/Reviewed/Kept stat card · **Back to albums**. On the system background (no emblem); "Open in Photos" dropped (no public deep-link to a specific album). | #39 · **built** |
+| **Export · working** ✓ | `3KG-0` | The transient "Creating your album…" state — gold spinner + "Adding your N photos to <album>." No actions. | #39 · **built** |
+| **Export · re-export** ✓ | `3J8-0` | The idempotent re-run: "Album updated · added N, now M" + the stat card + Back to albums. | #39 · **built** |
+| **Export · error** ✓ | `3LO-0` | Recoverable failure (neutral dark, amber warning): "Couldn't create the album" + **Try again** · **Create a new album instead** (when a re-export's album was deleted) · Back to albums. | #39 · **built** |
 | Album settings | `2F1-0` | Per-album settings (958 tall). | #41 · not built |
 | State · scanning (long fetch) | `2HZ-0` | The long-scan indicator state. | #34 · built (`ScanningView` scanning phase) |
 | State · empty range | `2JE-0` | Empty/no-photos-in-range state. | #40 · built minimally (`.empty` in `ScanningView`) |

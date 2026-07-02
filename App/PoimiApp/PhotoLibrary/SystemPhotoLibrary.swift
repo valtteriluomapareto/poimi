@@ -86,6 +86,103 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
         return ids
     }
 
+    func export(assetIDs: Set<String>, toAlbumNamed name: String,
+                existingAlbumID: String?) async throws -> ExportResult {
+        // Creating/modifying an album needs full-library write access; `.limited` can't add arbitrary
+        // assets to a collection, so require `.authorized` (D19 revoked-auth path).
+        guard Self.map(PHPhotoLibrary.authorizationStatus(for: .readWrite)) == .authorized else {
+            throw ExportError.notAuthorized
+        }
+        // Resolve to LIVE assets (an id deleted under the selection simply drops out). Only id strings
+        // and the resolved membership escape; no PHAsset crosses back to the caller (D31).
+        let liveIDs = Self.liveAssetIDs(from: assetIDs)
+        guard !liveIDs.isEmpty else { throw ExportError.noAssetsResolved }
+
+        if let existingAlbumID {
+            // Re-export: find the target (throw `.albumMissing` if it was deleted → the screen offers
+            // "create a new album instead"), then add only the picks it doesn't already hold.
+            guard let collection = PHAssetCollection.fetchAssetCollections(
+                withLocalIdentifiers: [existingAlbumID], options: nil).firstObject else {
+                throw ExportError.albumMissing
+            }
+            let existingIDs = Self.assetIDs(in: collection)
+            let toAdd = Array(liveIDs.subtracting(existingIDs))     // dupe guard
+            if !toAdd.isEmpty {
+                // If the album is deleted BETWEEN the preflight fetch and this change block, the block's
+                // guard no-ops — `didAdd` stays false, so we report the failure instead of a false success.
+                nonisolated(unsafe) var didAdd = false
+                do {
+                    try await PHPhotoLibrary.shared().performChanges {
+                        // Re-fetch inside the block so no non-Sendable PHAsset/collection is captured.
+                        guard let collection = PHAssetCollection.fetchAssetCollections(
+                            withLocalIdentifiers: [existingAlbumID], options: nil).firstObject,
+                              let request = PHAssetCollectionChangeRequest(for: collection) else { return }
+                        request.addAssets(Self.assetsByCaptureDate(withIDs: toAdd) as NSArray)
+                        didAdd = true
+                    }
+                } catch {
+                    Log.photoLibrary.error("export addAssets failed: \(String(describing: error), privacy: .public)")
+                    throw ExportError.writeFailed
+                }
+                guard didAdd else {
+                    Log.photoLibrary.error("export: target album disappeared mid-write")
+                    throw ExportError.albumMissing
+                }
+            }
+            Log.photoLibrary.notice("export updated album: +\(toAdd.count), now \(existingIDs.count + toAdd.count)")
+            return ExportResult(albumID: existingAlbumID, added: toAdd.count, total: existingIDs.count + toAdd.count)
+        }
+
+        // First export: create the album AND add every resolved pick in one change.
+        let addIDs = Array(liveIDs)
+        // `nonisolated(unsafe)`: `performChanges` runs the block to completion before it returns, so
+        // reading the placeholder id afterward is safe — this only opts the capture out of the check.
+        nonisolated(unsafe) var placeholderID: String?
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                let request = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: name)
+                request.addAssets(Self.assetsByCaptureDate(withIDs: addIDs) as NSArray)
+                placeholderID = request.placeholderForCreatedAssetCollection.localIdentifier
+            }
+        } catch {
+            Log.photoLibrary.error("export createAlbum failed: \(String(describing: error), privacy: .public)")
+            throw ExportError.writeFailed
+        }
+        guard let albumID = placeholderID else { throw ExportError.writeFailed }
+        Log.photoLibrary.notice("export created album with \(addIDs.count) photos")
+        return ExportResult(albumID: albumID, added: addIDs.count, total: addIDs.count)
+    }
+
+    /// The subset of `ids` that still resolve to a live `PHAsset` (their local identifiers).
+    private static func liveAssetIDs(from ids: Set<String>) -> Set<String> {
+        guard !ids.isEmpty else { return [] }
+        var live: Set<String> = []
+        PHAsset.fetchAssets(withLocalIdentifiers: Array(ids), options: nil).enumerateObjects { asset, _, _ in
+            live.insert(asset.localIdentifier)
+        }
+        return live
+    }
+
+    /// `ids` resolved to live `PHAsset`s, oldest capture date first — so the album reads chronologically
+    /// (architecture §8; `fetchAssets(withLocalIdentifiers:)` ignores sort descriptors, so sort here).
+    /// Called only inside a `performChanges` block; the array never escapes it.
+    private static func assetsByCaptureDate(withIDs ids: [String]) -> [PHAsset] {
+        var assets: [PHAsset] = []
+        PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil).enumerateObjects { asset, _, _ in
+            assets.append(asset)
+        }
+        return assets.sorted { ($0.creationDate ?? .distantPast) < ($1.creationDate ?? .distantPast) }
+    }
+
+    /// The asset ids currently in `collection` — the dupe-guard baseline for a re-export.
+    private static func assetIDs(in collection: PHAssetCollection) -> Set<String> {
+        var ids: Set<String> = []
+        PHAsset.fetchAssets(in: collection, options: nil).enumerateObjects { asset, _, _ in
+            ids.insert(asset.localIdentifier)
+        }
+        return ids
+    }
+
     // MARK: - Value mapping (PHAsset never escapes the actor)
 
     private static func map(_ status: PHAuthorizationStatus) -> LibraryAuthorization {

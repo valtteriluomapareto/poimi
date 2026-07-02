@@ -26,16 +26,19 @@ seam (`PhotoLibraryProviding` + `System`/`Fake` impls), the integration test tie
 (OSLog + screenshot harness), the state stores (`CurationProject`, `ProjectStore`, `SelectionStore`,
 `DoneStore`), the **navigation coordinator** (#30), **onboarding + authorization** (#31), the
 **albums library** (#32), **new-album setup + exclude-picker** (#33), the **scan surface** (#34),
-the **review grid** (#35), the **photo viewer** (#36), the **Overview** (#37), and most of
-**mark-as-done** (#38). `@main` launches the real coordinator-driven `AppRootView` (onboarding →
-permission → albums → the built screens).
+the **review grid** (#35), the **photo viewer** (#36), the **cluster-index Overview** (#37),
+**mark-as-done** (#38), and **album export + completion** (#39). `@main` launches the real
+coordinator-driven `AppRootView` (onboarding → permission → albums → the built screens).
 
 The **review grid is an accordion**: exactly one day-group cluster is open (its full grid) at a time
 and every other is a collapsed peek; "done" is its own state (a green seal badge), decoupled from
 collapse, set by a **"Mark as done" button at the end of an open cluster** that collapses it and
-advances to the next unreviewed cluster (`DoneStore` + `Completion.reopening` reconcile). Still open
-on the v1 path: **select-mode / drag-multi-select** (deferred from #35), **export + completion**
-(#39), empty/error hardening (#40), **settings** (#41), **iPad** split-view (#42), **E2E** (#43).
+advances to the next unreviewed cluster (`DoneStore` + `Completion.reopening` reconcile). The
+**Overview** is a **cluster index** (design 3BL): a per-day-cluster list + a coverage chart of
+adaptive time buckets shaded gold by density. **Export** writes the picks into a native Photos album
+(create-or-find + dupe-guard, one-way — D31) then shows the completion screen (`ExportStore` +
+`ExportView`). Still open on the v1 path: **select-mode / drag-multi-select** (deferred from #35),
+empty/error hardening (#40), **settings** (#41), **iPad** split-view (#42), **E2E** (#43).
 The throwaway Phase-0 **Spike** was deleted (it seeded #35).
 Phase/issue plan: [docs/plans/project-phases.md](docs/plans/project-phases.md).
 
