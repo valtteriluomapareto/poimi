@@ -49,7 +49,7 @@ struct OverviewThumb: View {
 /// calendar unit would yield fewer than `minBuckets` bars (a short/awkward span, e.g. a 5-week album →
 /// 5 weekly bars), it floors to `minBuckets` roughly-equal day-slices instead, so the chart never looks
 /// sparse. Axis labels (see `axisTicks`) are month initials for a multi-month span ("… Feb … Mar …")
-/// or a sparse date every few bars for a short one ("1 Jun … 9 Jun …"). App-layer + pure (Foundation
+/// or a sparse numeric date every few bars for a short one ("7.6. … 15.6. …"). App-layer + pure (Foundation
 /// only); app-tier tested. (Model `ChartBucket` lives with the other overview models.)
 enum ChartBucketing {
     /// The chart never shows fewer than this many bars when the span can hold them (owner: "at least 8").
@@ -91,8 +91,8 @@ enum ChartBucketing {
 
     /// The per-bucket axis labels. A span covering ≥ 2 months gets a month-initial where each new month
     /// opens ("… F … M …"). A short span (a single month's worth of bucket-starts — where month letters
-    /// would be a lone stranded "J") instead gets a DATE every few bars ("1 Jun … 9 Jun …"), so the axis
-    /// still orients without labelling every bar. `nil` = no label on that bucket.
+    /// would be a lone stranded "J") instead gets a compact numeric date every few bars ("7.6. … 15.6.
+    /// …"), so the axis still orients without labelling every bar. `nil` = no label on that bucket.
     private static func axisTicks(starts: [Date], firstDate: Date, calendar: Calendar, locale: Locale) -> [String?] {
         // `veryShortMonthSymbols` reads the calendar's OWN locale — bind the passed one so labels match
         // the caller's locale (and the tests are deterministic). A unit-aligned start can precede the
@@ -111,8 +111,9 @@ enum ChartBucketing {
         }
         if monthTicks.compactMap({ $0 }).count > 1 { return monthTicks }
 
-        // Short span → a date on every `stride`-th bar (≈ 4 labels total), not every bar.
-        var dateStyle = Date.FormatStyle.dateTime.day().month(.abbreviated).locale(locale)
+        // Short span → a compact numeric date (locale order/separator, e.g. "7.6." / "6/7") on every
+        // `stride`-th bar (≈ 4 labels total), not every bar.
+        var dateStyle = Date.FormatStyle.dateTime.day().month(.defaultDigits).locale(locale)
         dateStyle.timeZone = calendar.timeZone
         let stride = max(2, Int((Double(starts.count) / 4).rounded(.up)))
         return starts.indices.map { $0 % stride == 0 ? max(starts[$0], firstDate).formatted(dateStyle) : nil }

@@ -171,7 +171,7 @@ struct ChartBucketingTests {
         let ticks = bars.compactMap(\.tick)
         #expect(!ticks.isEmpty)                           // one month → date ticks, not empty
         #expect(ticks.count < bars.count)                 // …but not on every bar
-        #expect(ticks.allSatisfy { $0.contains("Jan") })  // dates, not a lone "J"
+        #expect(ticks.allSatisfy { !$0.contains(where: \.isLetter) })   // compact numeric dates, not "Jan"/"J"
     }
 
     @Test("a single-month span uses sparse DATE ticks (not stranded month letters)")
@@ -183,7 +183,7 @@ struct ChartBucketingTests {
         let ticks = bars.compactMap(\.tick)
         #expect(!ticks.isEmpty)
         #expect(ticks.count < bars.count)                 // not every bar
-        #expect(ticks.allSatisfy { $0.contains("Jun") })  // June dates
+        #expect(ticks.allSatisfy { !$0.contains(where: \.isLetter) })   // compact numeric dates
     }
 
     @Test("undated clusters get no bar (a timeline has no place for them)")
