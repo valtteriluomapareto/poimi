@@ -49,8 +49,12 @@ enum DebugScreen: String, CaseIterable {
     case thumbs
     /// The full-screen photo viewer — pager + select-in-place chrome over the fake tiles (#36).
     case photoviewer
-    /// The album overview — month rows + coverage histogram over the fake candidates (#37).
+    /// The album overview — the cluster index (coverage chart + month-sectioned list) over a full year
+    /// of fake candidates (#37, design 3BL).
     case overview
+    /// The overview for a SHORT album (~5 weeks) — proves the coverage chart's minimum-bucket floor
+    /// (weekly would be ~5 bars → falls back to 8 day-slices) fills the width instead of looking sparse.
+    case overviewshort
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -86,6 +90,7 @@ struct DebugScreenHost: View {
         case .thumbs: DebugThumbnailHostView()
         case .photoviewer: DebugPhotoViewerHostView()
         case .overview: DebugOverviewHostView()
+        case .overviewshort: DebugOverviewShortHostView()
         }
     }
 }
@@ -267,23 +272,37 @@ struct DebugScanningHostView: View {
     static let yearEnd = Date(timeIntervalSince1970: 1_767_225_600)     // 2026-01-01Z
 }
 
-/// Hosts the album overview (#37) over the deterministic fake candidates: month rows + coverage
-/// histogram, with a few preselected picks so the per-month "N picked" reads non-zero.
+/// Hosts the cluster-index overview (#37, design 3BL) over a spread-out year of fake clusters: the
+/// per-cluster bar chart + month-sectioned list. Two clusters are marked done (green + seal), two more
+/// carry picks (in-progress gold), the rest are untouched (grey) — so all three states show — and the
+/// picks total to 80 / 100 to mirror the design's tally.
 struct DebugOverviewHostView: View {
-    @Environment(\.photoLibrary) private var library
     // Retained so the in-memory container outlives `.task` (a context-only hold SIGTRAPs on dealloc).
     @State private var projectStore: ProjectStore?
     @State private var selectionStore: SelectionStore?
+    @State private var doneStore: DoneStore?
     @State private var coordinator: AppCoordinator?
     @State private var project: CurationProject?
 
-    private static let preselected = ["fake/busy/2", "fake/busy/5", "fake/quiet/16"]
+    /// A dedicated rich fake (independent of the launch flag's global library) so the chart + sections
+    /// have a real year to render.
+    private static let fake = FakePhotoLibrary(assets: FakePhotoLibrary.overviewSeed())
+    /// Feb 1 + Feb 8 finished → green bars + seals.
+    private static let doneDays = ["2025-02-01", "2025-02-08"]
+    /// 40 + 8 (in the done clusters) + 20 + 12 (in-progress) = 80 picks against a target of 100.
+    private static let picks: [String] =
+        (0..<40).map { "fake/ov/2-1-\($0)" }
+        + (0..<8).map { "fake/ov/2-8-\($0)" }
+        + (0..<20).map { "fake/ov/2-14-\($0)" }
+        + (0..<12).map { "fake/ov/5-10-\($0)" }
 
     var body: some View {
         Group {
-            if let selectionStore, let coordinator, let project {
+            if let selectionStore, let doneStore, let coordinator, let project {
                 NavigationStack { AlbumOverviewView(project: project) }
+                    .environment(\.photoLibrary, Self.fake)
                     .environment(selectionStore)
+                    .environment(doneStore)
                     .environment(coordinator)
             } else {
                 ProgressView()
@@ -296,22 +315,81 @@ struct DebugOverviewHostView: View {
             }
             let projects = ProjectStore(container: container)
             let selection = SelectionStore(container: container)
+            let done = DoneStore(container: container)
             let created = projects.create(
                 title: "Best of 2025",
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
-                targetCount: 100,
-                excludeScreenshots: true,
-                excludedAlbumIDs: ["album/whatsapp"])
+                targetCount: 100)
+            created.doneDays = Self.doneDays        // set before activate — DoneStore reads it on hydrate
             selection.activate(created)
-            Self.preselected.forEach { selection.toggle($0) }
+            done.activate(created)
+            Self.picks.forEach { selection.toggle($0) }
             projectStore = projects
             selectionStore = selection
-            coordinator = AppCoordinator(library: library)
+            doneStore = done
+            coordinator = AppCoordinator(library: Self.fake)
             project = created
 
-            let probe = CandidateStore(library: library)
+            let probe = CandidateStore(library: Self.fake)
             await probe.load(created)
             Log.app.notice("screenshot-ready: \(DebugScreen.overview.rawValue, privacy: .public)")
+        }
+    }
+}
+
+/// Hosts the overview for a SHORT album (~5-week summer) so the coverage chart's minimum-bucket floor
+/// is visible: weekly would be ~5 bars, so it falls back to 8 equal day-slices and fills the width.
+/// The Jun 1 cluster is done (green); Jun 4 + Jun 11 carry picks (in-progress gold).
+struct DebugOverviewShortHostView: View {
+    @State private var projectStore: ProjectStore?
+    @State private var selectionStore: SelectionStore?
+    @State private var doneStore: DoneStore?
+    @State private var coordinator: AppCoordinator?
+    @State private var project: CurationProject?
+
+    private static let fake = FakePhotoLibrary(assets: FakePhotoLibrary.overviewShortSeed())
+    private static let jun1 = Date(timeIntervalSince1970: 1_748_736_000)   // 2025-06-01Z
+    private static let aug1 = Date(timeIntervalSince1970: 1_754_006_400)   // 2025-08-01Z
+    private static let doneDays = ["2025-06-01"]
+    private static let picks: [String] =
+        (0..<15).map { "fake/kesa/6-1-\($0)" }
+        + (0..<8).map { "fake/kesa/6-4-\($0)" }
+        + (0..<10).map { "fake/kesa/6-11-\($0)" }
+
+    var body: some View {
+        Group {
+            if let selectionStore, let doneStore, let coordinator, let project {
+                NavigationStack { AlbumOverviewView(project: project) }
+                    .environment(\.photoLibrary, Self.fake)
+                    .environment(selectionStore)
+                    .environment(doneStore)
+                    .environment(coordinator)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            guard let container = try? AppModelContainer.make(inMemory: true) else {
+                Log.app.error("DebugOverviewShortHostView: failed to build the in-memory container")
+                return
+            }
+            let projects = ProjectStore(container: container)
+            let selection = SelectionStore(container: container)
+            let done = DoneStore(container: container)
+            let created = projects.create(title: "Kesä", rangeStart: Self.jun1, rangeEnd: Self.aug1, targetCount: 100)
+            created.doneDays = Self.doneDays        // set before activate — DoneStore reads it on hydrate
+            selection.activate(created)
+            done.activate(created)
+            Self.picks.forEach { selection.toggle($0) }
+            projectStore = projects
+            selectionStore = selection
+            doneStore = done
+            coordinator = AppCoordinator(library: Self.fake)
+            project = created
+
+            let probe = CandidateStore(library: Self.fake)
+            await probe.load(created)
+            Log.app.notice("screenshot-ready: \(DebugScreen.overviewshort.rawValue, privacy: .public)")
         }
     }
 }

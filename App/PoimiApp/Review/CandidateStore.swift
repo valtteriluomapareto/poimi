@@ -52,10 +52,6 @@ final class CandidateStore {
     /// so the per-asset day is derived here from `captureDate` under the same `calendar`. Empty
     /// until a pass settles to `.ready`.
     private(set) var dayByID: [String: DayKey] = [:]
-    /// The candidates aggregated by calendar month — the album overview's rows + coverage histogram
-    /// (#37). Coarser than `groups` (which the review grid uses); derived from the same candidates +
-    /// calendar. Empty until `.ready`.
-    private(set) var monthSummaries: [MonthSummary] = []
     private let library: any PhotoLibraryProviding
     /// The calendar the day-grouping buckets by. Injected (default `.current`) so the timezone
     /// policy is explicit and a test can pin it — and so a locale/timezone change is a property of
@@ -73,7 +69,6 @@ final class CandidateStore {
     func load(_ project: CurationProject) async {
         phase = .scanning
         dayByID = [:]   // clear any prior pass's map (e.g. a retry after .failed)
-        monthSummaries = []
 
         // An empty / inverted range has no candidates — and `DateInterval(start:end:)` traps when
         // end < start, so guard before constructing it. Setup disables Create on an inverted range
@@ -104,8 +99,6 @@ final class CandidateStore {
             dayByID = Dictionary(
                 candidates.map { ($0.id, DayKey(date: $0.captureDate, calendar: calendar)) },
                 uniquingKeysWith: { first, _ in first })
-            // Month aggregation for the overview (#37) — same candidates + calendar as the grouping.
-            monthSummaries = MonthGrouping.summaries(for: candidates, calendar: calendar)
             phase = groups.isEmpty ? .empty : .ready(groups)
         } catch {
             Log.photoLibrary.error("CandidateStore.load failed: \(String(describing: error), privacy: .public)")

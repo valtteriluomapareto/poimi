@@ -139,6 +139,72 @@ extension FakePhotoLibrary {
         return assets
     }
 
+    /// A spread-out year of clusters (Feb → Nov, varying sizes) for eyeballing the cluster-index
+    /// Overview (#37, design 3BL): enough day-clusters across enough months that the bar chart reads
+    /// as a real year skyline and the month sections stack. Ids are `fake/ov/<month>-<day>-<i>` so the
+    /// screenshot host can pick / mark-done specific clusters to show all three states.
+    static func overviewSeed() -> [AssetRef] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        // Midday, so a UTC-anchored seed rendered under the viewer's `.current` calendar never rolls a
+        // photo across midnight into the next day (which would split one cluster into two).
+        func date(_ month: Int, _ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2025, month: month, day: day, hour: 12))!
+        }
+        var assets: [AssetRef] = []
+        func cluster(_ month: Int, _ day: Int, _ count: Int) {
+            for index in 0..<count {
+                assets.append(AssetRef(id: "fake/ov/\(month)-\(day)-\(index)",
+                                       captureDate: date(month, day),
+                                       pixelSize: PixelSize(width: 4032, height: 3024)))
+            }
+        }
+        // Every month populated (a realistic full year), so the coverage chart is 12 even bars.
+        cluster(1, 15, 20)   // Jan
+        cluster(2, 1, 47)    // Feb 1  (done)
+        cluster(2, 8, 31)    // Feb 8  (done)
+        cluster(2, 14, 62)   // Feb 14 (in-progress)
+        cluster(3, 1, 24)    // Mar
+        cluster(3, 9, 18)    // Mar
+        cluster(4, 12, 15)   // Apr
+        cluster(5, 10, 40)   // May    (in-progress)
+        cluster(6, 8, 28)    // Jun
+        cluster(7, 4, 55)    // Jul
+        cluster(7, 5, 44)    // Jul
+        cluster(8, 22, 33)   // Aug
+        cluster(9, 20, 22)   // Sep
+        cluster(10, 5, 19)   // Oct
+        cluster(11, 3, 16)   // Nov
+        cluster(12, 20, 26)  // Dec
+        return assets
+    }
+
+    /// A SHORT album (~5 weeks, one summer) for eyeballing the coverage chart's minimum-bucket floor:
+    /// the calendar unit (weekly) would give only ~5 bars, so the chart falls back to 8 equal day-slices.
+    /// Ids are `fake/kesa/<month>-<day>-<i>`.
+    static func overviewShortSeed() -> [AssetRef] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        func date(_ month: Int, _ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2025, month: month, day: day, hour: 12))!
+        }
+        var assets: [AssetRef] = []
+        func cluster(_ month: Int, _ day: Int, _ count: Int) {
+            for index in 0..<count {
+                assets.append(AssetRef(id: "fake/kesa/\(month)-\(day)-\(index)",
+                                       captureDate: date(month, day),
+                                       pixelSize: PixelSize(width: 4032, height: 3024)))
+            }
+        }
+        cluster(6, 1, 30)     // Jun 1
+        cluster(6, 4, 12)     // Jun 4
+        cluster(6, 11, 20)    // Jun 11
+        cluster(6, 18, 41)    // Jun 18
+        cluster(6, 25, 25)    // Jun 25
+        cluster(7, 2, 18)     // Jul 2  → span ~31 days → weekly ≈ 5 bars → floors to 8
+        return assets
+    }
+
     /// `count` dated assets spread evenly across 2025, oldest → newest (all within the year,
     /// so a year-range fetch returns the whole set).
     static func scaleSeed(_ count: Int) -> [AssetRef] {
