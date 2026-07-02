@@ -74,13 +74,14 @@ enum ChartBucketing {
         let spanDays = calendar.dateComponents([.day], from: firstDate, to: lastDate).day ?? 0
         let starts = bucketStarts(firstDate: firstDate, lastDate: lastDate, spanDays: spanDays, calendar: calendar)
 
-        // Assign each cluster to the last bucket whose start ≤ its date. Both `starts` and `dated` are
-        // ascending (the caller provides chronological clusters), so a single forward sweep suffices.
-        var rowsByBucket = [[ClusterRow]](repeating: [], count: starts.count)
+        // Sum each bucket's photos (the chart shades by density). Assign each cluster to the last bucket
+        // whose start ≤ its date; both `starts` and `dated` are ascending (the caller provides
+        // chronological clusters), so a single forward sweep suffices.
+        var countByBucket = [Int](repeating: 0, count: starts.count)
         var bucket = 0
         for entry in dated {
             while bucket + 1 < starts.count, starts[bucket + 1] <= entry.date { bucket += 1 }
-            rowsByBucket[bucket].append(entry.row)
+            countByBucket[bucket] += entry.row.count
         }
 
         // `veryShortMonthSymbols` reads the calendar's OWN locale — bind the passed one so the ticks
@@ -98,12 +99,12 @@ enum ChartBucketing {
             let monthKey = calendar.component(.year, from: tickDate) * 12 + month
             let tick = monthKey != previousMonthKey && initials.indices.contains(month - 1) ? initials[month - 1] : nil
             previousMonthKey = monthKey
-            buckets.append(ChartBucket(id: index, rows: rowsByBucket[index], tick: tick))
+            buckets.append(ChartBucket(id: index, count: countByBucket[index], tick: tick))
         }
         // A lone month tick doesn't orient anything and reads as a stranded letter (a single-month album
         // where every bucket-start falls in that month) — keep ticks only when they mark ≥ 2 months.
         guard buckets.filter({ $0.tick != nil }).count > 1 else {
-            return buckets.map { ChartBucket(id: $0.id, rows: $0.rows, tick: nil) }
+            return buckets.map { ChartBucket(id: $0.id, count: $0.count, tick: nil) }
         }
         return buckets
     }
@@ -132,43 +133,28 @@ enum ChartBucketing {
     }
 }
 
-/// The overview's coverage chart: one bar per adaptive time bucket (day / week / month by span — see
-/// `ChartBucketing`), height ∝ that slice's photos, each bar stacked by review state — green (done) at
-/// the base, gold (in-progress) above it, grey (untouched) on top. Density AND how much is finished, in
-/// one glance; a quiet slice reads as a gap and month-initial ticks mark the axis. Fits the width at any
-/// album length — bars flex, never scroll (the earlier per-cluster chart went 100+ bars wide) — so
-/// per-cluster detail lives in the list below. Reads the stores itself (state is live) so the overview
-/// body stays selection-independent. Orientation only — `accessibilityHidden`.
+/// The overview's coverage chart — "where your photos pile up": one bar per adaptive time bucket
+/// (day / week / month by span — see `ChartBucketing`), height ∝ that slice's photos and shaded in gold
+/// that brightens with density (the busiest slices are tall + bright). A quiet slice reads as a gap;
+/// month-initial ticks mark the axis (dropped when there's only one). Fits the width at any album length
+/// — bars flex to a constant gap, never scroll. Pure density (no per-photo state): it doesn't read the
+/// stores, so it never re-renders on a pick; review state lives in the list below. Orientation only.
 struct CoverageChart: View {
     let buckets: [ChartBucket]
-    @Environment(SelectionStore.self) private var selection
-    @Environment(DoneStore.self) private var doneStore
 
-    private let maxBarHeight: CGFloat = 72
+    private let maxBarHeight: CGFloat = 88
     /// Constant gap between bars; the bars themselves widen/narrow to fill the width (the minimum-bucket
     /// floor keeps the count high enough that "fill the width" never makes a lone giant slab).
     private let barGap: CGFloat = 4
 
-    private struct Bar: Identifiable {
-        let id: Int
-        let tick: String?
-        let done: Int
-        let inProgress: Int
-        let untouched: Int
-        var total: Int { done + inProgress + untouched }
-    }
-
     var body: some View {
-        // Per-bucket photo totals split by state, computed here (orientation; the overview isn't the
-        // rapid-toggle surface). An empty bucket totals 0 → a gap in the skyline.
-        let bars = buckets.map(bar)
-        let unit = maxBarHeight / CGFloat(max(bars.map(\.total).max() ?? 1, 1))
+        let maxCount = max(buckets.map(\.count).max() ?? 1, 1)
         return HStack(alignment: .bottom, spacing: barGap) {
-            ForEach(bars) { bar in
+            ForEach(buckets) { bucket in
                 VStack(spacing: 4) {
-                    stackedBar(bar, unit: unit)
+                    bar(count: bucket.count, of: maxCount)
                         .frame(maxWidth: .infinity)   // fill the column → constant gap, bars just get wider
-                    Text(bar.tick ?? "")
+                    Text(bucket.tick ?? "")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .frame(height: 13)   // fixed so bar bottoms align whether or not a tick shows
@@ -180,40 +166,18 @@ struct CoverageChart: View {
         .accessibilityHidden(true)
     }
 
-    /// Green (done) at the base, gold (in-progress), grey (untouched) on top — completion fills up from
-    /// the bottom. Rounded as one bar; each present state floors at a 1pt sliver so it never vanishes.
-    private func stackedBar(_ bar: Bar, unit: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            segment(bar.untouched, unit: unit, color: Color(.systemGray3))
-            segment(bar.inProgress, unit: unit, color: .accentColor)
-            segment(bar.done, unit: unit, color: .brandGreen)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-    }
-
+    /// A gold bar: height ∝ density, and denser slices read more saturated so the peak stands out. An
+    /// empty slice draws nothing (a gap). A one-photo slice still floors to a visible sliver.
     @ViewBuilder
-    private func segment(_ count: Int, unit: CGFloat, color: Color) -> some View {
+    private func bar(count: Int, of maxCount: Int) -> some View {
         if count > 0 {
-            color.frame(height: max(1, CGFloat(count) * unit))
+            let ratio = Double(count) / Double(maxCount)
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(Color.accentColor.opacity(0.5 + 0.5 * ratio))
+                .frame(height: max(3, maxBarHeight * CGFloat(ratio)))
+        } else {
+            Color.clear.frame(height: 0)
         }
-    }
-
-    private func bar(_ bucket: ChartBucket) -> Bar {
-        var done = 0, inProgress = 0, untouched = 0
-        for row in bucket.rows {
-            switch ClusterState.of(isDone: doneStore.isDone(row.group), pickedCount: pickedCount(row)) {
-            case .done: done += row.count
-            case .inProgress: inProgress += row.count
-            case .untouched: untouched += row.count
-            }
-        }
-        return Bar(id: bucket.id, tick: bucket.tick, done: done, inProgress: inProgress, untouched: untouched)
-    }
-
-    // O(bucket photos) per bar; a selection/done write re-renders the chart. Fine — the overview isn't
-    // the rapid-toggle surface (picking happens in the grid).
-    private func pickedCount(_ row: ClusterRow) -> Int {
-        row.group.assetIDs.reduce(into: 0) { if selection.selected.contains($1) { $0 += 1 } }
     }
 }
 

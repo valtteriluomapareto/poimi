@@ -176,12 +176,12 @@ struct MonthSection: Identifiable {
     var rows: [ClusterRow]
 }
 
-/// One bar in the coverage chart — a contiguous time slice (day / week / month, chosen by span) with
-/// the clusters that fall in it (empty for a quiet slice) and a month-initial tick when it opens a new
-/// month. Built by `ChartBucketing`.
+/// One bar in the coverage chart — a contiguous time slice (day / week / month, chosen by span), its
+/// photo `count` (drives the bar's height + gold intensity; 0 = a quiet-slice gap), and a month-initial
+/// tick when it opens a new month. Built by `ChartBucketing`.
 struct ChartBucket: Identifiable {
     let id: Int
-    let rows: [ClusterRow]
+    let count: Int
     let tick: String?     // "F" when this bucket starts a new month, else nil
 }
 

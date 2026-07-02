@@ -135,7 +135,7 @@ struct ChartBucketingTests {
         #expect(bars.count == 12)
         #expect(bars.allSatisfy { $0.tick != nil })      // every bucket opens a new month
         #expect(bars.first?.tick == "J")                 // veryShortMonthSymbols[0] (en)
-        #expect(bars.allSatisfy { $0.rows.count == 1 })
+        #expect(bars.allSatisfy { $0.count == 5 })       // each month holds one 5-photo cluster
     }
 
     @Test("a multi-month album → weekly bars (≥ min), ticked at month starts, no phantom prior month")
@@ -158,7 +158,7 @@ struct ChartBucketingTests {
         #expect(bars.count == ChartBucketing.minBuckets)      // exactly the floor
         #expect(bars.first?.tick == "F")                      // opens in February
         #expect(bars.compactMap(\.tick) == ["F", "M"])        // crosses into March once
-        #expect(bars.reduce(0) { $0 + $1.rows.count } == 4)   // every cluster still placed
+        #expect(bars.reduce(0) { $0 + $1.count } == 36)       // every photo placed (10+8+12+6)
     }
 
     @Test("a few-day album → daily bars with gaps; a single month drops its lone stranded tick")
@@ -167,7 +167,7 @@ struct ChartBucketingTests {
                       group("c", 2025, 1, 5, count: 2)]
         let bars = buckets(groups)
         #expect(bars.count == 5)                          // Jan 1…5 inclusive
-        #expect(bars.map { $0.rows.count } == [1, 0, 1, 0, 1])   // gaps on the empty days
+        #expect(bars.map(\.count) == [3, 0, 4, 0, 2])     // photo counts; gaps on the empty days
         #expect(bars.compactMap(\.tick).isEmpty)          // one month → no lone "J" tick
     }
 
@@ -185,6 +185,6 @@ struct ChartBucketingTests {
         let undated = DayGroup(id: "u", assetIDs: ["u0", "u1"], days: [.undated], isBusyDay: false)
         let bars = buckets([group("a", 2025, 3, 1, count: 5), undated])
         #expect(bars.count == 1)                          // just the one dated cluster
-        #expect(bars.first?.rows.count == 1)
+        #expect(bars.first?.count == 5)                   // its 5 photos (undated's not counted)
     }
 }
