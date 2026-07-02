@@ -38,6 +38,13 @@ struct AlbumOverviewView: View {
             // No visible nav title — the big title lives in the scroll header (like the design); the
             // nav bar keeps just the back button.
             .navigationBarTitleDisplayMode(.inline)
+            // Export (+ Clear) at the album level too — the Overview shows the running tally, so it's the
+            // natural "I'm done → make the album" spot, not only inside a drilled-in cluster.
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ReviewToolbarActions(onExport: { coordinator.openExport(project.id) })
+                }
+            }
             // Done-state here is display-only — the Overview doesn't reconcile (the grid does, on entry),
             // so a photo added to a done day can lag its seal here until you drill in. Rare, acceptable.
             .task(id: project.id) {

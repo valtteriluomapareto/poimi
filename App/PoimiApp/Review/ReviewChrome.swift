@@ -123,16 +123,16 @@ struct ReviewToolbarActions: View {
                 Button("Clear", role: .destructive) { confirmingClear = true }
                     .accessibilityHint("Deselects all photos in this album.")
             }
-            Button(action: onExport) {
-                Label("Export", systemImage: "rectangle.stack.badge.plus")
-            }
-            .disabled(picked == 0)
+            // Plain text (like "Clear") — clearer than a cryptic add-to-album glyph in the nav.
+            Button("Export", action: onExport)
+                .disabled(picked == 0)
         }
         .confirmationDialog("Clear all picks?", isPresented: $confirmingClear, titleVisibility: .visible) {
             Button("Clear \(picked) picked", role: .destructive) { selection.clear() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This deselects all \(picked) photos. Your photos aren't deleted — but you'd pick this album again from scratch.")
+            Text("This deselects all \(picked) photos. Your photos aren't deleted — "
+                + "but you'd pick this album again from scratch.")
         }
     }
 }
