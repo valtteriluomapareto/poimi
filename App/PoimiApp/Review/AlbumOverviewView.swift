@@ -122,7 +122,7 @@ struct AlbumOverviewView: View {
         case .failed(.loadError):
             ReviewLoadFailedView(onRetry: { Task { await scan() } })
         case .failed(.accessLost):
-            ReviewAccessLostView()
+            ReviewAccessLostView(onRecovered: { Task { await scan() } })
         }
     }
 

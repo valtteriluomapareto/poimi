@@ -56,6 +56,7 @@ struct AlbumSettingsTests {
         proj.rangeStart = newStart
         proj.rangeEnd = newEnd
         proj.targetAlbumID = "album/dest"
+        proj.excludeScreenshots = false                            // default is true — prove the toggle persists
         proj.excludedAlbumIDs = ["z/album", "a/album", "m/album"]   // deliberately unsorted
         projects.saveEdits(to: proj)
 
@@ -70,6 +71,7 @@ struct AlbumSettingsTests {
         #expect(fetched.rangeStart == newStart)
         #expect(fetched.rangeEnd == newEnd)
         #expect(fetched.targetAlbumID == "album/dest")
+        #expect(fetched.excludeScreenshots == false)
         #expect(fetched.excludedAlbumIDs == ["a/album", "m/album", "z/album"])
     }
 

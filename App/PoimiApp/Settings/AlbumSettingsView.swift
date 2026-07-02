@@ -73,17 +73,27 @@ struct AlbumSettingsView: View {
                 } label: {
                     LabeledContent("Photos album", value: project.targetAlbumID == nil ? "New album" : "Existing album")
                 }
-                NavigationLink {
-                    AlbumPickerView(selection: excludedSelection, allowsMultiple: true)
-                } label: {
-                    LabeledContent("Excluded albums", value: excludedValue)
-                }
                 Stepper("Aim for ^[\(project.targetCount) photo](inflect: true)",
                         value: $project.targetCount, in: 1...10_000, step: 10)
             } header: {
                 Text("Saves to")
             } footer: {
                 Text("Picks are copied to this Photos album — your library and originals aren't changed.")
+            }
+
+            // Source exclusions grouped together (matching setup) — both levers the "all excluded"
+            // empty state points at, so "Review exclusions" lands somewhere it can actually fix.
+            Section {
+                Toggle("Exclude screenshots", isOn: $project.excludeScreenshots)
+                NavigationLink {
+                    AlbumPickerView(selection: excludedSelection, allowsMultiple: true)
+                } label: {
+                    LabeledContent("Excluded albums", value: excludedValue)
+                }
+            } header: {
+                Text("Exclude from source")
+            } footer: {
+                Text("Screenshots and photos in these albums won't appear while you pick.")
             }
 
             Section {

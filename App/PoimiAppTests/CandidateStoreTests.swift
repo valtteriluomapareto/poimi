@@ -265,6 +265,30 @@ struct CandidateStoreTests {
         #expect(store.phase == .failed(.accessLost))
     }
 
+    @Test("a fetch failure under .limited access is also .accessLost (the app needs FULL access)")
+    func failureAccessLostWhenLimited() async throws {
+        // The likelier real mid-session change: the user switches Photos to "selected" (`.limited`).
+        // The app can't curate a whole year from a subset, so `.limited` is treated as access lost.
+        let project = makeProject()
+        let library = FakePhotoLibrary(status: .limited, fetchError: FakePhotoLibrary.FakeError.fetchFailed)
+        let store = CandidateStore(library: library)
+        await store.load(project)
+        #expect(store.phase == .failed(.accessLost))
+    }
+
+    @Test("a reload that fails clears the day map from the prior .ready pass (reset-then-throw)")
+    func dayMapClearedOnFailedReload() async throws {
+        // The load()-top reset must clear a populated map even when the reload then FAILS (the catch
+        // path), so a stale map can't mislabel the viewer. Drive .ready → .failed on one store.
+        let project = makeProject(excludeScreenshots: false)
+        let store = CandidateStore(library: DegradingLibrary())
+        await store.load(project)                    // succeeds → dayByID populated
+        #expect(!store.dayByID.isEmpty)
+        await store.load(project)                    // second fetch throws → failed
+        #expect(store.phase == .failed(.loadError))
+        #expect(store.dayByID.isEmpty)               // reset cleared the prior pass's map
+    }
+
     @Test("a failure while resolving excluded albums also surfaces as .failed(.loadError)")
     func failureResolvingExclusions() async throws {
         // The fetch succeeds but the second await (assetIDs) throws — a real PhotoKit error can
@@ -324,6 +348,25 @@ private actor RecoveringLibrary: PhotoLibraryProviding {
     }
 }
 
+/// A library that SUCCEEDS on the first fetch then throws — the inverse of `RecoveringLibrary`, to
+/// drive `.ready` → `.failed` on one store (proves the load()-top day-map reset on the catch path).
+private actor DegradingLibrary: PhotoLibraryProviding {
+    private var attempts = 0
+    func authorizationStatus() async -> LibraryAuthorization { .authorized }
+    func requestAuthorization() async -> LibraryAuthorization { .authorized }
+    func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {
+        attempts += 1
+        if attempts == 1 { return FakePhotoLibrary.yearMixedSeed().filter { $0.captureDate != nil } }
+        throw PhotoLibraryError.fetchFailed
+    }
+    func albums() async throws -> [AlbumRef] { [] }
+    func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> { [] }
+    func export(assetIDs: Set<String>, toAlbumNamed name: String,
+                existingAlbumID: String?) async throws -> ExportResult {
+        throw ExportError.writeFailed
+    }
+}
+
 /// A library whose range fetch succeeds but whose membership resolution throws — to prove the
 /// pipeline's *second* await also maps to `.failed`.
 private actor FailingMembershipLibrary: PhotoLibraryProviding {
@@ -354,8 +397,10 @@ struct ReviewEmptyCopyTests {
         let noPhotos = ReviewEmptyCopy.forReason(.noPhotosInRange, rangeStart: start, rangeEnd: end, calendar: cal)
         let allExcluded = ReviewEmptyCopy.forReason(.allExcluded, rangeStart: start, rangeEnd: end, calendar: cal)
 
-        #expect(noPhotos.title == "Nothing to pick here")
-        #expect(allExcluded.title == "Nothing to pick here")
+        // Distinct titles per reason — the two empty states read as genuinely different, not one screen.
+        #expect(noPhotos.title == "No photos in this range")
+        #expect(allExcluded.title == "Everything's filtered out")
+        #expect(noPhotos.title != allExcluded.title)
         // Assert the distinguishing phrase, not the formatted date (which varies by locale).
         #expect(noPhotos.message.contains("wider date range"))
         #expect(allExcluded.message.contains("excluded album"))

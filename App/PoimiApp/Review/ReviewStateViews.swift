@@ -28,11 +28,11 @@ struct ReviewEmptyCopy: Equatable {
         switch reason {
         case .noPhotosInRange:
             return ReviewEmptyCopy(
-                title: "Nothing to pick here",
+                title: "No photos in this range",
                 message: "No photos between \(range). Try a wider date range.")
         case .allExcluded:
             return ReviewEmptyCopy(
-                title: "Nothing to pick here",
+                title: "Everything's filtered out",
                 message: "Every photo between \(range) is a screenshot or in an excluded album. "
                     + "Try fewer exclusions.")
         }
@@ -60,7 +60,7 @@ struct ReviewEmptyView: View {
                 Button("Change range", action: onChangeRange)
                     .buttonStyle(.borderedProminent)
             case .allExcluded:
-                Button("Review excluded albums", action: onReviewExclusions)
+                Button("Review exclusions", action: onReviewExclusions)
                     .buttonStyle(.borderedProminent)
                 Button("Change range", action: onChangeRange)
             }
@@ -89,6 +89,9 @@ struct ReviewLoadFailedView: View {
 /// This is the brief placeholder shown until that swap lands.
 struct ReviewAccessLostView: View {
     @Environment(AppCoordinator.self) private var coordinator
+    /// Re-run the scan if the re-read comes back authorized after all — so a transient throw that was
+    /// mis-read as "access lost" (or an access flap) heals instead of stranding this placeholder.
+    let onRecovered: () -> Void
 
     var body: some View {
         ContentUnavailableView {
@@ -96,6 +99,11 @@ struct ReviewAccessLostView: View {
         } description: {
             Text("Checking your photo access…")
         }
-        .task { await coordinator.refreshAuthorization() }
+        .task {
+            await coordinator.refreshAuthorization()
+            // Non-authorized → rootPhase flips to .recovery and this view is swapped out. Still
+            // authorized → no swap happens, so re-run the scan rather than sit here forever.
+            if coordinator.authorization == .authorized { onRecovered() }
+        }
     }
 }

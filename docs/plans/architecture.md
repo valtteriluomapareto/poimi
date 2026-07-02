@@ -177,9 +177,11 @@ Three rules the reviewers required to make (d) safe:
 
 **Per-album** settings, pushed from the Overview's gear (`Route.settings(UUID)`). `AlbumSettingsView`
 is a grouped `Form` that edits one `CurationProject` in place — name, period (the same
-end-exclusive ↔ inclusive-day bridge as new-album setup, `NewAlbumDraft`), export destination and
-excluded albums (reusing `AlbumPickerView`), and target — plus a destructive **Reset picks** /
-**Delete album** card. Edits apply immediately (iOS-Settings style, no Save button): controls bind to
+end-exclusive ↔ inclusive-day bridge as new-album setup, `NewAlbumDraft`), export destination +
+target, and an **Exclude from source** group (the screenshots toggle + excluded albums, reusing
+`AlbumPickerView`) — plus a destructive **Reset picks** / **Delete album** card. The exclusions live
+in their own group so the #40 "everything's filtered out" empty state's **Review exclusions** action
+lands where both levers are editable (a screenshots-only filter was otherwise unreachable). Edits apply immediately (iOS-Settings style, no Save button): controls bind to
 the `@Observable` model, and `onDisappear` forces a durable `ProjectStore.saveEdits(to:)` (rather than
 leaning on the mainContext's deferred autosave) and re-syncs the live tally via
 `SelectionStore.retarget(_:)` (the target is cached at `activate`, so a bare mutation wouldn't reach the
