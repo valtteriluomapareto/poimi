@@ -162,4 +162,5 @@ jobs:
         # Surface coverage in the run summary — NOT a gate (D28). Runs even if a prior step failed so a
         # red build still shows what was covered; the script is defensive about missing artifacts.
         if: always()
-        run: ./Scripts/coverage-summary.sh build/PoimiApp.xcresult >> "$GITHUB_STEP_SUMMARY"
+        # `tee` so the numbers show in the plain step log too (the rendered summary isn't in the log).
+        run: ./Scripts/coverage-summary.sh build/PoimiApp.xcresult | tee -a "$GITHUB_STEP_SUMMARY"
