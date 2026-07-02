@@ -43,6 +43,90 @@ struct OverviewThumb: View {
     }
 }
 
+/// The coverage chart's adaptive time buckets. Picks a calendar unit by the album's span so the bars
+/// stay readable — a year → months, a couple months → weeks, a short album → days — then slices the
+/// span into CONTIGUOUS buckets (empty ones included, so a quiet stretch reads as a real gap). When the
+/// calendar unit would yield fewer than `minBuckets` bars (a short/awkward span, e.g. a 5-week album →
+/// 5 weekly bars), it floors to `minBuckets` roughly-equal day-slices instead, so the chart never looks
+/// sparse. A month-initial tick marks each bucket that opens a new month ("… Feb … Mar …"). App-layer +
+/// pure (Foundation only); app-tier tested. (Model `ChartBucket` lives with the other overview models.)
+enum ChartBucketing {
+    /// The chart never shows fewer than this many bars when the span can hold them (owner: "at least 8").
+    static let minBuckets = 8
+
+    /// The calendar unit a bar spans, chosen by the album's day-span. Thresholds are tunable; quarters
+    /// aren't used (a multi-year album stays on months — rare for a "curate a year" app).
+    static func unit(spanDays: Int) -> Calendar.Component {
+        switch spanDays {
+        case ..<19: return .day           // ≤ ~18 days → daily bars
+        case ..<126: return .weekOfYear   // ~3–18 weeks
+        default: return .month            // ~4+ months
+        }
+    }
+
+    static func buckets(for rows: [ClusterRow], calendar: Calendar, locale: Locale) -> [ChartBucket] {
+        // Dated clusters only (the undated bucket has no place on a timeline), oldest → newest.
+        let dated = rows.compactMap { row -> (row: ClusterRow, date: Date)? in
+            guard let day = row.firstDay, let date = day.anchorDate(in: calendar) else { return nil }
+            return (row, date)
+        }
+        guard let firstDate = dated.first?.date, let lastDate = dated.last?.date else { return [] }
+        let spanDays = calendar.dateComponents([.day], from: firstDate, to: lastDate).day ?? 0
+        let starts = bucketStarts(firstDate: firstDate, lastDate: lastDate, spanDays: spanDays, calendar: calendar)
+
+        // Assign each cluster to the last bucket whose start ≤ its date. Both `starts` and `dated` are
+        // ascending (the caller provides chronological clusters), so a single forward sweep suffices.
+        var rowsByBucket = [[ClusterRow]](repeating: [], count: starts.count)
+        var bucket = 0
+        for entry in dated {
+            while bucket + 1 < starts.count, starts[bucket + 1] <= entry.date { bucket += 1 }
+            rowsByBucket[bucket].append(entry.row)
+        }
+
+        // `veryShortMonthSymbols` reads the calendar's OWN locale — bind the passed one so the ticks
+        // match the caller's locale (and the tests are deterministic).
+        var localizedCalendar = calendar
+        localizedCalendar.locale = locale
+        let initials = localizedCalendar.veryShortMonthSymbols
+        var buckets: [ChartBucket] = []
+        var previousMonthKey: Int?
+        for (index, bucketStart) in starts.enumerated() {
+            // A unit-aligned `start` can precede the album (e.g. a Jan-1 album whose first week starts
+            // Dec 29) — tick the first bucket by the album's real start so it isn't a phantom prior month.
+            let tickDate = max(bucketStart, firstDate)
+            let month = calendar.component(.month, from: tickDate)
+            let monthKey = calendar.component(.year, from: tickDate) * 12 + month
+            let tick = monthKey != previousMonthKey && initials.indices.contains(month - 1) ? initials[month - 1] : nil
+            previousMonthKey = monthKey
+            buckets.append(ChartBucket(id: index, rows: rowsByBucket[index], tick: tick))
+        }
+        return buckets
+    }
+
+    /// The contiguous bucket start-dates covering `firstDate … lastDate`: calendar-unit-aligned by span,
+    /// or — when that yields fewer than `minBuckets` and the span can hold that many day-boundaries —
+    /// `minBuckets` roughly-equal day-slices instead.
+    private static func bucketStarts(firstDate: Date, lastDate: Date, spanDays: Int, calendar: Calendar) -> [Date] {
+        let unit = unit(spanDays: spanDays)
+        let aligned = calendar.dateInterval(of: unit, for: firstDate)?.start ?? calendar.startOfDay(for: firstDate)
+        var starts: [Date] = []
+        var cursor = aligned
+        while cursor <= lastDate {
+            starts.append(cursor)
+            guard let next = calendar.date(byAdding: unit, value: 1, to: cursor), next > cursor else { break }
+            cursor = next
+        }
+        // Floor: a short/awkward span splits into `minBuckets` roughly-equal day-slices so the chart
+        // fills out. Only when the span holds that many day-boundaries (else keep the finer unit as-is).
+        guard starts.count < minBuckets, spanDays >= minBuckets - 1 else { return starts }
+        let dayStart = calendar.startOfDay(for: firstDate)
+        let totalDays = spanDays + 1
+        return (0..<minBuckets).compactMap { slice in
+            calendar.date(byAdding: .day, value: (slice * totalDays) / minBuckets, to: dayStart)
+        }
+    }
+}
+
 /// The overview's coverage chart: one bar per adaptive time bucket (day / week / month by span — see
 /// `ChartBucketing`), height ∝ that slice's photos, each bar stacked by review state — green (done) at
 /// the base, gold (in-progress) above it, grey (untouched) on top. Density AND how much is finished, in
@@ -56,9 +140,9 @@ struct CoverageChart: View {
     @Environment(DoneStore.self) private var doneStore
 
     private let maxBarHeight: CGFloat = 72
-    /// Cap the bar width so a few-bar album reads as a small chart, not giant slabs; bars thin down (via
-    /// the equal-width columns) when there are many.
-    private let maxBarWidth: CGFloat = 28
+    /// Constant gap between bars; the bars themselves widen/narrow to fill the width (the minimum-bucket
+    /// floor keeps the count high enough that "fill the width" never makes a lone giant slab).
+    private let barGap: CGFloat = 4
 
     private struct Bar: Identifiable {
         let id: Int
@@ -74,11 +158,11 @@ struct CoverageChart: View {
         // rapid-toggle surface). An empty bucket totals 0 → a gap in the skyline.
         let bars = buckets.map(bar)
         let unit = maxBarHeight / CGFloat(max(bars.map(\.total).max() ?? 1, 1))
-        return HStack(alignment: .bottom, spacing: 3) {
+        return HStack(alignment: .bottom, spacing: barGap) {
             ForEach(bars) { bar in
                 VStack(spacing: 4) {
                     stackedBar(bar, unit: unit)
-                        .frame(maxWidth: maxBarWidth)
+                        .frame(maxWidth: .infinity)   // fill the column → constant gap, bars just get wider
                     Text(bar.tick ?? "")
                         .font(.caption2)
                         .foregroundStyle(.secondary)

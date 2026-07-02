@@ -138,15 +138,27 @@ struct ChartBucketingTests {
         #expect(bars.allSatisfy { $0.rows.count == 1 })
     }
 
-    @Test("a ~6-week album → weekly bars, contiguous (empty weeks included), ticked at month starts")
-    func coupleMonthsIsWeekly() {
-        // Feb 3 → Mar 17 ≈ 42 days → weekly; 4 clusters but ~7 contiguous week buckets.
-        let groups = [group("a", 2025, 2, 3, count: 10), group("b", 2025, 2, 17, count: 8),
-                      group("c", 2025, 3, 3, count: 12), group("d", 2025, 3, 17, count: 6)]
+    @Test("a multi-month album → weekly bars (≥ min), ticked at month starts, no phantom prior month")
+    func multiMonthIsWeekly() {
+        // Feb 1 → Apr 15 ≈ 73 days → weekly, ~11–12 buckets (≥ minBuckets, no floor). Feb 1's week
+        // starts in late January, but the first tick must be "F" (the album's real start), not "J".
+        let groups = [group("a", 2025, 2, 1, count: 10), group("b", 2025, 3, 5, count: 8),
+                      group("c", 2025, 4, 15, count: 12)]
         let bars = buckets(groups)
-        #expect(bars.count > 4)                           // more buckets than clusters → empty weeks
-        #expect(bars.count <= 8)
-        #expect(bars.compactMap(\.tick) == ["F", "M"])    // one tick where Feb opens, one where Mar opens
+        #expect(bars.count >= 10)
+        #expect(bars.compactMap(\.tick) == ["F", "M", "A"])   // no leading "J" from the Jan week-start
+    }
+
+    @Test("a short/awkward span floors to minBuckets equal day-slices (never a sparse handful)")
+    func shortSpanFloorsToMinBuckets() {
+        // Feb 3 → Mar 10 ≈ 35 days → weekly would be ~6 bars (< 8), so it floors to 8 day-slices.
+        let groups = [group("a", 2025, 2, 3, count: 10), group("b", 2025, 2, 17, count: 8),
+                      group("c", 2025, 3, 1, count: 12), group("d", 2025, 3, 10, count: 6)]
+        let bars = buckets(groups)
+        #expect(bars.count == ChartBucketing.minBuckets)      // exactly the floor
+        #expect(bars.first?.tick == "F")                      // opens in February
+        #expect(bars.compactMap(\.tick) == ["F", "M"])        // crosses into March once
+        #expect(bars.reduce(0) { $0 + $1.rows.count } == 4)   // every cluster still placed
     }
 
     @Test("a few-day album → daily bars, with the empty days between kept as gaps")

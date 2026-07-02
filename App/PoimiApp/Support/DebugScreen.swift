@@ -49,9 +49,12 @@ enum DebugScreen: String, CaseIterable {
     case thumbs
     /// The full-screen photo viewer — pager + select-in-place chrome over the fake tiles (#36).
     case photoviewer
-    /// The album overview — the cluster index (per-cluster bar chart + month-sectioned list) over the
-    /// fake candidates (#37, design 3BL).
+    /// The album overview — the cluster index (coverage chart + month-sectioned list) over a full year
+    /// of fake candidates (#37, design 3BL).
     case overview
+    /// The overview for a SHORT album (~5 weeks) — proves the coverage chart's minimum-bucket floor
+    /// (weekly would be ~5 bars → falls back to 8 day-slices) fills the width instead of looking sparse.
+    case overviewshort
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -87,6 +90,7 @@ struct DebugScreenHost: View {
         case .thumbs: DebugThumbnailHostView()
         case .photoviewer: DebugPhotoViewerHostView()
         case .overview: DebugOverviewHostView()
+        case .overviewshort: DebugOverviewShortHostView()
         }
     }
 }
@@ -329,6 +333,63 @@ struct DebugOverviewHostView: View {
             let probe = CandidateStore(library: Self.fake)
             await probe.load(created)
             Log.app.notice("screenshot-ready: \(DebugScreen.overview.rawValue, privacy: .public)")
+        }
+    }
+}
+
+/// Hosts the overview for a SHORT album (~5-week summer) so the coverage chart's minimum-bucket floor
+/// is visible: weekly would be ~5 bars, so it falls back to 8 equal day-slices and fills the width.
+/// The Jun 1 cluster is done (green); Jun 4 + Jun 11 carry picks (in-progress gold).
+struct DebugOverviewShortHostView: View {
+    @State private var projectStore: ProjectStore?
+    @State private var selectionStore: SelectionStore?
+    @State private var doneStore: DoneStore?
+    @State private var coordinator: AppCoordinator?
+    @State private var project: CurationProject?
+
+    private static let fake = FakePhotoLibrary(assets: FakePhotoLibrary.overviewShortSeed())
+    private static let jun1 = Date(timeIntervalSince1970: 1_748_736_000)   // 2025-06-01Z
+    private static let aug1 = Date(timeIntervalSince1970: 1_754_006_400)   // 2025-08-01Z
+    private static let doneDays = ["2025-06-01"]
+    private static let picks: [String] =
+        (0..<15).map { "fake/kesa/6-1-\($0)" }
+        + (0..<8).map { "fake/kesa/6-4-\($0)" }
+        + (0..<10).map { "fake/kesa/6-11-\($0)" }
+
+    var body: some View {
+        Group {
+            if let selectionStore, let doneStore, let coordinator, let project {
+                NavigationStack { AlbumOverviewView(project: project) }
+                    .environment(\.photoLibrary, Self.fake)
+                    .environment(selectionStore)
+                    .environment(doneStore)
+                    .environment(coordinator)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            guard let container = try? AppModelContainer.make(inMemory: true) else {
+                Log.app.error("DebugOverviewShortHostView: failed to build the in-memory container")
+                return
+            }
+            let projects = ProjectStore(container: container)
+            let selection = SelectionStore(container: container)
+            let done = DoneStore(container: container)
+            let created = projects.create(title: "Kesä", rangeStart: Self.jun1, rangeEnd: Self.aug1, targetCount: 100)
+            created.doneDays = Self.doneDays        // set before activate — DoneStore reads it on hydrate
+            selection.activate(created)
+            done.activate(created)
+            Self.picks.forEach { selection.toggle($0) }
+            projectStore = projects
+            selectionStore = selection
+            doneStore = done
+            coordinator = AppCoordinator(library: Self.fake)
+            project = created
+
+            let probe = CandidateStore(library: Self.fake)
+            await probe.load(created)
+            Log.app.notice("screenshot-ready: \(DebugScreen.overviewshort.rawValue, privacy: .public)")
         }
     }
 }

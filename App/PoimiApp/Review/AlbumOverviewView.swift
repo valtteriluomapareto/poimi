@@ -235,64 +235,6 @@ enum ClusterIndexBuilder {
     }
 }
 
-/// The coverage chart's adaptive time buckets. Picks a calendar unit by the album's span so the bar
-/// count lands in a comfortable range — a year → months, a couple months → weeks, a short album → days
-/// — then slices the span into CONTIGUOUS buckets (empty ones included, so a quiet stretch reads as a
-/// real gap, not a collapsed skip). A month-initial tick marks each bucket that opens a new month, so
-/// the axis reads "… Feb … Mar …" at any unit. App-layer + pure (Foundation only); app-tier tested.
-enum ChartBucketing {
-    /// The calendar unit a bar spans, chosen by the album's day-span. Thresholds are tunable; quarters
-    /// aren't used (a multi-year album stays on months — rare for a "curate a year" app).
-    static func unit(spanDays: Int) -> Calendar.Component {
-        switch spanDays {
-        case ..<19: return .day           // ≤ ~18 days → up to ~19 daily bars
-        case ..<126: return .weekOfYear   // ~3–18 weeks
-        default: return .month            // ~4+ months
-        }
-    }
-
-    static func buckets(for rows: [ClusterRow], calendar: Calendar, locale: Locale) -> [ChartBucket] {
-        // Dated clusters only (the undated bucket has no place on a timeline), oldest → newest.
-        let dated = rows.compactMap { row -> (row: ClusterRow, date: Date)? in
-            guard let day = row.firstDay, let date = day.anchorDate(in: calendar) else { return nil }
-            return (row, date)
-        }
-        guard let firstDate = dated.first?.date, let lastDate = dated.last?.date else { return [] }
-        let unit = unit(spanDays: calendar.dateComponents([.day], from: firstDate, to: lastDate).day ?? 0)
-        let start = unitStart(firstDate, unit: unit, calendar: calendar)
-
-        // Assign each cluster to a bucket = whole units from the aligned start.
-        var rowsByBucket: [Int: [ClusterRow]] = [:]
-        var lastIndex = 0
-        for entry in dated {
-            let index = calendar.dateComponents([unit], from: start, to: entry.date).value(for: unit) ?? 0
-            rowsByBucket[index, default: []].append(entry.row)
-            lastIndex = max(lastIndex, index)
-        }
-
-        // `veryShortMonthSymbols` reads the calendar's OWN locale — bind the passed one so the ticks
-        // match the caller's locale (and the tests are deterministic).
-        var localizedCalendar = calendar
-        localizedCalendar.locale = locale
-        let initials = localizedCalendar.veryShortMonthSymbols
-        var buckets: [ChartBucket] = []
-        var previousMonthKey: Int?
-        for index in 0...lastIndex {
-            let bucketStart = calendar.date(byAdding: unit, value: index, to: start) ?? start
-            let month = calendar.component(.month, from: bucketStart)
-            let monthKey = calendar.component(.year, from: bucketStart) * 12 + month
-            let tick = monthKey != previousMonthKey && initials.indices.contains(month - 1) ? initials[month - 1] : nil
-            previousMonthKey = monthKey
-            buckets.append(ChartBucket(id: index, rows: rowsByBucket[index] ?? [], tick: tick))
-        }
-        return buckets
-    }
-
-    private static func unitStart(_ date: Date, unit: Calendar.Component, calendar: Calendar) -> Date {
-        calendar.dateInterval(of: unit, for: date)?.start ?? calendar.startOfDay(for: date)
-    }
-}
-
 // MARK: - The cluster list row + sticky month header
 
 /// A sticky month header ("February") over its clusters. Opaque so scrolling rows don't bleed through.
