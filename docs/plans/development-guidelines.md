@@ -123,6 +123,13 @@ Pre-UI (data, PhotoKit, filtering, export) work proceeds independently.
 4. One E2E smoke test (simulator).
 5. No new compiler warnings — **advisory early, a hard gate once the codebase settles** (D28).
 
+**Advisory (informational, never blocks) — #110:** a **code-coverage summary** in the run's step
+summary (`Scripts/coverage-summary.sh`). It reports the tiers where coverage is meaningful — **Curation**
+(pure domain, via `swift test --enable-code-coverage`) and the **app store tier** (`State/`,
+`Persistence/`, `CandidateStore`, per-file via `xccov`) — and files the whole-app number under a
+caveated "context" note, because SwiftUI **view bodies are eyeballed via the screenshot harness, not
+unit-tested** (D26/D27), so a single repo % would mislead. No threshold gate (D28); it can harden later.
+
 **Deploy to App Store Connect — deferred (D26).** Until there's something worth a TestFlight build, **ship manually from Xcode**; building out fastlane is pre-investment with no user value yet. When automated:
 - GitHub Actions → **fastlane** (`pilot` for TestFlight, `deliver`/`upload_to_app_store` for release).
 - Signing via **fastlane `match`** (or App Store Connect API key + automatic signing).

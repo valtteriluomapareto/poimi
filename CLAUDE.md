@@ -141,7 +141,8 @@ the harness is for human/agent eyeballing, not assertions.
 ## CI gates (every PR, all green to merge)
 
 Checkout → select Xcode 26 → SwiftLint → `Curation` tests → the 4 guards → Release build → app
-build + integration tests on an iOS 26 sim. Defined in `.github/workflows/ci.yml`.
+build + integration tests on an iOS 26 sim → an **advisory coverage summary** (not a gate — #110).
+Defined in `.github/workflows/ci.yml`.
 
 ## Conventions
 
