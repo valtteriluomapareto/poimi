@@ -38,11 +38,20 @@ struct AlbumOverviewView: View {
             // No visible nav title — the big title lives in the scroll header (like the design); the
             // nav bar keeps just the back button.
             .navigationBarTitleDisplayMode(.inline)
-            // Export (+ Clear) at the album level too — the Overview shows the running tally, so it's the
-            // natural "I'm done → make the album" spot, not only inside a drilled-in cluster.
+            // Settings + Export at the album level. The Overview is the album's landing screen and shows
+            // the running tally, so it's the natural "I'm done → make the album" spot; the gear reaches
+            // per-album settings (#41). No "Clear" here — clearing all picks now lives in Settings as
+            // "Reset picks"; Clear stays in the review grid for per-session use.
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    ReviewToolbarActions(onExport: { coordinator.openExport(project.id) })
+                    HStack(spacing: 16) {
+                        Button { coordinator.openSettings(project.id) } label: {
+                            Image(systemName: "gearshape")
+                        }
+                        .accessibilityLabel("Album settings")
+                        Button("Export") { coordinator.openExport(project.id) }
+                            .disabled(selection.progress.picked == 0)
+                    }
                 }
             }
             // Done-state here is display-only — the Overview doesn't reconcile (the grid does, on entry),

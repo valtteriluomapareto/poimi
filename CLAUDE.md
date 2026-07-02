@@ -27,8 +27,8 @@ seam (`PhotoLibraryProviding` + `System`/`Fake` impls), the integration test tie
 `DoneStore`), the **navigation coordinator** (#30), **onboarding + authorization** (#31), the
 **albums library** (#32), **new-album setup + exclude-picker** (#33), the **scan surface** (#34),
 the **review grid** (#35), the **photo viewer** (#36), the **cluster-index Overview** (#37),
-**mark-as-done** (#38), and **album export + completion** (#39). `@main` launches the real
-coordinator-driven `AppRootView` (onboarding → permission → albums → the built screens).
+**mark-as-done** (#38), **album export + completion** (#39), and **per-album settings** (#41). `@main`
+launches the real coordinator-driven `AppRootView` (onboarding → permission → albums → the built screens).
 
 The **review grid is an accordion**: exactly one day-group cluster is open (its full grid) at a time
 and every other is a collapsed peek; "done" is its own state (a green seal badge), decoupled from
@@ -37,8 +37,11 @@ advances to the next unreviewed cluster (`DoneStore` + `Completion.reopening` re
 **Overview** is a **cluster index** (design 3BL): a per-day-cluster list + a coverage chart of
 adaptive time buckets shaded gold by density. **Export** writes the picks into a native Photos album
 (create-or-find + dupe-guard, one-way — D31) then shows the completion screen (`ExportStore` +
-`ExportView`). Still open on the v1 path: **select-mode / drag-multi-select** (deferred from #35),
-empty/error hardening (#40), **settings** (#41), **iPad** split-view (#42), **E2E** (#43).
+`ExportView`). **Settings** (#41) is **per-album** only — name / period / target / exclusions /
+destination + Reset picks / Delete album (`AlbumSettingsView`, reached via the Overview's gear);
+app-level settings (Photos access, About) are deliberately NOT here (they belong on a future
+app-settings screen). Still open on the v1 path: **select-mode / drag-multi-select** (deferred from
+#35), empty/error hardening (#40), an **app-level settings** screen, **iPad** split-view (#42), **E2E** (#43).
 The throwaway Phase-0 **Spike** was deleted (it seeded #35).
 Phase/issue plan: [docs/plans/project-phases.md](docs/plans/project-phases.md).
 
@@ -55,6 +58,7 @@ App/
     State/                     ProjectStore, SelectionStore (@MainActor @Observable)
     Navigation/                Route, AppCoordinator, AppRootView (the adaptive spine, #30)
     Onboarding/                OnboardingView, AccessRecoveryView (first-run + auth, #31)
+    Settings/                  AlbumSettingsView (per-album edit / reset / delete, #41)
     Support/                   Log (OSLog), DebugScreen (screenshot harness)
     Resources/                 Assets.xcassets (AccentColor, BrandGreen, OnAccent, AppIcon)
   PoimiAppTests/               integration tier (Swift Testing, runs on a sim)
@@ -159,8 +163,8 @@ build + integration tests on an iOS 26 sim. Defined in `.github/workflows/ci.yml
   + a note in development-guidelines. An agent does not add libraries freely.
 - **The `.xcodeproj` is hand-authored** (no XcodeGen/Tuist). Add files by editing `project.pbxproj`
   with the structured ID blocks (app=1, PhotoLibrary=3, tests=4, Support=5, Persistence=6,
-  State=7, Navigation=8, Onboarding=9; Albums/Setup/Review use A0/B0/C0 ids; 2 retired with the
-  Spike; next new group = 10); `plutil -lint` after, and
+  State=7, Navigation=8, Onboarding=9; Albums/Setup/Review/Settings use A0/B0/C0/D0 ids; 2 retired
+  with the Spike; next new letter group = E0, next numeric = 10); `plutil -lint` after, and
   `xcodebuild -list` to confirm it still reads. Keep diffs to
   the intended change — no Xcode reformatting churn.
 - **Tests with fixes:** every bug fix ships with a failing-then-passing regression test.

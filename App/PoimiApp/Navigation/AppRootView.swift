@@ -105,6 +105,13 @@ struct AppRootView: View {
                 RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
                                  detail: "This album is no longer in your library.")
             }
+        case .settings(let id):
+            if let project = project(id) {
+                AlbumSettingsView(project: project)   // edit / reset / delete (#41)
+            } else {
+                RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
+                                 detail: "This album is no longer in your library.")
+            }
         }
     }
 }

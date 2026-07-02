@@ -58,6 +58,9 @@ enum DebugScreen: String, CaseIterable {
     /// The export completion screen — runs a deterministic export against the fake (all days done, some
     /// picks) so the "Your album is ready" state + stat card render (#39).
     case export
+    /// The per-album settings form — an in-memory project + authorized fake, so the grouped form
+    /// (name / period / saves-to / app / reset+delete) renders against real data (#41, design 2F1).
+    case settings
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -95,6 +98,7 @@ struct DebugScreenHost: View {
         case .overview: DebugOverviewHostView()
         case .overviewshort: DebugOverviewShortHostView()
         case .export: DebugExportHostView()
+        case .settings: DebugSettingsHostView()
         }
     }
 }
@@ -467,6 +471,65 @@ struct DebugExportHostView: View {
             Log.app.notice("screenshot-ready: \(DebugScreen.export.rawValue, privacy: .public)")
         }
     }
+}
+
+/// Hosts the per-album settings form (#41) against an in-memory project + an authorized fake, so the
+/// grouped form renders with real values: a named album, a full-year period, two excluded albums, and
+/// a target of 200 — plus the destructive Reset / Delete card below.
+struct DebugSettingsHostView: View {
+    @State private var projectStore: ProjectStore?
+    @State private var selectionStore: SelectionStore?
+    @State private var doneStore: DoneStore?
+    @State private var coordinator: AppCoordinator?
+    @State private var project: CurationProject?
+
+    private static let fake = FakePhotoLibrary(status: .authorized)
+
+    var body: some View {
+        Group {
+            if let selectionStore, let doneStore, let coordinator, let project {
+                NavigationStack { AlbumSettingsView(project: project, calendar: Self.utc) }
+                    .environment(\.photoLibrary, Self.fake)
+                    .environment(projectStore)
+                    .environment(selectionStore)
+                    .environment(doneStore)
+                    .environment(coordinator)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            guard let container = try? AppModelContainer.make(inMemory: true) else {
+                Log.app.error("DebugSettingsHostView: failed to build the in-memory container")
+                return
+            }
+            let projects = ProjectStore(container: container)
+            let selection = SelectionStore(container: container)
+            let done = DoneStore(container: container)
+            let created = projects.create(
+                title: "Best of 2025",
+                rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
+                targetCount: 200,
+                excludedAlbumIDs: ["album/whatsapp", "album/downloads"])
+            selection.activate(created)
+            done.activate(created)
+
+            let coord = AppCoordinator(library: Self.fake)
+            await coord.refreshAuthorization()      // → .authorized, so the access row shows "Full"
+            projectStore = projects
+            selectionStore = selection
+            doneStore = done
+            coordinator = coord
+            project = created
+            Log.app.notice("screenshot-ready: \(DebugScreen.settings.rawValue, privacy: .public)")
+        }
+    }
+
+    private static let utc: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
 }
 
 /// Hosts the full-screen photo viewer (#36) over the deterministic fake tiles: a coordinator seeded

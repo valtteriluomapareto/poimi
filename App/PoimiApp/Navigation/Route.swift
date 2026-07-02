@@ -21,6 +21,8 @@ enum Route: Hashable {
     case review(UUID, DayKey?)
     /// The export / completion step for an album.
     case export(UUID)
+    /// The album's settings — edit name / period / target / exclusions / destination, or reset / delete (#41).
+    case settings(UUID)
 }
 
 /// The app's root phase, derived from authorization (D6). Onboarding/permission sit *above* the

@@ -129,6 +129,18 @@ final class ProjectStore {
         refresh()
     }
 
+    /// Persist edits made to `project` in-place from the settings screen — title, period, target,
+    /// exclusions, destination. The fields are mutated on the model directly (it's `@Observable`, so
+    /// bound controls update it live); this forces an immediate durable save (rather than leaning on
+    /// the mainContext's deferred autosave) and `refresh()`es so the library list reflects a renamed
+    /// or re-targeted album. `excludedAlbumIDs` is sorted for a stable persisted order (matching
+    /// `create(from:)`).
+    func saveEdits(to project: CurationProject) {
+        project.excludedAlbumIDs.sort()
+        save("edit")
+        refresh()
+    }
+
     /// Delete the project record. NEVER deletes the exported Photos album (D31, §12).
     /// NOTE (#30): when the navigation coordinator can have a project *active* in `SelectionStore`,
     /// deleting or resetting the active project must `deactivate()` it first — otherwise the
