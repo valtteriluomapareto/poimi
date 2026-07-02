@@ -8,7 +8,7 @@ import Testing
 import Curation
 @testable import PoimiApp
 
-@Suite("App settings (#—): Photos-access display")
+@Suite("App settings: Photos-access display")
 struct AppSettingsTests {
 
     @Test("each authorization maps to its status label + SF Symbol")
@@ -23,5 +23,16 @@ struct AppSettingsTests {
             == PhotosAccessDisplay(label: "Off", symbol: "exclamationmark.circle"))
         #expect(PhotosAccessDisplay.forAuthorization(.notDetermined)
             == PhotosAccessDisplay(label: "Not set", symbol: "circle"))
+    }
+
+    @Test("denied and restricted deliberately share one 'Off' display; distinct states don't collide")
+    func groupingAndUniqueness() {
+        func display(_ status: LibraryAuthorization) -> PhotosAccessDisplay { .forAuthorization(status) }
+        // Guards the intentional `case .denied, .restricted:` grouping — a future re-split fails here.
+        #expect(display(.restricted) == display(.denied))
+        // The other states are genuinely distinct (no accidental copy-paste collision).
+        #expect(display(.authorized) != display(.limited))
+        #expect(display(.authorized) != display(.notDetermined))
+        #expect(display(.limited) != display(.denied))
     }
 }

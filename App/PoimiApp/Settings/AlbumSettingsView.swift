@@ -94,7 +94,9 @@ struct AlbumSettingsView: View {
                     + "this album from Poimi — the Photos album it created and your originals are never touched.")
             }
         }
-        .navigationTitle("Settings")
+        // "Album settings", not just "Settings" — distinguishes it from the app-level `AppSettingsView`
+        // (also reached by a gear-like icon), and matches this screen's entry `accessibilityLabel`.
+        .navigationTitle("Album settings")
         .navigationBarTitleDisplayMode(.inline)
         // Apply-on-leave AND on backgrounding: `onDisappear` alone isn't a reliable durable-save point
         // (it doesn't fire if the app is backgrounded — then force-quit — while this screen is up), which

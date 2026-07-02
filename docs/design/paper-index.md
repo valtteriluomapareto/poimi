@@ -108,7 +108,7 @@ lands. (Names describe each treatment.)
 | **Export · working** ✓ | `3KG-0` | The transient "Creating your album…" state — gold spinner + "Adding your N photos to <album>." No actions. | #39 · **built** |
 | **Export · re-export** ✓ | `3J8-0` | The idempotent re-run: "Album updated · added N, now M" + the stat card + Back to albums. | #39 · **built** |
 | **Export · error** ✓ | `3LO-0` | Recoverable failure (neutral dark, amber warning): "Couldn't create the album" + **Try again** · **Create a new album instead** (when a re-export's album was deleted) · Back to albums. | #39 · **built** |
-| Album settings | `2F1-0` | Per-album settings (958 tall): name / period / saves-to / reset+delete. | #41 · built (`AlbumSettingsView`); design's "App" section (Photos access, About) **omitted** — app-level, moved to `3N9-0` |
+| Album settings | `2F1-0` | Per-album settings (958 tall), titled **"Album settings"**: name / period / saves-to / reset+delete. | #41 · built (`AlbumSettingsView`); design's "App" section (Photos access, About) **omitted** — app-level, moved to `3N9-0` |
 | App settings | `3N9-0` | App-level settings: **Access** (Photos access → Full/Limited/Off + Settings deep-link) + **About** (Version / License AGPL-3.0 / Source code → GitHub). Reached from the albums-home cog. | built (`AppSettingsView`); the "App" section relocated out of `2F1-0` |
 | State · scanning (long fetch) | `2HZ-0` | The long-scan indicator state. | #34 · built (`ScanningView` scanning phase) |
 | State · empty range | `2JE-0` | Empty/no-photos-in-range state. | #40 · built minimally (`.empty` in `ScanningView`) |
