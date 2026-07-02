@@ -100,6 +100,11 @@ enum ChartBucketing {
             previousMonthKey = monthKey
             buckets.append(ChartBucket(id: index, rows: rowsByBucket[index], tick: tick))
         }
+        // A lone month tick doesn't orient anything and reads as a stranded letter (a single-month album
+        // where every bucket-start falls in that month) — keep ticks only when they mark ≥ 2 months.
+        guard buckets.filter({ $0.tick != nil }).count > 1 else {
+            return buckets.map { ChartBucket(id: $0.id, rows: $0.rows, tick: nil) }
+        }
         return buckets
     }
 

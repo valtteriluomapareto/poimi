@@ -161,14 +161,23 @@ struct ChartBucketingTests {
         #expect(bars.reduce(0) { $0 + $1.rows.count } == 4)   // every cluster still placed
     }
 
-    @Test("a few-day album → daily bars, with the empty days between kept as gaps")
+    @Test("a few-day album → daily bars with gaps; a single month drops its lone stranded tick")
     func shortAlbumIsDaily() {
         let groups = [group("a", 2025, 1, 1, count: 3), group("b", 2025, 1, 3, count: 4),
                       group("c", 2025, 1, 5, count: 2)]
         let bars = buckets(groups)
         #expect(bars.count == 5)                          // Jan 1…5 inclusive
         #expect(bars.map { $0.rows.count } == [1, 0, 1, 0, 1])   // gaps on the empty days
-        #expect(bars.compactMap(\.tick) == ["J"])         // only the first bucket opens January
+        #expect(bars.compactMap(\.tick).isEmpty)          // one month → no lone "J" tick
+    }
+
+    @Test("a single-month span drops all ticks (a lone tick doesn't orient)")
+    func singleMonthDropsTicks() {
+        // All within June → every bucket-start is June → one tick would be stranded, so drop it.
+        let groups = [group("a", 2025, 6, 2, count: 10), group("b", 2025, 6, 10, count: 8),
+                      group("c", 2025, 6, 20, count: 12)]
+        let bars = buckets(groups)
+        #expect(bars.compactMap(\.tick).isEmpty)
     }
 
     @Test("undated clusters get no bar (a timeline has no place for them)")
