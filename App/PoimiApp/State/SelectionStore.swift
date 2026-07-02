@@ -60,6 +60,14 @@ final class SelectionStore {
         Log.selection.notice("activated project: \(pickCount) picks, target \(targetCount)")
     }
 
+    /// Re-sync the live target after Settings edits `targetCount` on a project. The target is cached
+    /// at `activate` time (a bare `project.targetCount = …` wouldn't reach the running tally), and only
+    /// the active project's tally is on screen — so this is a no-op unless `project` is the active one.
+    func retarget(_ project: CurationProject) {
+        guard activeProjectID == project.persistentModelID else { return }
+        target = project.targetCount
+    }
+
     /// Flush and clear the active project (e.g. returning to the library with nothing open).
     func deactivate() {
         flushNow()

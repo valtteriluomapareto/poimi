@@ -172,6 +172,31 @@ Three rules the reviewers required to make (d) safe:
 
 **Implemented (Phase 2, #38 / #89).** Done-state lives in **`DoneStore`** (`@MainActor @Observable`, mirroring `SelectionStore`): an in-memory `Set<DayKey>`, debounced write to `CurationProject.doneDays`, one project hydrated at a time (multi-project guard). The **UI is an accordion** (D35), not the originally-designed done-driven collapse — one day-group cluster open at a time, "done" **decoupled** from collapse and set by an end-of-cluster **"Mark as done"** button that collapses the cluster and **advances to the next unreviewed** one; initial open = the derived first-unreviewed day (the resume, realized inline in the grid). The **"done-but-changed" reconcile** (above) is implemented via a persisted per-day candidate snapshot (**`reviewedIDsByDay`**, D38): each load diffs the current candidates against the last-load baseline and `Completion.reopening` re-opens any done day that *gained* an id (a first load / empty / corrupt baseline re-opens nothing). The snapshot field rides **additive-optional lightweight migration** (D37). Grid scroll positioning uses iOS-18 **`ScrollPosition`** (one-shot `scrollTo`, no re-apply on re-layout — D36).
 
+### 14. Album settings (#41, built)
+
+**Per-album** settings, pushed from the Overview's gear (`Route.settings(UUID)`). `AlbumSettingsView`
+is a grouped `Form` that edits one `CurationProject` in place — name, period (the same
+end-exclusive ↔ inclusive-day bridge as new-album setup, `NewAlbumDraft`), export destination and
+excluded albums (reusing `AlbumPickerView`), and target — plus a destructive **Reset picks** /
+**Delete album** card. Edits apply immediately (iOS-Settings style, no Save button): controls bind to
+the `@Observable` model, and `onDisappear` forces a durable `ProjectStore.saveEdits(to:)` (rather than
+leaning on the mainContext's deferred autosave) and re-syncs the live tally via
+`SelectionStore.retarget(_:)` (the target is cached at `activate`, so a bare mutation wouldn't reach the
+running count). Changing the period only re-scans the candidate pool on the next review load; picks
+outside the new range are **kept** — the user chose them.
+
+**Reset / Delete ordering.** Both reconcile the live stores so the Overview behind reflects the change
+on pop. Reset runs `selection.deactivate()` → `doneStore.deactivate()` → `store.reset(project)` →
+re-`activate` — deactivating *first* (flushing then clearing in-memory state) before zeroing the model,
+so a later debounced flush can't resurrect the just-cleared picks. Delete deactivates the stores, calls
+`store.delete(project)` (record only — **never** the exported Photos album or originals, D31), and
+`coordinator.popToRoot()`s back to the library; a teardown guard skips the `onDisappear` save of the
+now-deleted project.
+
+**App-level settings are NOT here.** Photos access and About are app-wide, not per-album; the 2F1
+design's "App" section belongs on a separate app-settings screen (reached from the album library),
+deliberately omitted from this per-album screen.
+
 ## Data model — v1 SwiftData entities
 
 Persist *our* state only; never photo bytes (one exception — the resource-size cache, D18). Commit to a lightweight **`VersionedSchema` from v1** (the project entity will gain fields), and wrap `selectionSnapshot` in a **versioned envelope** so the blob's own `Codable` shape can evolve without a silent decode wipe.

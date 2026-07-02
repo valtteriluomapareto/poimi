@@ -106,6 +106,11 @@ final class AppCoordinator {
         path.append(.export(projectID))
     }
 
+    /// Push the album's settings screen (#41).
+    func openSettings(_ projectID: UUID) {
+        path.append(.settings(projectID))
+    }
+
     /// Pop one route off the path (a within-albums back, e.g. review → overview). Does NOT touch the
     /// viewer sheet — that's `dismissPhoto()`'s job (the viewer is no longer a path route).
     func pop() {
