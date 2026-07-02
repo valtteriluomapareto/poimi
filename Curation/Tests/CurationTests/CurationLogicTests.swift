@@ -153,6 +153,16 @@ struct CompletionTests {
         #expect(abs(stats.fractionKept - 1.0 / 3.0) < 0.001)
     }
 
+    @Test("dayByID stats: totalPicked counts the whole selection even when a pick is absent from the map")
+    func statsFromDayByIDCountsWholeSelection() {
+        // "a" is on a done day in the map; "z" is a pick with NO map entry (dropped from the last scan).
+        let dayByID: [String: DayKey] = ["a": dk(2025, 3, 16)]
+        let stats = CompletionStats(dayByID: dayByID, doneDays: [dk(2025, 3, 16)], selection: ["a", "z"])
+        #expect(stats.totalPicked == 2)   // whole selection — map-independent (the intended semantic)
+        #expect(stats.markedDone == 1)    // only "a", from the map ∩ done days
+        #expect(stats.kept == 1)
+    }
+
     // THE core D32(d) guarantee: progress lives on days, so it survives regrouping.
     @Test("done-state survives a merge/split regrouping")
     func doneStateInvariantUnderRegrouping() {

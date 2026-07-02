@@ -99,8 +99,8 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
         guard !liveIDs.isEmpty else { throw ExportError.noAssetsResolved }
 
         if let existingAlbumID {
-            // Re-export: find the stored album (throw `.albumMissing` if it was deleted → the screen
-            // offers "create a new album instead"), then add only the picks it doesn't already hold.
+            // Re-export: find the target (throw `.albumMissing` if it was deleted → the screen offers
+            // "create a new album instead"), then add only the picks it doesn't already hold.
             guard let collection = PHAssetCollection.fetchAssetCollections(
                 withLocalIdentifiers: [existingAlbumID], options: nil).firstObject else {
                 throw ExportError.albumMissing
@@ -108,17 +108,25 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
             let existingIDs = Self.assetIDs(in: collection)
             let toAdd = Array(liveIDs.subtracting(existingIDs))     // dupe guard
             if !toAdd.isEmpty {
+                // If the album is deleted BETWEEN the preflight fetch and this change block, the block's
+                // guard no-ops — `didAdd` stays false, so we report the failure instead of a false success.
+                nonisolated(unsafe) var didAdd = false
                 do {
                     try await PHPhotoLibrary.shared().performChanges {
                         // Re-fetch inside the block so no non-Sendable PHAsset/collection is captured.
                         guard let collection = PHAssetCollection.fetchAssetCollections(
                             withLocalIdentifiers: [existingAlbumID], options: nil).firstObject,
                               let request = PHAssetCollectionChangeRequest(for: collection) else { return }
-                        request.addAssets(PHAsset.fetchAssets(withLocalIdentifiers: toAdd, options: nil))
+                        request.addAssets(Self.assetsByCaptureDate(withIDs: toAdd) as NSArray)
+                        didAdd = true
                     }
                 } catch {
                     Log.photoLibrary.error("export addAssets failed: \(String(describing: error), privacy: .public)")
                     throw ExportError.writeFailed
+                }
+                guard didAdd else {
+                    Log.photoLibrary.error("export: target album disappeared mid-write")
+                    throw ExportError.albumMissing
                 }
             }
             Log.photoLibrary.notice("export updated album: +\(toAdd.count), now \(existingIDs.count + toAdd.count)")
@@ -133,7 +141,7 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
         do {
             try await PHPhotoLibrary.shared().performChanges {
                 let request = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: name)
-                request.addAssets(PHAsset.fetchAssets(withLocalIdentifiers: addIDs, options: nil))
+                request.addAssets(Self.assetsByCaptureDate(withIDs: addIDs) as NSArray)
                 placeholderID = request.placeholderForCreatedAssetCollection.localIdentifier
             }
         } catch {
@@ -153,6 +161,17 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
             live.insert(asset.localIdentifier)
         }
         return live
+    }
+
+    /// `ids` resolved to live `PHAsset`s, oldest capture date first — so the album reads chronologically
+    /// (architecture §8; `fetchAssets(withLocalIdentifiers:)` ignores sort descriptors, so sort here).
+    /// Called only inside a `performChanges` block; the array never escapes it.
+    private static func assetsByCaptureDate(withIDs ids: [String]) -> [PHAsset] {
+        var assets: [PHAsset] = []
+        PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil).enumerateObjects { asset, _, _ in
+            assets.append(asset)
+        }
+        return assets.sorted { ($0.creationDate ?? .distantPast) < ($1.creationDate ?? .distantPast) }
     }
 
     /// The asset ids currently in `collection` — the dupe-guard baseline for a re-export.

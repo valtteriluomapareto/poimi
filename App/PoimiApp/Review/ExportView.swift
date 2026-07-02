@@ -15,6 +15,7 @@
 //
 
 import SwiftUI
+import UIKit
 import Curation
 
 /// Drives the export: one `run` per attempt, publishing the phase the screen renders.
@@ -22,14 +23,16 @@ import Curation
 @Observable
 final class ExportStore {
     enum Phase: Equatable {
-        case exporting
+        /// Working. `isReExport` picks the "Creating…" vs "Updating…" copy (captured from the attempt,
+        /// so a forceNewAlbum recovery reads "Creating…" even though a stale `targetAlbumID` is set).
+        case exporting(isReExport: Bool)
         /// Succeeded. `wasReExport` picks the "Album updated" vs "Your album is ready" copy.
         case done(ExportResult, wasReExport: Bool)
         /// Failed. `canCreateNew` is set when we were updating an EXISTING album (offer a fresh one).
         case failed(ExportError, canCreateNew: Bool)
     }
 
-    private(set) var phase: Phase = .exporting
+    private(set) var phase: Phase = .exporting(isReExport: false)
     private let library: any PhotoLibraryProviding
 
     init(library: any PhotoLibraryProviding) {
@@ -39,15 +42,21 @@ final class ExportStore {
     /// Export `picks` into `project`'s album. `forceNewAlbum` ignores any stored `targetAlbumID` (the
     /// error screen's "create a new album instead" recovery when the existing one is gone).
     func run(project: CurationProject, picks: Set<String>, forceNewAlbum: Bool = false) async {
-        phase = .exporting
         let existing = forceNewAlbum ? nil : project.targetAlbumID
+        phase = .exporting(isReExport: existing != nil)
         do {
             let result = try await library.export(
                 assetIDs: picks, toAlbumNamed: project.title, existingAlbumID: existing)
-            // Persist OUR state only: the created/found album id + the finalize stamp. Never the album
-            // contents (D31). SwiftData autosaves the @Model mutation.
+            // Persist OUR state only: the created/found album id + the finalize stamp (never the album
+            // contents — D31). Save explicitly at the seam (like ProjectStore/DoneStore) so this — the
+            // album's only durable "exported" record — can't be lost to a deferred autosave.
             project.targetAlbumID = result.albumID
             if project.markedDoneAt == nil { project.markedDoneAt = Date.now }
+            do {
+                try project.modelContext?.save()
+            } catch {
+                Log.app.error("export: couldn't persist finalize: \(String(describing: error), privacy: .public)")
+            }
             phase = .done(result, wasReExport: existing != nil)
         } catch let error as ExportError {
             phase = .failed(error, canCreateNew: existing != nil)
@@ -63,6 +72,7 @@ struct ExportView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
+    @Environment(\.openURL) private var openURL
     @State private var store: ExportStore?
 
     /// Production callers pass no `store` (the `.task` creates + runs one). The screenshot harness may
@@ -96,9 +106,9 @@ struct ExportView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch store?.phase ?? .exporting {
-        case .exporting:
-            working
+        switch store?.phase ?? .exporting(isReExport: false) {
+        case .exporting(let isReExport):
+            working(isReExport: isReExport)
         case .done(let result, let wasReExport):
             completion(result: result, wasReExport: wasReExport)
         case .failed(let error, let canCreateNew):
@@ -108,7 +118,7 @@ struct ExportView: View {
 
     // MARK: Working
 
-    private var working: some View {
+    private func working(isReExport: Bool) -> some View {
         VStack(spacing: 20) {
             // A gold indeterminate spinner (the branded loading moment).
             ProgressView()
@@ -116,7 +126,7 @@ struct ExportView: View {
                 .tint(.accentColor)
                 .opacity(spinnerVisible ? 1 : 0)
             albumLabel
-            Text(project.targetAlbumID == nil ? "Creating your album…" : "Updating your album…")
+            Text(isReExport ? "Updating your album…" : "Creating your album…")
                 .font(.largeTitle.bold())
                 .multilineTextAlignment(.center)
             Text("Adding your \(selection.selected.count.formatted()) photos to \(project.title).")
@@ -151,6 +161,13 @@ struct ExportView: View {
                     .multilineTextAlignment(.center)
                 statCard(stats)
                     .padding(.top, 12)
+                // Where the payoff landed — iOS has no public deep-link to a specific album, so point
+                // the user at Photos by name rather than a button that can't reach it.
+                Text("Find it in Photos, in the album “\(project.title)”.")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
             }
             Spacer(minLength: 20)
             actionButton("Back to albums", role: .primary) { coordinator.popToRoot() }
@@ -174,10 +191,14 @@ struct ExportView: View {
     private func statCard(_ stats: CompletionStats) -> some View {
         HStack(spacing: 0) {
             stat(value: stats.totalPicked.formatted(), label: "Picked", gold: false)
-            statDivider
-            stat(value: stats.markedDone.formatted(), label: "Reviewed", gold: false)
-            statDivider
-            stat(value: "\(Int((stats.fractionKept * 100).rounded()))%", label: "Kept", gold: true)
+            // Reviewed/Kept are meaningful only against marked-done days; with none marked done a
+            // "0 Reviewed · 0% Kept" reads as failure on a celebration, so show just the pick count.
+            if stats.markedDone > 0 {
+                statDivider
+                stat(value: stats.markedDone.formatted(), label: "Reviewed", gold: false)
+                statDivider
+                stat(value: "\(Int((stats.fractionKept * 100).rounded()))%", label: "Kept", gold: true)
+            }
         }
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity)
@@ -212,7 +233,7 @@ struct ExportView: View {
                     .foregroundStyle(Color.accentColor)
                     .padding(.bottom, 8)
                 albumLabel
-                Text(project.targetAlbumID == nil ? "Couldn’t create the album" : "Couldn’t update the album")
+                Text(canCreateNew ? "Couldn’t update the album" : "Couldn’t create the album")
                     .font(.largeTitle.bold())
                     .multilineTextAlignment(.center)
                 Text(failureMessage(error))
@@ -222,12 +243,19 @@ struct ExportView: View {
             }
             Spacer(minLength: 20)
             VStack(spacing: 12) {
-                actionButton("Try again", role: .primary) {
-                    Task { await store?.run(project: project, picks: selection.selected) }
-                }
-                if canCreateNew {
-                    actionButton("Create a new album instead", role: .secondary) {
-                        Task { await store?.run(project: project, picks: selection.selected, forceNewAlbum: true) }
+                if error == .notAuthorized {
+                    // Retrying can't succeed until access changes, so send them to Settings.
+                    actionButton("Open Settings", role: .primary) {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                    }
+                } else {
+                    actionButton("Try again", role: .primary) {
+                        Task { await store?.run(project: project, picks: selection.selected) }
+                    }
+                    if canCreateNew {
+                        actionButton("Create a new album instead", role: .secondary) {
+                            Task { await store?.run(project: project, picks: selection.selected, forceNewAlbum: true) }
+                        }
                     }
                 }
                 actionButton("Back to albums", role: .tertiary) { coordinator.popToRoot() }

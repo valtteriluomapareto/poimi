@@ -74,14 +74,22 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
 
     func export(assetIDs: Set<String>, toAlbumNamed name: String,
                 existingAlbumID: String?) async throws -> ExportResult {
-        guard status == .authorized || status == .limited else { throw ExportError.notAuthorized }
+        // Match SystemPhotoLibrary: creating/modifying an album needs FULL access (`.limited` can't).
+        guard status == .authorized else { throw ExportError.notAuthorized }
         // Resolve against the seed (mirrors SystemPhotoLibrary fetching live PHAssets by id).
         let resolved = assetIDs.intersection(Set(seededAssets.map(\.id)))
         guard !resolved.isEmpty else { throw ExportError.noAssetsResolved }
 
         let albumID: String
         if let existing = existingAlbumID {
-            guard exportedAlbums[existing] != nil else { throw ExportError.albumMissing }
+            // A valid target is one we exported before OR a pre-existing album the user chose at setup
+            // (a seeded album, with its current membership). Only a truly unknown id is `.albumMissing`.
+            if exportedAlbums[existing] == nil {
+                guard seededAlbums.contains(where: { $0.id == existing }) else {
+                    throw ExportError.albumMissing
+                }
+                exportedAlbums[existing] = (name, membership[existing] ?? [])
+            }
             albumID = existing
         } else {
             exportSeq += 1

@@ -48,7 +48,8 @@ final class CurationProject {
     var resumeDayKey: String?
     /// Scroll anchor only — not the done-state authority (§13).
     var lastViewedAssetID: String?
-    /// Set when the user finalizes the album → status `.done`.
+    /// Set at the FIRST export (finalize) → status `.done`. A later re-export leaves it unchanged — it
+    /// records *when finalized*, not the last export time.
     var markedDoneAt: Date?
 
     var createdAt: Date
