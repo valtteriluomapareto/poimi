@@ -80,7 +80,9 @@ jobs:
           # Capture output so we can both stream it and guard against an empty
           # suite passing green (e.g. if the only test is deleted/renamed away).
           # `set -o pipefail` makes a `swift test` failure here a step failure.
-          swift test 2>&1 | tee test-output.log
+          # `--enable-code-coverage` instruments the run so the advisory coverage step (below) can
+          # report the pure-domain number; it doesn't change pass/fail.
+          swift test --enable-code-coverage 2>&1 | tee test-output.log
 
           # Swift Testing prints a summary like:
           #   ✔ Test run with 1 test in 1 suite passed after 0.001 seconds.
@@ -145,8 +147,19 @@ jobs:
             exit 1
           fi
           echo "Testing on simulator $DEST_ID"
+          # `-enableCodeCoverage YES` + a result bundle so the advisory coverage step can read per-file
+          # numbers via `xccov`. Fresh runner, but rm defensively (xcodebuild refuses an existing bundle).
+          rm -rf build/PoimiApp.xcresult
           xcodebuild test \
             -project App/PoimiApp.xcodeproj \
             -scheme PoimiApp \
             -destination "platform=iOS Simulator,id=$DEST_ID" \
+            -enableCodeCoverage YES \
+            -resultBundlePath build/PoimiApp.xcresult \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Coverage summary (advisory)
+        # Surface coverage in the run summary — NOT a gate (D28). Runs even if a prior step failed so a
+        # red build still shows what was covered; the script is defensive about missing artifacts.
+        if: always()
+        run: ./Scripts/coverage-summary.sh build/PoimiApp.xcresult >> "$GITHUB_STEP_SUMMARY"
