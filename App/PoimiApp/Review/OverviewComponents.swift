@@ -48,8 +48,9 @@ struct OverviewThumb: View {
 /// span into CONTIGUOUS buckets (empty ones included, so a quiet stretch reads as a real gap). When the
 /// calendar unit would yield fewer than `minBuckets` bars (a short/awkward span, e.g. a 5-week album →
 /// 5 weekly bars), it floors to `minBuckets` roughly-equal day-slices instead, so the chart never looks
-/// sparse. A month-initial tick marks each bucket that opens a new month ("… Feb … Mar …"). App-layer +
-/// pure (Foundation only); app-tier tested. (Model `ChartBucket` lives with the other overview models.)
+/// sparse. Axis labels (see `axisTicks`) are month initials for a multi-month span ("… Feb … Mar …")
+/// or a sparse date every few bars for a short one ("1 Jun … 9 Jun …"). App-layer + pure (Foundation
+/// only); app-tier tested. (Model `ChartBucket` lives with the other overview models.)
 enum ChartBucketing {
     /// The chart never shows fewer than this many bars when the span can hold them (owner: "at least 8").
     static let minBuckets = 8
@@ -84,29 +85,37 @@ enum ChartBucketing {
             countByBucket[bucket] += entry.row.count
         }
 
-        // `veryShortMonthSymbols` reads the calendar's OWN locale — bind the passed one so the ticks
-        // match the caller's locale (and the tests are deterministic).
+        let ticks = axisTicks(starts: starts, firstDate: firstDate, calendar: calendar, locale: locale)
+        return starts.indices.map { ChartBucket(id: $0, count: countByBucket[$0], tick: ticks[$0]) }
+    }
+
+    /// The per-bucket axis labels. A span covering ≥ 2 months gets a month-initial where each new month
+    /// opens ("… F … M …"). A short span (a single month's worth of bucket-starts — where month letters
+    /// would be a lone stranded "J") instead gets a DATE every few bars ("1 Jun … 9 Jun …"), so the axis
+    /// still orients without labelling every bar. `nil` = no label on that bucket.
+    private static func axisTicks(starts: [Date], firstDate: Date, calendar: Calendar, locale: Locale) -> [String?] {
+        // `veryShortMonthSymbols` reads the calendar's OWN locale — bind the passed one so labels match
+        // the caller's locale (and the tests are deterministic). A unit-aligned start can precede the
+        // album (a week starting in the prior month), so key each tick off the album's real start.
         var localizedCalendar = calendar
         localizedCalendar.locale = locale
         let initials = localizedCalendar.veryShortMonthSymbols
-        var buckets: [ChartBucket] = []
+        var monthTicks: [String?] = []
         var previousMonthKey: Int?
-        for (index, bucketStart) in starts.enumerated() {
-            // A unit-aligned `start` can precede the album (e.g. a Jan-1 album whose first week starts
-            // Dec 29) — tick the first bucket by the album's real start so it isn't a phantom prior month.
-            let tickDate = max(bucketStart, firstDate)
-            let month = calendar.component(.month, from: tickDate)
-            let monthKey = calendar.component(.year, from: tickDate) * 12 + month
-            let tick = monthKey != previousMonthKey && initials.indices.contains(month - 1) ? initials[month - 1] : nil
+        for start in starts {
+            let date = max(start, firstDate)
+            let month = calendar.component(.month, from: date)
+            let monthKey = calendar.component(.year, from: date) * 12 + month
+            monthTicks.append(monthKey != previousMonthKey && initials.indices.contains(month - 1) ? initials[month - 1] : nil)
             previousMonthKey = monthKey
-            buckets.append(ChartBucket(id: index, count: countByBucket[index], tick: tick))
         }
-        // A lone month tick doesn't orient anything and reads as a stranded letter (a single-month album
-        // where every bucket-start falls in that month) — keep ticks only when they mark ≥ 2 months.
-        guard buckets.filter({ $0.tick != nil }).count > 1 else {
-            return buckets.map { ChartBucket(id: $0.id, count: $0.count, tick: nil) }
-        }
-        return buckets
+        if monthTicks.compactMap({ $0 }).count > 1 { return monthTicks }
+
+        // Short span → a date on every `stride`-th bar (≈ 4 labels total), not every bar.
+        var dateStyle = Date.FormatStyle.dateTime.day().month(.abbreviated).locale(locale)
+        dateStyle.timeZone = calendar.timeZone
+        let stride = max(2, Int((Double(starts.count) / 4).rounded(.up)))
+        return starts.indices.map { $0 % stride == 0 ? max(starts[$0], firstDate).formatted(dateStyle) : nil }
     }
 
     /// The contiguous bucket start-dates covering `firstDate … lastDate`: calendar-unit-aligned by span,

@@ -161,23 +161,29 @@ struct ChartBucketingTests {
         #expect(bars.reduce(0) { $0 + $1.count } == 36)       // every photo placed (10+8+12+6)
     }
 
-    @Test("a few-day album → daily bars with gaps; a single month drops its lone stranded tick")
+    @Test("a few-day album → daily bars with gaps; a single month labels sparse dates (not month letters)")
     func shortAlbumIsDaily() {
         let groups = [group("a", 2025, 1, 1, count: 3), group("b", 2025, 1, 3, count: 4),
                       group("c", 2025, 1, 5, count: 2)]
         let bars = buckets(groups)
         #expect(bars.count == 5)                          // Jan 1…5 inclusive
         #expect(bars.map(\.count) == [3, 0, 4, 0, 2])     // photo counts; gaps on the empty days
-        #expect(bars.compactMap(\.tick).isEmpty)          // one month → no lone "J" tick
+        let ticks = bars.compactMap(\.tick)
+        #expect(!ticks.isEmpty)                           // one month → date ticks, not empty
+        #expect(ticks.count < bars.count)                 // …but not on every bar
+        #expect(ticks.allSatisfy { $0.contains("Jan") })  // dates, not a lone "J"
     }
 
-    @Test("a single-month span drops all ticks (a lone tick doesn't orient)")
-    func singleMonthDropsTicks() {
-        // All within June → every bucket-start is June → one tick would be stranded, so drop it.
+    @Test("a single-month span uses sparse DATE ticks (not stranded month letters)")
+    func singleMonthUsesDateTicks() {
+        // All within June → month letters would be a lone stranded "J", so label sparse June dates.
         let groups = [group("a", 2025, 6, 2, count: 10), group("b", 2025, 6, 10, count: 8),
                       group("c", 2025, 6, 20, count: 12)]
         let bars = buckets(groups)
-        #expect(bars.compactMap(\.tick).isEmpty)
+        let ticks = bars.compactMap(\.tick)
+        #expect(!ticks.isEmpty)
+        #expect(ticks.count < bars.count)                 // not every bar
+        #expect(ticks.allSatisfy { $0.contains("Jun") })  // June dates
     }
 
     @Test("undated clusters get no bar (a timeline has no place for them)")
