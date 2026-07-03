@@ -155,7 +155,8 @@ struct AlbumOverviewView: View {
                             ClusterListRow(row: row) {
                                 coordinator.openReview(project.id, day: row.firstDay)
                             }
-                            .padding(.horizontal, 20)
+                            // No horizontal padding here — ClusterListRow insets its own text but lets the
+                            // preview strip bleed to the right screen edge.
                         }
                     } header: {
                         ClusterMonthHeader(title: section.title)
@@ -342,9 +343,12 @@ struct ClusterListRow: View {
                         .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
                 }
+                .padding(.horizontal, 20)   // the text row stays inset both sides
                 // The evenly-sampled preview strip — replaces the single cover thumb, so a glance shows
-                // the whole cluster, not one photo (#35 paged-clusters).
+                // the whole cluster, not one photo (#35 paged-clusters). Leading inset only, so it runs
+                // off the right screen edge (the shelf "keep scrolling" read) instead of stopping short.
                 ClusterStrip(group: row.group)
+                    .padding(.leading, 20)
             }
             .padding(.vertical, 10)
             .contentShape(Rectangle())

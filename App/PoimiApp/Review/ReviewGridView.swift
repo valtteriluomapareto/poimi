@@ -129,7 +129,16 @@ struct ReviewGridView: View {
             rebuildWindow()
             scheduleRecomputeWindow()
         }
-        .onChange(of: currentPage) { rebuildWindow(); scheduleRecomputeWindow() }
+        .onChange(of: currentPage) {
+            // Drop the previous page's ids up front. Otherwise they linger in `visibleIDs` — foreign to
+            // the new cluster's window universe — so the slice computes EMPTY and the cache is *cleared*
+            // on every flick, and the new cluster only starts loading once a scroll repopulates
+            // `visibleIDs`. Clearing here makes the slice prime the new cluster's head immediately, so
+            // its first screenful pre-decodes on the flick (no "move to start loading").
+            visibleIDs = []
+            rebuildWindow()
+            scheduleRecomputeWindow()
+        }
         .onChange(of: visibleIDs) { scheduleRecomputeWindow() }
         .onChange(of: columnCount) { scheduleRecomputeWindow() }
         .onChange(of: maxColumns) { columnCount = min(columnCount, maxColumns) }
