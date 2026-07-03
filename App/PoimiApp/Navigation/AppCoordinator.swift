@@ -50,6 +50,15 @@ final class AppCoordinator {
         self.library = library
     }
 
+    /// The album at the root of the current path — the one shown in the iPad detail column — or `nil`
+    /// at the albums root / app-settings. Drives the split-view sidebar's selection highlight (#42).
+    var activeAlbumID: UUID? {
+        switch path.first {
+        case .albumOverview(let id), .review(let id, _), .export(let id), .settings(let id): id
+        case .appSettings, nil: nil
+        }
+    }
+
     /// Where the app should be, derived from authorization — never stored (single source of truth).
     var rootPhase: RootPhase {
         switch authorization {
