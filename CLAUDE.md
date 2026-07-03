@@ -179,7 +179,8 @@ Defined in `.github/workflows/ci.yml`.
 - **The `.xcodeproj` is hand-authored** (no XcodeGen/Tuist). Add files by editing `project.pbxproj`
   with the structured ID blocks (app=1, PhotoLibrary=3, tests=4, Support=5, Persistence=6,
   State=7, Navigation=8, Onboarding=9; Albums/Setup/Review/Settings use A0/B0/C0/D0 ids; 2 retired
-  with the Spike; next new letter group = E0, next numeric = 10); `plutil -lint` after, and
+  with the Spike; next new letter group = E0, next numeric = 10; the app-group `Localizable.xcstrings`
+  resource took `…A1`/`…A2`); `plutil -lint` after, and
   `xcodebuild -list` to confirm it still reads. Keep diffs to
   the intended change — no Xcode reformatting churn.
 - **Tests with fixes:** every bug fix ships with a failing-then-passing regression test.
