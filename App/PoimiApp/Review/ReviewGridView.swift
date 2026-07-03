@@ -491,6 +491,7 @@ private struct ReviewSectionHeader: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("selectAllButton")
         // Primary label (glass vibrancy), NOT the gold accent: gold is for graphical marks — small gold
         // text fails the contrast caveat (styleguide §1). Position + weight signal it's tappable.
         .foregroundStyle(.primary)

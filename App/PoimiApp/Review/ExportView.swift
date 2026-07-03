@@ -181,6 +181,7 @@ struct ExportView: View {
             }
             Spacer(minLength: 20)
             actionButton("Back to albums", role: .primary) { coordinator.popToRoot() }
+                .accessibilityIdentifier("completionBackToAlbums")
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 16)

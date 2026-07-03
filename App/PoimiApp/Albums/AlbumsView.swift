@@ -29,6 +29,7 @@ struct AlbumsView: View {
                 } actions: {
                     Button("New album", systemImage: "plus") { showingSetup = true }
                         .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("newAlbumButton")
                 }
             } else {
                 // A `Button` per row (NOT `List(selection:)`): a plain list's selection binding doesn't
@@ -73,6 +74,7 @@ struct AlbumsView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Button("New album", systemImage: "plus") { showingSetup = true }
+                    .accessibilityIdentifier("newAlbumButton")
             }
         }
         .sheet(isPresented: $showingSetup) {
