@@ -50,10 +50,12 @@ struct AlbumOverviewView: View {
             // No visible nav title — the big title lives in the scroll header (like the design); the
             // nav bar keeps just the back button.
             .navigationBarTitleDisplayMode(.inline)
-            // Force the nav bar's background on so scrolling clusters are hidden behind the top controls
-            // (back / adjustments / Export) instead of showing through dimly above the pinned month
-            // header — the strips scroll UNDER an opaque top, not over it.
+            // A SOLID (not glass) nav bar background so scrolling clusters are fully hidden behind the
+            // top controls (back / adjustments / Export) — the earlier `.visible` gave a translucent
+            // glass bar, so content still showed through, dimmed, above the pinned month header. An
+            // opaque `systemBackground` bar matches the list ground (black in dark, white in light).
             .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(Color(.systemBackground), for: .navigationBar)
             // Settings + Export at the album level. The Overview is the album's landing screen and shows
             // the running tally, so it's the natural "I'm done → make the album" spot; the gear reaches
             // per-album settings (#41). No "Clear" here — clearing all picks now lives in Settings as
