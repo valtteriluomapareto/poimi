@@ -126,6 +126,7 @@ struct ReviewToolbarActions: View {
             // Plain text (like "Clear") — clearer than a cryptic add-to-album glyph in the nav.
             Button("Export", action: onExport)
                 .disabled(picked == 0)
+                .accessibilityIdentifier("exportButton")
         }
         .confirmationDialog("Clear all picks?", isPresented: $confirmingClear, titleVisibility: .visible) {
             Button("Clear \(picked) picked", role: .destructive) { selection.clear() }

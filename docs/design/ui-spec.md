@@ -1,9 +1,10 @@
-# UI spec — the review screen
+# UI spec — review screen + v1 surface
 
-The first concrete UI spec, written with the make-or-break screen (#35) as it lands
-("spike-then-document", D27). It records *what was built and why* for the review grid + its
-chrome, so the design and the code can be checked against each other. Tokens (color, type,
-spacing, materials) live in [styleguide.md](styleguide.md); the interaction rationale and the
+The concrete UI spec, written **spike-then-document** (D27): the make-or-break review screen (#35) in
+full depth, then the rest of the resolved v1 surface (overview, viewer, export, settings, empty/error,
+iPad) transcribed concisely under [Other resolved screens](#other-resolved-screens-v1). It records
+*what was built and why* so the design and the code can be checked against each other. Tokens (color,
+type, spacing, materials) live in [styleguide.md](styleguide.md); the interaction rationale and the
 Phase-0 evidence live in [design-language.md](design-language.md) and
 [../plans/spike-findings.md](../plans/spike-findings.md). This documents the *resolved* surface,
 not new decisions.
@@ -134,11 +135,58 @@ header. Beneath the title:
 - Reduce Motion (no collapse/density animation) and Reduce Transparency (the `.bar` headers adapt for
   free — no custom glass to make opaque) are built in.
 
+## Other resolved screens (v1)
+
+The review grid is the make-or-break, so it gets the depth above. The rest of the v1 surface —
+resolved + built this phase — is transcribed here concisely (anatomy · key interaction · a11y). Copy
+is **"album", never "yearbook"**; there is no print/export-to-print anywhere.
+
+- **Album overview (#37, cluster index — `3BL`).** The album's landing screen: a **coverage chart**
+  (adaptive day/week/month buckets shaded gold by density) over a **month-sectioned list of day-cluster
+  rows** (each: cover swatch · date · picked/total · done seal). Tapping a row **drills into the review
+  grid** at that day. Nav trailing: a **sliders "adjustments" icon** (→ album settings) + **Export**.
+  Chart/index built once in the store (never in `body`). a11y: rows are buttons labelled with the
+  date + progress; the chart is decorative (`.accessibilityHidden`), the list carries the data.
+- **Photo viewer (#36, Now-Playing card — `2ZC`).** A **`.sheet`**, not a path push — rises from the
+  bottom, pull-down to dismiss (the grid stays mounted beneath, D10). A paged `TabView` over the
+  review's ordered ids; per-photo day label; an in-place **select** control (gold check) + the running
+  tally; a filmstrip. Reduce Motion → cross-fade.
+- **Export + completion (#39 — `2DN`/`3KG`/`3LO`).** A terminal state machine: **working**
+  ("Creating/Updating your album…", grace-gated spinner) → **completion** ("Your album is ready" /
+  "Album updated" + a Picked/Reviewed/Kept stat card + "Find it in Photos, in the album …") or a
+  **recoverable error** (per-error copy; notAuthorized→Open Settings; albumMissing→Create a new album;
+  writeFailed→Try again). One-way copy into a native Photos album (create-or-find + dupe-guard, D31);
+  a partial first export notes "N couldn't be added". No nav chrome mid-write (no half state).
+- **Album settings (#41 — `2F1`).** Per-album grouped `Form`: **Name**, **Period** (from/to, re-scans
+  next review; picks outside the new range are kept), **Saves to** (Photos album destination + Aim-for
+  stepper), **Exclude from source** (screenshots toggle + excluded albums), and a destructive **Reset
+  picks / Delete album** card. Edits apply immediately; durable save + live-tally re-sync on leave.
+  Reset/Delete reconcile the live stores; delete never touches the Photos album/originals (D31).
+- **App settings (`3N9`).** App-**wide**, distinct from album settings (reached by a
+  **cog** on the albums home; album settings uses the sliders icon so the two never look alike):
+  **Access** (Photos access status + Settings deep-link) + **About** (Version / License AGPL-3.0 /
+  Source → GitHub). Thin (no stores).
+- **Empty + error states (#40 — `2JE`).** Never a dead-end. The scan's **empty** state is actionable
+  and reason-specific — *no photos in range* → **Change range**; *everything excluded* → **Review
+  exclusions** + Change range (→ album settings). The **failure** state distinguishes a transient load
+  error (**Try again**) from **access revoked mid-session** (re-reads auth → routes to the recovery
+  screen, §10). Shared views used by both the grid + overview.
+- **iPad split-view (#42 — `3QT`).** Regular width = a **2-column `NavigationSplitView`**: sidebar
+  (album library, open album highlighted) + a detail column hosting the album's own stack (overview →
+  grid → export). The photo viewer stays a sheet over the detail (no 3rd column). The grid's column
+  count derives from the detail width (dense on iPad, reflows on Split View / Stage Manager). Compact
+  (iPhone) stays the single-column `NavigationStack`.
+
 ## Deferred (tracked)
 
 - **Drag-to-multi-select** across cells — the badge-select already gives fast single-tap
-  multi-select; the drag gesture (and its conflict-handling with scroll/pinch) is a follow-up.
-- **`performAccessibilityAudit()` per screen** — needs a UI-test target; rides the E2E tier (#43).
+  multi-select; the drag gesture (and its conflict-handling with scroll/pinch) is a follow-up
+  (with **select-mode**, deferred from #35).
+- **iPad input polish** — pointer/hover, keyboard shortcuts, trackpad drag-select, drag-and-drop (v1.1;
+  the adaptive *layout* shipped in #42, the input-mode matrix is deferred).
+- **`performAccessibilityAudit()` per screen** — #43 landed the headless E2E smoke + accessibility
+  identifiers on the happy path (the hooks for a UI-test target), but no XCUITest target yet; adding
+  the target + per-screen audit calls is the next step.
 - **Glass scroll-edge chrome** — the header is `.bar` today; a real iOS-26 `glassEffect` scroll-edge
   is a device-iteration follow-up (no in-app precedent; can't verify the blur from a screenshot).
 - **Windowed-by-index snapshot + D29 access-counting guard** (#47).

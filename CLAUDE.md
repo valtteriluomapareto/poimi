@@ -21,7 +21,9 @@ third-party dependencies under incompatible licenses.
 
 ## Status
 
-**Phase 2 (the v1 critical path) is in progress.** Built: the pure `Curation` domain, the PhotoKit
+**Phase 2 (the v1 critical path) is complete** — every issue #30–#43 is built + merged; what remains is
+deferred-to-v1.1 polish (select-mode / drag-multi-select, iPad input polish) and the future
+app-settings-vs-per-album split already noted. Built: the pure `Curation` domain, the PhotoKit
 seam (`PhotoLibraryProviding` + `System`/`Fake` impls), the integration test tier, dev tooling
 (OSLog + screenshot harness), the state stores (`CurationProject`, `ProjectStore`, `SelectionStore`,
 `DoneStore`), the **navigation coordinator** (#30), **onboarding + authorization** (#31), the
@@ -48,10 +50,13 @@ transient load error (retry) from **access revoked mid-session** (routes to reco
 dead-end. **iPad** (#42) is a **2-column `NavigationSplitView`** — sidebar (album library, selection
 bound to `AppCoordinator.activeAlbumID`) + a detail stack (overview → grid → export); the photo viewer
 stays a sheet (no 3rd column), and the grid's columns derive from the detail width (`ReviewGridColumns`)
-so it opens dense on iPad + reflows on Split View / Stage Manager. Still open on the v1 path:
-**select-mode / drag-multi-select** (deferred from #35), iPad **input polish** (keyboard/hover/drag, v1.1),
-**E2E** (#43).
-The throwaway Phase-0 **Spike** was deleted (it seeded #35).
+so it opens dense on iPad + reflows on Split View / Stage Manager. **E2E + UI spec** (#43): a single
+**headless happy-path smoke** (`HappyPathSmokeTests` — authorize → create → scan → select → mark done →
+export, through the real stores + `FakePhotoLibrary`, with a `localIdentifier`-churn seed so nothing
+depends on id strings) as the D23 tripwire; the happy-path controls carry **accessibility identifiers**
+(future XCUITest-ready); and the [ui-spec](docs/design/ui-spec.md) now transcribes all resolved v1
+screens (D27). Deferred to v1.1: **select-mode / drag-multi-select** (from #35) + iPad **input polish**
+(keyboard/hover/drag). The throwaway Phase-0 **Spike** was deleted (it seeded #35).
 Phase/issue plan: [docs/plans/project-phases.md](docs/plans/project-phases.md).
 
 ## Repo map
@@ -203,8 +208,9 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
   north star (Liquid Glass, SwiftUI-first, adaptive iPad).
 - **[docs/design/styleguide.md](docs/design/styleguide.md)** — concrete tokens (color, type,
   spacing, materials, motion).
-- **[docs/design/ui-spec.md](docs/design/ui-spec.md)** — per-screen UI spec (the review screen so
-  far): anatomy, grid/header/selection/chrome, a11y, deferrals (spike-then-document, D27).
+- **[docs/design/ui-spec.md](docs/design/ui-spec.md)** — the UI spec: the review screen in depth
+  (anatomy, grid/header/selection/chrome, a11y) + all resolved v1 screens transcribed concisely
+  (overview, viewer, export, settings, empty/error, iPad), plus deferrals (spike-then-document, D27).
 - **[docs/design/paper-index.md](docs/design/paper-index.md)** — index of the Paper design file: all
   33 artboards — 27 product screens + a 6-artboard v1.1 exploration cluster (node IDs, content,
   issue + build status). Keep current when working with Paper.

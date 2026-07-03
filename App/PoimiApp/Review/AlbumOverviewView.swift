@@ -350,6 +350,7 @@ struct ClusterListRow: View {
         .accessibilityLabel(a11yLabel(state: state, picked: picked))
         .accessibilityHint("Opens this day in review")
         .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("overviewClusterRow")
     }
 
     // `.primary` (semibold carries the emphasis), not gold — small gold text fails the styleguide §1

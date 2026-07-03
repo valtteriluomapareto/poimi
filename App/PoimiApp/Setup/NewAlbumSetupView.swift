@@ -77,6 +77,7 @@ struct NewAlbumSetupView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create", action: create)
                         .disabled(!isValid)
+                        .accessibilityIdentifier("createAlbumButton")
                 }
             }
         }

@@ -301,6 +301,7 @@ struct ReviewGridView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .tint(isDone ? Color(.systemGray) : .brandGreen)
+            .accessibilityIdentifier("markDoneButton")   // stable id though the label toggles
             Spacer()
         }
         .padding(.top, 10)
@@ -491,6 +492,7 @@ private struct ReviewSectionHeader: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("selectAllButton")
         // Primary label (glass vibrancy), NOT the gold accent: gold is for graphical marks — small gold
         // text fails the contrast caveat (styleguide §1). Position + weight signal it's tappable.
         .foregroundStyle(.primary)
