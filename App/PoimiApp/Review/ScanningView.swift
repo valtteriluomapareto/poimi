@@ -115,8 +115,8 @@ struct ScanningView: View {
     /// "1,847 photos · Jan 2025 – Dec 2025".
     private func headerSubtitle(_ groups: [DayGroup]) -> String {
         let total = groups.reduce(0) { $0 + $1.count }
-        return String(localized: "\(total) photos · \(periodLabel)",
-                      comment: "Review header subtitle: photo count · date-range period")
+        return String(localized: "\(total.formatted()) photos · \(periodLabel)",
+                      comment: "Review header subtitle: photo count (grouped) · date-range period")
     }
 
     private var periodLabel: String {

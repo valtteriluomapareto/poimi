@@ -23,13 +23,38 @@
         }
       }
     },
-    "%@ is already up to date · %lld photos." : {
+    "%@ is already up to date · %@ photos." : {
       "comment" : "Re-export subtitle: nothing new to add",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@ is already up to date · %2$lld photos."
+            "value" : "%1$@ is already up to date · %2$@ photos."
+          }
+        }
+      }
+    },
+    "%@ photos · %@" : {
+      "comment" : "Review header subtitle: photo count (grouped) · date-range period",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ photos · %2$@"
+          }
+        }
+      }
+    },
+    "%@ photos, hand-picked — one tap at a time." : {
+      "comment" : "Completion subtitle: N picked, no days marked done"
+    },
+    "%@ photos, hand-picked from %@ — one tap at a time." : {
+      "comment" : "Completion subtitle: N picked from M reviewed days",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ photos, hand-picked from %2$@ — one tap at a time."
           }
         }
       }
@@ -53,9 +78,6 @@
           }
         }
       }
-    },
-    "%@, target reached" : {
-      "comment" : "Tally a11y label suffix when the target is met"
     },
     "%@. %lld of %lld kept.%@" : {
       "localizations" : {
@@ -157,37 +179,23 @@
         }
       }
     },
+    "%lld of %lld photos picked, %lld left, target reached" : {
+      "comment" : "Tally a11y label when the target is reached",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld photos picked, %3$lld left, target reached"
+          }
+        }
+      }
+    },
     "%lld of %lld picked" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$lld of %2$lld picked"
-          }
-        }
-      }
-    },
-    "%lld photos · %@" : {
-      "comment" : "Review header subtitle: photo count · date-range period",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld photos · %2$@"
-          }
-        }
-      }
-    },
-    "%lld photos, hand-picked — one tap at a time." : {
-      "comment" : "Completion subtitle: N picked, no days marked done"
-    },
-    "%lld photos, hand-picked from %lld — one tap at a time." : {
-      "comment" : "Completion subtitle: N picked from M reviewed days",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld photos, hand-picked from %2$lld — one tap at a time."
           }
         }
       }
@@ -207,13 +215,13 @@
     "Access" : {
 
     },
-    "Added %lld photos · %@ now holds %lld." : {
+    "Added %@ photos · %@ now holds %@." : {
       "comment" : "Re-export subtitle: N newly added, album total M",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Added %1$lld photos · %2$@ now holds %3$lld."
+            "value" : "Added %1$@ photos · %2$@ now holds %3$@."
           }
         }
       }
@@ -411,6 +419,9 @@
     "Jump to photo" : {
 
     },
+    "Kept" : {
+
+    },
     "Leave as a new album (created on export), or add picks to an existing album." : {
 
     },
@@ -567,6 +578,9 @@
 
     },
     "Review exclusions" : {
+
+    },
+    "Reviewed" : {
 
     },
     "Save to" : {

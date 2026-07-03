@@ -190,18 +190,21 @@ struct ExportView: View {
     }
 
     private func completionSubtitle(result: ExportResult, wasReExport: Bool, stats: CompletionStats) -> String {
+        // `.formatted()` keeps locale number grouping ("1,847"); it lands as a %@ arg in the key.
         if wasReExport {
             return result.added > 0
-                ? String(localized: "Added \(result.added) photos · \(project.title) now holds \(result.total).",
-                         comment: "Re-export subtitle: N newly added, album total M")
-                : String(localized: "\(project.title) is already up to date · \(result.total) photos.",
+                ? String(localized: """
+                    Added \(result.added.formatted()) photos · \(project.title) now holds \(result.total.formatted()).
+                    """, comment: "Re-export subtitle: N newly added, album total M")
+                : String(localized: "\(project.title) is already up to date · \(result.total.formatted()) photos.",
                          comment: "Re-export subtitle: nothing new to add")
         }
         return stats.markedDone > 0
             ? String(localized: """
-                \(stats.totalPicked) photos, hand-picked from \(stats.markedDone) — one tap at a time.
+                \(stats.totalPicked.formatted()) photos, hand-picked from \(stats.markedDone.formatted()) \
+                — one tap at a time.
                 """, comment: "Completion subtitle: N picked from M reviewed days")
-            : String(localized: "\(stats.totalPicked) photos, hand-picked — one tap at a time.",
+            : String(localized: "\(stats.totalPicked.formatted()) photos, hand-picked — one tap at a time.",
                      comment: "Completion subtitle: N picked, no days marked done")
     }
 
@@ -222,7 +225,9 @@ struct ExportView: View {
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    private func stat(value: String, label: String, gold: Bool) -> some View {
+    // `label` is a LocalizedStringKey so the call-site literals ("Picked"/"Reviewed"/"Kept") extract +
+    // localize; `value` stays a String (a formatted number, shown verbatim).
+    private func stat(value: String, label: LocalizedStringKey, gold: Bool) -> some View {
         VStack(spacing: 4) {
             Text(value)
                 .font(.title2.bold())

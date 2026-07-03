@@ -102,11 +102,16 @@ struct ReviewTally: View {
     }
 
     private func accessibilityLabel(_ progress: TargetProgress) -> String {
-        let base = String(localized: """
+        // Two full independent keys (not a localized fragment embedded in another) so a translator can
+        // reorder the whole sentence per language.
+        if progress.isComplete {
+            return String(localized: """
+                \(progress.picked) of \(progress.target) photos picked, \(progress.remaining) left, target reached
+                """, comment: "Tally a11y label when the target is reached")
+        }
+        return String(localized: """
             \(progress.picked) of \(progress.target) photos picked, \(progress.remaining) left
             """, comment: "Tally a11y label: picked / target / remaining")
-        guard progress.isComplete else { return base }
-        return String(localized: "\(base), target reached", comment: "Tally a11y label suffix when the target is met")
     }
 }
 
