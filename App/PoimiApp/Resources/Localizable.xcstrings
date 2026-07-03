@@ -781,7 +781,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Luo albumi, johon poimit käsin vuoden kuvat."
+            "value": "Luo albumi, johon poimit kuvasi käsin."
           }
         }
       }
@@ -1100,7 +1100,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Käy läpi koko vuoden kuvat ja valitse parhaat yhteen albumiin — kohti asettamaasi määrää. Sinä valitset jokaisen kuvan, ei algoritmi."
+            "value": "Käy kuvasi läpi ja poimi albumiin oikea määrä parhaita kuvia. Sinä poimit jokaisen kuvan."
           }
         }
       }
@@ -1111,7 +1111,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Poimi vuotesi käsin."
+            "value": "Poimi kuvasi"
           }
         }
       }
@@ -1195,7 +1195,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rajattu käyttöoikeus näyttää vain erikseen valitsemasi kuvat. Poimi tarvitsee koko kirjastosi, jotta voit koota kokonaisen vuoden päivämäärän mukaan."
+            "value": "Rajattu käyttöoikeus näyttää vain erikseen valitsemasi kuvat. Poimi tarvitsee koko kirjastosi, jotta voit koota albumin päivämäärän mukaan."
           }
         }
       }
@@ -1205,7 +1205,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Käydään vuottasi läpi…"
+            "value": "Käydään kuviasi läpi…"
           }
         }
       }
@@ -1566,7 +1566,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Poimi ei näe kirjastoasi. Ota kuvien käyttöoikeus käyttöön, jotta voit selata ja koota vuotesi."
+            "value": "Poimi ei näe kirjastoasi. Ota kuvien käyttöoikeus käyttöön, jotta voit selata kuviasi ja koota albumisi."
           }
         }
       }
