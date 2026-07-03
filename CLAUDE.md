@@ -45,8 +45,12 @@ exclusions / destination + Reset picks / Delete album, reached from the Overview
 are hardened: the scan's empty state is **actionable** (distinguishes "no photos in range" from "all
 excluded" → Change range / Review excluded albums, design 2JE) and its failure state distinguishes a
 transient load error (retry) from **access revoked mid-session** (routes to recovery) — never a
-dead-end. Still open on the v1 path: **select-mode / drag-multi-select** (deferred from #35), **iPad**
-split-view (#42), **E2E** (#43).
+dead-end. **iPad** (#42) is a **2-column `NavigationSplitView`** — sidebar (album library, selection
+bound to `AppCoordinator.activeAlbumID`) + a detail stack (overview → grid → export); the photo viewer
+stays a sheet (no 3rd column), and the grid's columns derive from the detail width (`ReviewGridColumns`)
+so it opens dense on iPad + reflows on Split View / Stage Manager. Still open on the v1 path:
+**select-mode / drag-multi-select** (deferred from #35), iPad **input polish** (keyboard/hover/drag, v1.1),
+**E2E** (#43).
 The throwaway Phase-0 **Spike** was deleted (it seeded #35).
 Phase/issue plan: [docs/plans/project-phases.md](docs/plans/project-phases.md).
 

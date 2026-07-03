@@ -7,9 +7,9 @@
 //  `NavigationStack` and regular `NavigationSplitView` whose detail column hosts its own stack. The
 //  photo viewer is a `.sheet` (a Now-Playing-style modal card, pull-down to dismiss) over this, not a route.
 //
-//  The destination views here are **labeled stubs**: #30 builds the spine; the real screens
-//  replace each stub (onboarding/recovery #31, albums #32, overview #37, review #35, photo #36,
-//  export #39). The full iPad split-view polish is #42.
+//  The destination views are the real screens (onboarding/recovery #31, albums #32, overview #37,
+//  review #35, photo #36, export #39, settings #41/app-settings). The iPad **2-column split** (#42) is
+//  the regular-width layout below; the compact stack is the iPhone/Slide-Over one.
 //
 
 import SwiftUI
@@ -60,15 +60,18 @@ struct AppRootView: View {
         }
     }
 
-    // Regular (iPad): sidebar = the library; detail column hosts its own path stack (#42 polishes).
+    // Regular (iPad): the 2-column split (#42) — sidebar = the album library; the detail column hosts
+    // its own path stack (overview → review grid → export). The photo viewer stays a sheet over it (D10/#36).
     private var splitView: some View {
         @Bindable var coordinator = coordinator
         return NavigationSplitView {
             AlbumsView()
         } detail: {
             NavigationStack(path: $coordinator.path) {
-                RoutePlaceholder(symbol: "sidebar.right", title: "Select an album",
-                                 detail: "Detail column — overview / review (#37/#35)")
+                // The no-album-selected state: the sidebar drives selection, so this is a genuine empty
+                // detail, not a stub.
+                RoutePlaceholder(symbol: "photo.stack", title: "Select an album",
+                                 detail: "Choose an album from the sidebar to start picking.")
                     .navigationDestination(for: Route.self, destination: destination)
             }
         }

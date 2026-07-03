@@ -25,6 +25,17 @@ import SwiftUI
 import UIKit
 import Curation
 
+/// Pure grid-density math (kept out of the view so it's unit-tested). Given the available width, pick
+/// the column count that best fills it at ~`target`pt cells, clamped to the size-class range. This is
+/// what lets the review grid open dense on iPad and reflow on a Split View / Stage Manager resize (#42).
+enum ReviewGridColumns {
+    static func ideal(forWidth width: CGFloat, target: CGFloat = 132, minColumns: Int, maxColumns: Int) -> Int {
+        guard width > 0 else { return minColumns }
+        let raw = Int((width / target).rounded())
+        return max(minColumns, min(maxColumns, raw))
+    }
+}
+
 struct ReviewGridView: View {
     /// The candidates split into adaptive day-groups (oldest → newest). Concatenating the groups'
     /// `assetIDs` reproduces the full chronological slice — the sections are headered runs of it.
@@ -53,6 +64,9 @@ struct ReviewGridView: View {
 
     @State private var columnCount = 3
     @State private var pinchBaseline = 3
+    /// Once the user pinch-zooms, their column choice sticks for the session — width changes stop
+    /// re-deriving the count (a compact↔regular size-class flip resets this; see `.onChange(of:)`).
+    @State private var hasPinched = false
     /// The scroll position (iOS 18 `ScrollPosition`). We only ever issue a ONE-SHOT `scrollTo` (opening
     /// a cluster, or the #37 drill); otherwise it just reflects where the user is. This replaced the
     /// older `.scrollPosition(id:)` binding, whose two-way write-back was RE-APPLIED on any re-layout —
@@ -88,6 +102,24 @@ struct ReviewGridView: View {
 
     private var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: spacing), count: columnCount)
+    }
+
+    /// Columns that best fill `width` at ~132pt cells, clamped to the size-class range. Deriving from
+    /// width (not a fixed 3) is what opens the grid dense on iPad (~6 in the detail column) and keeps it
+    /// filling the pane on a Split View / Stage Manager resize (#42) — iPhone still lands on ~3.
+    private func idealColumnCount(for width: CGFloat) -> Int {
+        guard width > 0 else { return columnCount }
+        return ReviewGridColumns.ideal(forWidth: width, minColumns: minColumns, maxColumns: maxColumns)
+    }
+
+    /// Apply the width-derived count unless the user has taken manual control via pinch this session.
+    private func applyIdealColumns(width: CGFloat) {
+        guard !hasPinched else { return }
+        let ideal = idealColumnCount(for: width)
+        if ideal != columnCount {
+            columnCount = ideal
+            pinchBaseline = ideal
+        }
     }
 
     var body: some View {
@@ -150,6 +182,7 @@ struct ReviewGridView: View {
         .gesture(
             MagnifyGesture()
                 .onChanged { value in
+                    hasPinched = true   // user is driving density now — stop auto-deriving from width
                     let proposed = Double(pinchBaseline) / value.magnification
                     // MagnifyGesture fires continuously, but the column count only crosses an
                     // integer boundary a few times across a whole pinch. Write only on a real
@@ -175,6 +208,14 @@ struct ReviewGridView: View {
         .onChange(of: visibleIDs) { scheduleRecomputeWindow() }
         .onChange(of: columnCount) { scheduleRecomputeWindow() }
         .onChange(of: maxColumns) { columnCount = min(columnCount, maxColumns) }
+        // Derive the column count from the available width so the grid opens dense on iPad and reflows
+        // on a Split View / Stage Manager resize (#42) — not stuck at the iPhone default of 3.
+        .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.width } action: { width in
+            applyIdealColumns(width: width)
+        }
+        // A compact↔regular flip is a fundamentally different layout — re-derive density even if the
+        // user had pinched in the old size class.
+        .onChange(of: sizeClass) { hasPinched = false }
         .onChange(of: expandedGroupID) {
             // The open cluster changed → which cells can render changed; re-derive the prefetch window.
             rebuildWindow()

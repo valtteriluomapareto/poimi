@@ -30,13 +30,13 @@ struct AlbumsView: View {
                         .buttonStyle(.borderedProminent)
                 }
             } else {
-                List {
+                // Selection-driven so the iPad split-view sidebar highlights the open album (#42);
+                // the binding routes a selection to `open(_:)` — compact pushes, regular swaps the detail.
+                List(selection: selectedAlbum) {
                     ForEach(store.projects) { project in
-                        Button { open(project) } label: {
-                            AlbumRow(project: project)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
+                        AlbumRow(project: project)
+                            .tag(project.id)
+                            .contextMenu {
                             Button("Duplicate", systemImage: "plus.square.on.square") {
                                 store.duplicate(project)
                             }
@@ -100,6 +100,18 @@ struct AlbumsView: View {
     private func open(_ project: CurationProject) {
         store.open(project)
         coordinator.openProject(project.id)
+    }
+
+    /// Sidebar selection ⇄ the coordinator's active album (the #42 split-view highlight). Selecting a
+    /// row opens that album; reading reflects what's open. Re-selecting the same album is a no-op (List
+    /// doesn't re-fire an unchanged selection) — fine, it's already showing.
+    private var selectedAlbum: Binding<UUID?> {
+        Binding(
+            get: { coordinator.activeAlbumID },
+            set: { id in
+                guard let id, let project = store.projects.first(where: { $0.id == id }) else { return }
+                open(project)
+            })
     }
 
     // Drive the confirmation dialogs off the pending-project optionals (cleared on dismiss).
