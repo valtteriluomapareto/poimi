@@ -100,14 +100,19 @@ struct ReviewGridView: View {
                     cachedImage: cachedImage,
                     openAsset: openAsset,
                     onVisible: { visibleIDs.insert($0) },
-                    onHidden: { visibleIDs.remove($0) })
+                    onHidden: { visibleIDs.remove($0) },
+                    position: index + 1,
+                    total: groups.count,
+                    onMarkDone: { markDoneAndAdvance(group) })
                     .tag(index)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
-        // Shared chrome as safe-area insets so it reserves space (never overlaps the photos).
-        .safeAreaInset(edge: .top, spacing: 0) { header }
-        .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
+        // The album header (name + subtitle + tally) is the ONE fixed chrome — same as the accordion.
+        // The per-cluster day + Select-all glass pills, the "Mark day done" button, and the page dots
+        // all live INSIDE each page (a pinned section header + an end-of-scroll footer), so they aren't
+        // a permanent bottom bar — you reach mark-done/dots by scrolling to the end of the cluster.
+        .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(title: title, subtitle: subtitle) }
         .background(Color(.systemBackground))
         // No implicit `.animation(value: currentPage)` — the TabView animates its own page transition;
         // a programmatic advance (mark-done) animates via `withAnimation` in `advance()`. Stacking both
@@ -137,42 +142,7 @@ struct ReviewGridView: View {
         }
     }
 
-    // MARK: Chrome (reads the CURRENT cluster)
-
-    @ViewBuilder private var header: some View {
-        if let group = currentGroup {
-            ClusterPageHeader(title: DayGroupHeader.title(for: group), count: group.count,
-                              position: currentPage + 1, total: groups.count)
-        }
-    }
-
-    @ViewBuilder private var bottomBar: some View {
-        if let group = currentGroup {
-            VStack(spacing: 12) {
-                markDoneButton(group)
-                if groups.count > 1 { PageDots(count: groups.count, current: currentPage) }
-            }
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-            .frame(maxWidth: .infinity)
-            .glassBarBackground()
-        }
-    }
-
-    /// The "Mark day done" CTA — brand-green + filled seal while not done; a quieter grey "Mark as not
-    /// done" once done (re-opened to edit). Marking done advances to the next unreviewed cluster (#38).
-    private func markDoneButton(_ group: DayGroup) -> some View {
-        let isDone = done.isDone(group)
-        return Button { markDoneAndAdvance(group) } label: {
-            Label(isDone ? "Mark as not done" : "Mark day done",
-                  systemImage: isDone ? "checkmark.seal.fill" : "checkmark.seal")
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .tint(isDone ? Color(.systemGray) : .brandGreen)
-        .accessibilityIdentifier("markDoneButton")   // stable id though the label toggles
-        .accessibilityHint(isDone ? "Reopens this day for editing" : "Marks this day reviewed and opens the next")
-    }
+    // MARK: Mark done → advance
 
     private func markDoneAndAdvance(_ group: DayGroup) {
         let wasDone = done.isDone(group)
@@ -242,10 +212,11 @@ struct ReviewGridView: View {
 
 // MARK: - One cluster's page (a vertical grid of its photos)
 
-/// A single cluster filling the screen: its photos in a vertical `LazyVGrid`. No accordion, no pinned
-/// header (the shared paged header shows the day) — just the grid. Owns its own vertical scroll, so
-/// each page starts at the top. Cells report visibility up so the parent's prefetch window can track
-/// the visible ± margin slice within this cluster.
+/// A single cluster filling the screen: its photos in a vertical `LazyVGrid`, with the day + Select-all
+/// as floating GLASS PILLS pinned at the top (over the photos, like the accordion header) and the
+/// "Mark day done" button + page dots as the section FOOTER — so those reach you at the END of the
+/// cluster's scroll, not as a permanent bottom bar. Owns its own vertical scroll (each page starts at
+/// the top). Cells report visibility up so the parent's prefetch window tracks the visible ± margin.
 private struct ClusterPage: View {
     let group: DayGroup
     let columns: [GridItem]
@@ -255,66 +226,146 @@ private struct ClusterPage: View {
     let openAsset: (String) -> Void
     let onVisible: (String) -> Void
     let onHidden: (String) -> Void
+    let position: Int
+    let total: Int
+    let onMarkDone: () -> Void
+    @Environment(DoneStore.self) private var done
 
     var body: some View {
-        // Formatted once per page (not per cell) — the cell a11y label reuses it.
+        // Formatted once per page (not per cell) — the cell a11y label + the day chip reuse it.
         let dayLabel = DayGroupHeader.title(for: group)
         ScrollView {
-            LazyVGrid(columns: columns, spacing: spacing) {
-                ForEach(group.assetIDs, id: \.self) { id in
-                    ReviewGridCell(
-                        id: id,
-                        dayLabel: dayLabel,
-                        load: load,
-                        cachedImage: cachedImage,
-                        onOpen: { Perf.event("grid.tap \(id.suffix(8))"); openAsset(id) })
-                        .id(id)
-                        .onAppear { onVisible(id) }
-                        .onDisappear { onHidden(id) }
+            LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
+                Section {
+                    ForEach(group.assetIDs, id: \.self) { id in
+                        ReviewGridCell(
+                            id: id,
+                            dayLabel: dayLabel,
+                            load: load,
+                            cachedImage: cachedImage,
+                            onOpen: { Perf.event("grid.tap \(id.suffix(8))"); openAsset(id) })
+                            .id(id)
+                            .onAppear { onVisible(id) }
+                            .onDisappear { onHidden(id) }
+                    }
+                } header: {
+                    ClusterChips(group: group, title: dayLabel, isDone: done.isDone(group))
+                } footer: {
+                    footer(isDone: done.isDone(group))
                 }
             }
             .padding(.horizontal, spacing)
             .scrollTargetLayout()
         }
     }
+
+    /// End-of-cluster CTA + position: the "Mark day done" button (advances to the next unreviewed
+    /// cluster) and the page dots — reached by scrolling to the end of the day, not a fixed bar (#38).
+    @ViewBuilder private func footer(isDone: Bool) -> some View {
+        VStack(spacing: 14) {
+            Button(action: onMarkDone) {
+                Label(isDone ? "Mark as not done" : "Mark day done",
+                      systemImage: isDone ? "checkmark.seal.fill" : "checkmark.seal")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .tint(isDone ? Color(.systemGray) : .brandGreen)
+            .accessibilityIdentifier("markDoneButton")   // stable id though the label toggles
+            .accessibilityHint(isDone ? "Reopens this day for editing" : "Marks this day reviewed and opens the next")
+            if total > 1 {
+                VStack(spacing: 6) {
+                    PageDots(count: total, current: position - 1)
+                    Text("\(position) / \(total)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        }
+        .padding(.top, 16)
+        .padding(.bottom, 28)
+        .frame(maxWidth: .infinity)
+    }
 }
 
-// MARK: - The paged header (current cluster)
+// MARK: - The floating day + Select-all glass pills (pinned over the photos)
 
-/// The top glass header for the current cluster: the day title + its photo count, the cluster's
-/// position in the album ("3 / 12"), and — restored on the picking screen — the album-level `ReviewTally`
-/// (picked / target + bar + "N left"), the orientation device you pick *toward* (a paged grid still
-/// needs to show how close to the count you are). Glass bar backing so photos refract under it when a
-/// page scrolls (styleguide §5); RT-safe via the shared modifier.
-private struct ClusterPageHeader: View {
+/// The cluster's day chip (date · count · done seal) and its Select-all chip — floating glass capsules
+/// pinned at the top of the page, over the photos (styleguide §5, like the accordion's header). The day
+/// chip is informational (no open/collapse in the paged model); Select-all toggles the whole cluster's
+/// picks. Observes the stores itself so the parent grid body stays independent of `selected`.
+private struct ClusterChips: View {
+    let group: DayGroup
     let title: String
-    let count: Int
-    let position: Int
-    let total: Int
+    let isDone: Bool
+    @Environment(SelectionStore.self) private var selection
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(title)
-                    .font(.title2.bold())
-                    .lineLimit(1)
-                Text("· \(count)")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                Spacer(minLength: 8)
-                Text("\(position) / \(total)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+        let selectedCount = selection.selected.intersection(group.assetIDs).count
+        let allSelected = !group.assetIDs.isEmpty && selectedCount == group.count
+        // One GlassEffectContainer so the two co-located chips sample as a single lens (styleguide §5).
+        GlassEffectContainer(spacing: 8) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    dayChip
+                    selectAllChip(allSelected: allSelected)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    dayChip
+                    Spacer(minLength: 0)
+                    selectAllChip(allSelected: allSelected)
+                }
             }
-            ReviewTally()   // album picked / target + bar + "N left" — reads the SelectionStore itself
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassBarBackground(extendTop: true)
         .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    /// The day identity capsule — date + count + (done) green seal. Non-interactive glass.
+    private var dayChip: some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isDone ? .secondary : .primary)
+                .lineLimit(1)
+            Text("· \(group.count)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            if isDone {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.brandGreen)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 44)   // ≥44pt touch floor even though it's non-interactive (visual balance)
+        .glassChip()
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Select-all / deselect-all for this cluster — its own glass capsule.
+    private func selectAllChip(allSelected: Bool) -> some View {
+        Button {
+            if allSelected { selection.deselect(group.assetIDs) } else { selection.select(group.assetIDs) }
+        } label: {
+            Text(allSelected ? "Deselect all" : "Select all")
+                .font(.footnote.weight(.semibold))
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .glassChip()
+        .accessibilityIdentifier("selectAllButton")
+        .accessibilityLabel(allSelected ? "Deselect all in \(title)" : "Select all in \(title)")
     }
 }
 
