@@ -1,14 +1,16 @@
 # Localization plan — multi-locale UI + automated translation & release notes
 
-**Status: PHASE 0 BUILT (2026-07-03); rest still deferred.** Tracks [#95]. Revised after a 3-persona +
+**Status: PHASES 0 + 1 DONE (2026-07-03); Phase 2+ deferred.** Tracks [#95]. Revised after a 3-persona +
 Codex review (see PR #96). The precondition ("don't build until the v1 English UI is stable") is now
-**met** — Phase 2 (#30–#43) is complete + the surface has settled — so **Phase 0 shipped**: the String
-Catalog (`App/PoimiApp/Resources/Localizable.xcstrings`) exists + is in the app target + is populated by
-extraction (`xcodebuild -exportLocalizations`), and **localizable-by-default** is a documented
-convention (CLAUDE.md). Still deferred (Phase 1+): the retro-audit of any un-extracted strings, the
-**DEBUG-string cleanup** (DebugScreen `Text` → `Text(verbatim:)` so dev strings leave the catalog),
-`fi` registration, `InfoPlist` localization, the glossary, and all translation/CI automation — built
-only when release-frequency × locale-count justifies each step.
+**met** — Phase 2 (#30–#43) is complete + the surface has settled — so the **English foundation shipped**:
+the String Catalog (`App/PoimiApp/Resources/Localizable.xcstrings`, 159 product keys) + `InfoPlist.xcstrings`
+(Photos-permission prompts) exist + are in the app target + are populated by extraction
+(`xcodebuild -exportLocalizations`); **localizable-by-default** is a documented convention (CLAUDE.md); the
+whole surface (incl. composed/a11y strings) is extracted; DEBUG strings use `Text(verbatim:)` (out of the
+catalog); `fi` is registered in `knownRegions`; and the **glossary + style guide** (`localization/`) are
+written. The catalog is translation-ready. Still deferred (Phase 2+): the actual `fi` (and other-locale)
+translations + a native-speaker baseline sign-off, plus all translation/CI automation — built only when
+release-frequency × locale-count justifies each step.
 
 **What IS worth doing now** is only the near-zero-cost foundation (create the String Catalog + make new
 strings localizable-by-default). Everything else is staged behind "v1 English shipped," and the *first*
@@ -52,13 +54,15 @@ extraction is ready once the catalog exists.
   by `-exportLocalizations`); adopted **localizable-by-default** (CLAUDE.md convention — new screens use
   `Text`/`String(localized:)`, DEBUG strings use `Text(verbatim:)`); stated the Curation-string-free
   invariant. English-only.
-- **Phase 1 — in progress.** The **bulk retro-audit is ✅ DONE (2026-07-03):** the composed UI strings
+- **Phase 1 — ✅ DONE (2026-07-03).** The **bulk retro-audit:** the composed UI strings
   + a11y helpers now use `String(localized:, comment:)`, and every `Text("a" + "b")` (which resolves to
   the *verbatim* overload → wouldn't localize) is now a single localizable literal (`"""` where long);
-  **"Poimi" stays verbatim** (app name). The catalog covers the resolved surface (~166 keys). **Still
-  pending in Phase 1:** register `fi` in `knownRegions`; `InfoPlist.xcstrings` for the Photos-permission
-  prompt; the **glossary + style guide** (`localization/glossary.md`, `style.md`); and the DebugScreen
-  `Text` → `Text(verbatim:)` cleanup (dev strings still in the catalog).
+  **"Poimi" stays verbatim** (app name). The **mechanical finishers:** `fi` registered in `knownRegions`;
+  `InfoPlist.xcstrings` created + wired to the target and populated (the `NSPhotoLibrary*UsageDescription`
+  Photos-permission prompts + `CFBundleName`); the **glossary + style guide** written
+  (`localization/glossary.md`, `localization/style.md`); and the DebugScreen `Text` → `Text(verbatim:)`
+  cleanup done (dev strings no longer pollute the catalog — 159 real product keys). English-only; the
+  catalog is now translation-ready, awaiting a `fi` baseline from a native speaker (Phase 2).
 - **Phase 2 — MANUAL translation MVP (no CI):** a script run **at release**: export → detect delta →
   Claude translates the delta (fed the catalog + glossary explicitly) → import → validate → open a PR;
   **native-speaker sign-off** on each new locale's baseline. Delivers ~all the value with none of the

@@ -10,9 +10,6 @@
     "· %lld" : {
 
     },
-    "“%@” is not in the DebugScreen catalog." : {
-
-    },
     "%@ · %@" : {
       "localizations" : {
         "en" : {
@@ -254,17 +251,8 @@
     "Albums" : {
 
     },
-    "Albums (%lld)" : {
-
-    },
     "Allow access" : {
       "comment" : "Onboarding permission primary button"
-    },
-    "Assets (%lld)" : {
-
-    },
-    "Authorization" : {
-
     },
     "Cancel" : {
 
@@ -320,9 +308,6 @@
     "Current photo" : {
 
     },
-    "Debug · Library" : {
-
-    },
     "Delete" : {
 
     },
@@ -357,9 +342,6 @@
 
     },
     "Duplicate" : {
-
-    },
-    "Error" : {
 
     },
     "Every photo between %@ is a screenshot or in an excluded album. Try fewer exclusions." : {
@@ -423,9 +405,6 @@
 
     },
     "Leave as a new album (created on export), or add picks to an existing album." : {
-
-    },
-    "Library" : {
 
     },
     "License" : {
@@ -649,13 +628,7 @@
     "Undated" : {
 
     },
-    "Unknown screen" : {
-
-    },
     "Updating your album…" : {
-
-    },
-    "Valid: %@" : {
 
     },
     "Version" : {

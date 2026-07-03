@@ -779,9 +779,9 @@ struct DebugUnknownScreenView: View {
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 48))
-            Text("Unknown screen").font(.title.bold())
-            Text("“\(id)” is not in the DebugScreen catalog.").multilineTextAlignment(.center)
-            Text("Valid: \(DebugScreen.allCases.map(\.rawValue).joined(separator: ", "))")
+            Text(verbatim: "Unknown screen").font(.title.bold())
+            Text(verbatim: "“\(id)” is not in the DebugScreen catalog.").multilineTextAlignment(.center)
+            Text(verbatim: "Valid: \(DebugScreen.allCases.map(\.rawValue).joined(separator: ", "))")
                 .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
         .padding(32)
@@ -804,27 +804,41 @@ struct DebugLibraryView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Library") {
-                    LabeledContent("Authorization", value: status.map(String.init(describing:)) ?? "—")
-                    if let loadError {
-                        LabeledContent("Error", value: loadError)
+                Section {
+                    LabeledContent {
+                        Text(verbatim: status.map(String.init(describing:)) ?? "—")
+                    } label: {
+                        Text(verbatim: "Authorization")
                     }
+                    if let loadError {
+                        LabeledContent {
+                            Text(verbatim: loadError)
+                        } label: {
+                            Text(verbatim: "Error")
+                        }
+                    }
+                } header: {
+                    Text(verbatim: "Library")
                 }
-                Section("Assets (\(assets.count))") {
+                Section {
                     ForEach(assets.prefix(50)) { asset in
                         LabeledContent(asset.id) {
                             Text(asset.captureDate.map { Self.dayFormatter.string(from: $0) } ?? "undated")
                                 .foregroundStyle(.secondary)
                         }
                     }
+                } header: {
+                    Text(verbatim: "Assets (\(assets.count))")
                 }
-                Section("Albums (\(albums.count))") {
+                Section {
                     ForEach(albums) { album in
                         LabeledContent(album.title, value: album.count.map(String.init) ?? "—")
                     }
+                } header: {
+                    Text(verbatim: "Albums (\(albums.count))")
                 }
             }
-            .navigationTitle("Debug · Library")
+            .navigationTitle(Text(verbatim: "Debug · Library"))
         }
         .task { await load() }
     }
