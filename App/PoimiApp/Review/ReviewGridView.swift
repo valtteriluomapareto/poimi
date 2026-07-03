@@ -324,16 +324,20 @@ private struct ClusterPage: View {
 
 // MARK: - Page indicator (always-visible position + swipe affordance)
 
-/// A compact glass pill — windowed page dots + "N / total" — pinned atop each cluster page. It's the
-/// paged model's orientation device: always-visible position across the album (UX review) and the cue
-/// that you can swipe sideways between clusters (the dots imply more pages).
+/// A compact glass pill pinned atop each cluster page — the paged model's orientation device: an
+/// always-visible position across the album plus the cue you can swipe between clusters. Dots read
+/// only for a *small* album (HIG: page controls suit ≲10 pages); past that a dot ribbon is meaningless
+/// noise (a windowed "10 of 349 dots" tells you nothing), so it's the numeric position alone.
 private struct PageIndicatorPill: View {
     let position: Int   // 1-based
     let total: Int
+    private let maxDots = 10
 
     var body: some View {
         HStack(spacing: 8) {
-            PageDots(count: total, current: position - 1)
+            if total <= maxDots {
+                PageDots(count: total, current: position - 1)
+            }
             Text("\(position) / \(total)")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
