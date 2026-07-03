@@ -51,17 +51,25 @@ struct HappyPathSmokeTests {
         }
         let scannedIDs = groups.flatMap(\.assetIDs)
         #expect(!scannedIDs.isEmpty)
+        // The churn seed is a busy day + a quiet 3-day run → two adaptive clusters; assert that shape so
+        // a grouping regression (or an empty scan) surfaces here and the mark-done step has a real
+        // cluster to act on. Ids are unique (nonce + index), so the count comparisons below are clean.
+        #expect(groups.count >= 2)
 
-        // 4 — select every candidate (the grid's "Select all", exercised at the store).
+        // 4 — select every candidate. (In the grid, Select all picks one cluster; here we select the
+        // whole scan at the store — the same SelectionStore path the UI drives.)
         selection.activate(project)
         selection.select(scannedIDs)
         #expect(selection.progress.picked == scannedIDs.count)
 
-        // 5 — mark the first cluster done.
+        // 5 — mark the first cluster done, and prove it PERSISTED to the model (not just in-memory) —
+        // otherwise this step is a no-op no downstream assertion would catch regressing.
         done.activate(project)
         let firstGroup = try #require(groups.first)
         done.toggle(firstGroup)
         #expect(done.isDone(firstGroup))
+        done.flushNow()
+        #expect(firstGroup.days.allSatisfy { project.doneDays.contains($0.description) })
 
         // 6 — export: create-or-find the Photos album and copy the picks in (one-way, D31).
         selection.flushNow()

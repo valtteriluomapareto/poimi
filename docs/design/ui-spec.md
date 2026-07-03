@@ -162,7 +162,7 @@ is **"album", never "yearbook"**; there is no print/export-to-print anywhere.
   stepper), **Exclude from source** (screenshots toggle + excluded albums), and a destructive **Reset
   picks / Delete album** card. Edits apply immediately; durable save + live-tally re-sync on leave.
   Reset/Delete reconcile the live stores; delete never touches the Photos album/originals (D31).
-- **App settings (#42-adjacent — `3N9`).** App-**wide**, distinct from album settings (reached by a
+- **App settings (`3N9`).** App-**wide**, distinct from album settings (reached by a
   **cog** on the albums home; album settings uses the sliders icon so the two never look alike):
   **Access** (Photos access status + Settings deep-link) + **About** (Version / License AGPL-3.0 /
   Source → GitHub). Thin (no stores).
@@ -184,8 +184,9 @@ is **"album", never "yearbook"**; there is no print/export-to-print anywhere.
   (with **select-mode**, deferred from #35).
 - **iPad input polish** — pointer/hover, keyboard shortcuts, trackpad drag-select, drag-and-drop (v1.1;
   the adaptive *layout* shipped in #42, the input-mode matrix is deferred).
-- **`performAccessibilityAudit()` per screen** — the UI-test target exists after #43; wiring an audit
-  call per screen into it is the next step (the E2E smoke lands first as the tripwire).
+- **`performAccessibilityAudit()` per screen** — #43 landed the headless E2E smoke + accessibility
+  identifiers on the happy path (the hooks for a UI-test target), but no XCUITest target yet; adding
+  the target + per-screen audit calls is the next step.
 - **Glass scroll-edge chrome** — the header is `.bar` today; a real iOS-26 `glassEffect` scroll-edge
   is a device-iteration follow-up (no in-app precedent; can't verify the blur from a screenshot).
 - **Windowed-by-index snapshot + D29 access-counting guard** (#47).

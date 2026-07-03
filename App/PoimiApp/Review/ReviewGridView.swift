@@ -301,6 +301,7 @@ struct ReviewGridView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .tint(isDone ? Color(.systemGray) : .brandGreen)
+            .accessibilityIdentifier("markDoneButton")   // stable id though the label toggles
             Spacer()
         }
         .padding(.top, 10)
