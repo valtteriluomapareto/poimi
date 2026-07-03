@@ -45,26 +45,39 @@ struct OverviewThumb: View {
 
 /// A horizontal, scrollable preview of a cluster's photos for the Overview (#35 paged-clusters): a
 /// handful of thumbnails **sampled evenly across the whole cluster** (via `DayGroup.evenlySampledIDs`),
-/// so a glance conveys the cluster's shape without opening it. The strip clips at the row edge (the
-/// last thumb cut signals more to scroll). `LazyHStack` so only the on-screen thumbs (~5) load; the
-/// rest of the sample load on horizontal scroll, not up front.
+/// so a glance conveys the cluster's shape without opening it. Thumbs are sized so **`visibleThumbs`
+/// (6.5)** fill the strip's width — the half-thumb runs off the right screen edge, an unmistakable
+/// "keep scrolling" cue. `LazyHStack` so only on-screen thumbs load; the rest of the sample load on
+/// horizontal scroll, not up front.
 struct ClusterStrip: View {
     let group: DayGroup
-    var thumbSize: CGFloat = 64
-    /// Sample up to this many across the cluster — ~5 show, the rest reveal on scroll. Bounded so a
-    /// 500-photo busy day previews with a dozen thumbs, not five hundred.
-    var sampleCount: Int = 12
+    var spacing: CGFloat = 6
+    /// How many thumbs fill the strip width — the fractional `.5` makes the next one run off the edge.
+    var visibleThumbs: CGFloat = 6.5
+    /// Sample up to this many across the cluster; ~6.5 show, the rest reveal on scroll. Bounded so a
+    /// 500-photo busy day previews with a handful of thumbs, not five hundred.
+    var sampleCount: Int = 14
+    /// Thumb edge — derived from the measured strip width so `visibleThumbs` fit. A sensible default
+    /// until the first geometry read, so the row never lays out at zero height.
+    @State private var thumbSize: CGFloat = 52
 
     var body: some View {
         let ids = group.evenlySampledIDs(sampleCount)
         ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: 6) {
+            LazyHStack(spacing: spacing) {
                 ForEach(ids, id: \.self) { id in
                     OverviewThumb(id: id, size: thumbSize, cornerRadius: 10)
                 }
             }
         }
         .frame(height: thumbSize)
+        // Size thumbs to the strip's own width so `visibleThumbs` fit. Gaps counted = the whole thumbs
+        // shown (⌊visibleThumbs⌋), so the fractional thumb spills past the right edge.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            let gaps = spacing * CGFloat(Int(visibleThumbs))
+            let size = (width - gaps) / visibleThumbs
+            if size > 0 { thumbSize = size }
+        }
         .accessibilityHidden(true)   // the cluster row owns the a11y label; these thumbs are a preview
     }
 }
