@@ -74,7 +74,7 @@ App/
     Onboarding/                OnboardingView, AccessRecoveryView (first-run + auth, #31)
     Settings/                  AlbumSettingsView (per-album, #41) + AppSettingsView (app-level: access/about)
     Support/                   Log (OSLog), DebugScreen (screenshot harness)
-    Resources/                 Assets.xcassets (AccentColor, BrandGreen, OnAccent, AppIcon)
+    Resources/                 Assets.xcassets + Localizable.xcstrings (String Catalog, #95 Phase 0)
   PoimiAppTests/               integration tier (Swift Testing, runs on a sim)
 Curation/                      pure-domain SPM package — NO Photos/SwiftData/UIKit/SwiftUI
   Sources/Curation/            AssetRef, DayKey, DayGrouping, Completion, TargetProgress,
@@ -179,10 +179,17 @@ Defined in `.github/workflows/ci.yml`.
 - **The `.xcodeproj` is hand-authored** (no XcodeGen/Tuist). Add files by editing `project.pbxproj`
   with the structured ID blocks (app=1, PhotoLibrary=3, tests=4, Support=5, Persistence=6,
   State=7, Navigation=8, Onboarding=9; Albums/Setup/Review/Settings use A0/B0/C0/D0 ids; 2 retired
-  with the Spike; next new letter group = E0, next numeric = 10); `plutil -lint` after, and
+  with the Spike; next new letter group = E0, next numeric = 10; the app-group `Localizable.xcstrings`
+  resource took `…A1`/`…A2`); `plutil -lint` after, and
   `xcodebuild -list` to confirm it still reads. Keep diffs to
   the intended change — no Xcode reformatting churn.
 - **Tests with fixes:** every bug fix ships with a failing-then-passing regression test.
+- **Localizable by default (#95 Phase 0):** user-facing strings flow through the **String Catalog**
+  (`Localizable.xcstrings`) — write `Text("…")` / `String(localized:, comment:)` (a build extracts them;
+  `xcodebuild -exportLocalizations` refreshes the catalog). **DEBUG-harness / dev-facing** strings use
+  `Text(verbatim:)` / `String(_:)` so they don't pollute the catalog. **`Curation` stays string-free**
+  (D14/D21) — no user-facing text in the pure domain. v1 is English-only; translation infra is later
+  phases ([docs/plans/localization.md](docs/plans/localization.md)).
 
 ## Documentation map
 
