@@ -14,6 +14,7 @@ import Curation
 struct AlbumsView: View {
     @Environment(ProjectStore.self) private var store
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showingSetup = false
     @State private var albumToDelete: CurationProject?
     @State private var albumToReset: CurationProject?
@@ -30,13 +31,18 @@ struct AlbumsView: View {
                         .buttonStyle(.borderedProminent)
                 }
             } else {
-                // Selection-driven so the iPad split-view sidebar highlights the open album (#42);
-                // the binding routes a selection to `open(_:)` — compact pushes, regular swaps the detail.
-                List(selection: selectedAlbum) {
+                // A `Button` per row (NOT `List(selection:)`): a plain list's selection binding doesn't
+                // fire on a single tap in the compact `NavigationStack`, so that would break iPhone
+                // tap-to-open. The Button navigates in both containers; the iPad sidebar highlight is
+                // hand-rolled below via `listRowBackground` (regular width only), keyed on the open album.
+                List {
                     ForEach(store.projects) { project in
-                        AlbumRow(project: project)
-                            .tag(project.id)
-                            .contextMenu {
+                        Button { open(project) } label: {
+                            AlbumRow(project: project)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(rowBackground(for: project))
+                        .contextMenu {
                             Button("Duplicate", systemImage: "plus.square.on.square") {
                                 store.duplicate(project)
                             }
@@ -102,16 +108,11 @@ struct AlbumsView: View {
         coordinator.openProject(project.id)
     }
 
-    /// Sidebar selection ⇄ the coordinator's active album (the #42 split-view highlight). Selecting a
-    /// row opens that album; reading reflects what's open. Re-selecting the same album is a no-op (List
-    /// doesn't re-fire an unchanged selection) — fine, it's already showing.
-    private var selectedAlbum: Binding<UUID?> {
-        Binding(
-            get: { coordinator.activeAlbumID },
-            set: { id in
-                guard let id, let project = store.projects.first(where: { $0.id == id }) else { return }
-                open(project)
-            })
+    /// The iPad sidebar's selection highlight (#42): tint the open album's row — regular width only, since
+    /// in the compact stack the list is covered after a push, so a lingering highlight would be noise.
+    /// `nil` → the default row background. Keyed on the open album, so it follows the row if it reorders.
+    private func rowBackground(for project: CurationProject) -> Color? {
+        (sizeClass != .compact && project.id == coordinator.activeAlbumID) ? Color(.systemGray5) : nil
     }
 
     // Drive the confirmation dialogs off the pending-project optionals (cleared on dismiss).
