@@ -87,10 +87,18 @@ struct PhotosAccessDisplay: Equatable {
 
     static func forAuthorization(_ status: LibraryAuthorization) -> PhotosAccessDisplay {
         switch status {
-        case .authorized: PhotosAccessDisplay(label: "Full", symbol: "checkmark.circle.fill")
-        case .limited: PhotosAccessDisplay(label: "Limited", symbol: "checkmark.circle")
-        case .denied, .restricted: PhotosAccessDisplay(label: "Off", symbol: "exclamationmark.circle")
-        case .notDetermined: PhotosAccessDisplay(label: "Not set", symbol: "circle")
+        case .authorized:
+            PhotosAccessDisplay(label: String(localized: "Full", comment: "Photo access status: full library access"),
+                                symbol: "checkmark.circle.fill")
+        case .limited:
+            PhotosAccessDisplay(label: String(localized: "Limited", comment: "Photo access status: limited selection"),
+                                symbol: "checkmark.circle")
+        case .denied, .restricted:
+            PhotosAccessDisplay(label: String(localized: "Off", comment: "Photo access status: denied or restricted"),
+                                symbol: "exclamationmark.circle")
+        case .notDetermined:
+            PhotosAccessDisplay(label: String(localized: "Not set", comment: "Photo access status: not yet requested"),
+                                symbol: "circle")
         }
     }
 }

@@ -52,7 +52,9 @@ struct NewAlbumSetupView: View {
                         AlbumPickerView(selection: $draft.excludedAlbumIDs, allowsMultiple: true)
                     } label: {
                         let excluded = draft.excludedAlbumIDs
-                        LabeledContent("Exclude albums", value: excluded.isEmpty ? "None" : "\(excluded.count)")
+                        LabeledContent("Exclude albums", value: excluded.isEmpty
+                            ? String(localized: "None", comment: "Excluded albums: none selected")
+                            : "\(excluded.count)")
                     }
                 }
 
@@ -60,7 +62,9 @@ struct NewAlbumSetupView: View {
                     NavigationLink {
                         AlbumPickerView(selection: targetSelection, allowsMultiple: false)
                     } label: {
-                        LabeledContent("Save to", value: draft.targetAlbumID == nil ? "New album" : "Existing album")
+                        LabeledContent("Save to", value: draft.targetAlbumID == nil
+                            ? String(localized: "New album", comment: "Destination: a new album created on export")
+                            : String(localized: "Existing album", comment: "Destination: an existing Photos album"))
                     }
                 } header: {
                     Text("Destination")

@@ -30,7 +30,9 @@ struct NewAlbumDraft: Equatable {
         let start = calendar.date(from: DateComponents(year: year, month: 1, day: 1)) ?? now
         let endExclusive = calendar.date(from: DateComponents(year: year + 1, month: 1, day: 1)) ?? now
         return NewAlbumDraft(
-            title: "Best of \(year)",
+            // `String(year)` (not `\(year)`) so the year interpolates ungrouped — a bare `\(Int)` in a
+            // localized string groups by locale ("2 024"), which is wrong for a year.
+            title: String(localized: "Best of \(String(year))", comment: "Default album name for a calendar year, e.g. “Best of 2025”"),
             rangeStart: start,
             rangeEnd: endExclusive,
             targetCount: 100,

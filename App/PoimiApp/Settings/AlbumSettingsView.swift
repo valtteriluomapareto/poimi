@@ -73,7 +73,9 @@ struct AlbumSettingsView: View {
                 NavigationLink {
                     AlbumPickerView(selection: targetSelection, allowsMultiple: false)
                 } label: {
-                    LabeledContent("Photos album", value: project.targetAlbumID == nil ? "New album" : "Existing album")
+                    LabeledContent("Photos album", value: project.targetAlbumID == nil
+                        ? String(localized: "New album", comment: "Destination: a new album created on export")
+                        : String(localized: "Existing album", comment: "Destination: an existing Photos album"))
                 }
                 Stepper("Aim for ^[\(project.targetCount) photo](inflect: true)",
                         value: $project.targetCount, in: 1...10_000, step: 10)
@@ -144,7 +146,9 @@ struct AlbumSettingsView: View {
     private func persistEdits() {
         guard !isDeleting else { return }
         if project.title.trimmingCharacters(in: .whitespaces).isEmpty {
-            project.title = titleOnOpen.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled album" : titleOnOpen
+            project.title = titleOnOpen.trimmingCharacters(in: .whitespaces).isEmpty
+                ? String(localized: "Untitled album", comment: "Fallback album name when the user clears the name field")
+                : titleOnOpen
         }
         store.saveEdits(to: project)
         selection.retarget(project)
@@ -207,9 +211,9 @@ struct AlbumSettingsView: View {
     private var excludedValue: String {
         let count = project.excludedAlbumIDs.count
         switch count {
-        case 0: return "None"
-        case 1: return "1 album"
-        default: return "\(count) albums"
+        case 0: return String(localized: "None", comment: "Excluded albums: none selected")
+        case 1: return String(localized: "1 album", comment: "Excluded albums count, singular")
+        default: return String(localized: "\(count) albums", comment: "Excluded albums count, 2 or more")
         }
     }
 }

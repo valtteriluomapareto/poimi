@@ -1,6 +1,6 @@
 # Localization plan — multi-locale UI + automated translation & release notes
 
-**Status: PHASES 0 + 1 DONE (2026-07-03); Phase 2+ deferred.** Tracks [#95]. Revised after a 3-persona +
+**Status: PHASES 0 + 1 DONE; Phase 2 `fi` baseline DRAFTED (2026-07-03), awaiting native sign-off.** Tracks [#95]. Revised after a 3-persona +
 Codex review (see PR #96). The precondition ("don't build until the v1 English UI is stable") is now
 **met** — Phase 2 (#30–#43) is complete + the surface has settled — so the **English foundation shipped**:
 the String Catalog (`App/PoimiApp/Resources/Localizable.xcstrings`, 159 product keys) + `InfoPlist.xcstrings`
@@ -72,10 +72,19 @@ extraction is ready once the catalog exists.
   (`localization/glossary.md`, `localization/style.md`); and the DebugScreen `Text` → `Text(verbatim:)`
   cleanup done (dev strings no longer pollute the catalog — 159 real product keys). English-only; the
   catalog is now translation-ready, awaiting a `fi` baseline from a native speaker (Phase 2).
-- **Phase 2 — MANUAL translation MVP (no CI):** a script run **at release**: export → detect delta →
-  Claude translates the delta (fed the catalog + glossary explicitly) → import → validate → open a PR;
-  **native-speaker sign-off** on each new locale's baseline. Delivers ~all the value with none of the
-  CI cost.
+- **Phase 2 — 🟡 fi BASELINE DRAFTED (2026-07-03), awaiting native sign-off.** The full v1 UI — **all 174
+  keys** in `Localizable.xcstrings` — is translated to **`fi`** (Claude, from the glossary + style guide),
+  with proper Finnish **plural variations** (`one`/`other`) for every count that changes the noun (the
+  `^[…](inflect:)` keys don't auto-inflect for Finnish), and eyeballed on **every screen** via the
+  screenshot harness under `-AppleLanguages (fi)`. The pass **surfaced + fixed 9 latent i18n bugs** the
+  Phase-1 audit missed — all *`String`-typed display paths that bypass the catalog* (verbatim, not
+  `LocalizedStringKey`): `ExportView.actionButton`, the `LabeledContent(value:)` destination/exclusion
+  strings, `PhotosAccessDisplay` status labels, `AccessRecoveryView`'s scaffold copy, the empty-state
+  date-range `" and "`, and the `NewAlbumDraft` default name (which also had a **year-grouping** bug —
+  a bare `\(Int)` in a localized string groups by locale, "2 024"). **Still needed:** a **native speaker
+  signs off** the baseline (the glossary flags the judgement calls — *Photos → Kuvat*, *Pick → Poimi*).
+  The at-release automation below (export → detect delta → `claude -p` translates the delta → import →
+  validate → PR) is the *ongoing* mechanism once a locale is live; the first `fi` baseline was done inline.
 - **Phase 3 — CI, only when volume justifies:** `localize.yml` (below) with the completeness gate +
   a real pseudoloc pass.
 - **Phase 4 — release notes + store metadata:** Claude drafts English notes from the changelog →
