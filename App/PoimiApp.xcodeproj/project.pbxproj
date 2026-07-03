@@ -10,6 +10,7 @@
 		000000001000000000000010 /* PoimiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000001000000000000001 /* PoimiApp.swift */; };
 		000000001000000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000001000000000000003 /* Assets.xcassets */; };
 		0000000010000000000000A2 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000010000000000000A1 /* Localizable.xcstrings */; };
+		0000000010000000000000A4 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000010000000000000A3 /* InfoPlist.xcstrings */; };
 		000000001000000000000013 /* Curation in Frameworks */ = {isa = PBXBuildFile; productRef = 000000001000000000000030 /* Curation */; };
 		00000000300000000000B301 /* FakePhotoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A301 /* FakePhotoLibrary.swift */; };
 		00000000300000000000B302 /* SystemPhotoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000300000000000A302 /* SystemPhotoLibrary.swift */; };
@@ -99,6 +100,7 @@
 		000000001000000000000001 /* PoimiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoimiApp.swift; sourceTree = "<group>"; };
 		000000001000000000000003 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0000000010000000000000A1 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		0000000010000000000000A3 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		000000001000000000000004 /* PoimiApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PoimiApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		00000000300000000000A301 /* FakePhotoLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrary.swift; sourceTree = "<group>"; };
 		00000000300000000000A302 /* SystemPhotoLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPhotoLibrary.swift; sourceTree = "<group>"; };
@@ -229,6 +231,7 @@
 			children = (
 				000000001000000000000003 /* Assets.xcassets */,
 				0000000010000000000000A1 /* Localizable.xcstrings */,
+				0000000010000000000000A3 /* InfoPlist.xcstrings */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -439,6 +442,7 @@
 			knownRegions = (
 				en,
 				Base,
+				fi,
 			);
 			mainGroup = 000000001000000000000005;
 			packageReferences = (
@@ -461,6 +465,7 @@
 			files = (
 				000000001000000000000012 /* Assets.xcassets in Resources */,
 				0000000010000000000000A2 /* Localizable.xcstrings in Resources */,
+				0000000010000000000000A4 /* InfoPlist.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -677,6 +682,7 @@
 				DEVELOPMENT_TEAM = N4FKQHR5AC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Poimi;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Poimi saves the photos you pick into an album in your library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Poimi needs full access to your photo library so you can browse a date range, hand-pick the best photos, and save them to an album. Your photos never leave your device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -707,6 +713,7 @@
 				DEVELOPMENT_TEAM = N4FKQHR5AC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Poimi;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Poimi saves the photos you pick into an album in your library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Poimi needs full access to your photo library so you can browse a date range, hand-pick the best photos, and save them to an album. Your photos never leave your device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
