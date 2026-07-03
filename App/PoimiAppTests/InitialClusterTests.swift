@@ -62,3 +62,34 @@ struct InitialPageTests {
         #expect(initialPage(groups: [], scrollToDay: jul5, isDone: { _ in false }) == 0)
     }
 }
+
+@Suite("nextUnreviewedPage (mark-done → next-day heartbeat)")
+struct NextUnreviewedPageTests {
+
+    @Test("jumps to the first UNREVIEWED cluster after the current page (skipping done ones)")
+    func jumpsToNextUnreviewed() {
+        // index 1 done; from 0 → skip 1, land on 2
+        #expect(nextUnreviewedPage(after: 0, count: 4, isDone: { $0 == 1 }) == 2)
+    }
+
+    @Test("no unreviewed ahead falls back to the literal next page")
+    func literalNextWhenAllAheadDone() {
+        // indices 2 and 3 done; from 1 → no unreviewed ahead → literal next = 2
+        #expect(nextUnreviewedPage(after: 1, count: 4, isDone: { $0 >= 2 }) == 2)
+    }
+
+    @Test("the last cluster stays put (nothing after it)")
+    func lastStaysPut() {
+        #expect(nextUnreviewedPage(after: 3, count: 4, isDone: { _ in false }) == 3)
+    }
+
+    @Test("a single-cluster album stays on page 0")
+    func singleCluster() {
+        #expect(nextUnreviewedPage(after: 0, count: 1, isDone: { _ in false }) == 0)
+    }
+
+    @Test("an empty album → page 0 (no trap on the empty range)")
+    func empty() {
+        #expect(nextUnreviewedPage(after: 0, count: 0, isDone: { _ in false }) == 0)
+    }
+}

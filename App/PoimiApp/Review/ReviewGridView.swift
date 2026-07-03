@@ -109,7 +109,9 @@ struct ReviewGridView: View {
         .safeAreaInset(edge: .top, spacing: 0) { header }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         .background(Color(.systemBackground))
-        .animation(reduceMotion ? nil : .snappy, value: currentPage)
+        // No implicit `.animation(value: currentPage)` — the TabView animates its own page transition;
+        // a programmatic advance (mark-done) animates via `withAnimation` in `advance()`. Stacking both
+        // double-animated the chrome on a swipe.
         // Success haptic when a day is marked done (count up), a light tap on undo.
         .sensoryFeedback(trigger: done.doneDays.count) { old, new in new > old ? .success : .impact(weight: .light) }
         .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.width } action: { applyIdealColumns(width: $0) }
@@ -139,7 +141,7 @@ struct ReviewGridView: View {
 
     @ViewBuilder private var header: some View {
         if let group = currentGroup {
-            ClusterPageHeader(title: DayGroupHeader.title(for: group), group: group,
+            ClusterPageHeader(title: DayGroupHeader.title(for: group), count: group.count,
                               position: currentPage + 1, total: groups.count)
         }
     }
@@ -182,10 +184,11 @@ struct ReviewGridView: View {
     }
 
     /// Advance to the next UNREVIEWED cluster after the current page; else the literal next; else stay
-    /// (finished the last stretch). Finishing a day lands you on the next one to review.
+    /// (finished the last stretch). Finishing a day lands you on the next one to review. The choice is
+    /// the pure `nextUnreviewedPage` (tested); this just applies it with animation.
     private func advance() {
-        let next = groups.indices.first { $0 > currentPage && !done.isDone(groups[$0]) }
-            ?? (currentPage + 1 < groups.count ? currentPage + 1 : currentPage)
+        let next = nextUnreviewedPage(after: currentPage, count: groups.count,
+                                      isDone: { done.isDone(groups[$0]) })
         withAnimation(reduceMotion ? nil : .snappy) { currentPage = next }
     }
 
@@ -278,41 +281,40 @@ private struct ClusterPage: View {
 
 // MARK: - The paged header (current cluster)
 
-/// The top glass header for the current cluster: the day title, "N photos · M kept" (kept = picks in
-/// this cluster, read from the `SelectionStore`), and the cluster's position in the album ("3 / 12").
-/// Glass bar backing so photos refract under it when a page scrolls (styleguide §5); RT-safe via the
-/// shared modifier.
+/// The top glass header for the current cluster: the day title + its photo count, the cluster's
+/// position in the album ("3 / 12"), and — restored on the picking screen — the album-level `ReviewTally`
+/// (picked / target + bar + "N left"), the orientation device you pick *toward* (a paged grid still
+/// needs to show how close to the count you are). Glass bar backing so photos refract under it when a
+/// page scrolls (styleguide §5); RT-safe via the shared modifier.
 private struct ClusterPageHeader: View {
     let title: String
-    let group: DayGroup
+    let count: Int
     let position: Int
     let total: Int
-    @Environment(SelectionStore.self) private var selection
 
     var body: some View {
-        let kept = group.assetIDs.reduce(into: 0) { if selection.selected.contains($1) { $0 += 1 } }
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(title)
                     .font(.title2.bold())
                     .lineLimit(1)
-                Text("\(group.count) photos · \(kept) kept")
+                Text("· \(count)")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                Spacer(minLength: 8)
+                Text("\(position) / \(total)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            Spacer(minLength: 8)
-            Text("\(position) / \(total)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+            ReviewTally()   // album picked / target + bar + "N left" — reads the SelectionStore itself
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassBarBackground(extendTop: true)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -364,4 +366,14 @@ func initialPage(groups: [DayGroup], scrollToDay: DayKey?, isDone: (DayGroup) ->
         return idx
     }
     return groups.firstIndex(where: { !isDone($0) }) ?? 0
+}
+
+/// The page to land on after marking `current` done (#38 mark-done → next-day heartbeat): the first
+/// UNREVIEWED cluster AFTER `current`, else the literal next page, else stay on `current` (the last
+/// stretch is finished). Pure so this — the core of the paged mark-done flow — is unit-tested, per the
+/// codebase's "pull the decision out of the View" convention. `isDone` is indexed into `0..<count`.
+func nextUnreviewedPage(after current: Int, count: Int, isDone: (Int) -> Bool) -> Int {
+    guard count > 0 else { return 0 }
+    if let next = (current + 1..<count).first(where: { !isDone($0) }) { return next }
+    return current + 1 < count ? current + 1 : current
 }
