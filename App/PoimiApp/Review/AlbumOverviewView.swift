@@ -318,31 +318,35 @@ struct ClusterListRow: View {
         let state = ClusterState.of(isDone: done, pickedCount: picked)
 
         Button(action: onOpen) {
-            HStack(spacing: 14) {
-                OverviewThumb(id: row.thumbID ?? "", size: 60, cornerRadius: 14)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(row.title)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    subtitle(state: state, picked: picked)
-                }
-                Spacer(minLength: 8)
-                // The done-seal is a graphical mark (gold's contrast caveat, styleguide §1) — green,
-                // shown only when the whole cluster is done.
-                if done {
-                    Image(systemName: "checkmark.circle.fill")
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, Color.brandGreen)
-                        .font(.title3)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(row.title)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        subtitle(state: state, picked: picked)
+                    }
+                    Spacer(minLength: 8)
+                    // The done-seal is a graphical mark (gold's contrast caveat, styleguide §1) — green,
+                    // shown only when the whole cluster is done.
+                    if done {
+                        Image(systemName: "checkmark.circle.fill")
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, Color.brandGreen)
+                            .font(.title3)
+                            .accessibilityHidden(true)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
                 }
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+                // The evenly-sampled preview strip — replaces the single cover thumb, so a glance shows
+                // the whole cluster, not one photo (#35 paged-clusters).
+                ClusterStrip(group: row.group)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 10)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

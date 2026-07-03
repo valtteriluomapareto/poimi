@@ -43,6 +43,40 @@ struct OverviewThumb: View {
     }
 }
 
+/// A horizontal, scrollable preview of a cluster's photos for the Overview (#35 paged-clusters): a
+/// handful of thumbnails **sampled evenly across the whole cluster** (via `DayGroup.evenlySampledIDs`),
+/// so a glance conveys the cluster's shape without opening it. The right edge fades so "more, keep
+/// scrolling" reads in either colour scheme (a mask fades the content to transparent — a fixed-colour
+/// scrim couldn't track light/dark). `LazyHStack` so only the on-screen thumbs (~5) load; the rest of
+/// the sample load on horizontal scroll, not up front.
+struct ClusterStrip: View {
+    let group: DayGroup
+    var thumbSize: CGFloat = 64
+    /// Sample up to this many across the cluster — ~5 show, the rest reveal on scroll. Bounded so a
+    /// 500-photo busy day previews with a dozen thumbs, not five hundred.
+    var sampleCount: Int = 12
+
+    var body: some View {
+        let ids = group.evenlySampledIDs(sampleCount)
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 6) {
+                ForEach(ids, id: \.self) { id in
+                    OverviewThumb(id: id, size: thumbSize, cornerRadius: 10)
+                }
+            }
+        }
+        .frame(height: thumbSize)
+        .mask(
+            LinearGradient(
+                stops: [.init(color: .black, location: 0),
+                        .init(color: .black, location: 0.86),
+                        .init(color: .clear, location: 1)],
+                startPoint: .leading, endPoint: .trailing)
+        )
+        .accessibilityHidden(true)   // the cluster row owns the a11y label; these thumbs are a preview
+    }
+}
+
 /// The coverage chart's adaptive time buckets. Picks a calendar unit by the album's span so the bars
 /// stay readable — a year → months, a couple months → weeks, a short album → days — then slices the
 /// span into CONTIGUOUS buckets (empty ones included, so a quiet stretch reads as a real gap). When the

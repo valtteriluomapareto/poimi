@@ -167,3 +167,54 @@ struct DayGroupingTests {
         #expect(gap == 2)
     }
 }
+
+// MARK: - Even sampling (Overview cluster strips, #35 paged-clusters)
+
+@Suite("DayGroup.evenlySampledIDs")
+struct EvenSamplingTests {
+    private func group(_ ids: [String]) -> DayGroup {
+        DayGroup(id: ids.first ?? "∅", assetIDs: ids, days: [.day(year: 2025, month: 1, day: 1)], isBusyDay: false)
+    }
+
+    @Test("count <= 0 yields empty, and a non-positive count never traps")
+    func nonPositive() {
+        #expect(group(["a", "b", "c"]).evenlySampledIDs(0).isEmpty)
+        #expect(group(["a", "b", "c"]).evenlySampledIDs(-3).isEmpty)
+    }
+
+    @Test("fewer ids than the target returns all of them, in order")
+    func fewerThanTarget() {
+        #expect(group(["a", "b", "c"]).evenlySampledIDs(5) == ["a", "b", "c"])
+        #expect(group(["a", "b", "c"]).evenlySampledIDs(3) == ["a", "b", "c"])
+        #expect(group([]).evenlySampledIDs(5).isEmpty)
+    }
+
+    @Test("count == 1 returns just the first id")
+    func single() {
+        #expect(group(["a", "b", "c", "d"]).evenlySampledIDs(1) == ["a"])
+    }
+
+    @Test("sampling always includes the first and last id (spans the cluster)")
+    func endpoints() {
+        let ids = (0..<100).map { "p\($0)" }
+        let sample = group(ids).evenlySampledIDs(5)
+        #expect(sample.first == "p0")
+        #expect(sample.last == "p99")
+        #expect(sample.count == 5)
+        // Evenly spread across the range.
+        #expect(sample == ["p0", "p25", "p50", "p74", "p99"])
+    }
+
+    @Test("result is de-duplicated + order-preserving when the group barely exceeds the target")
+    func deduped() {
+        // 6 ids, target 5: rounding would repeat an index; the result must have no duplicates
+        // and stay in chronological (input) order.
+        let input = ["a", "b", "c", "d", "e", "f"]
+        let sample = group(input).evenlySampledIDs(5)
+        #expect(Set(sample).count == sample.count)          // no repeats
+        let indices = sample.map { input.firstIndex(of: $0)! }
+        #expect(indices == indices.sorted())                // order preserved
+        #expect(sample.first == "a")
+        #expect(sample.last == "f")
+    }
+}

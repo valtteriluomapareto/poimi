@@ -1,20 +1,19 @@
 //
 //  InitialClusterTests.swift
-//  PoimiAppTests — the review grid's initial-cluster decision (#35 accordion; #37 drill).
+//  PoimiAppTests — the review grid's entry-page decision (#35 paged-clusters; #37 drill).
 //
-//  Pure unit tests for `initialCluster` — the drill-vs-resume choice pulled out of `ReviewGridView`
-//  so it's testable without rendering. Regression cover for the "drill from Overview lands blank until
-//  you scroll" bug: a drill must OPEN the target cluster AND return its first cell as the pending scroll
-//  target (the caller defers the actual scroll to a `.task`, after layout); everything else must NOT
-//  scroll (`pendingScrollID == nil`), and a matched-but-empty group must scroll nowhere.
+//  Pure unit tests for `initialPage` — the drill-vs-resume choice pulled out of `ReviewGridView` so
+//  it's testable without rendering. A drill from the Overview (`scrollToDay` matching a cluster's days)
+//  opens THAT cluster's page; otherwise the first UNREVIEWED cluster (resume), else the first. Returns
+//  a page index into `groups` (0 for an empty slice — the view guards it).
 //
 
 import Testing
 import Curation
 @testable import PoimiApp
 
-@Suite("initialCluster (review grid drill / resume)")
-struct InitialClusterTests {
+@Suite("initialPage (review grid drill / resume)")
+struct InitialPageTests {
 
     private func group(_ id: String, days: [DayKey], assets: [String]? = nil) -> DayGroup {
         DayGroup(id: id, assetIDs: assets ?? [id], days: days, isBusyDay: false)
@@ -24,53 +23,42 @@ struct InitialClusterTests {
     private let jul6 = DayKey.day(year: 2025, month: 7, day: 6)
     private let jul7 = DayKey.day(year: 2025, month: 7, day: 7)
 
-    @Test("a drill to a matching day opens that cluster AND targets its first cell to scroll")
+    @Test("a drill to a matching day opens that cluster's page")
     func drillMatches() {
         let groups = [group("a", days: [jul5], assets: ["a", "a2"]),
                       group("b", days: [jul6], assets: ["b", "b2"]),
                       group("c", days: [jul7])]
-        let choice = initialCluster(groups: groups, scrollToDay: jul6, isDone: { _ in false })
-        #expect(choice.expandedID == "b")
-        #expect(choice.pendingScrollID == "b")   // first asset id of the drilled group
+        #expect(initialPage(groups: groups, scrollToDay: jul6, isDone: { _ in false }) == 1)
     }
 
-    @Test("a drill day matching NO group falls back to first-unreviewed and does not scroll")
+    @Test("a drill day matching NO group falls back to first-unreviewed")
     func drillNoMatch() {
         let groups = [group("a", days: [jul5]), group("b", days: [jul6])]
         let missing = DayKey.day(year: 2030, month: 1, day: 1)
-        let choice = initialCluster(groups: groups, scrollToDay: missing, isDone: { $0.id == "a" })
-        #expect(choice.expandedID == "b")        // a is done → resume at b
-        #expect(choice.pendingScrollID == nil)   // not a real drill → no scroll
+        #expect(initialPage(groups: groups, scrollToDay: missing, isDone: { $0.id == "a" }) == 1)  // a done → b
     }
 
-    @Test("no drill opens the first UNREVIEWED cluster (resume) without scrolling")
+    @Test("no drill opens the first UNREVIEWED cluster (resume)")
     func resumeFirstUnreviewed() {
         let groups = [group("a", days: [jul5]), group("b", days: [jul6]), group("c", days: [jul7])]
-        let choice = initialCluster(groups: groups, scrollToDay: nil, isDone: { $0.id == "a" })
-        #expect(choice.expandedID == "b")
-        #expect(choice.pendingScrollID == nil)
+        #expect(initialPage(groups: groups, scrollToDay: nil, isDone: { $0.id == "a" }) == 1)
     }
 
-    @Test("no drill with every cluster done falls back to the first cluster")
+    @Test("no drill with every cluster done falls back to the first page")
     func resumeAllDone() {
         let groups = [group("a", days: [jul5]), group("b", days: [jul6])]
-        let choice = initialCluster(groups: groups, scrollToDay: nil, isDone: { _ in true })
-        #expect(choice.expandedID == "a")        // all done → first
-        #expect(choice.pendingScrollID == nil)
+        #expect(initialPage(groups: groups, scrollToDay: nil, isDone: { _ in true }) == 0)
     }
 
-    @Test("a drill to a matching but EMPTY group opens it but scrolls nowhere (the blank-fix edge)")
-    func drillEmptyGroup() {
-        let groups = [group("a", days: [jul5], assets: [])]
-        let choice = initialCluster(groups: groups, scrollToDay: jul5, isDone: { _ in false })
-        #expect(choice.expandedID == "a")
-        #expect(choice.pendingScrollID == nil)   // empty assetIDs → nothing to scroll to
+    @Test("a drill lands on the matching cluster even if a later one is the first unreviewed")
+    func drillWinsOverResume() {
+        let groups = [group("a", days: [jul5]), group("b", days: [jul6]), group("c", days: [jul7])]
+        // a is unreviewed (resume would pick 0), but the drill targets jul7 → page 2.
+        #expect(initialPage(groups: groups, scrollToDay: jul7, isDone: { _ in false }) == 2)
     }
 
-    @Test("no groups → nothing to open")
+    @Test("no groups → page 0")
     func emptyGroups() {
-        let choice = initialCluster(groups: [], scrollToDay: jul5, isDone: { _ in false })
-        #expect(choice.expandedID == nil)
-        #expect(choice.pendingScrollID == nil)
+        #expect(initialPage(groups: [], scrollToDay: jul5, isDone: { _ in false }) == 0)
     }
 }
