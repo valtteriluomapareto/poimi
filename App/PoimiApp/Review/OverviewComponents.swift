@@ -45,10 +45,9 @@ struct OverviewThumb: View {
 
 /// A horizontal, scrollable preview of a cluster's photos for the Overview (#35 paged-clusters): a
 /// handful of thumbnails **sampled evenly across the whole cluster** (via `DayGroup.evenlySampledIDs`),
-/// so a glance conveys the cluster's shape without opening it. The right edge fades so "more, keep
-/// scrolling" reads in either colour scheme (a mask fades the content to transparent — a fixed-colour
-/// scrim couldn't track light/dark). `LazyHStack` so only the on-screen thumbs (~5) load; the rest of
-/// the sample load on horizontal scroll, not up front.
+/// so a glance conveys the cluster's shape without opening it. The strip clips at the row edge (the
+/// last thumb cut signals more to scroll). `LazyHStack` so only the on-screen thumbs (~5) load; the
+/// rest of the sample load on horizontal scroll, not up front.
 struct ClusterStrip: View {
     let group: DayGroup
     var thumbSize: CGFloat = 64
@@ -66,13 +65,6 @@ struct ClusterStrip: View {
             }
         }
         .frame(height: thumbSize)
-        .mask(
-            LinearGradient(
-                stops: [.init(color: .black, location: 0),
-                        .init(color: .black, location: 0.86),
-                        .init(color: .clear, location: 1)],
-                startPoint: .leading, endPoint: .trailing)
-        )
         .accessibilityHidden(true)   // the cluster row owns the a11y label; these thumbs are a preview
     }
 }
