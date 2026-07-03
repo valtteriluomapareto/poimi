@@ -28,13 +28,18 @@ struct ReviewEmptyCopy: Equatable {
         switch reason {
         case .noPhotosInRange:
             return ReviewEmptyCopy(
-                title: "No photos in this range",
-                message: "No photos between \(range). Try a wider date range.")
+                title: String(localized: "No photos in this range",
+                              comment: "Empty scan title: the range yielded nothing"),
+                message: String(localized: "No photos between \(range). Try a wider date range.",
+                                comment: "Empty scan message: %@ is the date range"))
         case .allExcluded:
             return ReviewEmptyCopy(
-                title: "Everything's filtered out",
-                message: "Every photo between \(range) is a screenshot or in an excluded album. "
-                    + "Try fewer exclusions.")
+                title: String(localized: "Everything's filtered out",
+                              comment: "Empty scan title: all candidates excluded"),
+                message: String(localized: """
+                    Every photo between \(range) is a screenshot or in an excluded album. \
+                    Try fewer exclusions.
+                    """, comment: "Empty scan message: %@ is the date range"))
         }
     }
 }

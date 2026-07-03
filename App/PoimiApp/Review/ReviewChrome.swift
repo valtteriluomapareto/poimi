@@ -102,8 +102,11 @@ struct ReviewTally: View {
     }
 
     private func accessibilityLabel(_ progress: TargetProgress) -> String {
-        let base = "\(progress.picked) of \(progress.target) photos picked, \(progress.remaining) left"
-        return progress.isComplete ? base + ", target reached" : base
+        let base = String(localized: """
+            \(progress.picked) of \(progress.target) photos picked, \(progress.remaining) left
+            """, comment: "Tally a11y label: picked / target / remaining")
+        guard progress.isComplete else { return base }
+        return String(localized: "\(base), target reached", comment: "Tally a11y label suffix when the target is met")
     }
 }
 
@@ -132,8 +135,10 @@ struct ReviewToolbarActions: View {
             Button("Clear \(picked) picked", role: .destructive) { selection.clear() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This deselects all \(picked) photos. Your photos aren't deleted — "
-                + "but you'd pick this album again from scratch.")
+            Text("""
+                This deselects all \(picked) photos. Your photos aren't deleted — \
+                but you'd pick this album again from scratch.
+                """)
         }
     }
 }

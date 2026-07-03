@@ -23,18 +23,23 @@ struct RecoveryGuidance: Equatable {
         switch status {
         case .limited:
             RecoveryGuidance(
-                title: "Full access needed",
-                message: "Limited access only shows the photos you specifically picked. "
-                    + "Poimi needs your whole library to curate a full year by date.")
+                title: String(localized: "Full access needed", comment: "Recovery title: Limited access"),
+                message: String(localized: """
+                    Limited access only shows the photos you specifically picked. Poimi needs your \
+                    whole library to curate a full year by date.
+                    """, comment: "Recovery message: Limited access"))
         case .denied, .restricted:
             RecoveryGuidance(
-                title: "Photo access is off",
-                message: "Poimi can't see your library. Turn on photo access to browse and curate your year.")
+                title: String(localized: "Photo access is off", comment: "Recovery title: denied/restricted"),
+                message: String(localized: """
+                    Poimi can't see your library. Turn on photo access to browse and curate your year.
+                    """, comment: "Recovery message: denied/restricted"))
         case .authorized, .notDetermined:
             // Not a recovery state — the coordinator never routes here; a neutral fallback only.
             RecoveryGuidance(
-                title: "Photo access",
-                message: "Poimi needs access to your photo library.")
+                title: String(localized: "Photo access", comment: "Recovery title: neutral fallback"),
+                message: String(localized: "Poimi needs access to your photo library.",
+                                comment: "Recovery message: neutral fallback"))
         }
     }
 }

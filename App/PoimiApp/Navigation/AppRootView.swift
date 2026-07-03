@@ -125,8 +125,8 @@ struct AppRootView: View {
 /// screenshot of the shell is self-documenting, never mistaken for a finished screen.
 struct RoutePlaceholder: View {
     let symbol: String
-    let title: String
-    let detail: String
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey
 
     var body: some View {
         ContentUnavailableView {

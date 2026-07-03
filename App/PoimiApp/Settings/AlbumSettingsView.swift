@@ -63,8 +63,10 @@ struct AlbumSettingsView: View {
             } header: {
                 Text("Period")
             } footer: {
-                Text("Changing the range re-scans which photos you pick from next time you review. "
-                    + "Picks outside the new range are kept — you chose them.")
+                Text("""
+                    Changing the range re-scans which photos you pick from next time you review. \
+                    Picks outside the new range are kept — you chose them.
+                    """)
             }
 
             Section {
@@ -100,8 +102,10 @@ struct AlbumSettingsView: View {
                 Button("Reset picks", role: .destructive) { confirmingReset = true }
                 Button("Delete album", role: .destructive) { confirmingDelete = true }
             } footer: {
-                Text("Reset clears your picks and progress but keeps the album's settings. Delete removes "
-                    + "this album from Poimi — the Photos album it created and your originals are never touched.")
+                Text("""
+                    Reset clears your picks and progress but keeps the album's settings. Delete removes \
+                    this album from Poimi — the Photos album it created and your originals are never touched.
+                    """)
             }
         }
         // "Album settings", not just "Settings" — distinguishes it from the app-level `AppSettingsView`
@@ -119,8 +123,10 @@ struct AlbumSettingsView: View {
             Button("Reset “\(project.title)”", role: .destructive) { resetPicks() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Clears all picks and marked-done days. The album's settings are kept, "
-                + "and your Photos library isn't touched.")
+            Text("""
+                Clears all picks and marked-done days. The album's settings are kept, \
+                and your Photos library isn't touched.
+                """)
         }
         .confirmationDialog("Delete this album?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete “\(project.title)”", role: .destructive) { deleteAlbum() }

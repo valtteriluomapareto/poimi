@@ -88,8 +88,10 @@ struct AlbumsView: View {
             }
             Button("Cancel", role: .cancel) { albumToDelete = nil }
         } message: { project in
-            Text("Removes the album and its ^[\(project.persistedPickedCount) pick](inflect: true). "
-                + "Your Photos library isn't touched.")
+            Text("""
+                Removes the album and its ^[\(project.persistedPickedCount) pick](inflect: true). \
+                Your Photos library isn't touched.
+                """)
         }
         .confirmationDialog("Reset picks?", isPresented: resetConfirmation,
                             titleVisibility: .visible, presenting: albumToReset) { project in
@@ -192,9 +194,9 @@ struct AlbumSummary: Equatable {
 
     init(status: ProjectStatus, picked: Int, target: Int) {
         switch status {
-        case .empty: statusText = "Not started"
-        case .inProgress: statusText = "In progress"
-        case .done: statusText = "Done"
+        case .empty: statusText = String(localized: "Not started", comment: "Album status: no picks")
+        case .inProgress: statusText = String(localized: "In progress", comment: "Album status: in progress")
+        case .done: statusText = String(localized: "Done", comment: "Album status: finalized")
         }
         progressText = "\(picked) / \(target)"
     }

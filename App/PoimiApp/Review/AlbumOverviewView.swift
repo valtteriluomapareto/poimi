@@ -377,9 +377,15 @@ struct ClusterListRow: View {
 
     private func a11yLabel(state: ClusterState, picked: Int) -> String {
         switch state {
-        case .done: return "\(row.title). Done. \(picked) of \(row.count) picked."
-        case .inProgress: return "\(row.title). \(picked) of \(row.count) picked."
-        case .untouched: return "\(row.title). Not reviewed. \(row.count) photos."
+        case .done:
+            return String(localized: "\(row.title). Done. \(picked) of \(row.count) picked.",
+                          comment: "Cluster row a11y: %@ day, done, N of M picked")
+        case .inProgress:
+            return String(localized: "\(row.title). \(picked) of \(row.count) picked.",
+                          comment: "Cluster row a11y: %@ day, N of M picked")
+        case .untouched:
+            return String(localized: "\(row.title). Not reviewed. \(row.count) photos.",
+                          comment: "Cluster row a11y: %@ day, not reviewed, M photos")
         }
     }
 }
