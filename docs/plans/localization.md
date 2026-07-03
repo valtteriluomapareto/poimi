@@ -43,6 +43,15 @@ extraction is ready once the catalog exists.
 1. **`Localizable.xcstrings`** — the UI.
 2. **`InfoPlist` strings** — the **`NSPhotoLibraryUsageDescription`** permission prompt is user-facing
    and **App Review requires it localized** (a separate catalog/`.strings` surface; a first-draft omission).
+   **Source-of-truth (verified 2026-07-03, empirically):** the base (`en`) values live in the
+   `INFOPLIST_KEY_NS…UsageDescription` / `INFOPLIST_KEY_CFBundleDisplayName` **build settings** — these are
+   *mandatory* (removing them drops the keys from the generated `Info.plist` entirely → the app crashes on
+   first Photos access). `InfoPlist.xcstrings` only ever emits **per-locale overrides** (it produces *no*
+   `.lproj/InfoPlist.strings` when a locale matches the base), so its `en` entries are a tool-maintained
+   **translation reference**, not the runtime base. **To change the English wording, edit the build setting,
+   then `-exportLocalizations` to re-sync the catalog** — never edit the catalog `en` and expect a runtime
+   change. `CFBundleDisplayName`/`CFBundleName` carry `"shouldTranslate": false` (product/build names — the
+   glossary's "keep Poimi verbatim"). The display name is **`Poimi`** (was leaking the target name "PoimiApp").
 3. **App Store metadata per locale** — subtitle, **keywords** (our docs flag discoverability given the
    opaque name), description, promo, *and* release notes — not release notes alone.
 4. **Localized screenshots** — reuse the DEBUG screenshot harness with `-AppleLanguages (fi)` to eyeball

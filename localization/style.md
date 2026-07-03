@@ -18,7 +18,9 @@ How Poimi's UI copy should read in any language (#95). Fed to the translator wit
 - **Preserve every format specifier EXACTLY** — `%@`, `%lld`, `%1$@`, `%2$@` — same identity, type, and
   **order**. `%@ of %@` reordered breaks meaning; use the positional forms when reordering is needed.
 - **Preserve `^[…](inflect: true)`** automatic-grammar markup verbatim (it drives plural/case agreement).
-- **Numbers** come through as `%@` (already locale-formatted with grouping) — don't add your own digits.
+- **Numbers** appear as **either** `%@` (a locale-formatted count, already grouped — e.g. "1,847") **or**
+  `%lld` (a plain integer — e.g. "of %lld", "Photo %lld of %lld"). Preserve whichever the source uses —
+  never swap one for the other, and never add your own digits.
 - **Keep `Poimi` verbatim** and preserve the platform product names (see the glossary).
 
 ## Plurals
