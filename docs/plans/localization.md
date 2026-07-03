@@ -1,10 +1,14 @@
 # Localization plan — multi-locale UI + automated translation & release notes
 
-**Status: DEFERRED SPEC — not build-it-now.** Tracks [#95]. Revised after a 3-persona + Codex review
-(see PR #96). **Precondition: don't build the automation until the v1 English UI is stable** — export
-(#39), select-mode (#91), settings (#41), iPad (#42) are unbuilt and the surface is still moving (the
-accordion landed mid-Phase-2). Building translation infra now means maintaining it while what it
-translates keeps changing.
+**Status: PHASE 0 BUILT (2026-07-03); rest still deferred.** Tracks [#95]. Revised after a 3-persona +
+Codex review (see PR #96). The precondition ("don't build until the v1 English UI is stable") is now
+**met** — Phase 2 (#30–#43) is complete + the surface has settled — so **Phase 0 shipped**: the String
+Catalog (`App/PoimiApp/Resources/Localizable.xcstrings`) exists + is in the app target + is populated by
+extraction (`xcodebuild -exportLocalizations`), and **localizable-by-default** is a documented
+convention (CLAUDE.md). Still deferred (Phase 1+): the retro-audit of any un-extracted strings, the
+**DEBUG-string cleanup** (DebugScreen `Text` → `Text(verbatim:)` so dev strings leave the catalog),
+`fi` registration, `InfoPlist` localization, the glossary, and all translation/CI automation — built
+only when release-frequency × locale-count justifies each step.
 
 **What IS worth doing now** is only the near-zero-cost foundation (create the String Catalog + make new
 strings localizable-by-default). Everything else is staged behind "v1 English shipped," and the *first*
@@ -44,9 +48,10 @@ extraction is ready once the catalog exists.
 5. **`knownRegions` / `CFBundleLocalizations`** gain each target locale (setup step).
 
 ## Phasing (reframed: minimal now, graduate later)
-- **Phase 0 — now, cheap:** create `Localizable.xcstrings` + add to the target; adopt
-  **localizable-by-default** (every new screen uses `Text`/`String(localized:)` from the start); state
-  the Curation-string-free invariant. English-only. Near-zero marginal cost; avoids a bigger retro.
+- **Phase 0 — ✅ DONE (2026-07-03):** created `Localizable.xcstrings` + added to the target (populated
+  by `-exportLocalizations`); adopted **localizable-by-default** (CLAUDE.md convention — new screens use
+  `Text`/`String(localized:)`, DEBUG strings use `Text(verbatim:)`); stated the Curation-string-free
+  invariant. English-only.
 - **Phase 1 — after v1 English is stable:** one **bulk retro-audit** (focus: the a11y/non-`Text`
   strings) + `InfoPlist` localization + register the first locales in `knownRegions` + write the
   **glossary + style guide** (`localization/glossary.md`, `style.md`).
@@ -132,9 +137,10 @@ extraction is ready once the catalog exists.
    for incremental deltas over that verified baseline. (Lock at Phase 2.)
 3. **ASC automation — recommended: in-repo half first** (catalog + notes files); wire the ASC-API upload
    + key + gate in Phase 4.
-4. **Now vs deferred — DECIDED: plan only.** No repo code yet (not even Phase 0) — this doc is the
-   detailed, implementation-ready spec, revisited for build once the v1 English UI is stable. The code
-   below is **illustrative** (how each step would be built), not committed files.
+4. **Now vs deferred — UPDATED: Phase 0 built (2026-07-03), rest deferred.** With Phase 2 (#30–#43)
+   complete the v1 English UI is stable, so Phase 0 (the catalog + localizable-by-default) shipped. The
+   Phase 1+ code below stays **illustrative** (how each step would be built), not committed — built when
+   each step's value justifies it.
 
 ## Implementation detail (illustrative — plan only, not committed)
 

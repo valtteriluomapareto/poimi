@@ -1,0 +1,440 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    " · %lld" : {
+
+    },
+    " / %lld" : {
+
+    },
+    "· %lld" : {
+
+    },
+    "“%@” is not in the DebugScreen catalog." : {
+
+    },
+    "%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@, %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@, %3$@"
+          }
+        }
+      }
+    },
+    "%@, photo %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, photo %2$lld of %3$lld"
+          }
+        }
+      }
+    },
+    "%@. %lld of %lld kept.%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$lld of %3$lld kept.%4$@"
+          }
+        }
+      }
+    },
+    "%@. %lld of %lld photos kept. Open." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$lld of %3$lld photos kept. Open."
+          }
+        }
+      }
+    },
+    "%lld" : {
+
+    },
+    "%lld day%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld day%2$@ · %3$@"
+          }
+        }
+      }
+    },
+    "%lld left" : {
+
+    },
+    "%lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "%lld of %lld kept" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld kept"
+          }
+        }
+      }
+    },
+    "%lld of %lld picked" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld picked"
+          }
+        }
+      }
+    },
+    "%lld picked" : {
+
+    },
+    "^[%lld photo](inflect: true)" : {
+
+    },
+    "About" : {
+
+    },
+    "Access" : {
+
+    },
+    "Adding your %@ photos to %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Adding your %1$@ photos to %2$@."
+          }
+        }
+      }
+    },
+    "Aim for ^[%lld photo](inflect: true)" : {
+
+    },
+    "Album name" : {
+
+    },
+    "Album settings" : {
+
+    },
+    "Album updated" : {
+
+    },
+    "Albums" : {
+
+    },
+    "Albums (%lld)" : {
+
+    },
+    "Assets (%lld)" : {
+
+    },
+    "Authorization" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Change range" : {
+
+    },
+    "Checking your photo access…" : {
+
+    },
+    "Clear" : {
+
+    },
+    "Clear %lld picked" : {
+
+    },
+    "Clear all picks?" : {
+
+    },
+    "Clears all picks and progress. The album's settings are kept." : {
+
+    },
+    "Collapsed" : {
+
+    },
+    "Couldn’t create the album" : {
+
+    },
+    "Couldn't load your photos" : {
+
+    },
+    "Couldn’t update the album" : {
+
+    },
+    "Create" : {
+
+    },
+    "Create an album to hand-pick a year of photos into." : {
+
+    },
+    "Creating your album…" : {
+
+    },
+    "Current photo" : {
+
+    },
+    "Debug · Library" : {
+
+    },
+    "Delete" : {
+
+    },
+    "Delete “%@”" : {
+
+    },
+    "Delete album" : {
+
+    },
+    "Delete this album?" : {
+
+    },
+    "Deselect" : {
+
+    },
+    "Deselect all" : {
+
+    },
+    "Deselect all in %@" : {
+
+    },
+    "Deselects all photos in this album." : {
+
+    },
+    "Destination" : {
+
+    },
+    "Double tap to %@ this day" : {
+
+    },
+    "Duplicate" : {
+
+    },
+    "Error" : {
+
+    },
+    "Exclude albums" : {
+
+    },
+    "Exclude from source" : {
+
+    },
+    "Exclude screenshots" : {
+
+    },
+    "Excluded albums" : {
+
+    },
+    "Expanded" : {
+
+    },
+    "Export" : {
+
+    },
+    "Find it in Photos, in the album “%@”." : {
+
+    },
+    "From" : {
+
+    },
+    "GitHub" : {
+
+    },
+    "Jump to photo" : {
+
+    },
+    "Leave as a new album (created on export), or add picks to an existing album." : {
+
+    },
+    "Library" : {
+
+    },
+    "License" : {
+
+    },
+    "Looking over your year…" : {
+
+    },
+    "Mark as done" : {
+
+    },
+    "Mark as not done" : {
+
+    },
+    "Marks this day reviewed and opens the next" : {
+
+    },
+    "Name" : {
+
+    },
+    "New album" : {
+
+    },
+    "No albums" : {
+
+    },
+    "No albums yet" : {
+
+    },
+    "Not picked" : {
+
+    },
+    "Not reviewed · %lld" : {
+
+    },
+    "Opens this day in review" : {
+
+    },
+    "Period" : {
+
+    },
+    "Photo %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Photo %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Photo access changed" : {
+
+    },
+    "Photo, %@" : {
+
+    },
+    "Photos access" : {
+
+    },
+    "Photos album" : {
+
+    },
+    "Photos captured in this date range are the candidates to pick from." : {
+
+    },
+    "Pick" : {
+
+    },
+    "Pick photo" : {
+
+    },
+    "Picked" : {
+
+    },
+    "Picks are copied to this Photos album — your library and originals aren't changed." : {
+
+    },
+    "Removes the album from Poimi. The Photos album it created and your originals are never touched." : {
+
+    },
+    "Reopens this day for editing" : {
+
+    },
+    "Reset “%@”" : {
+
+    },
+    "Reset picks" : {
+
+    },
+    "Reset picks?" : {
+
+    },
+    "Review exclusions" : {
+
+    },
+    "Save to" : {
+
+    },
+    "Save to album" : {
+
+    },
+    "Saves to" : {
+
+    },
+    "Scanning your photos…" : {
+
+    },
+    "Screenshots and photos in these albums won't appear while you pick." : {
+
+    },
+    "Select" : {
+
+    },
+    "Select all" : {
+
+    },
+    "Select all in %@" : {
+
+    },
+    "Settings" : {
+
+    },
+    "Something went wrong reaching your library. Check your connection and try again." : {
+
+    },
+    "Source code" : {
+
+    },
+    "Target" : {
+
+    },
+    "Target: ^[%lld photo](inflect: true)" : {
+
+    },
+    "To" : {
+
+    },
+    "Try again" : {
+
+    },
+    "Undated" : {
+
+    },
+    "Unknown screen" : {
+
+    },
+    "Updating your album…" : {
+
+    },
+    "Valid: %@" : {
+
+    },
+    "Version" : {
+
+    },
+    "You have no albums to choose from." : {
+
+    },
+    "Your album is ready" : {
+
+    }
+  },
+  "version" : "1.0"
+}

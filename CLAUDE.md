@@ -74,7 +74,7 @@ App/
     Onboarding/                OnboardingView, AccessRecoveryView (first-run + auth, #31)
     Settings/                  AlbumSettingsView (per-album, #41) + AppSettingsView (app-level: access/about)
     Support/                   Log (OSLog), DebugScreen (screenshot harness)
-    Resources/                 Assets.xcassets (AccentColor, BrandGreen, OnAccent, AppIcon)
+    Resources/                 Assets.xcassets + Localizable.xcstrings (String Catalog, #95 Phase 0)
   PoimiAppTests/               integration tier (Swift Testing, runs on a sim)
 Curation/                      pure-domain SPM package — NO Photos/SwiftData/UIKit/SwiftUI
   Sources/Curation/            AssetRef, DayKey, DayGrouping, Completion, TargetProgress,
@@ -183,6 +183,12 @@ Defined in `.github/workflows/ci.yml`.
   `xcodebuild -list` to confirm it still reads. Keep diffs to
   the intended change — no Xcode reformatting churn.
 - **Tests with fixes:** every bug fix ships with a failing-then-passing regression test.
+- **Localizable by default (#95 Phase 0):** user-facing strings flow through the **String Catalog**
+  (`Localizable.xcstrings`) — write `Text("…")` / `String(localized:, comment:)` (a build extracts them;
+  `xcodebuild -exportLocalizations` refreshes the catalog). **DEBUG-harness / dev-facing** strings use
+  `Text(verbatim:)` / `String(_:)` so they don't pollute the catalog. **`Curation` stays string-free**
+  (D14/D21) — no user-facing text in the pure domain. v1 is English-only; translation infra is later
+  phases ([docs/plans/localization.md](docs/plans/localization.md)).
 
 ## Documentation map
 
