@@ -52,9 +52,13 @@ extraction is ready once the catalog exists.
   by `-exportLocalizations`); adopted **localizable-by-default** (CLAUDE.md convention — new screens use
   `Text`/`String(localized:)`, DEBUG strings use `Text(verbatim:)`); stated the Curation-string-free
   invariant. English-only.
-- **Phase 1 — after v1 English is stable:** one **bulk retro-audit** (focus: the a11y/non-`Text`
-  strings) + `InfoPlist` localization + register the first locales in `knownRegions` + write the
-  **glossary + style guide** (`localization/glossary.md`, `style.md`).
+- **Phase 1 — in progress.** The **bulk retro-audit is ✅ DONE (2026-07-03):** the composed UI strings
+  + a11y helpers now use `String(localized:, comment:)`, and every `Text("a" + "b")` (which resolves to
+  the *verbatim* overload → wouldn't localize) is now a single localizable literal (`"""` where long);
+  **"Poimi" stays verbatim** (app name). The catalog covers the resolved surface (~166 keys). **Still
+  pending in Phase 1:** register `fi` in `knownRegions`; `InfoPlist.xcstrings` for the Photos-permission
+  prompt; the **glossary + style guide** (`localization/glossary.md`, `style.md`); and the DebugScreen
+  `Text` → `Text(verbatim:)` cleanup (dev strings still in the catalog).
 - **Phase 2 — MANUAL translation MVP (no CI):** a script run **at release**: export → detect delta →
   Claude translates the delta (fed the catalog + glossary explicitly) → import → validate → open a PR;
   **native-speaker sign-off** on each new locale's baseline. Delivers ~all the value with none of the

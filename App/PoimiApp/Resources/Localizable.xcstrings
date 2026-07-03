@@ -23,6 +23,42 @@
         }
       }
     },
+    "%@ is already up to date · %@ photos." : {
+      "comment" : "Re-export subtitle: nothing new to add",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ is already up to date · %2$@ photos."
+          }
+        }
+      }
+    },
+    "%@ photos · %@" : {
+      "comment" : "Review header subtitle: photo count (grouped) · date-range period",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ photos · %2$@"
+          }
+        }
+      }
+    },
+    "%@ photos, hand-picked — one tap at a time." : {
+      "comment" : "Completion subtitle: N picked, no days marked done"
+    },
+    "%@ photos, hand-picked from %@ — one tap at a time." : {
+      "comment" : "Completion subtitle: N picked from M reviewed days",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ photos, hand-picked from %2$@ — one tap at a time."
+          }
+        }
+      }
+    },
     "%@, %@, %@" : {
       "localizations" : {
         "en" : {
@@ -63,6 +99,39 @@
         }
       }
     },
+    "%@. %lld of %lld picked." : {
+      "comment" : "Cluster row a11y: %@ day, N of M picked",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$lld of %3$lld picked."
+          }
+        }
+      }
+    },
+    "%@. Done. %lld of %lld picked." : {
+      "comment" : "Cluster row a11y: %@ day, done, N of M picked",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. Done. %2$lld of %3$lld picked."
+          }
+        }
+      }
+    },
+    "%@. Not reviewed. %lld photos." : {
+      "comment" : "Cluster row a11y: %@ day, not reviewed, M photos",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. Not reviewed. %2$lld photos."
+          }
+        }
+      }
+    },
     "%lld" : {
 
     },
@@ -99,6 +168,28 @@
         }
       }
     },
+    "%lld of %lld photos picked, %lld left" : {
+      "comment" : "Tally a11y label: picked / target / remaining",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld photos picked, %3$lld left"
+          }
+        }
+      }
+    },
+    "%lld of %lld photos picked, %lld left, target reached" : {
+      "comment" : "Tally a11y label when the target is reached",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld photos picked, %3$lld left, target reached"
+          }
+        }
+      }
+    },
     "%lld of %lld picked" : {
       "localizations" : {
         "en" : {
@@ -115,11 +206,25 @@
     "^[%lld photo](inflect: true)" : {
 
     },
+    "^[%lld photo](inflect: true) couldn't be added — no longer in your library." : {
+
+    },
     "About" : {
 
     },
     "Access" : {
 
+    },
+    "Added %@ photos · %@ now holds %@." : {
+      "comment" : "Re-export subtitle: N newly added, album total M",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Added %1$@ photos · %2$@ now holds %3$@."
+          }
+        }
+      }
     },
     "Adding your %@ photos to %@." : {
       "localizations" : {
@@ -137,6 +242,9 @@
     "Album name" : {
 
     },
+    "Album not found" : {
+
+    },
     "Album settings" : {
 
     },
@@ -148,6 +256,9 @@
     },
     "Albums (%lld)" : {
 
+    },
+    "Allow access" : {
+      "comment" : "Onboarding permission primary button"
     },
     "Assets (%lld)" : {
 
@@ -161,7 +272,13 @@
     "Change range" : {
 
     },
+    "Changing the range re-scans which photos you pick from next time you review. Picks outside the new range are kept — you chose them." : {
+
+    },
     "Checking your photo access…" : {
+
+    },
+    "Choose an album from the sidebar to start picking." : {
 
     },
     "Clear" : {
@@ -171,6 +288,9 @@
 
     },
     "Clear all picks?" : {
+
+    },
+    "Clears all picks and marked-done days. The album's settings are kept, and your Photos library isn't touched." : {
 
     },
     "Clears all picks and progress. The album's settings are kept." : {
@@ -230,6 +350,9 @@
     "Destination" : {
 
     },
+    "Done" : {
+      "comment" : "Album status: finalized"
+    },
     "Double tap to %@ this day" : {
 
     },
@@ -238,6 +361,12 @@
     },
     "Error" : {
 
+    },
+    "Every photo between %@ is a screenshot or in an excluded album. Try fewer exclusions." : {
+      "comment" : "Empty scan message: %@ is the date range"
+    },
+    "Everything's filtered out" : {
+      "comment" : "Empty scan title: all candidates excluded"
     },
     "Exclude albums" : {
 
@@ -263,10 +392,34 @@
     "From" : {
 
     },
+    "Full access needed" : {
+      "comment" : "Recovery title: Limited access"
+    },
+    "Full library access" : {
+      "comment" : "Onboarding permission title"
+    },
+    "Get started" : {
+      "comment" : "Onboarding intro primary button"
+    },
     "GitHub" : {
 
     },
+    "Go through a whole year of photos and choose the best into one album — toward a count you set. You pick every photo, not an algorithm." : {
+      "comment" : "Onboarding intro body"
+    },
+    "Hand-pick your year." : {
+      "comment" : "Onboarding intro headline"
+    },
+    "In progress" : {
+      "comment" : "Album status: in progress"
+    },
+    "It needs full access to browse a date range, show your photos, and save the album you build. Your photos never leave your device — Poimi stores only references, nothing in the cloud, nothing shared." : {
+      "comment" : "Onboarding permission body"
+    },
     "Jump to photo" : {
+
+    },
+    "Kept" : {
 
     },
     "Leave as a new album (created on export), or add picks to an existing album." : {
@@ -277,6 +430,9 @@
     },
     "License" : {
 
+    },
+    "Limited access only shows the photos you specifically picked. Poimi needs your whole library to curate a full year by date." : {
+      "comment" : "Recovery message: Limited access"
     },
     "Looking over your year…" : {
 
@@ -302,11 +458,20 @@
     "No albums yet" : {
 
     },
+    "No photos between %@. Try a wider date range." : {
+      "comment" : "Empty scan message: %@ is the date range"
+    },
+    "No photos in this range" : {
+      "comment" : "Empty scan title: the range yielded nothing"
+    },
     "Not picked" : {
 
     },
     "Not reviewed · %lld" : {
 
+    },
+    "Not started" : {
+      "comment" : "Album status: no picks"
     },
     "Opens this day in review" : {
 
@@ -324,11 +489,39 @@
         }
       }
     },
+    "Photo access" : {
+      "comment" : "Recovery title: neutral fallback"
+    },
     "Photo access changed" : {
 
     },
+    "Photo access is off" : {
+      "comment" : "Recovery title: denied/restricted"
+    },
     "Photo, %@" : {
 
+    },
+    "Photo, %@, %lld of %lld" : {
+      "comment" : "Viewer a11y: day, position",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Photo, %1$@, %2$lld of %3$lld"
+          }
+        }
+      }
+    },
+    "Photo, %lld of %lld" : {
+      "comment" : "Viewer a11y: position, no day",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Photo, %1$lld of %2$lld"
+          }
+        }
+      }
     },
     "Photos access" : {
 
@@ -351,6 +544,21 @@
     "Picks are copied to this Photos album — your library and originals aren't changed." : {
 
     },
+    "Poimi can't see your library. Turn on photo access to browse and curate your year." : {
+      "comment" : "Recovery message: denied/restricted"
+    },
+    "Poimi needs access to your photo library." : {
+      "comment" : "Recovery message: neutral fallback"
+    },
+    "Poimi needs full photo access to create an album. You can grant it in Settings." : {
+      "comment" : "Export error: authorization not full"
+    },
+    "Poimi works across your whole library." : {
+      "comment" : "Onboarding permission headline"
+    },
+    "Removes the album and its ^[%lld pick](inflect: true). Your Photos library isn't touched." : {
+
+    },
     "Removes the album from Poimi. The Photos album it created and your originals are never touched." : {
 
     },
@@ -360,6 +568,9 @@
     "Reset “%@”" : {
 
     },
+    "Reset clears your picks and progress but keeps the album's settings. Delete removes this album from Poimi — the Photos album it created and your originals are never touched." : {
+
+    },
     "Reset picks" : {
 
     },
@@ -367,6 +578,9 @@
 
     },
     "Review exclusions" : {
+
+    },
+    "Reviewed" : {
 
     },
     "Save to" : {
@@ -393,8 +607,14 @@
     "Select all in %@" : {
 
     },
+    "Select an album" : {
+
+    },
     "Settings" : {
 
+    },
+    "Something went wrong adding your photos. Your picks are safe — try again." : {
+      "comment" : "Export error: generic write failure"
     },
     "Something went wrong reaching your library. Check your connection and try again." : {
 
@@ -407,6 +627,18 @@
     },
     "Target: ^[%lld photo](inflect: true)" : {
 
+    },
+    "The album was removed from Photos. Your picks are safe — create it again." : {
+      "comment" : "Export error: the target Photos album was deleted"
+    },
+    "This album is no longer in your library." : {
+
+    },
+    "This deselects all %lld photos. Your photos aren't deleted — but you'd pick this album again from scratch." : {
+
+    },
+    "Those photos are no longer available in your library." : {
+      "comment" : "Export error: none of the picked assets resolved"
     },
     "To" : {
 
@@ -428,6 +660,9 @@
     },
     "Version" : {
 
+    },
+    "We'll ask iOS for permission next." : {
+      "comment" : "Onboarding permission footnote"
     },
     "You have no albums to choose from." : {
 

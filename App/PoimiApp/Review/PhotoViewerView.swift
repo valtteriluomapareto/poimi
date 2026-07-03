@@ -94,7 +94,7 @@ struct PhotoViewerView: View {
             cachedThumb: { thumbnails.cachedThumbnail(for: $0, targetSize: CGSize(width: 400, height: 400)) },
             loadFull: { await thumbnails.fullImage(for: $0, targetSize: $1) },
             axLabel: { photoAXLabel(for: $0) },
-            onTapPhoto: { selection.toggle($0) })   // single-tap the photo = pick (2nd path; the Pick button is primary)
+            onTapPhoto: { selection.toggle($0) })   // single-tap the photo = pick (Pick button is primary)
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .shadow(color: .black.opacity(0.35), radius: 20, y: 8)
             .padding(.horizontal, 12)
@@ -274,8 +274,9 @@ struct PhotoViewerView: View {
         let ids = allIDs
         let position = (ids.firstIndex(of: id) ?? 0) + 1
         let day = dayLabel(for: id)
-        return day.isEmpty ? "Photo, \(position) of \(ids.count)"
-                           : "Photo, \(day), \(position) of \(ids.count)"
+        return day.isEmpty
+            ? String(localized: "Photo, \(position) of \(ids.count)", comment: "Viewer a11y: position, no day")
+            : String(localized: "Photo, \(day), \(position) of \(ids.count)", comment: "Viewer a11y: day, position")
     }
 }
 

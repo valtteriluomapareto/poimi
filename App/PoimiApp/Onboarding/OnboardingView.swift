@@ -23,24 +23,30 @@ struct OnboardingView: View {
             OnboardingScaffold(
                 symbol: "hand.tap",
                 symbolTint: .brandGreen,   // first-run identity uses the green brand accent (§1)
-                title: "Poimi",
-                headline: "Hand-pick your year.",
-                message: "Go through a whole year of photos and choose the best into one album — "
-                    + "toward a count you set. You pick every photo, not an algorithm.",
-                primaryTitle: "Get started",
+                title: "Poimi",            // the app NAME — verbatim, never localized
+                headline: String(localized: "Hand-pick your year.", comment: "Onboarding intro headline"),
+                message: String(localized: """
+                    Go through a whole year of photos and choose the best into one album — toward a \
+                    count you set. You pick every photo, not an algorithm.
+                    """, comment: "Onboarding intro body"),
+                primaryTitle: String(localized: "Get started", comment: "Onboarding intro primary button"),
                 primaryAction: { step = .rationale })
         case .rationale:
             OnboardingScaffold(
                 symbol: "photo.stack",
                 symbolTint: .brandGreen,
-                title: "Full library access",
-                headline: "Poimi works across your whole library.",
-                message: "It needs full access to browse a date range, show your photos, and save the album "
-                    + "you build. Your photos never leave your device — Poimi stores only references, "
-                    + "nothing in the cloud, nothing shared.",
-                primaryTitle: "Allow access",
+                title: String(localized: "Full library access", comment: "Onboarding permission title"),
+                headline: String(localized: "Poimi works across your whole library.",
+                                 comment: "Onboarding permission headline"),
+                message: String(localized: """
+                    It needs full access to browse a date range, show your photos, and save the album \
+                    you build. Your photos never leave your device — Poimi stores only references, \
+                    nothing in the cloud, nothing shared.
+                    """, comment: "Onboarding permission body"),
+                primaryTitle: String(localized: "Allow access", comment: "Onboarding permission primary button"),
                 primaryAction: { Task { await coordinator.requestAuthorization() } },
-                footnote: "We'll ask iOS for permission next.")
+                footnote: String(localized: "We'll ask iOS for permission next.",
+                                 comment: "Onboarding permission footnote"))
         }
     }
 }

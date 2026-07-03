@@ -164,8 +164,10 @@ struct ExportView: View {
                 // Partial first export: some picks couldn't be resolved (deleted/offline since picking),
                 // so the album has fewer than picked. Say so honestly rather than overstating the count.
                 if !wasReExport, result.added < stats.totalPicked {
-                    Text("^[\(stats.totalPicked - result.added) photo](inflect: true) "
-                        + "couldn't be added — no longer in your library.")
+                    Text("""
+                        ^[\(stats.totalPicked - result.added) photo](inflect: true) \
+                        couldn't be added — no longer in your library.
+                        """)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -188,15 +190,22 @@ struct ExportView: View {
     }
 
     private func completionSubtitle(result: ExportResult, wasReExport: Bool, stats: CompletionStats) -> String {
+        // `.formatted()` keeps locale number grouping ("1,847"); it lands as a %@ arg in the key.
         if wasReExport {
             return result.added > 0
-                ? "Added \(result.added.formatted()) photos · \(project.title) now holds \(result.total.formatted())."
-                : "\(project.title) is already up to date · \(result.total.formatted()) photos."
+                ? String(localized: """
+                    Added \(result.added.formatted()) photos · \(project.title) now holds \(result.total.formatted()).
+                    """, comment: "Re-export subtitle: N newly added, album total M")
+                : String(localized: "\(project.title) is already up to date · \(result.total.formatted()) photos.",
+                         comment: "Re-export subtitle: nothing new to add")
         }
         return stats.markedDone > 0
-            ? "\(stats.totalPicked.formatted()) photos, hand-picked from "
-                + "\(stats.markedDone.formatted()) — one tap at a time."
-            : "\(stats.totalPicked.formatted()) photos, hand-picked — one tap at a time."
+            ? String(localized: """
+                \(stats.totalPicked.formatted()) photos, hand-picked from \(stats.markedDone.formatted()) \
+                — one tap at a time.
+                """, comment: "Completion subtitle: N picked from M reviewed days")
+            : String(localized: "\(stats.totalPicked.formatted()) photos, hand-picked — one tap at a time.",
+                     comment: "Completion subtitle: N picked, no days marked done")
     }
 
     private func statCard(_ stats: CompletionStats) -> some View {
@@ -216,7 +225,9 @@ struct ExportView: View {
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    private func stat(value: String, label: String, gold: Bool) -> some View {
+    // `label` is a LocalizedStringKey so the call-site literals ("Picked"/"Reviewed"/"Kept") extract +
+    // localize; `value` stays a String (a formatted number, shown verbatim).
+    private func stat(value: String, label: LocalizedStringKey, gold: Bool) -> some View {
         VStack(spacing: 4) {
             Text(value)
                 .font(.title2.bold())
@@ -279,13 +290,17 @@ struct ExportView: View {
     private func failureMessage(_ error: ExportError) -> String {
         switch error {
         case .notAuthorized:
-            return "Poimi needs full photo access to create an album. You can grant it in Settings."
+            return String(localized: "Poimi needs full photo access to create an album. You can grant it in Settings.",
+                          comment: "Export error: authorization not full")
         case .albumMissing:
-            return "The album was removed from Photos. Your picks are safe — create it again."
+            return String(localized: "The album was removed from Photos. Your picks are safe — create it again.",
+                          comment: "Export error: the target Photos album was deleted")
         case .noAssetsResolved:
-            return "Those photos are no longer available in your library."
+            return String(localized: "Those photos are no longer available in your library.",
+                          comment: "Export error: none of the picked assets resolved")
         case .writeFailed:
-            return "Something went wrong adding your photos. Your picks are safe — try again."
+            return String(localized: "Something went wrong adding your photos. Your picks are safe — try again.",
+                          comment: "Export error: generic write failure")
         }
     }
 

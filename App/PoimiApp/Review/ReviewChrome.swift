@@ -102,8 +102,16 @@ struct ReviewTally: View {
     }
 
     private func accessibilityLabel(_ progress: TargetProgress) -> String {
-        let base = "\(progress.picked) of \(progress.target) photos picked, \(progress.remaining) left"
-        return progress.isComplete ? base + ", target reached" : base
+        // Two full independent keys (not a localized fragment embedded in another) so a translator can
+        // reorder the whole sentence per language.
+        if progress.isComplete {
+            return String(localized: """
+                \(progress.picked) of \(progress.target) photos picked, \(progress.remaining) left, target reached
+                """, comment: "Tally a11y label when the target is reached")
+        }
+        return String(localized: """
+            \(progress.picked) of \(progress.target) photos picked, \(progress.remaining) left
+            """, comment: "Tally a11y label: picked / target / remaining")
     }
 }
 
@@ -132,8 +140,10 @@ struct ReviewToolbarActions: View {
             Button("Clear \(picked) picked", role: .destructive) { selection.clear() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This deselects all \(picked) photos. Your photos aren't deleted — "
-                + "but you'd pick this album again from scratch.")
+            Text("""
+                This deselects all \(picked) photos. Your photos aren't deleted — \
+                but you'd pick this album again from scratch.
+                """)
         }
     }
 }
