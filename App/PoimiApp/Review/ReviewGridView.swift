@@ -2,12 +2,14 @@
 //  ReviewGridView.swift
 //  PoimiApp — the review grid (issue #35), PAGED-CLUSTERS model (#35 paged-clusters redesign).
 //
-//  One cluster fills the screen; you SWIPE SIDEWAYS between clusters (a horizontal page `TabView`),
-//  replacing the earlier single-scroll accordion — whose collapse/open reflow was jumpy on device now
-//  that the Overview is itself a full cluster index (with per-cluster thumbnail strips). Each page is
-//  that cluster's own vertical `LazyVGrid`. Shared chrome (safe-area insets, so it never overlaps the
-//  photos) shows the CURRENT cluster: a top glass header (day · "N photos · M kept" · position "3 / 12")
-//  and a bottom glass bar (page dots + a "Mark day done" button that advances to the next cluster).
+//  One cluster fills the screen; you SWIPE SIDEWAYS between clusters (a horizontal page `TabView`,
+//  selected by group id — not a positional index — so a re-scan can't strand the selection), replacing
+//  the earlier single-scroll accordion whose collapse/open reflow was jumpy on device now that the
+//  Overview is itself a full cluster index (with per-cluster thumbnail strips). Each page is that
+//  cluster's own vertical `LazyVGrid`. Chrome: a fixed album header on top (`ReviewHeader`: name +
+//  tally), then PINNED per-cluster over the photos — a page indicator ("3 / 12" + dots, the swipe
+//  affordance + orientation) and the day + Select-all glass pills; the "Mark day done" button is the
+//  end-of-scroll footer (advances to the next unreviewed cluster).
 //
 //  Selection lives in the shared `SelectionStore` (in-memory `Set`, D15); the cells + header observe it
 //  themselves, so this parent body does NOT depend on `selected` — a toggle re-renders only the cell.
@@ -49,8 +51,10 @@ struct ReviewGridView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(DoneStore.self) private var done
 
-    /// The current cluster page — an index into `groups`. Swiping (TabView) or "Mark day done" moves it.
-    @State private var currentPage = 0
+    /// The current cluster page, identified by its GROUP ID (a stable id, not a positional index —
+    /// so a re-scan that reshapes grouping can't leave the selection pointing at a different cluster).
+    /// Swiping (TabView) or "Mark day done" moves it.
+    @State private var currentPageID: String?
     /// Pick the entry page once per appearance (drill target, or first-unreviewed resume).
     @State private var didInitialOpen = false
 
@@ -78,7 +82,18 @@ struct ReviewGridView: View {
     }
 
     private var currentGroup: DayGroup? {
-        groups.indices.contains(currentPage) ? groups[currentPage] : nil
+        groups.first { $0.id == currentPageID } ?? groups.first
+    }
+
+    /// 0-based position of the current page — for the indicator + `advance` math. 0 if unresolved.
+    private var currentIndex: Int {
+        groups.firstIndex { $0.id == currentPageID } ?? 0
+    }
+
+    /// The group id to open on entry / album switch: the drill-or-resume `initialPage` mapped to its id.
+    private func entryPageID() -> String? {
+        let idx = initialPage(groups: groups, scrollToDay: scrollToDay, isDone: { done.isDone($0) })
+        return groups.indices.contains(idx) ? groups[idx].id : groups.first?.id
     }
 
     /// Columns that best fill `width` at ~132pt cells, clamped to the size-class range — opens dense on
@@ -90,7 +105,7 @@ struct ReviewGridView: View {
     }
 
     var body: some View {
-        TabView(selection: $currentPage) {
+        TabView(selection: $currentPageID) {
             ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
                 ClusterPage(
                     group: group,
@@ -99,12 +114,15 @@ struct ReviewGridView: View {
                     load: load,
                     cachedImage: cachedImage,
                     openAsset: openAsset,
+                    // Only the ACTIVE page reports cell visibility — TabView pre-renders neighbours, and
+                    // their cells reporting visible would churn the prefetch recompute on every swipe.
+                    isActive: group.id == currentPageID,
                     onVisible: { visibleIDs.insert($0) },
                     onHidden: { visibleIDs.remove($0) },
                     position: index + 1,
                     total: groups.count,
                     onMarkDone: { markDoneAndAdvance(group) })
-                    .tag(index)
+                    .tag(group.id as String?)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
@@ -124,12 +142,12 @@ struct ReviewGridView: View {
             Perf.event("grid.onAppear (paged)")
             if !didInitialOpen {
                 didInitialOpen = true
-                currentPage = initialPage(groups: groups, scrollToDay: scrollToDay, isDone: { done.isDone($0) })
+                currentPageID = entryPageID()
             }
             rebuildWindow()
             scheduleRecomputeWindow()
         }
-        .onChange(of: currentPage) {
+        .onChange(of: currentPageID) {
             // Drop the previous page's ids up front. Otherwise they linger in `visibleIDs` — foreign to
             // the new cluster's window universe — so the slice computes EMPTY and the cache is *cleared*
             // on every flick, and the new cluster only starts loading once a scroll repopulates
@@ -145,7 +163,7 @@ struct ReviewGridView: View {
         .onChange(of: groupIdentity) {
             visibleIDs = []
             lastAppliedSlice = []      // new album → re-cache from scratch, don't skip on a stale match
-            currentPage = initialPage(groups: groups, scrollToDay: scrollToDay, isDone: { done.isDone($0) })
+            currentPageID = entryPageID()
             rebuildWindow()
             scheduleRecomputeWindow()
         }
@@ -166,9 +184,10 @@ struct ReviewGridView: View {
     /// (finished the last stretch). Finishing a day lands you on the next one to review. The choice is
     /// the pure `nextUnreviewedPage` (tested); this just applies it with animation.
     private func advance() {
-        let next = nextUnreviewedPage(after: currentPage, count: groups.count,
+        let next = nextUnreviewedPage(after: currentIndex, count: groups.count,
                                       isDone: { done.isDone(groups[$0]) })
-        withAnimation(reduceMotion ? nil : .snappy) { currentPage = next }
+        guard groups.indices.contains(next) else { return }
+        withAnimation(reduceMotion ? nil : .snappy) { currentPageID = groups[next].id }
     }
 
     // MARK: Cell load (the thumbnail seam)
@@ -233,6 +252,9 @@ private struct ClusterPage: View {
     let load: (String) async -> UIImage?
     let cachedImage: (String) -> UIImage?
     let openAsset: (String) -> Void
+    /// Only the active (current) page reports cell visibility — keeps the prefetch recompute off the
+    /// swipe hot path, since TabView pre-renders neighbours whose cells would otherwise churn it.
+    let isActive: Bool
     let onVisible: (String) -> Void
     let onHidden: (String) -> Void
     let position: Int
@@ -254,11 +276,11 @@ private struct ClusterPage: View {
                             cachedImage: cachedImage,
                             onOpen: { Perf.event("grid.tap \(id.suffix(8))"); openAsset(id) })
                             .id(id)
-                            .onAppear { onVisible(id) }
-                            .onDisappear { onHidden(id) }
+                            .onAppear { if isActive { onVisible(id) } }
+                            .onDisappear { if isActive { onHidden(id) } }
                     }
                 } header: {
-                    ClusterChips(group: group, title: dayLabel, isDone: done.isDone(group))
+                    clusterHeader(dayLabel: dayLabel)
                 } footer: {
                     footer(isDone: done.isDone(group))
                 }
@@ -268,10 +290,22 @@ private struct ClusterPage: View {
         }
     }
 
-    /// End-of-cluster CTA + position: the "Mark day done" button (advances to the next unreviewed
-    /// cluster) and the page dots — reached by scrolling to the end of the day, not a fixed bar (#38).
+    /// The pinned per-cluster header: an always-visible page indicator (position + dots — the swipe
+    /// affordance + "where am I in the year" orientation the paged model needs) above the day +
+    /// Select-all glass pills.
+    @ViewBuilder private func clusterHeader(dayLabel: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if total > 1 { PageIndicatorPill(position: position, total: total) }
+            ClusterChips(group: group, title: dayLabel, isDone: done.isDone(group))
+        }
+    }
+
+    /// End-of-cluster CTA: the "Mark day done" button (advances to the next unreviewed cluster),
+    /// reached by scrolling to the end of the day (#38). Position now lives in the pinned header, so
+    /// the footer is just the button.
     @ViewBuilder private func footer(isDone: Bool) -> some View {
-        VStack(spacing: 14) {
+        HStack {
+            Spacer()
             Button(action: onMarkDone) {
                 Label(isDone ? "Mark as not done" : "Mark day done",
                       systemImage: isDone ? "checkmark.seal.fill" : "checkmark.seal")
@@ -281,19 +315,35 @@ private struct ClusterPage: View {
             .tint(isDone ? Color(.systemGray) : .brandGreen)
             .accessibilityIdentifier("markDoneButton")   // stable id though the label toggles
             .accessibilityHint(isDone ? "Reopens this day for editing" : "Marks this day reviewed and opens the next")
-            if total > 1 {
-                VStack(spacing: 6) {
-                    PageDots(count: total, current: position - 1)
-                    Text("\(position) / \(total)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-            }
+            Spacer()
         }
         .padding(.top, 16)
         .padding(.bottom, 28)
-        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Page indicator (always-visible position + swipe affordance)
+
+/// A compact glass pill — windowed page dots + "N / total" — pinned atop each cluster page. It's the
+/// paged model's orientation device: always-visible position across the album (UX review) and the cue
+/// that you can swipe sideways between clusters (the dots imply more pages).
+private struct PageIndicatorPill: View {
+    let position: Int   // 1-based
+    let total: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            PageDots(count: total, current: position - 1)
+            Text("\(position) / \(total)")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 34)
+        .glassChip()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(position) / \(total)")
     }
 }
 
