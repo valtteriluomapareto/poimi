@@ -318,7 +318,7 @@ struct ExportView: View {
     private enum ButtonRole { case primary, secondary, tertiary }
 
     @ViewBuilder
-    private func actionButton(_ title: String, role: ButtonRole, action: @escaping () -> Void) -> some View {
+    private func actionButton(_ title: LocalizedStringKey, role: ButtonRole, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.body.weight(role == .tertiary ? .medium : .semibold))

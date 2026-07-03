@@ -24,7 +24,8 @@ struct ReviewEmptyCopy: Equatable {
         // rangeEnd is end-EXCLUSIVE; the message wants the inclusive last day ("…and 31 Dec 2025").
         let style = Date.FormatStyle.dateTime.day().month(.abbreviated).year()
         let lastDay = calendar.date(byAdding: .day, value: -1, to: rangeEnd) ?? rangeEnd
-        let range = "\(rangeStart.formatted(style)) and \(lastDay.formatted(style))"
+        let range = String(localized: "\(rangeStart.formatted(style)) and \(lastDay.formatted(style))",
+                           comment: "A date range embedded in empty-state messages: start and end")
         switch reason {
         case .noPhotosInRange:
             return ReviewEmptyCopy(
