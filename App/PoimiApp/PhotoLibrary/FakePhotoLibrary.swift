@@ -253,6 +253,95 @@ extension FakePhotoLibrary {
         return assets
     }
 
+    /// A synthetic **located** year with *planted trips*, for the interactive location-clustering
+    /// probe (issue #133 / spike #129). It is the app-tier port of `CurationTests/PlantedSeed`: a dense
+    /// **home base** (Helsinki) across most of the year, a **multi-city foreign trip** (Rome / Florence /
+    /// Venice — three place clusters, one contiguous trip), a **weekend city trip** (Stockholm),
+    /// **fly-home-between-two-trips** (Paris → one home day → London), an **antimeridian** cluster (Fiji,
+    /// straddling ±180°), the **concurrent-location** family case (Barcelona on home days), plus
+    /// **null-island `(0,0)`** and **dated-but-no-GPS** edge assets that must route to no-location. All
+    /// jitter is a deterministic SplitMix64 (`SpikeSeedRNG`) so the field — and therefore the probe's
+    /// clusters, trips, and screenshot — is byte-stable run-to-run (never `Date.now`/`arc4random`).
+    ///
+    /// Ground truth (the pre-registration anchor, `docs/plans/location-spike-preregistration.md`): the
+    /// six planted trips above + Helsinki home. Undated assets are omitted here because a range fetch
+    /// (the probe's load path, mirroring PhotoKit) never returns them; the no-location bucket the probe
+    /// shows is therefore the null-island + dated-no-GPS assets, which a range fetch *does* return.
+    static func locationSpikeSeed() -> [AssetRef] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let base = calendar.date(from: DateComponents(year: 2025, month: 1, day: 1, hour: 12))!
+        func date(_ offset: Int) -> Date { calendar.date(byAdding: .day, value: offset, to: base)! }
+
+        var rng = SpikeSeedRNG(seed: 0x50A1)
+        func jitter(_ span: Double) -> Double { Double.random(in: -span...span, using: &rng) }
+
+        // `perDay` jittered located photos on each day offset, within ~±`span`° of `centre`.
+        func place(_ prefix: String, _ lat: Double, _ lon: Double,
+                   offsets: [Int], perDay: Int, span: Double = 0.02) -> [AssetRef] {
+            var out: [AssetRef] = []
+            for offset in offsets {
+                for shot in 0..<perDay {
+                    out.append(AssetRef(
+                        id: "fake/spike/\(prefix)-\(offset)-\(shot)",
+                        captureDate: date(offset),
+                        coordinate: Coordinate(latitude: lat + jitter(span), longitude: lon + jitter(span)),
+                        pixelSize: PixelSize(width: 4032, height: 3024)))
+                }
+            }
+            return out
+        }
+
+        // Trip day windows (offsets from Jan 1). Barcelona's even offsets deliberately coincide with
+        // home days (the concurrent case); day 123 is a HOME day wedged between Paris (120–122) and
+        // London (124–126) so the run breaks into two trips.
+        let stockholm = [60, 61]
+        let italy = [90, 91, 92, 93, 94, 95]            // Rome 90–92, Florence 93–94, Venice 95
+        let paris = [120, 121, 122]
+        let london = [124, 125, 126]
+        let fiji = [150, 151, 152]
+        let barcelona = [180, 182, 184]
+        let flyHome = 123
+
+        let tripWindow = Set(stockholm + italy + paris + london + fiji)
+        var homeDays = stride(from: 0, through: 300, by: 2).filter { !tripWindow.contains($0) }
+        homeDays.append(flyHome)
+
+        var assets: [AssetRef] = []
+        assets += place("home", 60.17, 24.94, offsets: homeDays, perDay: 3, span: 0.03)   // Helsinki
+        assets += place("sto", 59.33, 18.07, offsets: stockholm, perDay: 8)               // Stockholm
+        // Keep each Italian city above the adaptive minPts (~4 here) so all three cluster; Venice (6)
+        // is the thinnest margin.
+        assets += place("rom", 41.90, 12.50, offsets: [90, 91, 92], perDay: 7)            // Rome
+        assets += place("flo", 43.77, 11.26, offsets: [93, 94], perDay: 6)               // Florence
+        assets += place("ven", 45.44, 12.33, offsets: [95], perDay: 6)                   // Venice
+        assets += place("par", 48.86, 2.35, offsets: paris, perDay: 7)                   // Paris
+        assets += place("lon", 51.51, -0.13, offsets: london, perDay: 7)                 // London
+        assets += place("bcn", 41.39, 2.17, offsets: barcelona, perDay: 8)              // Barcelona
+
+        // Antimeridian: Fiji photos split half at +179.9x and half at −179.9x — genuinely across ±180°.
+        for offset in fiji {
+            for shot in 0..<6 {
+                let lon = (shot % 2 == 0 ? 179.93 : -179.93) + jitter(0.02)
+                assets.append(AssetRef(
+                    id: "fake/spike/fij-\(offset)-\(shot)",
+                    captureDate: date(offset),
+                    coordinate: Coordinate(latitude: -17.0 + jitter(0.02), longitude: lon),
+                    pixelSize: PixelSize(width: 4032, height: 3024)))
+            }
+        }
+
+        // No-location edge assets (dated, so a range fetch returns them → they count as no-location).
+        for i in 0..<8 {                                 // null-island (0,0) sentinels
+            assets.append(AssetRef(id: "fake/spike/null-\(i)", captureDate: date(40 + i % 2),
+                                   coordinate: Coordinate(latitude: 0, longitude: 0)))
+        }
+        for i in 0..<5 {                                 // dated but no GPS
+            assets.append(AssetRef(id: "fake/spike/nogps-\(i)", captureDate: date(45 + i % 2)))
+        }
+        return assets
+    }
+
     /// `count` dated assets spread evenly across 2025, oldest → newest (all within the year,
     /// so a year-range fetch returns the whole set).
     static func scaleSeed(_ count: Int) -> [AssetRef] {
@@ -265,6 +354,21 @@ extension FakePhotoLibrary {
                 captureDate: start.addingTimeInterval(Double(index) * spacing),
                 pixelSize: PixelSize(width: 4032, height: 3024))
         }
+    }
+}
+
+/// A tiny seedable PRNG (SplitMix64) so `locationSpikeSeed`'s jitter is reproducible per seed —
+/// the app-tier mirror of `CurationTests.SeededRNG` (no `Date.now`/`arc4random`, so the seeded
+/// field is byte-stable across runs). Local to this DEBUG file, not a shipped utility.
+struct SpikeSeedRNG: RandomNumberGenerator {
+    private var state: UInt64
+    init(seed: UInt64) { state = seed &+ 0x9E37_79B9_7F4A_7C15 }
+    mutating func next() -> UInt64 {
+        state = state &+ 0x9E37_79B9_7F4A_7C15
+        var mixed = state
+        mixed = (mixed ^ (mixed >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        mixed = (mixed ^ (mixed >> 27)) &* 0x94D0_49BB_1331_11EB
+        return mixed ^ (mixed >> 31)
     }
 }
 
