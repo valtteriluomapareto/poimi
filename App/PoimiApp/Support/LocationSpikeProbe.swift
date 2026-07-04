@@ -222,6 +222,11 @@ protocol SpikePlaceNaming: Sendable {
 /// The real device path: a single serial `CLGeocoder` (it has no batch API and rejects concurrency —
 /// §7). Reconstructs `CLLocation` from the EXIF coordinate (no CoreLocation permission, D7), paces
 /// requests, and degrades to `nil` ("unnamed") on any failure.
+///
+/// `CLGeocoder` is soft-deprecated on iOS 26 in favour of `MKReverseGeocodingRequest`; the two
+/// deprecation warnings are knowingly accepted here — this is a throwaway `#if DEBUG` spike probe (D30)
+/// the issue scopes to `CLGeocoder`, and a MapKit migration is out of scope for a tool that never ships.
+/// The v1.1 production `PlaceNaming` seam (§7) is where the modern API lands.
 actor SystemSpikeGeocoder: SpikePlaceNaming {
     private let geocoder = CLGeocoder()
 
@@ -321,7 +326,6 @@ final class LocationSpikeModel {
             let k = PlaceClustering.adaptiveMinPts(for: assets, calendar: calendar)
             kUsed = k
             let cap = previewCap
-            let cal = calendar
             kDistances = await Task.detached(priority: .userInitiated) {
                 LocationSpikeCompute.kDistanceCurve(for: assets, k: k, previewCap: cap)
             }.value
@@ -714,7 +718,7 @@ private struct SpikeClusterCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: cluster.isHome ? "house.fill" : "mappin.circle")
-                    .foregroundStyle(cluster.isHome ? Color.green : .tint)
+                    .foregroundStyle(cluster.isHome ? Color.green : Color.accentColor)
                 Text(verbatim: name ?? cluster.id).font(.headline).lineLimit(1)
                 if cluster.isHome {
                     Text(verbatim: "HOME").font(.caption2.bold()).foregroundStyle(.green)
