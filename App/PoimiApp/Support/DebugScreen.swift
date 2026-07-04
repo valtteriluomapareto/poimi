@@ -68,6 +68,9 @@ enum DebugScreen: String, CaseIterable {
     case empty
     /// The review scan's FAILURE state (#40): a seeded fetch error → the recoverable "Couldn't load".
     case scanfailed
+    /// The interactive location-clustering spike probe (#133, serving spike #129): live `eps`/`minPts`/
+    /// gap/home tuning over the merged #132 core. Renders the planted `locationSpikeSeed` under the fake.
+    case locationspike
 }
 
 /// Resolves the `-PoimiScreen` launch override.
@@ -109,6 +112,7 @@ struct DebugScreenHost: View {
         case .appsettings: DebugAppSettingsHostView()
         case .empty: DebugEmptyHostView()
         case .scanfailed: DebugScanFailedHostView()
+        case .locationspike: DebugLocationSpikeHostView()
         }
     }
 }
@@ -788,6 +792,47 @@ struct DebugUnknownScreenView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.red)
         .foregroundStyle(.white)
+    }
+}
+
+/// Hosts the interactive location-clustering spike probe (#133). Under `-PoimiUseFakeLibrary` it drives
+/// a dedicated fake seeded with the planted-trip `locationSpikeSeed` (the injected global fake has no GPS
+/// data) + the deterministic placeholder geocoder, so the probe renders meaningful clusters/trips in CI
+/// and the screenshot harness. On device (no fake flag) it drives the real `\.photoLibrary` + `CLGeocoder`.
+/// The host owns loading so `screenshot-ready` fires only once the first clustering has settled.
+struct DebugLocationSpikeHostView: View {
+    @Environment(\.photoLibrary) private var library
+    @State private var model: LocationSpikeModel?
+
+    private static let utc: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+
+    var body: some View {
+        Group {
+            if let model {
+                LocationSpikeProbeView(model: model)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            let usingFake = ProcessInfo.processInfo.arguments.contains("-PoimiUseFakeLibrary")
+            // A UTC calendar for the fake path keeps the seed's day keys deterministic in the screenshot;
+            // the device path uses `.current` (the user's own calendar) since the probe reasons about
+            // real local capture days.
+            let calendar = usingFake ? Self.utc : .current
+            let resolvedLibrary: any PhotoLibraryProviding = usingFake
+                ? FakePhotoLibrary(assets: FakePhotoLibrary.locationSpikeSeed())
+                : library
+            let built = LocationSpikeModel(
+                library: resolvedLibrary, geocoder: SpikeGeocoderFactory.make(), calendar: calendar)
+            await built.load()          // settle the first clustering (+ placeholder names) before ready
+            model = built
+            Log.app.notice("screenshot-ready: \(DebugScreen.locationspike.rawValue, privacy: .public)")
+        }
     }
 }
 
