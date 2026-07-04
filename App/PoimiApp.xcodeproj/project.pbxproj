@@ -691,6 +691,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Poimi;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Poimi saves the photos you pick into an album in your library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Poimi needs full access to your photo library so you can browse a date range, hand-pick the best photos, and save them to an album. Your photos never leave your device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -722,6 +723,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Poimi;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Poimi saves the photos you pick into an album in your library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Poimi needs full access to your photo library so you can browse a date range, hand-pick the best photos, and save them to an album. Your photos never leave your device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
