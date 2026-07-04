@@ -29,7 +29,7 @@ import Foundation
 
 /// One trip: a contiguous run of away-from-home days, labeled by its dominant (plurality) place
 /// cluster. A pure annotation over the day timeline — it never owns or re-cuts assets.
-public struct Trip: Sendable, Identifiable, Equatable, Hashable, Codable {
+public struct Trip: Sendable, Identifiable, Equatable, Hashable {
     /// Stable id: `"<clusterID>@<startDay>"`. Unique because one cluster can't start two runs on the
     /// same day; distinguishes two separate trips to the *same* place (e.g. a cabin in Jan and June).
     public let id: String
@@ -60,7 +60,8 @@ public enum TripOverlay {
     ///   - home: the home cluster (`PlaceClustering.homeCluster`), excluded from trips; `nil` treats
     ///     every cluster as away (no home base).
     ///   - gapToleranceDays: max gap a run bridges across neutral days.
-    ///   - calendar: the same calendar used elsewhere, so day keys line up.
+    ///   - calendar: MUST be the same calendar passed to `PlaceClustering.clusters(for:)` /
+    ///     `homeCluster(_:assets:)`, so the day keys the run logic compares actually line up.
     /// - Returns: the trips in chronological order (by start day, then label).
     public static func trips(
         assets: [AssetRef],

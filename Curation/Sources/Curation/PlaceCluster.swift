@@ -38,7 +38,7 @@ import Foundation
 /// One spatial cluster of located assets — a "place." Identified by its **medoid asset id** (§5.3),
 /// so a cached handle survives re-clustering. `medoid` is the representative coordinate (the point a
 /// later geocode step queries). `assetIDs` are the members, sorted ascending for byte-stable output.
-public struct PlaceCluster: Sendable, Identifiable, Equatable, Hashable, Codable {
+public struct PlaceCluster: Sendable, Identifiable, Equatable, Hashable {
     /// Cluster identity = the medoid member's asset id (`AssetRef.id`). Stable, not an ordinal.
     public let id: String
     /// The medoid coordinate — the actual member coordinate minimizing summed intra-cluster distance
@@ -59,7 +59,7 @@ public struct PlaceCluster: Sendable, Identifiable, Equatable, Hashable, Codable
 /// The result of clustering a candidate set: the place clusters (sorted by medoid id) plus the
 /// no-location bucket (`(0,0)` sentinels, missing coordinates, and DBSCAN noise — §5.4). Together
 /// they partition every input asset id (no loss, no dup).
-public struct PlaceClusters: Sendable, Equatable, Codable {
+public struct PlaceClusters: Sendable, Equatable {
     /// The clusters, sorted by medoid id (ascending) for byte-stable output.
     public let clusters: [PlaceCluster]
     /// Asset ids with no place: null-island `(0,0)`, no coordinate, or DBSCAN noise. Sorted ascending.
@@ -70,9 +70,9 @@ public struct PlaceClusters: Sendable, Equatable, Codable {
         self.noLocationIDs = noLocationIDs
     }
 
-    /// `assetID → cluster id` for every clustered asset (empty value for no-location assets, which
-    /// are simply absent). Built on demand — convenient for the trip overlay and for tests.
-    public var clusterIDByAsset: [String: String] {
+    /// `assetID → cluster id` for every clustered asset (no entry for no-location assets). Built on
+    /// demand — used by the trip overlay and the tests (same module / `@testable`).
+    var clusterIDByAsset: [String: String] {
         var map: [String: String] = [:]
         for cluster in clusters {
             for assetID in cluster.assetIDs { map[assetID] = cluster.id }
@@ -164,16 +164,7 @@ public enum PlaceClustering {
             return PlaceClusters(clusters: [], noLocationIDs: noLocation)
         }
 
-        // Neighbour lists within `eps` (inclusive), self-inclusive — the DBSCAN convention where a
-        // point counts toward its own `minPts`. O(n²); a grid index is the deferred scale optimization.
-        var neighbours: [[Int]] = (0..<count).map { [$0] }
-        for i in 0..<count {
-            for j in (i + 1)..<count where located[i].coord.distance(to: located[j].coord) <= eps {
-                neighbours[i].append(j)
-                neighbours[j].append(i)
-            }
-        }
-
+        let neighbours = neighbourLists(located, eps: eps)
         let isCore = (0..<count).map { neighbours[$0].count >= resolvedMinPts }
 
         // Group cores by density-connectivity: two cores within `eps` are in the same cluster.
@@ -236,6 +227,21 @@ public enum PlaceClustering {
         return PlaceClusters(clusters: clusters, noLocationIDs: noLocation)
     }
 
+    /// For each canonically-sorted point, the indices within `eps` (inclusive), self-inclusive — the
+    /// DBSCAN convention where a point counts toward its own `minPts`. O(n²); a grid spatial index is
+    /// the deferred scale optimization (§5.2), not needed for the pure core or its property tests.
+    private static func neighbourLists(_ points: [(id: String, coord: Coordinate)], eps: Double) -> [[Int]] {
+        let count = points.count
+        var neighbours: [[Int]] = (0..<count).map { [$0] }
+        for i in 0..<count {
+            for j in (i + 1)..<count where points[i].coord.distance(to: points[j].coord) <= eps {
+                neighbours[i].append(j)
+                neighbours[j].append(i)
+            }
+        }
+        return neighbours
+    }
+
     /// The index of the medoid within `members`: the member minimizing summed distance to the others,
     /// tie-broken by lower id. Deterministic and order-independent (a min over the set). For an
     /// identical-coordinate burst every sum is 0, so the tie collapses to the lowest id (invariant 9).
@@ -262,6 +268,12 @@ public enum PlaceClustering {
     /// across the year, not where you took the most photos on one trip). Tie-break: more photos, then
     /// lower medoid id. Home is excluded from trip formation and never surfaced as a "trip"
     /// (`TripOverlay`, §6). `nil` when there are no clusters. Undated days don't count toward the span.
+    ///
+    /// Pass the SAME `calendar` used for `clusters(for:)` / `TripOverlay.trips(...)` so the day keys
+    /// line up. Known limitation for the #129 spike (§5.5): a single long single-city stay forms one
+    /// cluster spanning many days and could out-vote the true home for that window — multi-city trips
+    /// are naturally safe (they split across clusters). Tune the day-span-vs-day-*spread* heuristic on
+    /// real data before this is "settled"; the current rule is the issue's "most-days-spanning" spec.
     public static func homeCluster(
         _ clusters: [PlaceCluster],
         assets: [AssetRef],
@@ -281,6 +293,9 @@ public enum PlaceClustering {
         var bestDays = distinctDays(clusters[0])
         for cluster in clusters.dropFirst() {
             let days = distinctDays(cluster)
+            // The final `cluster.id < best.id` clause is the defensive path for an unsorted input; for
+            // the `clusters(for:)` output (id-ascending) `best` already holds the lowest id, so ties
+            // keep the earliest = lowest-id cluster via first-wins.
             let better = days > bestDays
                 || (days == bestDays && cluster.count > best.count)
                 || (days == bestDays && cluster.count == best.count && cluster.id < best.id)

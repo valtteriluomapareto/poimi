@@ -81,9 +81,10 @@ struct TripOverlayTests {
         #expect(trips[0].clusterID == bCluster?.id)
 
         var rng = SeededRNG(seed: 42)
-        let shuffled = PlaceClustering.clusters(for: assets.shuffled(using: &rng), minPts: 3, calendar: cal)
-        let shuffledTrips = TripOverlay.trips(assets: assets, clusters: shuffled, home: nil, calendar: cal)
-        #expect(shuffledTrips == trips)   // determinism: same label, same days
+        let shuffledAssets = assets.shuffled(using: &rng)   // shuffle BOTH the cluster and trip inputs
+        let shuffled = PlaceClustering.clusters(for: shuffledAssets, minPts: 3, calendar: cal)
+        let shuffledTrips = TripOverlay.trips(assets: shuffledAssets, clusters: shuffled, home: nil, calendar: cal)
+        #expect(shuffledTrips == trips)   // determinism: same label, same days for the plurality step
     }
 
     @Test("an exact plurality tie is broken by the lower medoid id")
@@ -173,6 +174,26 @@ struct TripOverlayTests {
         #expect(Set(trips[0].days) == [key(14), key(15)])
     }
 
+    @Test("a trip spanning a merged quiet run overlays it without splitting the day-group")
+    func tripSpansMergedQuietRun() {
+        // A sparse away city on gapped days (10, 12, 14; the odd days are empty) that DayGrouping folds
+        // into ONE quiet day-group (each tiny run folds across the 2-day gaps). Home sits far away in
+        // time so no home day breaks the run. The trip (gap tolerance 2) must span all three days as a
+        // single trip while the day-group stays merged — the §6 "overlay spans, never cuts" property.
+        let home = place("home", 60.17, 24.94, offsets: Array(stride(from: 100, through: 160, by: 2)), perDay: 3)
+        let city = place("city", 41.9, 12.5, offsets: [10, 12, 14], perDay: 4)
+        let assets = home + city
+
+        let groups = DayGrouping.groups(adaptiveFor: assets, calendar: cal)
+        let cityDays: Set<DayKey> = [key(10), key(12), key(14)]
+        let cityGroups = groups.filter { !cityDays.isDisjoint(with: Set($0.days)) }
+        #expect(cityGroups.count == 1)                               // one merged quiet group
+        #expect(cityDays.isSubset(of: Set(cityGroups[0].days)))
+
+        let (_, trips) = pipeline(assets)
+        #expect(trips.contains { Set($0.days) == cityDays })         // one trip spans the whole run
+    }
+
     // MARK: Invariant 8 — done survives regrouping (D32(d)/D33 tripwire)
 
     @Test("applying the trip overlay never perturbs day-groups, doneDays, or Completion.reopening")
@@ -193,6 +214,18 @@ struct TripOverlayTests {
         let (clusters, trips) = pipeline(assets)
         let tripMap = TripOverlay.tripIDByDay(trips)
         #expect(!tripMap.isEmpty)                 // the overlay actually annotated something
+
+        // Falsifiable coupling (not just value-identity): the overlay ONLY ever annotates real
+        // day-group days, each owned by exactly one group, and a trip never strays outside the
+        // day-group partition. A future overlay that re-cut or invented days would fail here.
+        let allGroupDays = Set(groupsBefore.flatMap(\.days))
+        for day in tripMap.keys {
+            #expect(allGroupDays.contains(day))
+            #expect(groupsBefore.filter { $0.days.contains(day) }.count == 1)
+        }
+        for trip in trips {
+            #expect(Set(trip.days).isSubset(of: allGroupDays))
+        }
 
         // Every date-world output is byte-identical after the overlay — it is purely additive.
         let groupsAfter = DayGrouping.groups(adaptiveFor: assets, calendar: cal)

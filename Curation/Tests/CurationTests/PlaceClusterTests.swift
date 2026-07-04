@@ -97,6 +97,10 @@ struct PlaceClusterTests {
         #expect(Set(clustered).isSubset(of: locatedIDs))
         // A cluster's medoid is one of its own members.
         for cluster in result.clusters { #expect(cluster.assetIDs.contains(cluster.id)) }
+        // Output-ordering contract (byte-stability): clusters sorted by medoid id, no-location ascending.
+        #expect(result.clusters.map(\.id) == result.clusters.map(\.id).sorted())
+        #expect(result.noLocationIDs == result.noLocationIDs.sorted())
+        for cluster in result.clusters { #expect(cluster.assetIDs == cluster.assetIDs.sorted()) }
     }
 
     // MARK: Invariant 2 — order-independence (shuffle + id churn → byte-identical)
@@ -120,9 +124,9 @@ struct PlaceClusterTests {
         let map = orderPreservingMap(assets.map(\.id))
         let churned = relabel(assets, map).shuffled(using: &rng)
 
-        let base = PlaceClustering.clusters(for: assets, calendar: cal)
+        let baseline = PlaceClustering.clusters(for: assets, calendar: cal)
         let after = PlaceClustering.clusters(for: churned, calendar: cal)
-        #expect(after == relabel(base, map))   // cluster(relabel(x)) == relabel(cluster(x))
+        #expect(after == relabel(baseline, map))   // cluster(relabel(x)) == relabel(cluster(x))
     }
 
     // MARK: Invariant 3 — medoid identity stability
@@ -252,5 +256,22 @@ struct PlaceClusterTests {
         let result = PlaceClustering.clusters(for: assets, minPts: 3, calendar: cal)
         let detectedHome = PlaceClustering.homeCluster(result.clusters, assets: assets, calendar: cal)
         #expect(detectedHome?.assetIDs.contains(where: { $0.hasPrefix("home") }) == true)
+        // …and the denser-but-fewer-days trip cluster is NOT chosen as home.
+        #expect(detectedHome?.assetIDs.allSatisfy { !$0.hasPrefix("trip") } == true)
+    }
+
+    @Test("a NEAR addition may move the medoid (identity is medoid-derived, not frozen — invariant 3)")
+    func medoidDriftsWithNearMass() {
+        // Invariant 3 pins stability under FAR additions; the complement is that a near addition is
+        // *allowed* to move the medoid. Five identical points → medoid = lowest id; adding 20 points
+        // ~5 km away (still one cluster, < eps) pulls the medoid to the new centre of gravity.
+        var points = (0..<5).map { located("a\($0)", 41.90, 12.50, dayOffset: $0) }
+        let before = PlaceClustering.clusters(for: points, minPts: 3, calendar: cal)
+        #expect(before.clusters.count == 1)
+        let originalMedoid = before.clusters[0].id
+        points += (0..<20).map { located("b\($0)", 41.95, 12.50, dayOffset: 50 + $0) }
+        let after = PlaceClustering.clusters(for: points, minPts: 3, calendar: cal)
+        #expect(after.clusters.count == 1)          // 5 km < eps 25 km → still one cluster
+        #expect(after.clusters[0].id != originalMedoid)   // medoid drifted toward the added mass
     }
 }

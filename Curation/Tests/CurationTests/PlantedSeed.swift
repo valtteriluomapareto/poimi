@@ -96,6 +96,9 @@ struct PlantedSeed {
         var assets: [AssetRef] = []
         assets += place("home", helsinki, offsets: homeDays, perDay: 3, jitter: 0.03)
         assets += place("sto", stockholm, offsets: stockholmDays, perDay: 8)
+        // Per-day counts here must keep each city's total above the adaptive `minPts` (~4 for this
+        // seed) so Rome/Florence/Venice each form their own cluster — Venice (6) is the thinnest
+        // margin, so don't drop it below ~6 without re-checking the precision/recall gate.
         assets += place("rom", rome, offsets: [90, 91, 92], perDay: 7)
         assets += place("flo", florence, offsets: [93, 94], perDay: 6)
         assets += place("ven", venice, offsets: [95], perDay: 6)
