@@ -18,7 +18,9 @@
 //
 //  Performance (the main build risk, §8): the core's neighbour search is O(n²), so the live recompute
 //  runs OFF the main thread in a detached `Task`, coalesced by a debounce, with a spinner — never in a
-//  `body`. A large real library is downsampled for the live preview (surfaced, never silent).
+//  `body`. That (not downsampling) is the primary mitigation; the full located set is clustered by
+//  default. An OPT-IN downsample cap is the "if still laggy on a huge library" escape hatch, and because
+//  clustering a subset changes which clusters *form*, it is surfaced (never a silent cap).
 //
 //  Overfitting guard (§5.5): the reported result is a *plateau* (a param range that surfaces the trips
 //  with ~0 junk), never a lucky point — freeze expectations first in
@@ -99,42 +101,54 @@ struct SpikeResult: Sendable {
 /// its Sendable inputs — it calls only `PlaceClustering` / `TripOverlay` (the tested `Curation` core),
 /// so the live recompute can never diverge from what the property tests pin.
 enum LocationSpikeCompute {
-    /// Cap on located points clustered for the LIVE preview, so a real multi-thousand-photo year stays
-    /// responsive under the O(n²) neighbour search (§8). The full run on device can drop this via the
-    /// probe's own control; the settled findings note the sample size.
-    static let defaultPreviewCap = 2_500
+    /// Default value for the OPT-IN downsample cap (`LocationSpikeModel.downsampleCap`). Downsampling is
+    /// OFF by default: the live recompute clusters the FULL located set (the issue's §8 primary
+    /// mitigation is debounce + off-main + spinner; downsampling is only the "if still laggy" fallback).
+    /// A real multi-thousand-photo year is O(n²) but runs in a detached task with a spinner — acceptable
+    /// for a manual tuning tool — and clustering a strided subset changes which clusters *form*, which
+    /// would mislead the plateau read the spike exists to make.
+    static let defaultDownsampleCap = 2_500
 
     /// Mirror of `PlaceClustering.isLocated` (which is module-internal to `Curation`): a real coordinate
-    /// that is not the `(0,0)` null-island EXIF sentinel.
+    /// that is not the `(0,0)` null-island EXIF sentinel. `locatedCount`/`globalCoverage` are the
+    /// has-GPS count (a superset of clustered points — DBSCAN noise is GPS-bearing yet routes to the
+    /// no-location bucket, §5.4), so they intentionally differ from `clustered.noLocationIDs`.
     static func isLocated(_ asset: AssetRef) -> Bool {
         guard let c = asset.coordinate else { return false }
         return !(c.latitude == 0 && c.longitude == 0)
     }
 
-    static func run(assets: [AssetRef], params: SpikeParams, calendar: Calendar, previewCap: Int) -> SpikeResult {
+    /// Deterministic stride subsample of `cap` items from an id-sorted set (stable across recomputes).
+    private static func downsample(_ located: [AssetRef], to cap: Int) -> [AssetRef] {
+        let sorted = located.sorted { $0.id < $1.id }
+        let stride = Double(sorted.count) / Double(cap)
+        return (0..<cap).map { sorted[Int(Double($0) * stride)] }
+    }
+
+    /// - Parameter cap: optional live-preview downsample ceiling on the LOCATED set. `nil` (the default)
+    ///   clusters everything. When set and exceeded, a strided subset is clustered — which changes which
+    ///   clusters *form*, not merely the counts (surfaced via `SpikeResult.didDownsample`).
+    static func run(assets: [AssetRef], params: SpikeParams, calendar: Calendar, cap: Int?) -> SpikeResult {
         let total = assets.count
         let locatedAssets = assets.filter(isLocated)
         let locatedCount = locatedAssets.count
 
-        // Downsample the LOCATED set for the live preview if it exceeds the cap — a deterministic stride
-        // (every k-th of the canonical id-sorted order), so the sample is stable across recomputes and
-        // the same points cluster each drag. No-location assets are cheap and kept whole (they only add
-        // to the no-location tally). See §8: full run drops the cap.
         let previewLocated: [AssetRef]
-        if locatedCount > previewCap {
-            let sorted = locatedAssets.sorted { $0.id < $1.id }
-            let stride = Double(locatedCount) / Double(previewCap)
-            previewLocated = (0..<previewCap).map { sorted[Int(Double($0) * stride)] }
+        if let cap, locatedCount > cap {
+            previewLocated = downsample(locatedAssets, to: cap)
         } else {
             previewLocated = locatedAssets
         }
         let noLocationAssets = assets.filter { !isLocated($0) }
         let input = previewLocated + noLocationAssets
 
-        let adaptive = PlaceClustering.adaptiveMinPts(for: input, calendar: calendar)
+        // Density floor from the FULL located set (O(n) day-binning, cheap) so the adaptive `minPts`
+        // matches production even when the clustered point set is thinned — a downsampled `input` would
+        // deflate the mean-per-day toward the floor and mislead the plateau read.
+        let adaptive = PlaceClustering.adaptiveMinPts(for: assets, calendar: calendar)
         let resolved = params.minPts ?? adaptive
         let clustered = PlaceClustering.clusters(
-            for: input, eps: params.epsMeters, minPts: params.minPts, calendar: calendar)
+            for: input, eps: params.epsMeters, minPts: resolved, calendar: calendar)
         let home = params.excludeHome
             ? PlaceClustering.homeCluster(clustered.clusters, assets: input, calendar: calendar)
             : nil
@@ -186,26 +200,31 @@ enum LocationSpikeCompute {
             clusters: clusterCards, trips: tripCards)
     }
 
-    /// The sorted k-distance list for the elbow plot (an objective `eps` starting point, §5.2): for
-    /// each located point, the distance to its k-th nearest neighbour, sorted ascending. The "knee" of
-    /// this curve is where density drops off — a data-driven `eps` candidate. O(n² log n), so computed
-    /// ONCE per data set (on load), not per drag. `k` is the adaptive `minPts` reference.
-    static func kDistanceCurve(for assets: [AssetRef], k: Int, previewCap: Int) -> [Double] {
-        var located = assets.filter(isLocated).map { $0.coordinate! }
-        if located.count > previewCap {
-            let stride = Double(located.count) / Double(previewCap)
-            located = (0..<previewCap).map { located[Int(Double($0) * stride)] }
-        }
-        let n = located.count
-        guard n > k else { return [] }
+    /// The sorted k-distance list for the elbow plot (an objective `eps` starting point, §5.2): for each
+    /// located point, the distance at which it would become a DBSCAN core point, sorted ascending. The
+    /// "knee" is where density drops off — a data-driven `eps` candidate. O(n² log n), computed ONCE per
+    /// data set (on load), not per drag.
+    ///
+    /// Rank note: this core's neighbour list is **self-inclusive** and core requires `count >= minPts`
+    /// (PlaceCluster.swift), so a point turns core once its **(minPts − 1)-th** nearest *other* neighbour
+    /// is within `eps`. We therefore plot that distance (`dists[k − 2]` for `k = minPts`), not the k-th,
+    /// to match this DBSCAN's definition. Sorted by id before any subsample so it sees the SAME points
+    /// the preview clusters (mirrors `run`) and is order-independent of the fetch.
+    static func kDistanceCurve(for assets: [AssetRef], k: Int, cap: Int?) -> [Double] {
+        var located = assets.filter(isLocated)
+        if let cap, located.count > cap { located = downsample(located, to: cap) }
+        let coords = located.map { $0.coordinate! }
+        let othersNeeded = max(1, k - 1)          // (minPts − 1) other neighbours ⇒ core
+        let n = coords.count
+        guard n > othersNeeded else { return [] }
         var kth: [Double] = []
         kth.reserveCapacity(n)
         for i in 0..<n {
             var dists: [Double] = []
             dists.reserveCapacity(n - 1)
-            for j in 0..<n where j != i { dists.append(located[i].distance(to: located[j])) }
+            for j in 0..<n where j != i { dists.append(coords[i].distance(to: coords[j])) }
             dists.sort()
-            kth.append(dists[k - 1])   // k-th nearest (1-indexed)
+            kth.append(dists[othersNeeded - 1])   // distance to the (minPts−1)-th nearest other point
         }
         return kth.sorted()
     }
@@ -274,6 +293,10 @@ final class LocationSpikeModel {
     var manualMinPts = 5
     var gapToleranceDays = TripOverlay.defaultGapToleranceDays
     var excludeHome = true
+    /// Downsampling is OFF by default (cluster the full set — see `LocationSpikeCompute`). The opt-in
+    /// cap is the "if still laggy" escape hatch for a very large real library (§8).
+    var downsampleEnabled = false
+    var downsampleCap = LocationSpikeCompute.defaultDownsampleCap
 
     // Outputs.
     private(set) var result: SpikeResult?
@@ -287,7 +310,6 @@ final class LocationSpikeModel {
     let library: any PhotoLibraryProviding
     private let geocoder: any SpikePlaceNaming
     let calendar: Calendar
-    private let previewCap: Int
 
     private var debounceTask: Task<Void, Never>?
     private var generation = 0
@@ -295,11 +317,13 @@ final class LocationSpikeModel {
     init(library: any PhotoLibraryProviding,
          geocoder: any SpikePlaceNaming,
          calendar: Calendar = .current,
-         previewCap: Int = LocationSpikeCompute.defaultPreviewCap) {
+         downsampleEnabled: Bool = false,
+         downsampleCap: Int = LocationSpikeCompute.defaultDownsampleCap) {
         self.library = library
         self.geocoder = geocoder
         self.calendar = calendar
-        self.previewCap = previewCap
+        self.downsampleEnabled = downsampleEnabled
+        self.downsampleCap = downsampleCap
     }
 
     /// The effective params — `minPts == nil` when adaptive. The view observes this to debounce.
@@ -309,6 +333,10 @@ final class LocationSpikeModel {
                     gapToleranceDays: gapToleranceDays,
                     excludeHome: excludeHome)
     }
+
+    /// The live-preview downsample ceiling on the located set: `nil` (full run) unless the opt-in
+    /// control is on. Threaded into every `LocationSpikeCompute.run` / `kDistanceCurve` call.
+    var effectiveCap: Int? { downsampleEnabled ? downsampleCap : nil }
 
     /// Fetch the whole library (no new fetch on recompute — clustering is live over this in-memory set,
     /// §7 step 1), compute the k-distance curve once, then the first clustering.
@@ -323,11 +351,14 @@ final class LocationSpikeModel {
             let interval = DateInterval(start: .distantPast, end: .distantFuture)
             let assets = try await library.fetchAssets(in: interval)
             allAssets = assets
+            // k for the elbow is the full-set adaptive minPts — the same density reference the recompute
+            // uses. Computed once here (§ "once per data set"); the plot caption notes it's the load-time
+            // adaptive value, so it stays a fixed reference even if the user later sets a manual minPts.
             let k = PlaceClustering.adaptiveMinPts(for: assets, calendar: calendar)
             kUsed = k
-            let cap = previewCap
+            let cap = effectiveCap
             kDistances = await Task.detached(priority: .userInitiated) {
-                LocationSpikeCompute.kDistanceCurve(for: assets, k: k, previewCap: cap)
+                LocationSpikeCompute.kDistanceCurve(for: assets, k: k, cap: cap)
             }.value
             Log.app.notice("LocationSpikeProbe loaded \(assets.count) assets, k=\(k, privacy: .public)")
         } catch {
@@ -354,11 +385,10 @@ final class LocationSpikeModel {
         guard !allAssets.isEmpty else { return }
         generation += 1
         let mine = generation
-        let (assets, snapshot, cal, cap) = (allAssets, self.params, calendar, previewCap)
+        let (assets, params, cal, cap) = (allAssets, self.params, calendar, effectiveCap)
         isComputing = true
-        let params = snapshot
         let computed = await Task.detached(priority: .userInitiated) {
-            LocationSpikeCompute.run(assets: assets, params: params, calendar: cal, previewCap: cap)
+            LocationSpikeCompute.run(assets: assets, params: params, calendar: cal, cap: cap)
         }.value
         guard mine == generation else { return }   // a newer recompute superseded this one
         result = computed
@@ -486,6 +516,8 @@ struct LocationSpikeProbeView: View {
         // Loading + the screenshot-ready signal are owned by the host (`DebugLocationSpikeHostView`),
         // so the capture never races the async first cluster; the view only recomputes on a control change.
         .onChange(of: model.params) { _, _ in model.scheduleRecompute() }
+        .onChange(of: model.downsampleEnabled) { _, _ in model.scheduleRecompute() }
+        .onChange(of: model.downsampleCap) { _, _ in model.scheduleRecompute() }
     }
 
     private var content: some View {
@@ -577,6 +609,25 @@ private struct SpikeControlsView: View {
                 Text(verbatim: "Exclude home from trips")
             }
             .accessibilityIdentifier("spike-home")
+
+            // Downsampling is OFF by default (full-set clustering); this is the "if still laggy on a huge
+            // library" escape hatch (§8). Capping changes which clusters FORM, so it's opt-in + surfaced.
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle(isOn: $model.downsampleEnabled) {
+                    HStack {
+                        Text(verbatim: "Downsample preview")
+                        Spacer()
+                        Text(verbatim: model.downsampleEnabled ? "\(model.downsampleCap) pts" : "full")
+                            .foregroundStyle(.secondary).monospacedDigit()
+                    }
+                }
+                .accessibilityIdentifier("spike-downsample")
+                if model.downsampleEnabled {
+                    Stepper(value: $model.downsampleCap, in: 250...5000, step: 250) {
+                        Text(verbatim: "cap \(model.downsampleCap) located pts")
+                    }
+                }
+            }
         }
         .padding()
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
@@ -609,11 +660,11 @@ private struct SpikeResultsPanel: View {
                 }
                 if r.didDownsample {
                     Label {
-                        Text(verbatim: "Live preview clustered \(r.previewedLocatedCount) of \(r.locatedCount) located points")
+                        Text(verbatim: "Downsampled: clustered \(r.previewedLocatedCount) of \(r.locatedCount) located points — cluster/trip SHAPE is approximate, not just the counts")
                     } icon: {
-                        Image(systemName: "speedometer")
+                        Image(systemName: "exclamationmark.triangle")
                     }
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(.orange)
                 }
             } else {
                 Text(verbatim: "Computing…").foregroundStyle(.secondary)
@@ -644,7 +695,13 @@ private struct KDistancePlot: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(verbatim: "k-distance (k = \(k)) — knee ≈ eps candidate").font(.headline)
+            Text(verbatim: "k-distance (k = \(k), load-time adaptive) — knee ≈ eps candidate").font(.headline)
+            // y-axis top: the curve is sorted ascending, so its max sits at the top-right.
+            HStack {
+                Spacer()
+                Text(verbatim: String(format: "max %.0f km", (distances.last ?? 0) / 1000))
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
             Canvas { context, size in
                 guard let maxD = distances.last, maxD > 0 else { return }
                 var path = Path()
@@ -665,9 +722,9 @@ private struct KDistancePlot: View {
             }
             .frame(height: 120)
             HStack {
-                Text(verbatim: "0").font(.caption2).foregroundStyle(.secondary)
+                Text(verbatim: "points sorted by k-distance →").font(.caption2).foregroundStyle(.secondary)
                 Spacer()
-                Text(verbatim: String(format: "max %.0f km", (distances.last ?? 0) / 1000))
+                Text(verbatim: String(format: "eps %.1f km (dashed)", epsMeters / 1000))
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }

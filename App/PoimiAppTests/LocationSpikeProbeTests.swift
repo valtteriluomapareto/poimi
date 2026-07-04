@@ -2,17 +2,16 @@
 //  LocationSpikeProbeTests.swift
 //  PoimiAppTests — integration coverage for the interactive location-clustering spike probe (#133).
 //
-//  The probe is a throwaway DEBUG instrument, but two things about it are worth pinning so it stays a
+//  The probe is a throwaway DEBUG instrument, but three things about it are worth pinning so it stays a
 //  HONEST instrument and doesn't rot:
-//    1. Its wiring — load the library → run the merged #132 core off-main → publish counts/cards —
-//       actually recovers the planted trips against the deterministic fake seed (the same field the
-//       `Curation` precision/recall test proves at the pure layer). If the app-tier port of the seed or
-//       the compute drifted from the core, this catches it.
+//    1. Its wiring — load the library → run the merged #132 core → publish counts/cards — actually
+//       recovers the planted trips against the deterministic fake seed (the same field the `Curation`
+//       precision/recall test proves at the pure layer).
 //    2. The live recompute over the SAME core yields the SAME clustering as calling `PlaceClustering`
-//       directly (the probe must not silently diverge from what the property tests pin — the Algorithms
-//       persona's concern).
-//    3. The findings export contains the params + counts + cluster/trip tables (the plateau-capture
-//       artifact, §8), so a settled result is recorded, not just remembered.
+//       directly (the probe must not silently diverge from what the property tests pin), and a control
+//       change (minPts, home exclusion, downsample) actually re-runs the core with the new inputs.
+//    3. The findings export carries the params + counts + cluster/trip tables + resolved names — the
+//       plateau-capture artifact (§8).
 //
 
 import Testing
@@ -25,10 +24,16 @@ import Curation
 struct LocationSpikeProbeTests {
     private let cal = utcCalendar()
 
+    private func makeModel(downsampleEnabled: Bool = false,
+                           downsampleCap: Int = LocationSpikeCompute.defaultDownsampleCap) -> LocationSpikeModel {
+        LocationSpikeModel(
+            library: FakePhotoLibrary(assets: FakePhotoLibrary.locationSpikeSeed()),
+            geocoder: PlaceholderSpikeGeocoder(), calendar: cal,
+            downsampleEnabled: downsampleEnabled, downsampleCap: downsampleCap)
+    }
+
     private func loadedModel() async -> LocationSpikeModel {
-        let library = FakePhotoLibrary(assets: FakePhotoLibrary.locationSpikeSeed())
-        let model = LocationSpikeModel(
-            library: library, geocoder: PlaceholderSpikeGeocoder(), calendar: cal)
+        let model = makeModel()
         await model.load()
         return model
     }
@@ -50,15 +55,18 @@ struct LocationSpikeProbeTests {
         #expect(result.trips.allSatisfy { $0.labelClusterID != home.id })
     }
 
-    @Test("no-location bucket holds the null-island + dated-no-GPS assets; coverage is high")
+    @Test("clusters + no-location bucket partition every asset; the 13 non-GPS assets route out")
     func noLocationRouting() async throws {
         let model = await loadedModel()
         let result = try #require(model.result)
 
-        // 8 null-island (0,0) + 5 dated-no-GPS = 13 no-location; the rest are located.
+        // The real invariant (not a tautology): every input asset is either clustered or in the
+        // no-location bucket — no loss, no dup — even through the app-tier card mapping.
+        let clusteredCount = result.clusters.reduce(0) { $0 + $1.count }
+        #expect(clusteredCount + result.noLocationCount == result.totalCount)
+        // The 8 null-island (0,0) + 5 dated-no-GPS assets must all route to no-location (≥13 because
+        // any DBSCAN noise would land here too).
         #expect(result.noLocationCount >= 13)
-        #expect(result.locatedCount == result.totalCount - result.noLocationCount
-                || result.locatedCount == result.totalCount - 13)   // located excludes (0,0)/no-GPS
         #expect(result.globalCoverage > 0.85)
     }
 
@@ -67,7 +75,7 @@ struct LocationSpikeProbeTests {
         let model = await loadedModel()
         let assets = model.allAssets
 
-        // Same call the compute makes internally, at the model's default params.
+        // Same calls the compute makes internally, at the model's default params (full set, adaptive).
         let clusters = PlaceClustering.clusters(for: assets, calendar: cal)
         let home = PlaceClustering.homeCluster(clusters.clusters, assets: assets, calendar: cal)
         let trips = TripOverlay.trips(assets: assets, clusters: clusters, home: home, calendar: cal)
@@ -79,21 +87,60 @@ struct LocationSpikeProbeTests {
         #expect(result.homeClusterID == home?.id)
     }
 
-    @Test("changing a control (manual minPts) recomputes; adaptive value is surfaced")
+    @Test("tightening minPts actually re-runs the core: dense trip cities collapse to noise")
     func recomputesOnParamChange() async throws {
         let model = await loadedModel()
-        let adaptive = try #require(model.result).adaptiveMinPts
-        #expect(adaptive >= PlaceClustering.minAdaptiveMinPts)
+        let base = try #require(model.result)
+        let baseClusterCount = base.clusterCount
+        #expect(base.adaptiveMinPts >= PlaceClustering.minAdaptiveMinPts)
 
-        // Flip to a manual minPts and recompute directly (bypassing the UI debounce).
+        // A manual minPts far above the trip cities' per-place counts (≤24) drops them below core → they
+        // become noise; only the dense home (~435 pts) survives → strictly fewer clusters.
         model.useAdaptiveMinPts = false
-        model.manualMinPts = 30           // an extreme density floor → fewer/no clusters survive
+        model.manualMinPts = 30
         await model.recomputeNow()
         let tightened = try #require(model.result)
         #expect(tightened.resolvedMinPts == 30)
+        #expect(tightened.clusterCount < baseClusterCount)
     }
 
-    @Test("findings export carries params + counts + cluster/trip tables")
+    @Test("disabling home-exclusion surfaces the home cluster as a trip label")
+    func homeExclusionToggle() async throws {
+        let model = await loadedModel()
+        // With home excluded (default) no trip is labeled by home.
+        let withHome = try #require(model.result)
+        let homeID = try #require(withHome.clusters.first { $0.isHome }).id
+        #expect(withHome.trips.allSatisfy { $0.labelClusterID != homeID })
+
+        model.excludeHome = false
+        await model.recomputeNow()
+        let noHome = try #require(model.result)
+        // The largest cluster is home; without exclusion its away-runs get labeled by it.
+        let biggest = try #require(noHome.clusters.first)  // sorted busiest-first
+        #expect(noHome.trips.contains { $0.labelClusterID == biggest.id })
+    }
+
+    @Test("the opt-in downsample cap thins the clustered set and is surfaced")
+    func downsamplePreview() async throws {
+        let model = makeModel(downsampleEnabled: true, downsampleCap: 50)
+        await model.load()
+        let result = try #require(model.result)
+
+        #expect(result.locatedCount > 50)                 // the seed has far more than the cap
+        #expect(result.didDownsample)
+        #expect(result.previewedLocatedCount == 50)
+        #expect(model.findings.contains("downsampled"))   // surfaced in the export, never silent
+    }
+
+    @Test("the k-distance elbow curve is computed and sorted ascending")
+    func kDistanceCurve() async throws {
+        let model = await loadedModel()
+        #expect(!model.kDistances.isEmpty)
+        #expect(model.kDistances == model.kDistances.sorted())
+        #expect(model.kUsed >= PlaceClustering.minAdaptiveMinPts)
+    }
+
+    @Test("findings export carries params + counts + cluster/trip tables + resolved names")
     func findingsExport() async throws {
         let model = await loadedModel()
         let markdown = model.findingsMarkdown(now: Date(timeIntervalSince1970: 0))
@@ -106,5 +153,8 @@ struct LocationSpikeProbeTests {
         #expect(markdown.contains("no-location bucket:"))
         #expect(markdown.contains("## Clusters"))
         #expect(markdown.contains("## Trips"))
+        // The placeholder geocoder resolves each medoid to a "≈ lat, lon" label; assert one folds into
+        // the exported table (the "honest instrument" claim — names reach the artifact).
+        #expect(markdown.contains("≈ "))
     }
 }
