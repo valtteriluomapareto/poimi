@@ -128,6 +128,11 @@ jobs:
         # pull_request / branch push), and the export-compliance build setting must be present.
         run: ./Scripts/check-testflight-trigger.sh
 
+      - name: Check version consistency
+        # Version hygiene (#135): all MARKETING_VERSION occurrences in project.pbxproj must be
+        # an identical semver (no Debug/Release/app/test drift). Bump with Scripts/bump-version.sh.
+        run: ./Scripts/check-version.sh
+
       # --- App build + integration tests (slowest; after the fast checks) ------
 
       - name: Build PoimiApp (Release)

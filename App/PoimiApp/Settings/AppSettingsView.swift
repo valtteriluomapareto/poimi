@@ -62,9 +62,18 @@ struct AppSettingsView: View {
         openURL(url)
     }
 
-    /// The marketing version (`CFBundleShortVersionString`), e.g. "0.1.0".
+    /// The full version identity for display: marketing version + build number, e.g.
+    /// "0.1.0 (1234)" — mirroring the TestFlight identity (#135). Marketing version is the
+    /// canonical `CFBundleShortVersionString` (MARKETING_VERSION); the build is `CFBundleVersion`
+    /// (CURRENT_PROJECT_VERSION = $GITHUB_RUN_NUMBER on release builds). Both come from
+    /// `Bundle.main` — no hardcoded duplicates. The build is appended only when present.
     private var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        if let build, !build.isEmpty {
+            return "\(short) (\(build))"
+        }
+        return short
     }
 
     /// Status colour: full = brand green (the "all set"), limited = gold (attention), off = neutral.

@@ -63,6 +63,20 @@ def build_number
   ENV["GITHUB_RUN_NUMBER"] || Time.now.strftime("%Y%m%d%H%M")
 end
 
+# The canonical marketing version = MARKETING_VERSION in project.pbxproj (single source
+# of truth; feeds CFBundleShortVersionString + the About screen). The release lane only
+# READS it — it is bumped deliberately by a human via Scripts/bump-version.sh, never here.
+# Scripts/check-version.sh guarantees every occurrence is an identical semver, so the
+# first match is authoritative.
+def marketing_version
+  @marketing_version ||= begin
+    pbxproj = File.join(XCODEPROJ, "project.pbxproj")
+    line = File.readlines(pbxproj).find { |l| l =~ /MARKETING_VERSION = / }
+    UI.user_error!("No MARKETING_VERSION in #{pbxproj}") if line.nil?
+    line[/MARKETING_VERSION = ([^;]+);/, 1].strip
+  end
+end
+
 platform :ios do
   # --- build_only: archive + signed .ipa, no upload -------------------------
   desc "Archive + sign a Release .ipa (no upload). Bring-up step 2 isolator."
@@ -90,7 +104,7 @@ platform :ios do
       xcargs: "CURRENT_PROJECT_VERSION=#{build_number}"
     )
 
-    UI.success("Archived #{OUTPUT_NAME}.ipa (build #{build_number}).")
+    UI.success("Archived #{OUTPUT_NAME}.ipa — #{marketing_version} (#{build_number}).")
   end
 
   # --- beta: build_only + upload to TestFlight (internal) + processing poll --
@@ -154,10 +168,11 @@ platform :ios do
     end
   end
 
-  # Echo the build number + TestFlight/ASC URL to the GitHub step summary (AC).
+  # Echo the TestFlight identity (version + build) + ASC URL to the step summary (AC).
   def summarize(build, state)
     app_url = "https://appstoreconnect.apple.com/apps"
-    line = "TestFlight build **#{build}** reached ASC processingState **#{state}**. " \
+    identity = "#{marketing_version} (#{build})" # e.g. "0.1.0 (1234)"
+    line = "TestFlight build **#{identity}** reached ASC processingState **#{state}**. " \
            "View in App Store Connect → TestFlight: #{app_url}"
     UI.success(line)
 
@@ -167,6 +182,8 @@ platform :ios do
     File.open(summary_path, "a") do |f|
       f.puts("### TestFlight upload")
       f.puts("")
+      f.puts("- TestFlight identity: `#{identity}`")
+      f.puts("- Marketing version: `#{marketing_version}`")
       f.puts("- Build number: `#{build}`")
       f.puts("- ASC processingState: `#{state}`")
       f.puts("- App Store Connect (TestFlight): #{app_url}")

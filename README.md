@@ -134,6 +134,13 @@ the runbook (one-time Apple/ASC setup + the required `testflight` Environment se
 tooling is pinned via [`Gemfile`](Gemfile) + `Gemfile.lock` (`bundle install` in frozen mode).
 Signing uses `match (appstore)` in read-only mode; the App Store Connect API key is auth only.
 
+**Versioning.** The **marketing version** (`MARKETING_VERSION` / `CFBundleShortVersionString`,
+semver `x.y.z`) is the human-owned source of truth in `project.pbxproj` — bump it deliberately in
+its own PR with `./Scripts/bump-version.sh <major|minor|patch|X.Y.Z>` (keeps all occurrences in
+sync); `./Scripts/check-version.sh` guards against drift. The **build number**
+(`CURRENT_PROJECT_VERSION` / `CFBundleVersion`) is auto-injected as `$GITHUB_RUN_NUMBER` at archive
+time — never hand-edited. TestFlight identity is `marketing (build)`, e.g. `0.1.0 (1234)`.
+
 ## Screenshots (eyeball a screen against its design)
 
 `Scripts/screenshots.sh` boots an iOS 26 simulator, builds + installs the app, and launches

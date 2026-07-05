@@ -40,6 +40,20 @@ name: TestFlight
 #
 # All actions are pinned to commit SHAs; Dependabot (github-actions + bundler)
 # should be enabled so pins are updated deliberately.
+#
+# ---------------------------------------------------------------------------
+# VERSIONING (#135)
+# ---------------------------------------------------------------------------
+#   • Marketing version (MARKETING_VERSION / CFBundleShortVersionString, semver
+#     x.y.z) is the human-owned SOURCE OF TRUTH in project.pbxproj. Bump it
+#     DELIBERATELY with `Scripts/bump-version.sh <major|minor|patch|X.Y.Z>` in its
+#     own PR — NEVER in this lane (the lane only READS it). Scripts/check-version.sh
+#     asserts every occurrence is an identical semver.
+#   • Build number (CURRENT_PROJECT_VERSION / CFBundleVersion) is auto-injected here
+#     as $GITHUB_RUN_NUMBER at archive time — monotonic, unique, never hand-edited.
+#   • TestFlight identity = "MARKETING_VERSION (GITHUB_RUN_NUMBER)", e.g. "0.1.0 (1234)".
+#   • When the optional `v*` tag trigger is later enabled, add a guard asserting the
+#     tag equals MARKETING_VERSION (tag `v0.1.0` ⇔ MARKETING_VERSION `0.1.0`).
 # =============================================================================
 
 on:
