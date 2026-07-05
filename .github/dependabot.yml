@@ -1,0 +1,17 @@
+# Dependabot — keep the deploy pipeline's pinned versions current deliberately
+# (issue #135 Security: "Pin every action to a commit SHA; enable Dependabot for
+# github-actions + bundler"). Both ecosystems are CI/dev-tooling only; the shipped
+# app has no third-party runtime dependency.
+version: 2
+updates:
+  # GitHub Actions pinned to commit SHAs in .github/workflows/*.yml.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # fastlane (and its gem graph) pinned in Gemfile.lock.
+  - package-ecosystem: "bundler"
+    directory: "/"
+    schedule:
+      interval: "weekly"

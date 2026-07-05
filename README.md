@@ -122,6 +122,18 @@ the build if violated:
 The full pipeline (lint → `Curation` tests → guards → Release build → app tests on an iOS 26
 sim) is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
+## TestFlight deploy (fastlane)
+
+A separate, **manually-triggered** workflow builds a signed Release and uploads it to
+TestFlight — no local Mac needed. It is `workflow_dispatch`-only (never on a PR or push) and
+runs behind a protected `testflight` GitHub Environment. The lanes live in
+[`fastlane/Fastfile`](fastlane/Fastfile) (`beta` = build + upload + poll for App Store Connect
+`VALID`; `build_only` = archive + sign an `.ipa`, no upload); the workflow is
+[`.github/workflows/testflight.yml`](.github/workflows/testflight.yml), whose header comments are
+the runbook (one-time Apple/ASC setup + the required `testflight` Environment secrets). Ruby
+tooling is pinned via [`Gemfile`](Gemfile) + `Gemfile.lock` (`bundle install` in frozen mode).
+Signing uses `match (appstore)` in read-only mode; the App Store Connect API key is auth only.
+
 ## Screenshots (eyeball a screen against its design)
 
 `Scripts/screenshots.sh` boots an iOS 26 simulator, builds + installs the app, and launches
