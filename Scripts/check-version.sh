@@ -31,12 +31,14 @@ fail() {
 [ -f "${PBXPROJ}" ] || fail "Missing ${PBXPROJ}."
 
 # Extract the value of every `MARKETING_VERSION = <value>;` line (trim spaces + trailing ;).
+# `|| true` so a no-match grep (exit 1 under `set -o pipefail`) doesn't abort the script
+# before the explicit emptiness check below can print a friendly message.
 values="$(grep -oE 'MARKETING_VERSION = [^;]+;' "${PBXPROJ}" \
-    | sed -E 's/MARKETING_VERSION = //; s/;$//; s/^[[:space:]]+//; s/[[:space:]]+$//')"
+    | sed -E 's/MARKETING_VERSION = //; s/;$//; s/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
 
 [ -n "${values}" ] || fail "No MARKETING_VERSION found in project.pbxproj."
 
-count="$(printf '%s\n' "${values}" | grep -c .)"
+count="$(printf '%s\n' "${values}" | grep -c . || true)"
 unique="$(printf '%s\n' "${values}" | sort -u)"
 unique_count="$(printf '%s\n' "${unique}" | grep -c .)"
 

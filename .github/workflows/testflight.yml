@@ -146,6 +146,9 @@ jobs:
 
       - name: Upload artifacts
         # On success AND failure, so a failed run is still diagnosable (AC).
+        # NOTE: upload-artifact does NOT expand a leading "~", so logs must live in the
+        # workspace — the Fastfile sets gym buildlog_path to build/logs. On the FIRST run,
+        # eyeball these artifacts to confirm no secret (e.g. MATCH_GIT_URL) leaked into a log.
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -155,6 +158,5 @@ jobs:
           path: |
             build/*.ipa
             build/*.xcarchive/Info.plist
-            ~/Library/Logs/gym/*.log
-            ~/Library/Logs/fastlane/*
+            build/logs/**
             fastlane/report.xml

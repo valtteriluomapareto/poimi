@@ -34,8 +34,10 @@ die() { echo "error: $1" >&2; exit 1; }
 arg="$1"
 
 # Current version = the single value all occurrences share. Refuse to guess if they drift.
+# `|| true` so a no-match grep (exit 1 under `set -o pipefail`) doesn't abort before the
+# explicit emptiness check below can print a friendly message.
 current_values="$(grep -oE 'MARKETING_VERSION = [^;]+;' "${PBXPROJ}" \
-    | sed -E 's/MARKETING_VERSION = //; s/;$//; s/^[[:space:]]+//; s/[[:space:]]+$//')"
+    | sed -E 's/MARKETING_VERSION = //; s/;$//; s/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
 [ -n "${current_values}" ] || die "no MARKETING_VERSION found in ${PBXPROJ}"
 
 unique="$(printf '%s\n' "${current_values}" | sort -u)"

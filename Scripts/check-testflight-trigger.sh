@@ -73,8 +73,14 @@ if printf '%s\n' "${on_block_code}" | grep -Eq '(^|[[:space:]])push:'; then
 fi
 
 # --- 2. Export-compliance build setting (from #136) ------------------------------
+# Require the key set to NO on BOTH app configs (Debug + Release), not just present:
+# a stray key with the wrong value (or on only one config) still stalls builds in
+# "Missing Compliance". The app target has two configs, so assert >= 2 occurrences of
+# the `= NO;` value.
 [ -f "${PBXPROJ}" ] || fail "Missing ${PBXPROJ}."
-grep -q 'INFOPLIST_KEY_ITSAppUsesNonExemptEncryption' "${PBXPROJ}" \
-    || fail "INFOPLIST_KEY_ITSAppUsesNonExemptEncryption missing from project.pbxproj — TestFlight builds would stall in 'Missing Compliance' (#136)."
+compliance_count="$(grep -c 'INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;' "${PBXPROJ}" || true)"
+if [ "${compliance_count}" -lt 2 ]; then
+    fail "INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO must be set on both app configs (found ${compliance_count}) — TestFlight builds would stall in 'Missing Compliance' (#136)."
+fi
 
-echo "OK: testflight.yml is workflow_dispatch-only (no pull_request / branch push) and the export-compliance key is present."
+echo "OK: testflight.yml is workflow_dispatch-only (no pull_request / branch push); export-compliance = NO on ${compliance_count} configs."
