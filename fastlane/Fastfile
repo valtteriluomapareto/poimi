@@ -39,6 +39,10 @@ default_platform(:ios)
 APP_IDENTIFIER = "com.valtteriluoma.poimi".freeze
 TEAM_ID        = "N4FKQHR5AC".freeze                    # DEVELOPMENT_TEAM in project.pbxproj
 XCODEPROJ      = "App/PoimiApp.xcodeproj".freeze
+# Absolute path captured at load time (CWD = repo root here). `build_app`/gym changes the process CWD
+# during the archive+export, so a RELATIVE path in `marketing_version` (called after gym) fails with
+# ENOENT. Resolve it once, up front, so the version read works regardless of the later CWD.
+PBXPROJ_PATH   = File.expand_path(File.join(XCODEPROJ, "project.pbxproj")).freeze
 SCHEME         = "PoimiApp".freeze
 OUTPUT_DIR     = "build".freeze
 OUTPUT_NAME    = "PoimiApp".freeze
@@ -76,9 +80,8 @@ end
 # first match is authoritative.
 def marketing_version
   @marketing_version ||= begin
-    pbxproj = File.join(XCODEPROJ, "project.pbxproj")
-    line = File.readlines(pbxproj).find { |l| l =~ /MARKETING_VERSION = / }
-    UI.user_error!("No MARKETING_VERSION in #{pbxproj}") if line.nil?
+    line = File.readlines(PBXPROJ_PATH).find { |l| l =~ /MARKETING_VERSION = / }
+    UI.user_error!("No MARKETING_VERSION in #{PBXPROJ_PATH}") if line.nil?
     line[/MARKETING_VERSION = ([^;]+);/, 1].strip
   end
 end
