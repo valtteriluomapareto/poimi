@@ -9,6 +9,10 @@ on:
   push:
     branches: [main]
 
+# Least privilege: CI only reads the repo (no deploy, no writes).
+permissions:
+  contents: read
+
 # Cancel superseded runs on the same ref to save runner minutes.
 concurrency:
   group: ci-${{ github.ref }}
@@ -35,7 +39,8 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        # Pinned to a commit SHA (same as testflight.yml) — no mutable tags.
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Select Xcode ${{ env.XCODE_VERSION }}
         run: |
@@ -118,6 +123,16 @@ jobs:
         # O(n log n) pass over the whole candidate set — it must run once in CandidateStore, never
         # in a SwiftUI View body (where a scroll-anchor write would recompute it on the hot path).
         run: ./Scripts/check-no-grouping-in-views.sh
+
+      - name: Check TestFlight trigger isolation
+        # Deploy safety (#135): the TestFlight workflow must stay workflow_dispatch-only (never
+        # pull_request / branch push), and the export-compliance build setting must be present.
+        run: ./Scripts/check-testflight-trigger.sh
+
+      - name: Check version consistency
+        # Version hygiene (#135): all MARKETING_VERSION occurrences in project.pbxproj must be
+        # an identical semver (no Debug/Release/app/test drift). Bump with Scripts/bump-version.sh.
+        run: ./Scripts/check-version.sh
 
       # --- App build + integration tests (slowest; after the fast checks) ------
 

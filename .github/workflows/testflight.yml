@@ -1,0 +1,162 @@
+name: TestFlight
+
+# =============================================================================
+# CI → TestFlight deploy pipeline (issue #135). Archives, signs, and uploads a
+# Release build to TestFlight from a GitHub-hosted macOS runner — no local Mac.
+#
+# This workflow is DELIBERATELY separate from ci.yml so a deploy failure never
+# gates PR CI, and it is triggered ONLY by an explicit human `workflow_dispatch`
+# (Scripts/check-testflight-trigger.sh enforces "never pull_request / branch push").
+#
+# ---------------------------------------------------------------------------
+# HUMAN ONE-TIME SETUP (the lane cannot do these — see issue #135 "Prerequisites")
+# ---------------------------------------------------------------------------
+#   1. Paid Apple Developer Program membership (team N4FKQHR5AC).
+#   2. Register bundle id `com.valtteriluoma.poimi` in the portal AND create the
+#      app record in App Store Connect (upload + build queries fail without it).
+#   3. Create an App Store Connect API key. Role couples to signing:
+#         • App Manager  — enough if the signing cert/profile already exist (match
+#                          created them once, locally; CI runs match --readonly).
+#         • Admin        — required only if the key must CREATE signing resources.
+#      Prefer pre-created certs + an App Manager key. The key is revocable —
+#      document rotation and re-add the secret when rotated.
+#   4. Run `bundle exec fastlane match appstore` ONCE locally (or from a trusted
+#      machine) to seed the encrypted certs/profiles git repo. CI only reads it.
+#   5. Create a PROTECTED GitHub Environment named `testflight` (Settings →
+#      Environments) WITH REQUIRED REVIEWERS, and add the secrets below to THAT
+#      environment (not repo-level secrets). The `environment:` key on the deploy
+#      job makes the reviewer gate apply before any secret is available.
+#   6. (External testers only, later) Add a PrivacyInfo.xcprivacy manifest + fill
+#      the App Privacy nutrition label in ASC, and pass Beta App Review. NOT
+#      required for internal testers / this internal-only lane.
+#
+# REQUIRED `testflight` ENVIRONMENT SECRETS:
+#   ASC_KEY_ID                    App Store Connect API key id
+#   ASC_ISSUER_ID                 App Store Connect API issuer id
+#   ASC_KEY_CONTENT_BASE64        base64 of the .p8 private key
+#   MATCH_GIT_URL                 private git repo holding the match certs/profiles
+#   MATCH_PASSWORD                passphrase decrypting the match repo
+#   MATCH_GIT_BASIC_AUTHORIZATION base64 "user:token" with read access to MATCH_GIT_URL
+#
+# All actions are pinned to commit SHAs; Dependabot (github-actions + bundler)
+# should be enabled so pins are updated deliberately.
+#
+# ---------------------------------------------------------------------------
+# VERSIONING (#135)
+# ---------------------------------------------------------------------------
+#   • Marketing version (MARKETING_VERSION / CFBundleShortVersionString, semver
+#     x.y.z) is the human-owned SOURCE OF TRUTH in project.pbxproj. Bump it
+#     DELIBERATELY with `Scripts/bump-version.sh <major|minor|patch|X.Y.Z>` in its
+#     own PR — NEVER in this lane (the lane only READS it). Scripts/check-version.sh
+#     asserts every occurrence is an identical semver.
+#   • Build number (CURRENT_PROJECT_VERSION / CFBundleVersion) is auto-injected here
+#     as $GITHUB_RUN_NUMBER at archive time — monotonic, unique, never hand-edited.
+#   • TestFlight identity = "MARKETING_VERSION (GITHUB_RUN_NUMBER)", e.g. "0.1.0 (1234)".
+#   • When the optional `v*` tag trigger is later enabled, add a guard asserting the
+#     tag equals MARKETING_VERSION (tag `v0.1.0` ⇔ MARKETING_VERSION `0.1.0`).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: "fastlane lane (beta = build+upload+poll; build_only = archive/sign, no upload)"
+        type: choice
+        default: beta
+        options:
+          - beta
+          - build_only
+
+# Least privilege: this workflow only reads the repo; it uploads to ASC via the
+# API key, not the GITHUB_TOKEN.
+permissions:
+  contents: read
+
+# Never run two deploys at once; do not cancel an in-flight upload.
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & upload to TestFlight
+    runs-on: macos-26
+    # Binds the required-reviewer gate + scopes the deploy secrets to this job only.
+    environment: testflight
+
+    env:
+      # Keep IDENTICAL to ci.yml's XCODE_VERSION to avoid toolchain pin drift.
+      XCODE_VERSION: "26.3"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        # NOTE: kept byte-for-byte identical to ci.yml's "Select Xcode" step so the
+        # deploy build uses the exact toolchain PR CI validated. Update both together.
+        run: |
+          APP="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [ ! -d "$APP" ]; then
+            APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)"
+            echo "::warning::Pinned Xcode ${XCODE_VERSION} not found on the runner; falling back to ${APP:-<none>}. Update XCODE_VERSION to track the image."
+          fi
+          if [ -z "$APP" ] || [ ! -d "$APP" ]; then
+            echo "::error::No Xcode 26.x found on the runner. Available:"
+            ls -d /Applications/Xcode*.app 2>/dev/null || true
+            exit 1
+          fi
+          echo "Using $APP"
+          sudo xcode-select -s "$APP/Contents/Developer"
+          xcodebuild -version
+
+      - name: Set up Ruby + bundler
+        uses: ruby/setup-ruby@a4effe49ee8ee5b8b5091268c473a4628afb5651 # v1.245.0
+        with:
+          ruby-version: "3.3"
+          # Installs the bundler version pinned in Gemfile.lock (BUNDLED WITH).
+          bundler-cache: false
+
+      - name: Install gems (frozen)
+        run: |
+          # Frozen install: refuse to change Gemfile.lock, so the resolved graph is
+          # exactly what was committed (supply-chain pinning). `bundle config set
+          # frozen true` is the portable form (bundler 4 removed the `--frozen` flag).
+          bundle config set --local frozen true
+          bundle install --jobs 4
+
+      - name: Run fastlane ${{ github.event.inputs.lane }}
+        # No `set -x`, no `--verbose`: secrets must never reach the log.
+        env:
+          # ASC API key (auth for upload + processing poll; NOT a signing substitute).
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT_BASE64: ${{ secrets.ASC_KEY_CONTENT_BASE64 }}
+          # match (appstore, readonly) — signing identity from the encrypted certs repo.
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          # Monotonic, unique build number injected at archive time (CURRENT_PROJECT_VERSION).
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          # Fastlane hygiene on CI.
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          FASTLANE_HIDE_CHANGELOG: "1"
+        run: |
+          bundle exec fastlane "${{ github.event.inputs.lane }}"
+
+      - name: Upload artifacts
+        # On success AND failure, so a failed run is still diagnosable (AC).
+        # NOTE: upload-artifact does NOT expand a leading "~", so logs must live in the
+        # workspace — the Fastfile sets gym buildlog_path to build/logs. On the FIRST run,
+        # eyeball these artifacts to confirm no secret (e.g. MATCH_GIT_URL) leaked into a log.
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: testflight-${{ github.run_number }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            build/*.ipa
+            build/*.xcarchive/Info.plist
+            build/logs/**
+            fastlane/report.xml

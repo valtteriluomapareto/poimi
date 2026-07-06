@@ -1,0 +1,9 @@
+# fastlane Appfile — identity shared by the deploy lanes (issue #135).
+#
+# No secrets here (this file is committed): only the public bundle id and the
+# Apple Developer team, both already set in App/PoimiApp.xcodeproj/project.pbxproj
+# (PRODUCT_BUNDLE_IDENTIFIER / DEVELOPMENT_TEAM). Auth is the ASC API key, wired
+# in the Fastfile — no Apple ID / 2FA.
+
+app_identifier("com.valtteriluoma.poimi")
+team_id("N4FKQHR5AC") # DEVELOPMENT_TEAM (must match the ASC API key's team)
