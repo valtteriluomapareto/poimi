@@ -111,7 +111,7 @@ jobs:
           xcodebuild -version
 
       - name: Set up Ruby + bundler
-        uses: ruby/setup-ruby@a4effe49ee8ee5b8b5091268c473a4628afb5651 # v1.245.0
+        uses: ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9 # v1.316.0
         with:
           ruby-version: "3.3"
           # Installs the bundler version pinned in Gemfile.lock (BUNDLED WITH).
