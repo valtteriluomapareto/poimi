@@ -58,6 +58,7 @@
 		00000000E00000000000B0E2 /* SystemPlaceNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000E00000000000A0E2 /* SystemPlaceNaming.swift */; };
 		00000000E00000000000B0E3 /* FakePlaceNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000E00000000000A0E3 /* FakePlaceNaming.swift */; };
 		00000000E00000000000B0E4 /* LocationPreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000E00000000000A0E4 /* LocationPreprocessor.swift */; };
+		00000000E00000000000B0E5 /* TripLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000E00000000000A0E5 /* TripLabel.swift */; };
 		00000000C00000000000B0CF /* ReviewStateViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0CF /* ReviewStateViews.swift */; };
 		000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000043 /* PhotoLibraryConformanceTests.swift */; };
 		000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */; };
@@ -157,6 +158,7 @@
 		00000000E00000000000A0E2 /* SystemPlaceNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPlaceNaming.swift; sourceTree = "<group>"; };
 		00000000E00000000000A0E3 /* FakePlaceNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePlaceNaming.swift; sourceTree = "<group>"; };
 		00000000E00000000000A0E4 /* LocationPreprocessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPreprocessor.swift; sourceTree = "<group>"; };
+		00000000E00000000000A0E5 /* TripLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripLabel.swift; sourceTree = "<group>"; };
 		000000004000000000000042 /* PoimiAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PoimiAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000004000000000000043 /* PhotoLibraryConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryConformanceTests.swift; sourceTree = "<group>"; };
 		000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrarySeedTests.swift; sourceTree = "<group>"; };
@@ -275,6 +277,7 @@
 				00000000E00000000000A0E2 /* SystemPlaceNaming.swift */,
 				00000000E00000000000A0E3 /* FakePlaceNaming.swift */,
 				00000000E00000000000A0E4 /* LocationPreprocessor.swift */,
+				00000000E00000000000A0E5 /* TripLabel.swift */,
 			);
 			path = Location;
 			sourceTree = "<group>";
@@ -556,6 +559,7 @@
 				00000000E00000000000B0E2 /* SystemPlaceNaming.swift in Sources */,
 				00000000E00000000000B0E3 /* FakePlaceNaming.swift in Sources */,
 				00000000E00000000000B0E4 /* LocationPreprocessor.swift in Sources */,
+				00000000E00000000000B0E5 /* TripLabel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
