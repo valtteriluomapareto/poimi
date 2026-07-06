@@ -25,6 +25,7 @@
 		00000000500000000000B503 /* LocationSpikeProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000500000000000A503 /* LocationSpikeProbe.swift */; };
 		00000000600000000000B601 /* CurationProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000600000000000A601 /* CurationProject.swift */; };
 		00000000600000000000B602 /* AppSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000600000000000A602 /* AppSchema.swift */; };
+		00000000600000000000B603 /* GeocodedPlaceName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000600000000000A603 /* GeocodedPlaceName.swift */; };
 		00000000700000000000B701 /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000700000000000A701 /* ProjectStore.swift */; };
 		00000000700000000000B702 /* SelectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000700000000000A702 /* SelectionStore.swift */; };
 		00000000700000000000B703 /* DoneStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000700000000000A703 /* DoneStore.swift */; };
@@ -53,6 +54,10 @@
 		00000000C00000000000B0CE /* ExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0CE /* ExportView.swift */; };
 		00000000D00000000000B0D1 /* AlbumSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000D00000000000A0D1 /* AlbumSettingsView.swift */; };
 		00000000D00000000000B0D2 /* AppSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000D00000000000A0D2 /* AppSettingsView.swift */; };
+		00000000E00000000000B0E1 /* PlaceNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000E00000000000A0E1 /* PlaceNaming.swift */; };
+		00000000E00000000000B0E2 /* SystemPlaceNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000E00000000000A0E2 /* SystemPlaceNaming.swift */; };
+		00000000E00000000000B0E3 /* FakePlaceNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000E00000000000A0E3 /* FakePlaceNaming.swift */; };
+		00000000E00000000000B0E4 /* LocationPreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000E00000000000A0E4 /* LocationPreprocessor.swift */; };
 		00000000C00000000000B0CF /* ReviewStateViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0CF /* ReviewStateViews.swift */; };
 		000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000043 /* PhotoLibraryConformanceTests.swift */; };
 		000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */; };
@@ -77,6 +82,7 @@
 		000000004000000000000076 /* IPadLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000075 /* IPadLayoutTests.swift */; };
 		000000004000000000000078 /* HappyPathSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000077 /* HappyPathSmokeTests.swift */; };
 		00000000400000000000007A /* LocationSpikeProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000079 /* LocationSpikeProbeTests.swift */; };
+		00000000400000000000007C /* LocationNameCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000007B /* LocationNameCacheTests.swift */; };
 		000000004000000000000066 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000065 /* TestSupport.swift */; };
 /* End PBXBuildFile section */
 
@@ -117,6 +123,7 @@
 		00000000500000000000A503 /* LocationSpikeProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationSpikeProbe.swift; sourceTree = "<group>"; };
 		00000000600000000000A601 /* CurationProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurationProject.swift; sourceTree = "<group>"; };
 		00000000600000000000A602 /* AppSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSchema.swift; sourceTree = "<group>"; };
+		00000000600000000000A603 /* GeocodedPlaceName.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeocodedPlaceName.swift; sourceTree = "<group>"; };
 		00000000700000000000A701 /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
 		00000000700000000000A702 /* SelectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionStore.swift; sourceTree = "<group>"; };
 		00000000700000000000A703 /* DoneStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoneStore.swift; sourceTree = "<group>"; };
@@ -146,6 +153,10 @@
 		00000000C00000000000A0CF /* ReviewStateViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewStateViews.swift; sourceTree = "<group>"; };
 		00000000D00000000000A0D1 /* AlbumSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumSettingsView.swift; sourceTree = "<group>"; };
 		00000000D00000000000A0D2 /* AppSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsView.swift; sourceTree = "<group>"; };
+		00000000E00000000000A0E1 /* PlaceNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceNaming.swift; sourceTree = "<group>"; };
+		00000000E00000000000A0E2 /* SystemPlaceNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPlaceNaming.swift; sourceTree = "<group>"; };
+		00000000E00000000000A0E3 /* FakePlaceNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePlaceNaming.swift; sourceTree = "<group>"; };
+		00000000E00000000000A0E4 /* LocationPreprocessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPreprocessor.swift; sourceTree = "<group>"; };
 		000000004000000000000042 /* PoimiAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PoimiAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000004000000000000043 /* PhotoLibraryConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryConformanceTests.swift; sourceTree = "<group>"; };
 		000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrarySeedTests.swift; sourceTree = "<group>"; };
@@ -170,6 +181,7 @@
 		000000004000000000000075 /* IPadLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPadLayoutTests.swift; sourceTree = "<group>"; };
 		000000004000000000000077 /* HappyPathSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HappyPathSmokeTests.swift; sourceTree = "<group>"; };
 		000000004000000000000079 /* LocationSpikeProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationSpikeProbeTests.swift; sourceTree = "<group>"; };
+		00000000400000000000007B /* LocationNameCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationNameCacheTests.swift; sourceTree = "<group>"; };
 		000000004000000000000065 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -199,6 +211,7 @@
 			children = (
 				000000001000000000000008 /* Sources */,
 				00000000300000000000C301 /* PhotoLibrary */,
+				00000000E00000000000C0E1 /* Location */,
 				00000000500000000000C501 /* Support */,
 				00000000600000000000C601 /* Persistence */,
 				00000000700000000000C701 /* State */,
@@ -255,6 +268,17 @@
 			path = PhotoLibrary;
 			sourceTree = "<group>";
 		};
+		00000000E00000000000C0E1 /* Location */ = {
+			isa = PBXGroup;
+			children = (
+				00000000E00000000000A0E1 /* PlaceNaming.swift */,
+				00000000E00000000000A0E2 /* SystemPlaceNaming.swift */,
+				00000000E00000000000A0E3 /* FakePlaceNaming.swift */,
+				00000000E00000000000A0E4 /* LocationPreprocessor.swift */,
+			);
+			path = Location;
+			sourceTree = "<group>";
+		};
 		00000000500000000000C501 /* Support */ = {
 			isa = PBXGroup;
 			children = (
@@ -270,6 +294,7 @@
 			children = (
 				00000000600000000000A601 /* CurationProject.swift */,
 				00000000600000000000A602 /* AppSchema.swift */,
+				00000000600000000000A603 /* GeocodedPlaceName.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -378,6 +403,7 @@
 				000000004000000000000075 /* IPadLayoutTests.swift */,
 				000000004000000000000077 /* HappyPathSmokeTests.swift */,
 				000000004000000000000079 /* LocationSpikeProbeTests.swift */,
+				00000000400000000000007B /* LocationNameCacheTests.swift */,
 				000000004000000000000065 /* TestSupport.swift */,
 			);
 			path = PoimiAppTests;
@@ -496,6 +522,7 @@
 				00000000500000000000B503 /* LocationSpikeProbe.swift in Sources */,
 				00000000600000000000B601 /* CurationProject.swift in Sources */,
 				00000000600000000000B602 /* AppSchema.swift in Sources */,
+				00000000600000000000B603 /* GeocodedPlaceName.swift in Sources */,
 				00000000700000000000B701 /* ProjectStore.swift in Sources */,
 				00000000700000000000B702 /* SelectionStore.swift in Sources */,
 				00000000700000000000B703 /* DoneStore.swift in Sources */,
@@ -525,6 +552,10 @@
 				00000000C00000000000B0CF /* ReviewStateViews.swift in Sources */,
 				00000000D00000000000B0D1 /* AlbumSettingsView.swift in Sources */,
 				00000000D00000000000B0D2 /* AppSettingsView.swift in Sources */,
+				00000000E00000000000B0E1 /* PlaceNaming.swift in Sources */,
+				00000000E00000000000B0E2 /* SystemPlaceNaming.swift in Sources */,
+				00000000E00000000000B0E3 /* FakePlaceNaming.swift in Sources */,
+				00000000E00000000000B0E4 /* LocationPreprocessor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -555,6 +586,7 @@
 				000000004000000000000076 /* IPadLayoutTests.swift in Sources */,
 				000000004000000000000078 /* HappyPathSmokeTests.swift in Sources */,
 				00000000400000000000007A /* LocationSpikeProbeTests.swift in Sources */,
+				00000000400000000000007C /* LocationNameCacheTests.swift in Sources */,
 				000000004000000000000066 /* TestSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

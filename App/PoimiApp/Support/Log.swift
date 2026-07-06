@@ -31,6 +31,8 @@ enum Log {
     static let persistence = Logger(subsystem: subsystem, category: "Persistence")
     /// Selection + snapshot debounce/flush (`SelectionStore`).
     static let selection = Logger(subsystem: subsystem, category: "Selection")
+    /// Location naming pass — reverse-geocoding seam + name cache (`LocationPreprocessor`).
+    static let location = Logger(subsystem: subsystem, category: "Location")
     /// App-level / composition root / catch-all.
     static let app = Logger(subsystem: subsystem, category: "App")
     /// UI interaction timing (#36 device tuning) — durations of the viewer/grid hot paths so hangs
