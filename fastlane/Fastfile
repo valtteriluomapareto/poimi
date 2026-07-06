@@ -29,10 +29,8 @@
 #   MATCH_GIT_BASIC_AUTHORIZATION — base64 "user:token" for read access to MATCH_GIT_URL
 #   GITHUB_RUN_NUMBER         — injected by Actions; becomes CURRENT_PROJECT_VERSION
 #
-# Secret hygiene: no `set -x`, no `--verbose`. The CI keychain lives on the ephemeral
-# runner and is discarded when the job ends.
-
-require "securerandom"
+# Secret hygiene: no `set -x`, no `--verbose`. The temp keychain from setup_ci is
+# torn down automatically at the end of the CI job.
 
 default_platform(:ios)
 
@@ -85,45 +83,17 @@ def marketing_version
   end
 end
 
-# The dedicated CI signing keychain. We do NOT use fastlane's `setup_ci` keychain: it creates the temp
-# keychain with an EMPTY password, and `security import` of the match .p12 into an empty-password
-# keychain fails on the macOS runner with `errSecInternalComponent` (verified — the identical .p12
-# imports cleanly into a NON-empty-password keychain). So on CI we create our own keychain with a
-# throwaway non-empty password and hand it to match; locally we return {} so match uses the developer's
-# login keychain (the same path that seeds the repo). The runner is ephemeral — no teardown needed.
-CI_KEYCHAIN_NAME = "poimi_ci.keychain".freeze
-
-def ci_keychain_password
-  @ci_keychain_password ||= SecureRandom.hex(16)
-end
-
-def prepare_ci_keychain
-  return {} unless FastlaneCore::Helper.ci?
-  create_keychain(
-    name: CI_KEYCHAIN_NAME,
-    password: ci_keychain_password,
-    default_keychain: true,
-    unlock: true,
-    timeout: 3600,
-    lock_when_sleeps: false,
-    add_to_search_list: true
-  )
-  { keychain_name: CI_KEYCHAIN_NAME, keychain_password: ci_keychain_password }
-end
-
 platform :ios do
   # --- build_only: archive + signed .ipa, no upload -------------------------
   desc "Archive + sign a Release .ipa (no upload). Bring-up step 2 isolator."
   lane :build_only do
-    # A CI keychain with a NON-EMPTY password (empty → errSecInternalComponent on import); {} locally.
-    keychain_opts = prepare_ci_keychain
+    setup_ci # temporary keychain on CI; no-op locally
 
     match(
       type: "appstore",
       readonly: true,
       app_identifier: APP_IDENTIFIER,
-      api_key: asc_api_key,
-      **keychain_opts
+      api_key: asc_api_key
     )
 
     # Force manual signing for the archive. match imported the cert + profile into the
