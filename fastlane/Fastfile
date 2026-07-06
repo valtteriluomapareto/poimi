@@ -39,10 +39,6 @@ default_platform(:ios)
 APP_IDENTIFIER = "com.valtteriluoma.poimi".freeze
 TEAM_ID        = "N4FKQHR5AC".freeze                    # DEVELOPMENT_TEAM in project.pbxproj
 XCODEPROJ      = "App/PoimiApp.xcodeproj".freeze
-# Absolute path captured at load time (CWD = repo root here). `build_app`/gym changes the process CWD
-# during the archive+export, so a RELATIVE path in `marketing_version` (called after gym) fails with
-# ENOENT. Resolve it once, up front, so the version read works regardless of the later CWD.
-PBXPROJ_PATH   = File.expand_path(File.join(XCODEPROJ, "project.pbxproj")).freeze
 SCHEME         = "PoimiApp".freeze
 OUTPUT_DIR     = "build".freeze
 OUTPUT_NAME    = "PoimiApp".freeze
@@ -80,9 +76,25 @@ end
 # first match is authoritative.
 def marketing_version
   @marketing_version ||= begin
-    line = File.readlines(PBXPROJ_PATH).find { |l| l =~ /MARKETING_VERSION = / }
-    UI.user_error!("No MARKETING_VERSION in #{PBXPROJ_PATH}") if line.nil?
+    line = File.readlines(pbxproj_path).find { |l| l =~ /MARKETING_VERSION = / }
+    UI.user_error!("No MARKETING_VERSION in #{pbxproj_path}") if line.nil?
     line[/MARKETING_VERSION = ([^;]+);/, 1].strip
+  end
+end
+
+# The project.pbxproj, resolved defensively. fastlane evaluates the Fastfile with CWD = fastlane/ and
+# build_app/gym changes the CWD again mid-run, so a single relative/CWD-based path is fragile (it bit us
+# twice with ENOENT). Try the known locations — anchored to fastlane's own folder, then repo-root CWD,
+# then fastlane/ CWD — and use the first that exists.
+def pbxproj_path
+  @pbxproj_path ||= begin
+    candidates = [
+      File.join(FastlaneCore::FastlaneFolder.path.to_s, "..", XCODEPROJ, "project.pbxproj"),
+      File.join(XCODEPROJ, "project.pbxproj"),
+      File.join("..", XCODEPROJ, "project.pbxproj")
+    ].map { |path| File.expand_path(path) }
+    candidates.find { |path| File.exist?(path) } ||
+      UI.user_error!("project.pbxproj not found; tried: #{candidates.join(', ')}")
   end
 end
 
