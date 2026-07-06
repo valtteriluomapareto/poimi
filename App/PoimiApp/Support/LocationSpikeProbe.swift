@@ -311,17 +311,32 @@ final class LocationSpikeModel {
     private let geocoder: any SpikePlaceNaming
     let calendar: Calendar
 
+    /// The fetch scope. All-time by default (the library-wide launch/CI path); an album's date range
+    /// when hosted per-album (`DebugAlbumLocationSpikeHostView`), which is what makes the located set
+    /// small enough to cluster without downsampling.
+    private let interval: DateInterval
+    /// Source exclusions applied after the fetch so the clustered set matches the album's real
+    /// candidate set (`Filtering.included`, mirroring `CandidateStore`). Empty for the library-wide path.
+    private let excludedAlbumIDs: [String]
+    private let excludeScreenshots: Bool
+
     private var debounceTask: Task<Void, Never>?
     private var generation = 0
 
     init(library: any PhotoLibraryProviding,
          geocoder: any SpikePlaceNaming,
          calendar: Calendar = .current,
+         interval: DateInterval = DateInterval(start: .distantPast, end: .distantFuture),
+         excludedAlbumIDs: [String] = [],
+         excludeScreenshots: Bool = false,
          downsampleEnabled: Bool = false,
          downsampleCap: Int = LocationSpikeCompute.defaultDownsampleCap) {
         self.library = library
         self.geocoder = geocoder
         self.calendar = calendar
+        self.interval = interval
+        self.excludedAlbumIDs = excludedAlbumIDs
+        self.excludeScreenshots = excludeScreenshots
         self.downsampleEnabled = downsampleEnabled
         self.downsampleCap = downsampleCap
     }
@@ -348,8 +363,14 @@ final class LocationSpikeModel {
             _ = await library.requestAuthorization()
         }
         do {
-            let interval = DateInterval(start: .distantPast, end: .distantFuture)
-            let assets = try await library.fetchAssets(in: interval)
+            // Fetch the scope (all-time or one album's range), then apply the same source exclusions the
+            // real curation flow uses (`CandidateStore`), so a per-album run clusters exactly that album's
+            // candidate set — no new fetch on recompute; clustering is live over this in-memory set (§7).
+            let fetched = try await library.fetchAssets(in: interval)
+            let excludedAssetIDs = excludedAlbumIDs.isEmpty
+                ? Set<String>() : try await library.assetIDs(inAlbums: excludedAlbumIDs)
+            let assets = Filtering.included(
+                fetched, excludeScreenshots: excludeScreenshots, excludedAssetIDs: excludedAssetIDs)
             allAssets = assets
             // k for the elbow is the full-set adaptive minPts — the same density reference the recompute
             // uses. Computed once here (§ "once per data set"); the plot caption notes it's the load-time
