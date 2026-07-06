@@ -50,12 +50,18 @@ actor SystemThumbnailProvider: ThumbnailProviding {
             if Task.isCancelled { return nil }
             return await withCheckedContinuation { (continuation: CheckedContinuation<UIImage?, Never>) in
                 let options = PHImageRequestOptions()
-                options.deliveryMode = .opportunistic
+                // `.highQualityFormat`, NOT `.opportunistic`: opportunistic delivers a blurry degraded
+                // image first and the sharp one second, but an async wrapper can only return once — it
+                // returned the blurry one, and the cell only picked up the cached sharp copy on the next
+                // scroll (the "stays blurry until I move the list" bug). High-quality format delivers a
+                // single sharp result, so a cluster's cells load crisp on open. The prefetch window
+                // (below) primes these at the same format, so the visible screenful is usually cache-warm.
+                options.deliveryMode = .highQualityFormat
                 options.resizeMode = .fast
                 options.isNetworkAccessAllowed = true   // iCloud-optimized assets
                 options.isSynchronous = false
 
-                // Opportunistic delivery may call back twice (degraded then final); resume once.
+                // High-quality delivery calls back once (the sharp result / error / cancel); resume once.
                 let resumed = LockedFlag()
                 let id = manager.requestImage(
                     for: asset, targetSize: targetSize,
@@ -125,7 +131,10 @@ actor SystemThumbnailProvider: ThumbnailProviding {
         // Built per call as a local: PHImageRequestOptions is mutable / non-Sendable, so it can't be
         // a shared static in an actor. Cheap to construct.
         let cachingOptions = PHImageRequestOptions()
-        cachingOptions.deliveryMode = .opportunistic
+        // Match the per-cell request format (.highQualityFormat) so the primed cache actually satisfies
+        // the cell request — a mismatched delivery mode would re-decode and defeat the prefetch. Primes
+        // the visible screenful sharp the moment a cluster opens (the window is seeded on page change).
+        cachingOptions.deliveryMode = .highQualityFormat
         cachingOptions.resizeMode = .fast
         cachingOptions.isNetworkAccessAllowed = true
 

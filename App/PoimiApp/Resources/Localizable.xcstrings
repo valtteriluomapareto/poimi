@@ -159,6 +159,7 @@
       }
     },
     "%@. %lld of %lld kept.%@": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -263,6 +264,22 @@
         }
       }
     },
+    "%lld / %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$lld / %2$lld"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld / %2$lld"
+          }
+        }
+      }
+    },
     "%lld albums": {
       "comment": "Excluded albums count, 2 or more",
       "localizations": {
@@ -329,6 +346,7 @@
       }
     },
     "%lld of %lld kept": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -717,6 +735,7 @@
       }
     },
     "Collapsed": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -857,6 +876,7 @@
       }
     },
     "Deselect all": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -867,6 +887,7 @@
       }
     },
     "Deselect all in %@": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -908,6 +929,7 @@
       }
     },
     "Double tap to %@ this day": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -1001,6 +1023,7 @@
       }
     },
     "Expanded": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -1211,6 +1234,7 @@
       }
     },
     "Mark as done": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -1226,6 +1250,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Merkitse keskeneräiseksi"
+          }
+        }
+      }
+    },
+    "Mark day done": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitse päivä valmiiksi"
           }
         }
       }
@@ -1767,6 +1801,7 @@
       }
     },
     "Select all": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -1777,6 +1812,7 @@
       }
     },
     "Select all in %@": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {

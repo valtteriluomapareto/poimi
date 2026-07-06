@@ -836,6 +836,38 @@ struct DebugLocationSpikeHostView: View {
     }
 }
 
+/// Hosts the location spike scoped to ONE album's date range (the `AlbumSettingsView` ▸ Developer entry).
+/// Scoping to the album's period + exclusions shrinks the located set from the whole library (tens of
+/// thousands) to that range (typically a few thousand), so the O(n²) core runs without downsampling —
+/// the point of doing this per-album rather than as a library-wide one-shot.
+struct DebugAlbumLocationSpikeHostView: View {
+    let project: CurationProject
+    @Environment(\.photoLibrary) private var library
+    @State private var model: LocationSpikeModel?
+
+    var body: some View {
+        Group {
+            if let model {
+                LocationSpikeProbeView(model: model)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            // `max` guards `DateInterval(start:end:)` (it traps when end < start); an equal pair is a
+            // zero-length range that simply fetches nothing — safe. Real projects always have end > start.
+            let interval = DateInterval(
+                start: project.rangeStart, end: max(project.rangeEnd, project.rangeStart))
+            let built = LocationSpikeModel(
+                library: library, geocoder: SpikeGeocoderFactory.make(), calendar: .current,
+                interval: interval, excludedAlbumIDs: project.excludedAlbumIDs,
+                excludeScreenshots: project.excludeScreenshots)   // downsample off — the range is small
+            model = built            // render immediately so the load-progress view is visible
+            await built.load()
+        }
+    }
+}
+
 /// A plain inspector over the injected photo library — its authorization, assets, and albums.
 /// Deterministic under `-PoimiUseFakeLibrary`, so its screenshot is stable in CI / agent runs.
 struct DebugLibraryView: View {
