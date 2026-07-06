@@ -80,10 +80,7 @@ concurrency:
 jobs:
   deploy:
     name: Build & upload to TestFlight
-    # macOS 15, NOT macos-26: match's .p12 (OpenSSL 3 format) fails `security import` on the
-    # macOS 26 runner with errSecInternalComponent, but imports cleanly on macOS 15. The Xcode-select
-    # step below falls back to the newest Xcode 26.x present, so the iOS 26 SDK is still used.
-    runs-on: macos-15
+    runs-on: macos-26
     # Binds the required-reviewer gate + scopes the deploy secrets to this job only.
     environment: testflight
 
