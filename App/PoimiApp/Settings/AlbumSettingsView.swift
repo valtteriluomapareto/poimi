@@ -40,6 +40,9 @@ struct AlbumSettingsView: View {
     /// The title as it was when the screen opened — restored if the user leaves the name blank, so
     /// clearing the field is a no-op rather than a silent rename to a placeholder.
     @State private var titleOnOpen: String
+    #if DEBUG
+    @State private var showLocationSpike = false
+    #endif
 
     init(project: CurationProject, calendar: Calendar = .current) {
         _project = Bindable(wrappedValue: project)
@@ -109,11 +112,32 @@ struct AlbumSettingsView: View {
                     this album from Poimi — the Photos album it created and your originals are never touched.
                     """)
             }
+
+            #if DEBUG
+            // DEBUG-only dev tool (release-isolated, D30): run the location-clustering spike over THIS
+            // album's range (not the whole library), so it clusters a small set without downsampling. The
+            // probe brings its own NavigationStack → hosted as a sheet (swipe down to dismiss).
+            Section {
+                Button { showLocationSpike = true } label: {
+                    Label { Text(verbatim: "Location clustering") } icon: { Image(systemName: "map") }
+                }
+                .tint(.primary)
+            } header: {
+                Text(verbatim: "Developer")
+            } footer: {
+                Text(verbatim: "Clusters this album's photos into places / trips; tune eps / minPts live.")
+            }
+            #endif
         }
         // "Album settings", not just "Settings" — distinguishes it from the app-level `AppSettingsView`
         // (also reached by a gear-like icon), and matches this screen's entry `accessibilityLabel`.
         .navigationTitle("Album settings")
         .navigationBarTitleDisplayMode(.inline)
+        #if DEBUG
+        .sheet(isPresented: $showLocationSpike) {
+            DebugAlbumLocationSpikeHostView(project: project)
+        }
+        #endif
         // Apply-on-leave AND on backgrounding: `onDisappear` alone isn't a reliable durable-save point
         // (it doesn't fire if the app is backgrounded — then force-quit — while this screen is up), which
         // would silently fall back to the deferred autosave we're avoiding. So persist on both.
