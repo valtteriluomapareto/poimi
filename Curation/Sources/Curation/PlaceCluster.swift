@@ -27,10 +27,13 @@
 //    • **No-location routing:** `(0,0)` null-island sentinels, missing coordinates, and DBSCAN noise
 //      (sub-`minPts`, no core neighbour) all route to the no-location bucket (§5.4) — never a cluster.
 //
-//  Scale note: neighbour discovery is the deliberately-simple O(n²) form. The grid spatial index that
-//  makes it O(n log n) (§5.2) is the *deferred* optimization — the pure core is the correctness anchor
-//  it will build on (the same "correctness first, fast-path later" posture as `GeoDistance.swift`), and
-//  the 10k perf smoke that would need it is the deferred integration tier (§10).
+//  Scale note: neighbour discovery is a uniform-grid spatial index (§5.2) — each point scans only a 3×3
+//  block of eps-sized cells instead of the whole field, so cross-region pairs (home-vs-a-far-trip) are
+//  pruned. It returns the SAME neighbour sets as the brute O(n²) form (kept as `bruteForceNeighbourLists`,
+//  the correctness anchor the property tests pin the grid against), and this DBSCAN is order-independent,
+//  so clusters stay byte-identical. Falls back to brute for the (vanishingly rare) ±180° antimeridian
+//  straddle, where linear longitude bucketing has a seam. Remaining O(m²) costs are intra-dense-cluster
+//  (a home blob's own adjacency, and its medoid) — inherent to the output size, small at album scale.
 //
 
 import Foundation
@@ -227,10 +230,75 @@ public enum PlaceClustering {
         return PlaceClusters(clusters: clusters, noLocationIDs: noLocation)
     }
 
+    /// An integer grid cell. Longitude is bucketed linearly (the ±180° seam is handled by the
+    /// brute-force fallback in `neighbourLists`), so a plain `Hashable` pair suffices.
+    private struct Cell: Hashable { let lat: Int; let lng: Int }
+
     /// For each canonically-sorted point, the indices within `eps` (inclusive), self-inclusive — the
-    /// DBSCAN convention where a point counts toward its own `minPts`. O(n²); a grid spatial index is
-    /// the deferred scale optimization (§5.2), not needed for the pure core or its property tests.
-    private static func neighbourLists(_ points: [(id: String, coord: Coordinate)], eps: Double) -> [[Int]] {
+    /// DBSCAN convention where a point counts toward its own `minPts`. Uses a uniform spatial grid
+    /// (§5.2): each cell is ≥ `eps` metres on both axes, so every point within `eps` of a query lies in
+    /// the query's own cell or one of its 8 neighbours (a 3×3 block). Latitude is a fixed metres/degree;
+    /// longitude degrees shrink by cos(lat), so the longitude cell is sized at the highest |lat| present
+    /// (the widest it ever needs to be). A small safety factor absorbs the haversine-vs-degree
+    /// small-angle slop so the block is never a hair too small. The final `distance(to:) <= eps` filter
+    /// is the SAME haversine as the brute form ⇒ identical neighbour sets ⇒ (this DBSCAN being
+    /// order-independent) identical clusters.
+    static func neighbourLists(_ points: [(id: String, coord: Coordinate)], eps: Double) -> [[Int]] {
+        let count = points.count
+        guard count > 1 else { return count == 1 ? [[0]] : [] }
+
+        let metresPerDegreeLat = Coordinate.earthRadiusMeters * .pi / 180
+        // 5% margin: covers the asin(x)>x small-angle gap between great-circle distance and the degree
+        // conversion (worst-case ~1e-3 even near 89°) plus any float slop. Larger cells only add
+        // candidates (all re-filtered by exact haversine) — they can never drop a true neighbour.
+        let safety = 1.05
+        let latCellDeg = safety * eps / metresPerDegreeLat
+        let maxAbsLat = points.reduce(0.0) { Swift.max($0, abs($1.coord.latitude)) }
+        let cosFloor = Swift.max(cos(maxAbsLat * .pi / 180), 0.01)   // guard the (absurd) poles
+        let lngCellDeg = safety * eps / (metresPerDegreeLat * cosFloor)
+
+        // Linear longitude bucketing has a seam at ±180°. If the field could hold a within-eps pair
+        // across it (points within one cell of BOTH edges), fall back to the seam-safe brute form.
+        var minLng = Double.infinity, maxLng = -Double.infinity
+        for point in points {
+            minLng = Swift.min(minLng, point.coord.longitude)
+            maxLng = Swift.max(maxLng, point.coord.longitude)
+        }
+        if minLng < -180 + lngCellDeg && maxLng > 180 - lngCellDeg {
+            return bruteForceNeighbourLists(points, eps: eps)
+        }
+
+        // Bucket points into cells; remember each point's own cell.
+        var cells: [Cell: [Int]] = [:]
+        var cellOf = [Cell](repeating: Cell(lat: 0, lng: 0), count: count)
+        for i in 0..<count {
+            let cell = Cell(lat: Int((points[i].coord.latitude / latCellDeg).rounded(.down)),
+                            lng: Int((points[i].coord.longitude / lngCellDeg).rounded(.down)))
+            cellOf[i] = cell
+            cells[cell, default: []].append(i)
+        }
+
+        // Each point scans its 3×3 cell block; keep those within eps (self seeded via `[i]`).
+        var neighbours: [[Int]] = (0..<count).map { [$0] }
+        for i in 0..<count {
+            let home = cellOf[i]
+            let coord = points[i].coord
+            for dLat in -1...1 {
+                for dLng in -1...1 {
+                    guard let bucket = cells[Cell(lat: home.lat + dLat, lng: home.lng + dLng)] else { continue }
+                    for j in bucket where j != i && coord.distance(to: points[j].coord) <= eps {
+                        neighbours[i].append(j)
+                    }
+                }
+            }
+        }
+        return neighbours
+    }
+
+    /// The deliberately-simple O(n²) neighbour form — the correctness anchor the grid mirrors (and its
+    /// fallback for antimeridian-straddling fields). Internal so `PlaceClusterTests` can pin the grid's
+    /// output against it (their neighbour SETS must match for every field).
+    static func bruteForceNeighbourLists(_ points: [(id: String, coord: Coordinate)], eps: Double) -> [[Int]] {
         let count = points.count
         var neighbours: [[Int]] = (0..<count).map { [$0] }
         for i in 0..<count {

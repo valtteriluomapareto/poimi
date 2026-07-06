@@ -102,12 +102,16 @@ struct SpikeResult: Sendable {
 /// so the live recompute can never diverge from what the property tests pin.
 enum LocationSpikeCompute {
     /// Default value for the OPT-IN downsample cap (`LocationSpikeModel.downsampleCap`). Downsampling is
-    /// OFF by default: the live recompute clusters the FULL located set (the issue's §8 primary
-    /// mitigation is debounce + off-main + spinner; downsampling is only the "if still laggy" fallback).
-    /// A real multi-thousand-photo year is O(n²) but runs in a detached task with a spinner — acceptable
-    /// for a manual tuning tool — and clustering a strided subset changes which clusters *form*, which
-    /// would mislead the plateau read the spike exists to make.
+    /// OFF by default: `PlaceClustering` uses a grid spatial index now, so it clusters the FULL located
+    /// set fast — the cap is only the "if still laggy" escape hatch for the whole-library launch path.
+    /// Clustering a strided subset changes which clusters *form*, which would mislead the plateau read.
     static let defaultDownsampleCap = 2_500
+
+    /// The k-distance elbow plot is a *diagnostic*, and its k-NN pass is O(n² log n) — the grid index
+    /// (fixed-radius) doesn't accelerate it. So the curve is always computed on a representative strided
+    /// subsample of at most this many located points; the elbow shape is preserved while the load stays
+    /// fast. (The clustering itself still runs on the full set via the grid.)
+    static let kCurveSampleCap = 2_000
 
     /// Mirror of `PlaceClustering.isLocated` (which is module-internal to `Curation`): a real coordinate
     /// that is not the `(0,0)` null-island EXIF sentinel. `locatedCount`/`globalCoverage` are the
@@ -394,8 +398,9 @@ final class LocationSpikeModel {
             // adaptive value, so it stays a fixed reference even if the user later sets a manual minPts.
             let k = PlaceClustering.adaptiveMinPts(for: assets, calendar: calendar)
             kUsed = k
-            let cap = effectiveCap
-            // The k-distance curve is the dominant O(n² log n) cost — report it as a determinate bar.
+            // The curve is diagnostic and O(n² log n) (the grid doesn't help k-NN) → always subsample it
+            // to a representative ceiling (or a smaller downsample cap, if the user set one).
+            let curveCap = Swift.min(effectiveCap ?? .max, LocationSpikeCompute.kCurveSampleCap)
             loadStage = .measuringDensity(0)
             let onProgress: @Sendable (Double) -> Void = { fraction in
                 // Guard against a late tick landing after we've advanced to `.clustering`.
@@ -404,7 +409,7 @@ final class LocationSpikeModel {
                 }
             }
             kDistances = await Task.detached(priority: .userInitiated) {
-                LocationSpikeCompute.kDistanceCurve(for: assets, k: k, cap: cap, onProgress: onProgress)
+                LocationSpikeCompute.kDistanceCurve(for: assets, k: k, cap: curveCap, onProgress: onProgress)
             }.value
             Log.app.notice("LocationSpikeProbe loaded \(assets.count) assets, k=\(k, privacy: .public)")
         } catch {

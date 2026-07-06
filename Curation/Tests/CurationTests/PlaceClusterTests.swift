@@ -76,6 +76,21 @@ struct PlaceClusterTests {
         return assets
     }
 
+    /// A larger, denser field than `randomField` for stressing the grid index: several big blobs across a
+    /// wide latitude band (incl. high latitudes, where longitude cells are widest) with jitter spanning
+    /// multiple cell widths, so many pairs sit right at the `eps` boundary — the completeness edge. Kept
+    /// off the ±180° seam so the grid path (not its brute fallback) is exercised.
+    private func gridStressField(_ rng: inout SeededRNG) -> [AssetRef] {
+        var assets: [AssetRef] = []
+        for b in 0..<Int.random(in: 2...6, using: &rng) {
+            let centre = Coordinate(latitude: Double.random(in: -70...70, using: &rng),
+                                    longitude: Double.random(in: -170...170, using: &rng))
+            assets += blob("g\(b)", centre, n: Int.random(in: 20...120, using: &rng), jitter: 0.4, &rng)
+        }
+        assets.shuffle(using: &rng)
+        return assets
+    }
+
     // MARK: Invariant 1 — partition of located assets
 
     @Test("clusters ∪ no-location partition the input exactly — no loss, no dup", arguments: 0..<200)
@@ -273,5 +288,43 @@ struct PlaceClusterTests {
         let after = PlaceClustering.clusters(for: points, minPts: 3, calendar: cal)
         #expect(after.clusters.count == 1)          // 5 km < eps 25 km → still one cluster
         #expect(after.clusters[0].id != originalMedoid)   // medoid drifted toward the added mass
+    }
+
+    // MARK: Spatial grid index — must equal the brute O(n²) form (§5.2)
+
+    /// Canonical `(lat, lon, id)` order of the located points — mirrors `clusters(for:)` so grid/brute
+    /// indices line up. (The neighbour builders take the pre-sorted `(id, coord)` pairs.)
+    private func sortedLocated(_ assets: [AssetRef]) -> [(id: String, coord: Coordinate)] {
+        assets.filter { PlaceClustering.isLocated($0) }
+            .compactMap { asset in asset.coordinate.map { (asset.id, $0) } }
+            .sorted { lhs, rhs in
+                if lhs.coord.latitude != rhs.coord.latitude { return lhs.coord.latitude < rhs.coord.latitude }
+                if lhs.coord.longitude != rhs.coord.longitude { return lhs.coord.longitude < rhs.coord.longitude }
+                return lhs.id < rhs.id
+            }
+    }
+
+    @Test("grid neighbour sets equal the brute-force sets (completeness + soundness)", arguments: 0..<200)
+    func gridMatchesBruteForce(seed: Int) {
+        var rng = SeededRNG(seed: UInt64(seed))
+        let located = sortedLocated(gridStressField(&rng))
+        for eps in [5_000.0, 25_000.0, 80_000.0] {
+            let grid = PlaceClustering.neighbourLists(located, eps: eps)
+            let brute = PlaceClustering.bruteForceNeighbourLists(located, eps: eps)
+            #expect(grid.count == brute.count)
+            // Sets, not arrays: DBSCAN here is order-independent, so grid may enumerate in cell order.
+            for i in grid.indices { #expect(Set(grid[i]) == Set(brute[i])) }
+        }
+    }
+
+    @Test("clusters() over a large field still partitions and stays order-independent", arguments: 0..<40)
+    func gridScaleClustersHold(seed: Int) {
+        var rng = SeededRNG(seed: UInt64(seed))
+        let assets = gridStressField(&rng)
+        let once = PlaceClustering.clusters(for: assets, calendar: cal)
+        let all = once.clusters.flatMap(\.assetIDs) + once.noLocationIDs
+        #expect(all.count == assets.count)
+        #expect(Set(all) == Set(assets.map(\.id)))
+        #expect(PlaceClustering.clusters(for: assets.shuffled(using: &rng), calendar: cal) == once)
     }
 }
