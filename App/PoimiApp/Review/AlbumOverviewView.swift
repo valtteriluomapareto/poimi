@@ -50,6 +50,12 @@ struct AlbumOverviewView: View {
             // No visible nav title — the big title lives in the scroll header (like the design); the
             // nav bar keeps just the back button.
             .navigationBarTitleDisplayMode(.inline)
+            // A SOLID (not glass) nav bar background so scrolling clusters are fully hidden behind the
+            // top controls (back / adjustments / Export) — the earlier `.visible` gave a translucent
+            // glass bar, so content still showed through, dimmed, above the pinned month header. An
+            // opaque `systemBackground` bar matches the list ground (black in dark, white in light).
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(Color(.systemBackground), for: .navigationBar)
             // Settings + Export at the album level. The Overview is the album's landing screen and shows
             // the running tally, so it's the natural "I'm done → make the album" spot; the gear reaches
             // per-album settings (#41). No "Clear" here — clearing all picks now lives in Settings as
@@ -155,7 +161,8 @@ struct AlbumOverviewView: View {
                             ClusterListRow(row: row) {
                                 coordinator.openReview(project.id, day: row.firstDay)
                             }
-                            .padding(.horizontal, 20)
+                            // No horizontal padding here — ClusterListRow insets its own text but lets the
+                            // preview strip bleed to the right screen edge.
                         }
                     } header: {
                         ClusterMonthHeader(title: section.title)
@@ -318,31 +325,38 @@ struct ClusterListRow: View {
         let state = ClusterState.of(isDone: done, pickedCount: picked)
 
         Button(action: onOpen) {
-            HStack(spacing: 14) {
-                OverviewThumb(id: row.thumbID ?? "", size: 60, cornerRadius: 14)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(row.title)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    subtitle(state: state, picked: picked)
-                }
-                Spacer(minLength: 8)
-                // The done-seal is a graphical mark (gold's contrast caveat, styleguide §1) — green,
-                // shown only when the whole cluster is done.
-                if done {
-                    Image(systemName: "checkmark.circle.fill")
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, Color.brandGreen)
-                        .font(.title3)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(row.title)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        subtitle(state: state, picked: picked)
+                    }
+                    Spacer(minLength: 8)
+                    // The done-seal is a graphical mark (gold's contrast caveat, styleguide §1) — green,
+                    // shown only when the whole cluster is done.
+                    if done {
+                        Image(systemName: "checkmark.circle.fill")
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, Color.brandGreen)
+                            .font(.title3)
+                            .accessibilityHidden(true)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
                 }
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+                .padding(.horizontal, 20)   // the text row stays inset both sides
+                // The evenly-sampled preview strip — replaces the single cover thumb, so a glance shows
+                // the whole cluster, not one photo (#35 paged-clusters). Leading inset only, so it runs
+                // off the right screen edge (the shelf "keep scrolling" read) instead of stopping short.
+                ClusterStrip(group: row.group)
+                    .padding(.leading, 20)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 10)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

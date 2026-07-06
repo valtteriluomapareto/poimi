@@ -4,7 +4,11 @@ A map of the Poimi design file in **Paper** — every artboard, what it shows, a
 issues + the current build. This is the index for agents/humans to find a screen's design before
 implementing it.
 
-- **Index created:** 2026-06-29 · **updated:** 2026-07-03 (**#42 iPad split-view** — new `3QT-0` "iPad ·
+- **Index created:** 2026-06-29 · **updated:** 2026-07-03 (**paged-clusters v2 exploration** — new
+  `3T6-0` "Overview · cluster strips (v2)" + `3VM-0` "Cluster page · paged (v2)": revisiting the paged
+  model (`36R`/`39D`) to replace the accordion's collapse/open jumpiness — the Overview keeps the shipped
+  borderless style but previews each cluster with a scrollable evenly-sampled thumbnail strip; the grid
+  becomes one cluster with sideways paging. Open Q on the single cover thumb. Earlier 2026-07-03: **#42 iPad split-view** — new `3QT-0` "iPad ·
   split view": the 2-column layout (sidebar album-library + detail review-grid, 6-wide) signed off +
   built. Earlier 2026-07-02: **#40 empty/error hardening** — `2JE-0`
   built as the actionable empty state (`ReviewEmptyView`); the scan's empty/failure states now
@@ -67,6 +71,8 @@ full 999. The repo's Asset Catalog + styleguide.md mirror these.
 | **iPad · split view** ✓ | `3QT-0` | 1194×834 | The regular-width **2-column** layout: sidebar (album library, selected album highlighted) + detail (the review grid at ~6 columns, tally + toolbar, day-group header, gold-check selection). Photo viewer stays a sheet (no 3rd column). | #42 · **built** (`AppRootView.splitView`; adaptive columns via `ReviewGridColumns`) |
 | **Clusters · index (paged concept)** ✓ | `36R-0` | 390×844 | **Concept exploration (in review):** an alternative to the single-scroll accordion — a **two-level** model. This is Level 1: a scrollable list of *collapsed* cluster cards (day · count · done seal · N-kept · photo peek), the "map" of the whole album. Tapping a cluster drills into its grid page (`39D-0`). Solves "how do I see all clusters" when the grid becomes a paged view. | #35 · **concept** |
 | **Cluster grid · page (paged concept)** ✓ | `39D-0` | 390×844 | **Concept exploration (in review):** Level 2 of the paged model — one cluster's photos fill a full page; **swipe sideways** to the adjacent cluster (page dots + a next-cluster edge peek signal it). Glass nav = ‹ back-to-index · day · "N / total" cluster position; "Mark day done" advances to the next page. Reuses the shipped gap+rounded cells + gold-check selection. | #35 · **concept** |
+| **Overview · cluster strips (v2)** ✓ | `3T6-0` | 390×844 | **Concept (in review, 2026-07-03) — the paged direction, refreshed to the *shipped* app style.** The current cluster-index Overview (black, borderless, month headers, tally — **no gray cards**) with each cluster row previewed by a **scrollable, evenly-sampled thumbnail strip** (Apple-Music shelf: ~5 shown, edge-fade → "more") — "get the idea of the whole cluster" without opening it. Pairs with `3VM-0`. **Open Q:** keep the single cover thumb *alongside* the strip, or let the strip replace it (current mock). | #35 · **concept** |
+| **Cluster page · paged (v2)** ✓ | `3VM-0` | 390×844 | **Concept (in review, 2026-07-03).** Refined `39D-0`: one cluster fills the page, **swipe sideways** between clusters (page dots + next-cluster edge peek), "1 / 12" position, "Mark day done" advances. The pitch: replace the shipped **accordion**'s collapse/open jumpiness with stable single-cluster paging, now that the Overview is a full cluster index. | #35 · **concept** |
 | **Select mode** | `14C-0` | 390×844 | Active multi-select entered from the grid: a quick-select badge on **every** cell, **drag-to-multi-select**, per-day + whole-range Select-all, top toolbar (count + progress + Deselect-all). Same selection encoding. | #35 (deferred drag-select) · **not built** |
 | Select mode — notes ✓ | `11J-0` | 460×443 | Annotated spec for Select mode. | — |
 | **Photo viewer · swipe + select** | `WZ-0` | 390×844 | *(Original v1 design.)* Full-bleed photo; top bar = back · "Sat 5 Jul / 12 of 53" · gold check toggle; bottom = live "148/200 picked" + a **filmstrip scrubber** (current enlarged, picked thumbs checked). Reached via the `.zoom` transition; returns to the same cell. | #36 · **built, then redesigned** → superseded by the Now-Playing card `2ZC-0` (below) |

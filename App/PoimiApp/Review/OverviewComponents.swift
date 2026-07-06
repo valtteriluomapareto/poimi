@@ -43,6 +43,45 @@ struct OverviewThumb: View {
     }
 }
 
+/// A horizontal, scrollable preview of a cluster's photos for the Overview (#35 paged-clusters): a
+/// handful of thumbnails **sampled evenly across the whole cluster** (via `DayGroup.evenlySampledIDs`),
+/// so a glance conveys the cluster's shape without opening it. Thumbs are sized so **`visibleThumbs`
+/// (6.5)** fill the strip's width — the half-thumb runs off the right screen edge, an unmistakable
+/// "keep scrolling" cue. `LazyHStack` so only on-screen thumbs load; the rest of the sample load on
+/// horizontal scroll, not up front.
+struct ClusterStrip: View {
+    let group: DayGroup
+    var spacing: CGFloat = 6
+    /// How many thumbs fill the strip width — the fractional `.5` makes the next one run off the edge.
+    var visibleThumbs: CGFloat = 6.5
+    /// Sample up to this many across the cluster; ~6.5 show, the rest reveal on scroll. Bounded so a
+    /// 500-photo busy day previews with a handful of thumbs, not five hundred.
+    var sampleCount: Int = 14
+    /// Thumb edge — derived from the measured strip width so `visibleThumbs` fit. A sensible default
+    /// until the first geometry read, so the row never lays out at zero height.
+    @State private var thumbSize: CGFloat = 52
+
+    var body: some View {
+        let ids = group.evenlySampledIDs(sampleCount)
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: spacing) {
+                ForEach(ids, id: \.self) { id in
+                    OverviewThumb(id: id, size: thumbSize, cornerRadius: 10)
+                }
+            }
+        }
+        .frame(height: thumbSize)
+        // Size thumbs to the strip's own width so `visibleThumbs` fit. Gaps counted = the whole thumbs
+        // shown (⌊visibleThumbs⌋), so the fractional thumb spills past the right edge.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            let gaps = spacing * CGFloat(Int(visibleThumbs))
+            let size = (width - gaps) / visibleThumbs
+            if size > 0 { thumbSize = size }
+        }
+        .accessibilityHidden(true)   // the cluster row owns the a11y label; these thumbs are a preview
+    }
+}
+
 /// The coverage chart's adaptive time buckets. Picks a calendar unit by the album's span so the bars
 /// stay readable — a year → months, a couple months → weeks, a short album → days — then slices the
 /// span into CONTIGUOUS buckets (empty ones included, so a quiet stretch reads as a real gap). When the
@@ -191,56 +230,10 @@ struct CoverageChart: View {
 }
 
 /// Keeps-first ordering for the collapsed peek: the picked ids (in source order) then the rest.
-/// Pure + `internal` so the "foreground the keeps" blocker fix is unit-tested and can't silently
-/// regress back to raw chronology (the product-blocker the ruthless review flagged).
+/// Pure + `internal` so the "foreground the keeps" ordering is unit-tested and can't silently regress
+/// to raw chronology. Currently unused by the paged grid (which shows every cell, no collapsed peek);
+/// retained as a tested helper for a future done-cluster "kept first" treatment. (The accordion's
+/// `CollapsedSectionPeek`, its only former caller, was removed with the paged-clusters redesign.)
 func keptFirstOrdering(ids: [String], picked: Set<String>) -> [String] {
     ids.filter(picked.contains) + ids.filter { !picked.contains($0) }
-}
-
-/// The collapsed peek for a cluster in the accordion review grid — a width-filling strip of that
-/// day's photos; tap anywhere to open it (the disclosure chevron in its header signals that, so no
-/// "Show all"/overflow chrome). The count lives in the pinned header ("N of M kept" / "· total").
-/// A DONE cluster foregrounds the kept photos and dims the rest (its summary is "what I kept"); a
-/// not-done cluster shows a clean chronological preview at full opacity. Reads `SelectionStore`
-/// itself, so the grid body stays selection-independent.
-struct CollapsedSectionPeek: View {
-    let ids: [String]
-    /// The day-group title, threaded in for the VoiceOver label (a peek is otherwise contextless).
-    let dayTitle: String
-    /// Done clusters dim their not-kept thumbs (kept-emphasis); not-done clusters never dim.
-    let isDone: Bool
-    let onOpen: () -> Void
-    @Environment(SelectionStore.self) private var selection
-
-    private let thumbSize: CGFloat = 56
-    private let thumbSpacing: CGFloat = 6
-    private let thumbRadius: CGFloat = 8
-    private let trailingInset: CGFloat = 12
-
-    var body: some View {
-        // O(group size), bounded; runs in this subview, not the grid body.
-        let pickedSet = selection.selected.intersection(ids)
-        // Done → lead with the keeps; not-done → plain chronological order.
-        let ordered = isDone ? keptFirstOrdering(ids: ids, picked: pickedSet) : ids
-
-        Button(action: onOpen) {
-            GeometryReader { geo in
-                // Fill the available width with as many 56pt thumbs as fit (Pro Max shows more than a
-                // mini) — no fixed cap, no "+N", just photos.
-                let fit = max(1, Int((geo.size.width - trailingInset + thumbSpacing) / (thumbSize + thumbSpacing)))
-                HStack(spacing: thumbSpacing) {
-                    ForEach(Array(ordered.prefix(fit)), id: \.self) { id in
-                        OverviewThumb(id: id, size: thumbSize, cornerRadius: thumbRadius)
-                            .opacity(isDone && !pickedSet.contains(id) ? 0.55 : 1)   // dim not-kept on DONE only
-                    }
-                    Spacer(minLength: 0)
-                }
-            }
-            .frame(height: thumbSize)
-            .padding(.bottom, 12)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(dayTitle). \(pickedSet.count) of \(ids.count) photos kept. Open.")
-    }
 }

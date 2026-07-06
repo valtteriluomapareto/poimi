@@ -40,6 +40,26 @@ public struct DayGroup: Sendable, Identifiable, Equatable, Codable {
     public var count: Int { assetIDs.count }
     public var isUndated: Bool { days == [.undated] }
 
+    /// Up to `count` asset ids sampled **evenly across the whole group** (first + last included),
+    /// preserving chronological order — a representative preview of the cluster for the Overview
+    /// thumbnail strip (#35 paged-clusters). `count <= 0` → empty; `count >= self.count` → all ids.
+    /// Indices are de-duplicated, so a group only slightly larger than `count` yields distinct thumbs
+    /// (a repeated preview thumbnail would read as a bug), possibly returning fewer than `count`.
+    public func evenlySampledIDs(_ count: Int) -> [String] {
+        guard count > 0 else { return [] }
+        let n = assetIDs.count
+        guard n > count else { return assetIDs }
+        if count == 1 { return [assetIDs[0]] }
+        var seen = Set<Int>()
+        var out: [String] = []
+        out.reserveCapacity(count)
+        for i in 0..<count {
+            let idx = Int((Double(i) * Double(n - 1) / Double(count - 1)).rounded())
+            if seen.insert(idx).inserted { out.append(assetIDs[idx]) }
+        }
+        return out
+    }
+
     public init(id: String, assetIDs: [String], days: [DayKey], isBusyDay: Bool) {
         self.id = id
         self.assetIDs = assetIDs
