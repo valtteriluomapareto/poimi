@@ -11,4 +11,4 @@ source "https://rubygems.org"
 
 # fastlane drives the archive → sign → upload-to-TestFlight lanes (fastlane/Fastfile).
 # #95 will reuse the same fastlane/ dir for `deliver` (metadata / release notes).
-gem "fastlane", "2.236.1"
+gem "fastlane", "2.237.0"
