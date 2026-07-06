@@ -31,8 +31,9 @@
 //  block of eps-sized cells instead of the whole field, so cross-region pairs (home-vs-a-far-trip) are
 //  pruned. It returns the SAME neighbour sets as the brute O(n²) form (kept as `bruteForceNeighbourLists`,
 //  the correctness anchor the property tests pin the grid against), and this DBSCAN is order-independent,
-//  so clusters stay byte-identical. Falls back to brute for the (vanishingly rare) ±180° antimeridian
-//  straddle, where linear longitude bucketing has a seam. Remaining O(m²) costs are intra-dense-cluster
+//  so clusters stay byte-identical. Falls back to brute for the geographic edge cases the linear grid
+//  can't size safely — the ±180° antimeridian seam, near-polar latitudes, and non-positive eps — all
+//  vanishingly rare in a photo library. Remaining O(m²) costs are intra-dense-cluster
 //  (a home blob's own adjacency, and its medoid) — inherent to the output size, small at album scale.
 //
 
@@ -248,14 +249,25 @@ public enum PlaceClustering {
         guard count > 1 else { return count == 1 ? [[0]] : [] }
 
         let metresPerDegreeLat = Coordinate.earthRadiusMeters * .pi / 180
-        // 5% margin: covers the asin(x)>x small-angle gap between great-circle distance and the degree
-        // conversion (worst-case ~1e-3 even near 89°) plus any float slop. Larger cells only add
-        // candidates (all re-filtered by exact haversine) — they can never drop a true neighbour.
+        let maxAbsLat = points.reduce(0.0) { Swift.max($0, abs($1.coord.latitude)) }
+        let cosMaxLat = cos(maxAbsLat * .pi / 180)
+
+        // Fall back to the exact O(n²) form where the linear grid can't be sized safely: a non-positive
+        // eps (cell size 0/negative → divide-by-zero), and extreme latitudes within ~5.7° of a pole
+        // (cos < 0.1), where a longitude cell would have to be implausibly wide to stay ≥ eps — clamping
+        // it instead would make it too NARROW and drop true neighbours there. Both are vanishingly rare
+        // in a photo library; brute stays correct for them.
+        guard eps > 0, cosMaxLat >= 0.1 else { return bruteForceNeighbourLists(points, eps: eps) }
+
+        // Cell size ≥ eps metres on both axes. Latitude is a fixed metres/degree; longitude degrees
+        // shrink by cos(lat), so size the longitude cell at the most-poleward latitude present
+        // (`cosMaxLat` — the smallest cosine ⇒ the widest a cell must be), which covers every
+        // lower-latitude pair too. A 5% margin absorbs the asin(x)>x small-angle gap between haversine
+        // metres and the degree conversion; larger cells only add candidates (all re-filtered by the
+        // exact haversine) — they can never drop a true neighbour.
         let safety = 1.05
         let latCellDeg = safety * eps / metresPerDegreeLat
-        let maxAbsLat = points.reduce(0.0) { Swift.max($0, abs($1.coord.latitude)) }
-        let cosFloor = Swift.max(cos(maxAbsLat * .pi / 180), 0.01)   // guard the (absurd) poles
-        let lngCellDeg = safety * eps / (metresPerDegreeLat * cosFloor)
+        let lngCellDeg = safety * eps / (metresPerDegreeLat * cosMaxLat)
 
         // Linear longitude bucketing has a seam at ±180°. If the field could hold a within-eps pair
         // across it (points within one cell of BOTH edges), fall back to the seam-safe brute form.

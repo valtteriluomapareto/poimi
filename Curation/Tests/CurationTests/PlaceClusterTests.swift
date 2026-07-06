@@ -317,6 +317,26 @@ struct PlaceClusterTests {
         }
     }
 
+    @Test("grid equals brute at high latitude (grid path) and near the poles (fallback)",
+          arguments: 0..<80)
+    func gridMatchesBruteForceHighLatitude(seed: Int) {
+        var rng = SeededRNG(seed: UInt64(seed))
+        // Two independent fields: ~80° stays on the grid path (cos ≈ 0.17, where longitude cells are
+        // wide); ~89° trips the near-pole brute fallback (cos < 0.1). Both must match the reference —
+        // this pins the completeness of the longitude cell sizing that the O(n²) form makes trivial.
+        for centreLat in [80.0, 89.0] {
+            let centre = Coordinate(latitude: centreLat,
+                                    longitude: Double.random(in: -150...150, using: &rng))
+            let located = sortedLocated(blob("hi", centre, n: Int.random(in: 20...80, using: &rng),
+                                             jitter: 0.5, &rng))
+            for eps in [5_000.0, 25_000.0, 120_000.0] {
+                let grid = PlaceClustering.neighbourLists(located, eps: eps)
+                let brute = PlaceClustering.bruteForceNeighbourLists(located, eps: eps)
+                for i in grid.indices { #expect(Set(grid[i]) == Set(brute[i])) }
+            }
+        }
+    }
+
     @Test("clusters() over a large field still partitions and stays order-independent", arguments: 0..<40)
     func gridScaleClustersHold(seed: Int) {
         var rng = SeededRNG(seed: UInt64(seed))
