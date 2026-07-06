@@ -210,7 +210,8 @@ enum LocationSpikeCompute {
     /// is within `eps`. We therefore plot that distance (`dists[k − 2]` for `k = minPts`), not the k-th,
     /// to match this DBSCAN's definition. Sorted by id before any subsample so it sees the SAME points
     /// the preview clusters (mirrors `run`) and is order-independent of the fetch.
-    static func kDistanceCurve(for assets: [AssetRef], k: Int, cap: Int?) -> [Double] {
+    static func kDistanceCurve(for assets: [AssetRef], k: Int, cap: Int?,
+                               onProgress: (@Sendable (Double) -> Void)? = nil) -> [Double] {
         var located = assets.filter(isLocated)
         if let cap, located.count > cap { located = downsample(located, to: cap) }
         let coords = located.map { $0.coordinate! }
@@ -219,12 +220,14 @@ enum LocationSpikeCompute {
         guard n > othersNeeded else { return [] }
         var kth: [Double] = []
         kth.reserveCapacity(n)
+        let progressStep = max(1, n / 50)         // ~50 progress ticks over the O(n²) sweep
         for i in 0..<n {
             var dists: [Double] = []
             dists.reserveCapacity(n - 1)
             for j in 0..<n where j != i { dists.append(coords[i].distance(to: coords[j])) }
             dists.sort()
             kth.append(dists[othersNeeded - 1])   // distance to the (minPts−1)-th nearest other point
+            if let onProgress, i % progressStep == 0 { onProgress(Double(i) / Double(n)) }
         }
         return kth.sorted()
     }
@@ -276,16 +279,29 @@ struct PlaceholderSpikeGeocoder: SpikePlaceNaming {
 
 // MARK: - The model (@MainActor; recompute off-main, debounced)
 
+/// Coarse progress for the initial `load()` — the phases that otherwise leave the probe on a blank
+/// spinner (§8: the O(n²) core). `measuringDensity` (the k-distance curve, the dominant cost) is
+/// determinate; fetch + clustering are labelled but indeterminate.
+enum SpikeLoadStage: Equatable {
+    case fetching
+    case measuringDensity(Double)   // 0…1 fraction of the k-distance curve
+    case clustering
+}
+
 @MainActor
 @Observable
 final class LocationSpikeModel {
     // Inputs / lifecycle.
-    private(set) var isLoading = true
     private(set) var isComputing = false
     private(set) var loadError: String?
     private(set) var allAssets: [AssetRef] = []
     private(set) var kDistances: [Double] = []
     private(set) var kUsed = 0
+    /// The current phase of the initial load (drives the loading view).
+    private(set) var loadStage: SpikeLoadStage = .fetching
+    /// True until the first clustering result lands — i.e. the initial load is still preparing. Survives
+    /// later recomputes (those only *replace* `result`, never nil it), so the loading view shows once.
+    var isPreparing: Bool { result == nil && loadError == nil }
 
     // Live-tunable controls (bound by the view; a change schedules a debounced recompute).
     var epsMeters: Double = PlaceClustering.defaultEps
@@ -353,11 +369,12 @@ final class LocationSpikeModel {
     /// control is on. Threaded into every `LocationSpikeCompute.run` / `kDistanceCurve` call.
     var effectiveCap: Int? { downsampleEnabled ? downsampleCap : nil }
 
-    /// Fetch the whole library (no new fetch on recompute — clustering is live over this in-memory set,
-    /// §7 step 1), compute the k-distance curve once, then the first clustering.
+    /// Fetch the configured scope once (no new fetch on recompute — clustering is live over this
+    /// in-memory set, §7 step 1), compute the k-distance curve, then the first clustering. Advances
+    /// `loadStage` through fetch → density → clustering so the loading view can show real progress.
     func load() async {
-        isLoading = true
         loadError = nil
+        loadStage = .fetching
         // The real path needs Photos authorization (the irreducible human part); ask if undetermined.
         if await library.authorizationStatus() == .notDetermined {
             _ = await library.requestAuthorization()
@@ -378,16 +395,24 @@ final class LocationSpikeModel {
             let k = PlaceClustering.adaptiveMinPts(for: assets, calendar: calendar)
             kUsed = k
             let cap = effectiveCap
+            // The k-distance curve is the dominant O(n² log n) cost — report it as a determinate bar.
+            loadStage = .measuringDensity(0)
+            let onProgress: @Sendable (Double) -> Void = { fraction in
+                // Guard against a late tick landing after we've advanced to `.clustering`.
+                Task { @MainActor in
+                    if case .measuringDensity = self.loadStage { self.loadStage = .measuringDensity(fraction) }
+                }
+            }
             kDistances = await Task.detached(priority: .userInitiated) {
-                LocationSpikeCompute.kDistanceCurve(for: assets, k: k, cap: cap)
+                LocationSpikeCompute.kDistanceCurve(for: assets, k: k, cap: cap, onProgress: onProgress)
             }.value
             Log.app.notice("LocationSpikeProbe loaded \(assets.count) assets, k=\(k, privacy: .public)")
         } catch {
             loadError = String(describing: error)
             Log.photoLibrary.error("LocationSpikeProbe load failed: \(String(describing: error), privacy: .public)")
         }
-        isLoading = false
-        await recomputeNow()
+        loadStage = .clustering
+        await recomputeNow()          // publishes the first `result` → `isPreparing` flips false
     }
 
     /// Debounced entry point for a control change — coalesces a slider drag into one recompute.
@@ -507,10 +532,7 @@ struct LocationSpikeProbeView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if model.isLoading {
-                    ProgressView { Text(verbatim: "Loading library…") }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let error = model.loadError {
+                if let error = model.loadError {
                     ContentUnavailableView {
                         Label { Text(verbatim: "Couldn’t load") } icon: {
                             Image(systemName: "exclamationmark.triangle")
@@ -518,6 +540,9 @@ struct LocationSpikeProbeView: View {
                     } description: {
                         Text(verbatim: error)
                     }
+                } else if model.isPreparing {
+                    SpikeLoadingView(stage: model.loadStage, photoCount: model.allAssets.count)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     content
                 }
@@ -564,6 +589,42 @@ struct LocationSpikeProbeView: View {
             }
             .padding()
         }
+    }
+}
+
+/// The initial-load progress. A per-album run is a one-time O(n²) pass that can take a minute, so this
+/// replaces a bare spinner: a determinate bar for the k-distance phase (the dominant cost) and labelled
+/// spinners for fetch + clustering.
+private struct SpikeLoadingView: View {
+    let stage: SpikeLoadStage
+    let photoCount: Int
+
+    var body: some View {
+        VStack(spacing: 16) {
+            switch stage {
+            case .fetching:
+                ProgressView().controlSize(.large)
+                Text(verbatim: "Loading photos…")
+            case .measuringDensity(let fraction):
+                ProgressView(value: fraction) {
+                    Text(verbatim: "Measuring density…")
+                } currentValueLabel: {
+                    Text(verbatim: "\(Int((fraction * 100).rounded()))%")
+                }
+                .progressViewStyle(.linear)
+                .frame(maxWidth: 260)
+                if photoCount > 0 {
+                    Text(verbatim: "\(photoCount) photos in this album")
+                        .font(.footnote)
+                }
+            case .clustering:
+                ProgressView().controlSize(.large)
+                Text(verbatim: "Clustering places…")
+            }
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .padding()
     }
 }
 

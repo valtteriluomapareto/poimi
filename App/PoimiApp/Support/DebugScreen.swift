@@ -862,8 +862,8 @@ struct DebugAlbumLocationSpikeHostView: View {
                 library: library, geocoder: SpikeGeocoderFactory.make(), calendar: .current,
                 interval: interval, excludedAlbumIDs: project.excludedAlbumIDs,
                 excludeScreenshots: project.excludeScreenshots)   // downsample off — the range is small
+            model = built            // render immediately so the load-progress view is visible
             await built.load()
-            model = built
         }
     }
 }
