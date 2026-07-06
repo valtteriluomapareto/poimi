@@ -68,8 +68,8 @@ full 999. The repo's Asset Catalog + styleguide.md mirror these.
 | Design | Node | Content | Status |
 |---|---|---|---|
 | **App icon · v1 (default)** ✓ | `3Z7-0` | Deep-green field (`--color-secondary`) + gold square (`--color-accent`), tilted 15° CCW, lifted with a soft shadow. | **chosen + shipped** (asset-catalog appearances) |
-| **App icon · v1 (dark)** ✓ | `3Z9-0` | Dark-green field (#33502C) + brighter gold (`--color-accent-dark`). | shipped (dark appearance) |
-| **App icon · v1 (tinted / mono)** ✓ | `3ZB-0` | Preview of iOS tinted mode: light-gray square on dark — proves the single-shape mark holds when hue is stripped. | shipped (tinted appearance) |
+| **App icon · v1 (dark)** ✓ | `3Z9-0` | **Transparent** — just the brighter gold (`--color-accent-dark`) square; iOS supplies the **system dark ground** (like Music/Photos). | shipped (dark appearance) |
+| **App icon · v1 (tinted / mono)** ✓ | `3ZB-0` | **Transparent** grayscale square only; iOS applies the user's tint over its ground. Single-shape mark holds when hue is stripped. | shipped (tinted appearance) |
 | **App icon · v2 (chosen from many)** ✓ | `3ZD-0` | Iteration: a quiet 3×3 grid of green cells (the "many") with the gold square lifted proud + tilted over the centre (the "one"). Degrades to v1 when small/mono. | exploration |
 
 **Shipped:** v1 as light / dark / tinted **asset-catalog** icons (flat). The full iOS 26 **layered `.icon`** (Icon Composer, per-layer material + depth) remains the upgrade tracked in **#122**.
