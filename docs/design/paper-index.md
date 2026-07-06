@@ -4,7 +4,7 @@ A map of the Poimi design file in **Paper** — every artboard, what it shows, a
 issues + the current build. This is the index for agents/humans to find a screen's design before
 implementing it.
 
-- **Index created:** 2026-06-29 · **updated:** 2026-07-03 (**paged-clusters v2 exploration** — new
+- **Index created:** 2026-06-29 · **updated:** 2026-07-06 (**app icon** — new **Icon design** page `2-0`: v1 mark (gold square on green field) shipped as the app icon + a v2 "chosen from many" exploration; see the App icon section. Earlier 2026-07-03: **paged-clusters v2 exploration** — new
   `3T6-0` "Overview · cluster strips (v2)" + `3VM-0` "Cluster page · paged (v2)": revisiting the paged
   model (`36R`/`39D`) to replace the accordion's collapse/open jumpiness — the Overview keeps the shipped
   borderless style but previews each cluster with a scrollable evenly-sampled thumbnail strip; the grid
@@ -60,6 +60,19 @@ full 999. The repo's Asset Catalog + styleguide.md mirror these.
 | Accent — beyond Clay | `FG-0` | 1210×674 | Accent alternatives beyond the clay instinct. |
 | Accent — berries (poimi!) | `I9-0` | 1210×661 | The berry set (lingonberry…cloudberry) — where the chosen Cloudberry gold came from ("poimi" = pick berries). |
 | Brand palette | `KZ-0` | 1100×949 | The committed palette + roles. |
+
+## App icon — the mark (page `2-0` "Icon design", 1024×1024)
+
+> A **separate page** (`2-0`) from the screens above. Concept (#122): **gold = the one chosen, green = the field** — the app's core "pick one from many" gesture. The mark is a single shape, so it survives the tinted/monochrome appearance.
+
+| Design | Node | Content | Status |
+|---|---|---|---|
+| **App icon · v1 (default)** ✓ | `3Z7-0` | Deep-green field (`--color-secondary`) + gold square (`--color-accent`), tilted 15° CCW, lifted with a soft shadow. | **chosen + shipped** (asset-catalog appearances) |
+| **App icon · v1 (dark)** ✓ | `3Z9-0` | Dark-green field (#17230F) + brighter gold (`--color-accent-dark`). | shipped (dark appearance) |
+| **App icon · v1 (tinted / mono)** ✓ | `3ZB-0` | Preview of iOS tinted mode: light-gray square on dark — proves the single-shape mark holds when hue is stripped. | shipped (tinted appearance) |
+| **App icon · v2 (chosen from many)** ✓ | `3ZD-0` | Iteration: a quiet 3×3 grid of green cells (the "many") with the gold square lifted proud + tilted over the centre (the "one"). Degrades to v1 when small/mono. | exploration |
+
+**Shipped:** v1 as light / dark / tinted **asset-catalog** icons (flat). The full iOS 26 **layered `.icon`** (Icon Composer, per-layer material + depth) remains the upgrade tracked in **#122**.
 
 ## The picking core — v1 (390×844)
 
