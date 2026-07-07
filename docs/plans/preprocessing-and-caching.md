@@ -43,9 +43,13 @@ silently drift when the library changes. Cheap, pure, deterministic derivations 
 *preprocessed once per session, not persisted across sessions*.
 
 Date day-grouping is cheap+pure → stays live (already runs once at `.ready`, never in a `body`).
-**The only thing in the location feature that clears the D18 bar is geocoding.** Clustering is cheap
-and pure, so — by this plan's own rule — it is **not** persisted; only the network-bound *names* and
-the user-authored *named locations* are.
+Geocoding clears the D18 bar (network-bound) → persisted.
+
+> **Revised by #152 (measured):** *clustering* was assumed cheap here, but on a large year (~8 k
+> photos) DBSCAN + the trip overlay measured **~3–6 s** — well past "unacceptable interactively." It
+> now also clears the generalized D18 bar (expensive **and** carries an explicit invalidation key), so
+> its output *is* cached — but as **regenerable** derived data, distinct from the durable name cache:
+> see §8's **timeline cache**. The pure-and-cheap parts (day-grouping) still stay live.
 
 ---
 
@@ -204,16 +208,24 @@ shape (cluster present, name absent); the fake geocoder (§8) needs an error-inj
 
 ## 8. Caching — lead with the cheap, membership-stable MVP
 
-By §1's rule, **clustering is recomputed live every open** (cheap, pure). Only two *small*,
-membership-stable things are persisted:
+The original plan recomputed **clustering live every open** (assumed cheap). #152 measured it at ~3–6 s
+on a large year and added a third persisted thing — a regenerable timeline cache. Persisted:
 
 - **`NamedLocation` (`@Model`) — authored state, durable.** Center, radius, user-confirmed name.
   Membership is a stable predicate (a point is in the radius or not), so a binding doesn't silently
-  drift. Survives library changes; never auto-invalidated. *State, not a cache.*
-- **A geocoded-name cache, keyed by query coordinate (medoid) + the asset's modification date**
-  (the D18 precedent the first draft wrongly dropped). This caches *only the expensive step*. It is
-  independent of clustering params, so a param tweak re-clusters (cheap) but reuses names for
-  unchanged query points.
+  drift. Survives library changes; never auto-invalidated. *State, not a cache.* *(deferred — P2/P3.)*
+- **A geocoded-name cache** (`GeocodedPlaceName` `@Model` via the `NameCacheStore` `@ModelActor`),
+  keyed by the query coordinate's `GeocodeCell` (rounded medoid). This caches *only the expensive,
+  network-bound step*, in **SwiftData** (durable — geocoding is costly to regenerate). Independent of
+  clustering params. *(shipped, #130.)*
+- **A per-album timeline cache** (`TimelineCache`, an app-tier `actor`), keyed by a **SHA-256
+  fingerprint** of the candidate set (id + capture instant + coordinate) + the location toggle +
+  clustering params + calendar tz. Caches the assembled `[ReviewCluster]` so a repeat open (or
+  relaunch) skips the ~3–6 s clustering. Because it's **regenerable CPU-derived data** — unlike the
+  network-bound name cache — it lives in the **Caches directory** (OS-purgeable, backup-excluded): a
+  purge, a decode failure, or a fingerprint mismatch is a benign miss → recompute, never data loss.
+  The fingerprint IS the explicit invalidation key (a range/exclusion edit or a re-geotag misses).
+  Dropped on album delete via the `ProjectStore.delete` choke point. *(shipped, #152.)*
 
 That is the v1.1 MVP: **`NamedLocation` CRUD + live re-clustering + a name cache.** No per-asset
 assignment cache, no revision counter, no D29-guard extension on day one.
