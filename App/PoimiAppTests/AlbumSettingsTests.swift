@@ -145,4 +145,15 @@ struct AlbumSettingsTests {
         let stillThere = try other.fetch(FetchDescriptor<CurationProject>()).contains { $0.id == id }
         #expect(!stillThere)                          // record gone from the store
     }
+
+    @Test("TargetCountField.clamped keeps direct entry within the target bounds (#123)")
+    func targetCountClamps() {
+        let range = 1...10_000
+        #expect(TargetCountField.clamped(0, in: range) == 1)           // 0 / empty-committed → floor
+        #expect(TargetCountField.clamped(-50, in: range) == 1)         // negative → floor
+        #expect(TargetCountField.clamped(99_999, in: range) == 10_000) // over max → ceiling
+        #expect(TargetCountField.clamped(1_000, in: range) == 1_000)   // in range → unchanged
+        #expect(TargetCountField.clamped(1, in: range) == 1)           // lower bound kept
+        #expect(TargetCountField.clamped(10_000, in: range) == 10_000) // upper bound kept
+    }
 }

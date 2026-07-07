@@ -83,8 +83,7 @@ struct AlbumSettingsView: View {
                         ? String(localized: "New album", comment: "Destination: a new album created on export")
                         : String(localized: "Existing album", comment: "Destination: an existing Photos album"))
                 }
-                Stepper("Aim for ^[\(project.targetCount) photo](inflect: true)",
-                        value: $project.targetCount, in: 1...10_000, step: 10)
+                TargetCountField(count: $project.targetCount)
             } header: {
                 Text("Saves to")
             } footer: {
@@ -149,6 +148,8 @@ struct AlbumSettingsView: View {
             }
             #endif
         }
+        // Reliable number-pad dismissal for the target field (it has no return key): swipe to dismiss (#123).
+        .scrollDismissesKeyboard(.interactively)
         // "Album settings", not just "Settings" — distinguishes it from the app-level `AppSettingsView`
         // (also reached by a gear-like icon), and matches this screen's entry `accessibilityLabel`.
         .navigationTitle("Album settings")

@@ -42,8 +42,7 @@ struct NewAlbumSetupView: View {
                 }
 
                 Section("Target") {
-                    Stepper("Target: ^[\(draft.targetCount) photo](inflect: true)",
-                            value: $draft.targetCount, in: 1...10_000, step: 10)
+                    TargetCountField(count: $draft.targetCount)
                 }
 
                 Section("Exclude from source") {
@@ -72,6 +71,8 @@ struct NewAlbumSetupView: View {
                     Text("Leave as a new album (created on export), or add picks to an existing album.")
                 }
             }
+            // Reliable number-pad dismissal (it has no return key): swipe the form to dismiss (#123).
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("New album")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
