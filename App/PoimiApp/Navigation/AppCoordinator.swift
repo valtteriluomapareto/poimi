@@ -54,6 +54,12 @@ final class AppCoordinator {
     private(set) var candidateStore: CandidateStore?
     private var candidateStoreKey: CandidateStoreKey?
 
+    /// The shared, cross-album review-timeline cache (#130) — one instance keyed internally by album id,
+    /// so clustering is skipped on any repeat open of an unchanged album (even after a relaunch or an
+    /// album switch that freed the in-memory store). Injected into each `CandidateStore` the review
+    /// screens build.
+    let timelineCache = TimelineCache()
+
     /// Identity of a scanned store — a change in any field means a genuinely different candidate set.
     struct CandidateStoreKey: Equatable {
         let id: UUID

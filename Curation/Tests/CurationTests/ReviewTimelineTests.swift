@@ -359,4 +359,19 @@ struct ReviewTimelineTests {
         assets.shuffle(using: &rng)
         return assets
     }
+
+    // MARK: — Codable round-trip (the timeline cache serializes `[ReviewCluster]`, #130)
+
+    @Test("a computed timeline survives a JSON encode/decode round-trip byte-identically", arguments: 0..<50)
+    func codableRoundTrip(seed: Int) throws {
+        // The app-tier `TimelineCache` persists the assembled `[ReviewCluster]` as JSON and reloads it to
+        // skip re-clustering. That's only correct if the round-trip is lossless — trips (incl. medoid +
+        // shape), day-groups, and undated all preserved. Exercise a real, trip-bearing timeline.
+        var rng = SeededRNG(seed: UInt64(seed))
+        let assets = field(&rng, undated: true)
+        let timeline = ReviewTimeline.clusters(for: assets, calendar: cal)
+        let data = try JSONEncoder().encode(timeline)
+        let restored = try JSONDecoder().decode([ReviewCluster].self, from: data)
+        #expect(restored == timeline)
+    }
 }

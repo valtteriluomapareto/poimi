@@ -370,6 +370,52 @@ struct CandidateStoreTests {
         #expect(candidates.tripNames.isEmpty)
     }
 
+    /// A unique temp cache directory for a single test (cleaned by the caller).
+    private func tempCacheDir() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    }
+
+    @Test("a repeat open of an unchanged photo set is served from the timeline cache (clustering skipped)")
+    func timelineCacheHitOnUnchangedSet() async throws {
+        let dir = tempCacheDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let cache = TimelineCache(directory: dir)
+        let project = makeProject()
+        // First open: a cache miss → the timeline is computed and stored.
+        let first = CandidateStore(library: FakePhotoLibrary(assets: locatedSeed()),
+                                   calendar: utcCalendar(), locationEnabled: true, timelineCache: cache)
+        await first.load(project)
+        let firstClusters = readyClusters(first, "first open")
+        #expect(first.scanReport?.cached == false)
+        // Second open — a FRESH store (no in-memory state) sharing the cache, same project + photos:
+        // the fingerprint matches, so the clusters come from disk (clustering skipped) and are identical.
+        let second = CandidateStore(library: FakePhotoLibrary(assets: locatedSeed()),
+                                    calendar: utcCalendar(), locationEnabled: true, timelineCache: cache)
+        await second.load(project)
+        #expect(second.scanReport?.cached == true)
+        #expect(readyClusters(second, "second open") == firstClusters)
+    }
+
+    @Test("changing the photo set invalidates the cache (fingerprint miss → recompute, not stale reuse)")
+    func timelineCacheMissOnChangedSet() async throws {
+        let dir = tempCacheDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let cache = TimelineCache(directory: dir)
+        let project = makeProject()
+        let first = CandidateStore(library: FakePhotoLibrary(assets: locatedSeed()),
+                                   calendar: utcCalendar(), locationEnabled: true, timelineCache: cache)
+        await first.load(project)
+        #expect(first.scanReport?.cached == false)
+        // Same project id, but one more away day → a different candidate set → a different fingerprint,
+        // so the stored entry no longer matches and the open recomputes rather than reusing stale clusters.
+        var changed = locatedSeed()
+        for shot in 0..<25 { changed.append(located("aland-12-\(shot)", 60.10, 19.90, 5, 12)) }
+        let second = CandidateStore(library: FakePhotoLibrary(assets: changed),
+                                    calendar: utcCalendar(), locationEnabled: true, timelineCache: cache)
+        await second.load(project)
+        #expect(second.scanReport?.cached == false)
+    }
+
     private func readyClusters(_ store: CandidateStore, _ comment: Comment) -> [ReviewCluster] {
         guard case .ready(let clusters) = store.phase else {
             Issue.record("expected .ready, got \(store.phase) — \(comment)")

@@ -90,6 +90,9 @@ final class CandidateStore {
     /// the environment's `PlaceNaming` + a `NameCacheStore` over the app container.
     private let naming: (any PlaceNaming)?
     private let nameCache: NameCacheStore?
+    /// The per-album timeline cache (#130). `nil` on the debug/test sites (always recompute). When set,
+    /// a repeat open with an unchanged photo set skips the seconds of clustering and re-reads the result.
+    private let timelineCache: TimelineCache?
     /// The in-flight trip-name resolution — cancelled when a new load starts, so a stale pass never
     /// publishes names for a superseded album/setting. Detached from `.ready` so naming never blocks it.
     private var nameTask: Task<Void, Never>?
@@ -116,6 +119,7 @@ final class CandidateStore {
         var geocoded: Int?        // names freshly reverse-geocoded (cache miss)
         var cacheRows: Int?       // total rows in the name cache after the pass (0 ⇒ saves not persisting)
         let locationEnabled: Bool
+        let cached: Bool          // clusters served from the timeline cache (⇒ clustering was skipped)
 
         /// A one-screen, copyable summary (shared per-album to see where the open time goes).
         var text: String {
@@ -132,7 +136,7 @@ final class CandidateStore {
             candidates: \(candidateCount)
             clusters: \(clusterCount) (\(tripCount) trips)
             fetch:   \(Int(fetchMillis)) ms
-            cluster: \(Int(clusterMillis)) ms
+            cluster: \(Int(clusterMillis)) ms\(cached ? " (cached — clustering skipped)" : "")
             naming:  \(naming)
             """
         }
@@ -142,12 +146,14 @@ final class CandidateStore {
          calendar: Calendar = .current,
          locationEnabled: Bool = true,
          naming: (any PlaceNaming)? = nil,
-         nameCache: NameCacheStore? = nil) {
+         nameCache: NameCacheStore? = nil,
+         timelineCache: TimelineCache? = nil) {
         self.library = library
         self.calendar = calendar
         self.locationEnabled = locationEnabled
         self.naming = naming
         self.nameCache = nameCache
+        self.timelineCache = timelineCache
     }
 
     /// Run the fetch → resolve → filter pass for `project`, publishing each phase as it settles.
@@ -179,17 +185,10 @@ final class CandidateStore {
                 excludeScreenshots: project.excludeScreenshots,
                 excludedAssetIDs: excludedAssetIDs)
             let fetchMillis = Date().timeIntervalSince(fetchStart) * 1000
-            // Assemble the timeline once, here, OFF the main actor — the grid renders it directly and
-            // never recomputes it (Finding 1). Clustering (DBSCAN over the located set) is heavier than
-            // the old day-grouping, so it runs on a detached task to keep the scan off the UI thread;
-            // the busy-day threshold within it stays ADAPTIVE (this album's own density). With location
-            // off (or no trips) the result is the date-only day-grouping wrapped as `.day` clusters.
-            let locationOn = locationEnabled
-            let cal = calendar
+            // Assemble the timeline once, here — the grid renders it directly and never recomputes it
+            // (Finding 1). Reuses the cached result for an unchanged photo set, else clusters off-main.
             let clusterStart = Date()
-            let clusters = await Task.detached(priority: .userInitiated) {
-                ReviewTimeline.clusters(for: candidates, calendar: cal, locationEnabled: locationOn)
-            }.value
+            let (clusters, fromCache) = await assembleTimeline(for: candidates, project: project)
             let clusterMillis = Date().timeIntervalSince(clusterStart) * 1000
             // Per-photo day map for the viewer's label (#36), built from the same candidates +
             // calendar so it agrees with the grouping (a busy day and the viewer read the same day).
@@ -210,7 +209,8 @@ final class CandidateStore {
                     clusterCount: clusters.count,
                     tripCount: clusters.filter { $0.tripCluster != nil }.count,
                     fetchMillis: fetchMillis, clusterMillis: clusterMillis,
-                    namingMillis: nil, namesResolved: nil, locationEnabled: locationEnabled)
+                    namingMillis: nil, namesResolved: nil, locationEnabled: locationEnabled,
+                    cached: fromCache)
                 // Resolve trip place names in a DETACHED, cancellable task — geocoding is network-bound
                 // and slow (§7), so it must never block `.ready` (the grid/viewer publish + done reconcile
                 // happen as soon as we return). Names fill into `tripNames` when the pass completes
@@ -227,6 +227,30 @@ final class CandidateStore {
             let stillAuthorized = await library.authorizationStatus() == .authorized
             phase = .failed(stillAuthorized ? .loadError : .accessLost)
         }
+    }
+
+    /// Assemble the review timeline for `candidates`, reusing the cached result when this exact photo
+    /// set + options were already clustered (keyed by a fingerprint, so a range/exclusion edit or a
+    /// re-geotag misses). A miss clusters OFF the main actor — clustering (DBSCAN over the located set)
+    /// is heavier than the old day-grouping, so a detached task keeps it off the UI thread — and persists
+    /// the result for next time. `timelineCache == nil` (debug/test) always recomputes. With location off
+    /// (or no trips) the result is the date-only day-grouping wrapped as `.day` clusters. Returns whether
+    /// the clusters came from the cache (for the scan report).
+    private func assembleTimeline(
+        for candidates: [AssetRef], project: CurationProject
+    ) async -> (clusters: [ReviewCluster], fromCache: Bool) {
+        let locationOn = locationEnabled
+        let cal = calendar
+        let fingerprint = TimelineCache.fingerprint(
+            candidates: candidates, locationEnabled: locationOn, calendar: cal)
+        if let cached = await timelineCache?.lookup(projectID: project.id, fingerprint: fingerprint) {
+            return (cached, true)
+        }
+        let clusters = await Task.detached(priority: .userInitiated) {
+            ReviewTimeline.clusters(for: candidates, calendar: cal, locationEnabled: locationOn)
+        }.value
+        await timelineCache?.store(projectID: project.id, fingerprint: fingerprint, clusters: clusters)
+        return (clusters, false)
     }
 
     /// Reverse-geocode the trip places (§7) and publish `tripNames`. No-ops without naming deps

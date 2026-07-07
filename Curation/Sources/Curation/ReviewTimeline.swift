@@ -28,7 +28,7 @@ import Foundation
 
 /// The duration "shape" of a trip, derived purely from its away-day span. The app tier maps this to the
 /// localized location sentence; the domain stays string-free (D14/D21).
-public enum TripShape: Sendable, Equatable, Hashable {
+public enum TripShape: Sendable, Equatable, Hashable, Codable {
     /// A single away day (→ "Visit to …").
     case visit
     /// A 2–3 day run that includes a calendar weekend day (→ "Weekend in …").
@@ -70,7 +70,7 @@ public enum TripShape: Sendable, Equatable, Hashable {
 /// one trip's day-span, presented as a single reviewable unit (one Overview strip, one grid page). It
 /// never splits or re-cuts a day-group — the day-group stays the atom of done-tracking (D33) — so its
 /// members are exactly the union of its constituent day-groups.
-public struct TripCluster: Sendable, Identifiable, Equatable {
+public struct TripCluster: Sendable, Identifiable, Equatable, Codable {
     /// The trip's stable id (`Trip.id` = `"<clusterID>@<startDay>"`).
     public let id: String
     /// The labeling place cluster's medoid id (`Trip.clusterID`) — the stable handle the app tier uses
@@ -105,7 +105,7 @@ public struct TripCluster: Sendable, Identifiable, Equatable {
 /// One element of the review timeline: either a plain date day-group (the v1 unit) or a trip/visit
 /// cluster (the v1.1 location overlay). Passthrough accessors (`assetIDs`/`days`/`count`/`dayGroups`)
 /// mean consumers that only need members or the done substrate never branch on the case.
-public enum ReviewCluster: Sendable, Identifiable, Equatable {
+public enum ReviewCluster: Sendable, Identifiable, Equatable, Codable {
     case day(DayGroup)
     case trip(TripCluster)
 
