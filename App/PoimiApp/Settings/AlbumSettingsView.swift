@@ -104,6 +104,15 @@ struct AlbumSettingsView: View {
             }
 
             Section {
+                Toggle("Group by trips & places", isOn: $project.locationEnabled)
+            } footer: {
+                Text("""
+                    Groups a stretch away from home into one trip (“Week in Salo”) with its place name. \
+                    Turn off to review strictly by date.
+                    """)
+            }
+
+            Section {
                 Button("Reset picks", role: .destructive) { confirmingReset = true }
                 Button("Delete album", role: .destructive) { confirmingDelete = true }
             } footer: {

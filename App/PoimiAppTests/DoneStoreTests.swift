@@ -75,6 +75,48 @@ struct DoneStoreTests {
         done.deactivate()
     }
 
+    // MARK: - "Mark trip done" (a trip cluster spans several day-groups; #130, D33)
+
+    private func tripCluster(_ groups: [DayGroup]) -> ReviewCluster {
+        .trip(TripCluster(id: "trip", clusterID: "place", shape: .weekend, dayGroups: groups))
+    }
+
+    @Test("Mark trip done marks EVERY constituent day; a trip is done iff all its day-groups are")
+    func markTripDoneMarksAllDays() throws {
+        let (projects, done) = try makeStores()
+        let a = project(projects, "A")
+        let g1 = group("d1", [.day(year: 2025, month: 11, day: 8)])
+        let g2 = group("d2", [.day(year: 2025, month: 11, day: 9)])
+        let trip = tripCluster([g1, g2])
+
+        done.activate(a)
+        #expect(!done.isDone(trip))
+        done.toggle(trip)                              // "Mark trip done"
+        #expect(done.isDone(trip))
+        #expect(done.isDone(g1) && done.isDone(g2))    // marked ALL its days, not just the first
+        done.flushNow()
+        #expect(a.doneDays == ["2025-11-08", "2025-11-09"])
+        done.deactivate()
+    }
+
+    @Test("a trip is not done until its LAST day is flagged; toggling the trip undoes every day")
+    func tripDoneNeedsAllDaysAndTogglesAll() throws {
+        let (projects, done) = try makeStores()
+        let a = project(projects, "A")
+        let g1 = group("d1", [.day(year: 2025, month: 11, day: 8)])
+        let g2 = group("d2", [.day(year: 2025, month: 11, day: 9)])
+        let trip = tripCluster([g1, g2])
+
+        done.activate(a)
+        done.toggle(g1)                                // one constituent day done individually
+        #expect(!done.isDone(trip))                    // trip not done — g2 still open
+        done.toggle(g2)
+        #expect(done.isDone(trip))                     // all days done → trip done
+        done.toggle(trip)                              // "Mark trip NOT done"
+        #expect(!done.isDone(trip) && !done.isDone(g1) && !done.isDone(g2))   // every day undone
+        done.deactivate()
+    }
+
     @Test("switching projects flushes the outgoing one; the incoming starts from its own done-days")
     func perProjectIsolation() throws {
         let (projects, done) = try makeStores()

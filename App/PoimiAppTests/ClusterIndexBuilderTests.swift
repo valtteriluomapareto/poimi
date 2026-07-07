@@ -113,6 +113,27 @@ struct ClusterIndexBuilderTests {
         #expect(index.totalClusters == 3)   // three clusters (incl. undated)
         #expect(index.totalDays == 3)       // run's 2 days + busy's 1; undated contributes no day
     }
+
+    @Test("a trip row carries the location sentence + date subline; date fallback until the name lands")
+    func tripRow() throws {
+        let g1 = DayGroup(id: "d1", assetIDs: ["a1"], days: [.day(year: 2025, month: 11, day: 8)], isBusyDay: true)
+        let g2 = DayGroup(id: "d2", assetIDs: ["a2"], days: [.day(year: 2025, month: 11, day: 9)], isBusyDay: true)
+        let trip = ReviewCluster.trip(TripCluster(id: "t", clusterID: "aland", shape: .weekend, dayGroups: [g1, g2]))
+        let dateRange = DayGroupHeader.title(for: trip, calendar: cal, locale: locale)
+
+        // Named → the sentence is the title; the date range is the subline; it's flagged a trip.
+        let named = ClusterIndexBuilder.build(from: [trip], tripNames: ["aland": "Åland"], calendar: cal, locale: locale)
+        let namedRow = try #require(named.sections.first?.rows.first)
+        #expect(namedRow.isTrip)
+        #expect(namedRow.title == TripLabel.sentence(for: .weekend, place: "Åland"))
+        #expect(namedRow.dateSubtitle == dateRange)
+
+        // Not-yet-resolved → the date range is the fallback title (the async name hasn't landed).
+        let unnamed = ClusterIndexBuilder.build(from: [trip], tripNames: [:], calendar: cal, locale: locale)
+        let unnamedRow = try #require(unnamed.sections.first?.rows.first)
+        #expect(unnamedRow.title == dateRange)
+        #expect(unnamedRow.dateSubtitle == dateRange)
+    }
 }
 
 @Suite("ChartBucketing — adaptive coverage-chart buckets (#37)")

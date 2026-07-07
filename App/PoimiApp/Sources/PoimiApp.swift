@@ -21,6 +21,10 @@ struct PoimiApp: App {
     // directly.
     private let photoLibrary = PhotoLibraryProvider.make()
     private let thumbnailProvider = ThumbnailProvider.make()
+    /// The reverse-geocoding seam (#130): the real `CLGeocoder` on device, the deterministic fake only
+    /// under `-PoimiUseFakeLibrary`. MUST be injected here — the environment's DEBUG default is the fake,
+    /// so a missing injection silently shows synthetic "Place <lat>,<lon>" names instead of real places.
+    private let placeNaming = PlaceNamingProvider.make()
     private let modelContainer: ModelContainer
     @State private var projectStore: ProjectStore
     @State private var selectionStore: SelectionStore
@@ -50,6 +54,7 @@ struct PoimiApp: App {
             rootView
                 .environment(\.photoLibrary, photoLibrary)
                 .environment(\.thumbnailProvider, thumbnailProvider)
+                .environment(\.placeNaming, placeNaming)
                 .environment(projectStore)
                 .environment(selectionStore)
                 .environment(doneStore)

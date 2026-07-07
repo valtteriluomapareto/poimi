@@ -90,6 +90,12 @@ final class CandidateStore {
     /// the environment's `PlaceNaming` + a `NameCacheStore` over the app container.
     private let naming: (any PlaceNaming)?
     private let nameCache: NameCacheStore?
+    /// The in-flight trip-name resolution — cancelled when a new load starts, so a stale pass never
+    /// publishes names for a superseded album/setting. Detached from `.ready` so naming never blocks it.
+    private var nameTask: Task<Void, Never>?
+    /// Monotonic load token: the name pass only publishes if it's still the current load — guards the
+    /// retry paths (`onRetry`/`onRecovered`) that re-enter `load()` without cancelling the prior `.task`.
+    private var loadGeneration = 0
 
     init(library: any PhotoLibraryProviding,
          calendar: Calendar = .current,
@@ -110,6 +116,9 @@ final class CandidateStore {
         phase = .scanning
         dayByID = [:]   // clear any prior pass's map (e.g. a retry after .failed)
         tripNames = [:]
+        nameTask?.cancel()        // supersede any in-flight name pass from a prior load
+        loadGeneration += 1
+        let generation = loadGeneration
 
         // An empty / inverted range has no candidates — and `DateInterval(start:end:)` traps when
         // end < start, so guard before constructing it. Setup disables Create on an inverted range
@@ -151,10 +160,13 @@ final class CandidateStore {
                 phase = .empty(fetched.isEmpty ? .noPhotosInRange : .allExcluded)
             } else {
                 phase = .ready(clusters)
-                // Resolve the trip place names in the background (§7): geocoding is network-bound + paced,
-                // so it must never block the settled `.ready`. Names fill into `tripNames` when the pass
-                // completes (cache-fast on repeat opens); trips show a date fallback until then.
-                await resolveTripNames(in: clusters, candidates: candidates)
+                // Resolve trip place names in a DETACHED, cancellable task — geocoding is network-bound
+                // and slow (§7), so it must never block `.ready` (the grid/viewer publish + done reconcile
+                // happen as soon as we return). Names fill into `tripNames` when the pass completes
+                // (cache-fast on repeat opens); trips show a date fallback until then.
+                nameTask = Task { [weak self] in
+                    await self?.resolveTripNames(in: clusters, candidates: candidates, generation: generation)
+                }
             }
         } catch {
             Log.photoLibrary.error("CandidateStore.load failed: \(String(describing: error), privacy: .public)")
@@ -169,12 +181,13 @@ final class CandidateStore {
     /// Reverse-geocode the trip places (§7) and publish `tripNames`. No-ops without naming deps
     /// (debug/test) or when there are no trips. Serial + cache-backed inside `LocationPreprocessor`;
     /// a superseding `load()` cancels this task before it can publish stale names.
-    private func resolveTripNames(in clusters: [ReviewCluster], candidates: [AssetRef]) async {
+    private func resolveTripNames(in clusters: [ReviewCluster], candidates: [AssetRef], generation: Int) async {
         guard locationEnabled, let naming, let nameCache,
               clusters.contains(where: { $0.tripCluster != nil }) else { return }
         let preprocessor = LocationPreprocessor(naming: naming, cache: nameCache)
         let names = await preprocessor.resolveTripNames(for: candidates, calendar: calendar)
-        guard !Task.isCancelled else { return }
+        // Only publish if this is still the current load (a newer load bumps the token / cancels us).
+        guard generation == loadGeneration, !Task.isCancelled else { return }
         tripNames = names
     }
 
@@ -184,4 +197,8 @@ final class CandidateStore {
     func tripLabel(for trip: TripCluster) -> String? {
         tripNames[trip.clusterID].map { TripLabel.sentence(for: trip.shape, place: $0) }
     }
+
+    /// Await the in-flight trip-name resolution — the pass is detached from `.ready`, so a test (or a
+    /// caller that needs settled names) awaits it here rather than after `load()`. No-op if idle.
+    func awaitPendingNames() async { await nameTask?.value }
 }

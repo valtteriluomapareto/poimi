@@ -27,6 +27,7 @@ private struct OverviewScanKey: Hashable {
     let id: UUID
     let start: Date
     let end: Date
+    let locationEnabled: Bool
 }
 
 struct AlbumOverviewView: View {
@@ -44,6 +45,9 @@ struct AlbumOverviewView: View {
     /// this same project, so the change is observed here), this differs from the project's range and the
     /// `.task` re-scans — otherwise the retained `.ready` store keeps serving the OLD range's clusters.
     @State private var scannedRange: Range<Date>?
+    /// The location setting the retained `store` scanned with — flipping the per-album "Trips & places"
+    /// toggle re-scans (date-only vs trip-overlaid timeline).
+    @State private var scannedLocationEnabled: Bool?
     /// Gate the scanning indicator behind a short grace delay so an instant scan never flashes it.
     @State private var indicatorVisible = false
 
@@ -84,16 +88,19 @@ struct AlbumOverviewView: View {
             // Keyed on the range too (not just the id): a period edit in Settings mutates this same
             // project, so the key changes and the task re-runs, re-scanning even while Settings is still
             // on top — so the cluster index is fresh by the time you pop back.
-            .task(id: OverviewScanKey(id: project.id, start: project.rangeStart, end: project.rangeEnd)) {
+            .task(id: OverviewScanKey(id: project.id, start: project.rangeStart, end: project.rangeEnd,
+                                      locationEnabled: project.locationEnabled)) {
                 selection.activate(project)     // hydrate persisted picks so the counts are live
                 doneStore.activate(project)     // hydrate marked-done days so the state colours are live
                 let range = project.rangeStart..<project.rangeEnd
-                // First load, or the period changed → re-scan from scratch (a retained .ready store holds
-                // the OLD range's clusters). Otherwise reuse the loaded store and just (re)build the index.
-                if store == nil || scannedRange != range {
-                    store = CandidateStore(library: library, naming: placeNaming,
+                // First load, or the period / location setting changed → re-scan from scratch (a retained
+                // .ready store holds the OLD clusters). Otherwise reuse the store and just (re)build the index.
+                if store == nil || scannedRange != range || scannedLocationEnabled != project.locationEnabled {
+                    store = CandidateStore(library: library, locationEnabled: project.locationEnabled,
+                                           naming: placeNaming,
                                            nameCache: NameCacheStore(modelContainer: modelContext.container))
                     scannedRange = range
+                    scannedLocationEnabled = project.locationEnabled
                     await scan()
                 } else if index == nil, case .ready(let clusters) = store?.phase {
                     index = ClusterIndexBuilder.build(from: clusters, tripNames: store?.tripNames ?? [:])

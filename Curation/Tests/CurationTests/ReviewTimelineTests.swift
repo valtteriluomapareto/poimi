@@ -290,6 +290,31 @@ struct ReviewTimelineTests {
         #expect(timeline.compactMap(\.tripCluster).count == 1)
     }
 
+    // MARK: — ReviewCluster passthroughs (the render-layer surface)
+
+    @Test("a trip cluster samples evenly across its MERGED members (not per day-group)")
+    func tripEvenSampling() {
+        let g1 = DayGroup(id: "g1", assetIDs: (0..<5).map { "a\($0)" }, days: [key(10)], isBusyDay: true)
+        let g2 = DayGroup(id: "g2", assetIDs: (5..<10).map { "a\($0)" }, days: [key(11)], isBusyDay: true)
+        let trip = ReviewCluster.trip(TripCluster(id: "t", clusterID: "c", shape: .weekend, dayGroups: [g1, g2]))
+        let sample = trip.evenlySampledIDs(4)
+        #expect(sample.count == 4)
+        #expect(sample.first == "a0")                                      // overall first
+        #expect(sample.last == "a9")                                       // overall last, across the merge
+        #expect(trip.evenlySampledIDs(100) == (0..<10).map { "a\($0)" })   // count ≥ n → all, in order
+    }
+
+    @Test("ReviewCluster firstDay / isUndated passthroughs")
+    func clusterPassthroughs() {
+        let undated = ReviewCluster.day(DayGroup(id: "u", assetIDs: ["u0"], days: [.undated], isBusyDay: false))
+        #expect(undated.isUndated)
+        #expect(undated.firstDay == .undated)
+        let trip = ReviewCluster.trip(TripCluster(id: "t", clusterID: "c", shape: .visit,
+            dayGroups: [DayGroup(id: "g", assetIDs: ["x"], days: [key(5)], isBusyDay: true)]))
+        #expect(!trip.isUndated)
+        #expect(trip.firstDay == key(5))
+    }
+
     // MARK: — property field
 
     /// A realistic album: a home run spanning most days, 0–3 disjoint away trips (busy days), plus some
