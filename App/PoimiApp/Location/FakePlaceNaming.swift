@@ -40,7 +40,16 @@ actor FakePlaceNaming: PlaceNaming {
         if let error = errors[cell] { throw error }
         if unnamed.contains(cell) { return nil }
         if let name = names[cell] { return name }
-        return "Place \(cell)"   // deterministic synthetic default
+        // A deterministic, NON-coordinate synthetic name — a coordinate must never reach the UI (product
+        // rule), not even from the fake in previews/screenshots. Stable across runs (scalar-sum, not the
+        // randomized `String.hashValue`), and distinct-enough that separate places read differently.
+        let index = cell.unicodeScalars.reduce(0) { $0 &+ Int($1.value) } % Self.syntheticNames.count
+        return Self.syntheticNames[index]
     }
+
+    /// Fake place names (deliberately not real, never coordinates) for previews/tests/screenshots.
+    private static let syntheticNames = [
+        "Testby", "Fakenäs", "Mockala", "Dummeberg", "Sampleton", "Placeholmen", "Nowheresund", "Faketon"
+    ]
 }
 #endif

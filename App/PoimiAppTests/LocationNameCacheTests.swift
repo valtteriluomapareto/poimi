@@ -49,14 +49,15 @@ struct LocationNameCacheTests {
     @Test("each trip place is geocoded once; a second pass is served entirely from cache")
     func geocodesOnceThenCaches() async throws {
         let assets = homePlusTwoTrips()
-        let fake = FakePlaceNaming()
+        let alandCell = GeocodeCell.key(for: Coordinate(latitude: Self.aland.lat, longitude: Self.aland.lon))
+        let romeCell = GeocodeCell.key(for: Coordinate(latitude: Self.rome.lat, longitude: Self.rome.lon))
+        let fake = FakePlaceNaming(names: [alandCell: "Åland", romeCell: "Rome"])
         let pre = LocationPreprocessor(naming: fake, cache: try makeCache())
 
-        let alandCell = GeocodeCell.key(for: Coordinate(latitude: Self.aland.lat, longitude: Self.aland.lon))
         let first = await pre.resolveTripNames(for: assets, minPts: 3, calendar: cal)
         #expect(first.count == 2)                                    // both trip places named
         #expect(await fake.callCount == 2)                           // geocoded exactly twice
-        #expect(first.values.contains("Place \(alandCell)"))
+        #expect(Set(first.values) == ["Åland", "Rome"])
 
         let second = await pre.resolveTripNames(for: assets, minPts: 3, calendar: cal)
         #expect(second == first)                                     // identical result
@@ -82,13 +83,13 @@ struct LocationNameCacheTests {
     func failureIsolatesToOnePlace() async throws {
         let romeCell = GeocodeCell.key(for: Coordinate(latitude: Self.rome.lat, longitude: Self.rome.lon))
         let alandCell = GeocodeCell.key(for: Coordinate(latitude: Self.aland.lat, longitude: Self.aland.lon))
-        let fake = FakePlaceNaming(errors: [romeCell: .rateLimited])
+        let fake = FakePlaceNaming(names: [alandCell: "Åland"], errors: [romeCell: .rateLimited])
         let pre = LocationPreprocessor(naming: fake, cache: try makeCache())
 
         let names = await pre.resolveTripNames(for: homePlusTwoTrips(), minPts: 3, calendar: cal)
         #expect(names.count == 1)                                    // rome failed, aland resolved
-        #expect(names.values.contains("Place \(alandCell)"))
-        #expect(!names.values.contains { $0.contains(romeCell) })
+        #expect(names.values.contains("Åland"))
+        #expect(!names.values.contains("Rome"))                      // rome errored → stays unnamed
     }
 
     @Test("a failed place is NOT cached — a later pass retries it")
