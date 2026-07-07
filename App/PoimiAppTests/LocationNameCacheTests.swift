@@ -148,3 +148,15 @@ struct LocationNameCacheTests {
         #expect(a == "60.170,24.940")                               // stable, documented format
     }
 }
+
+@Suite("TripLabel — the location sentence")
+struct TripLabelTests {
+    @Test("each shape composes its designed phrasing (the signed-off wording)")
+    func phrasing() {
+        #expect(TripLabel.sentence(for: .visit, place: "Pori") == "Visit to Pori")
+        #expect(TripLabel.sentence(for: .weekend, place: "Åland") == "Weekend in Åland")
+        #expect(TripLabel.sentence(for: .shortTrip, place: "Oulu") == "Short trip to Oulu")
+        #expect(TripLabel.sentence(for: .week, place: "Äkäslompolo") == "Week in Äkäslompolo")
+        #expect(TripLabel.sentence(for: .longer(days: 12), place: "Italy") == "12 days in Italy")
+    }
+}

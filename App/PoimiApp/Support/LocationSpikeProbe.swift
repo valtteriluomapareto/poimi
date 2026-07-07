@@ -320,6 +320,11 @@ final class LocationSpikeModel {
 
     // Outputs.
     private(set) var result: SpikeResult?
+    /// The PRODUCT view (Phase 3): the merged review timeline — trips relabelled over the date
+    /// day-groups — that the real Overview/grid will render, so a real library previews the actual
+    /// labelled + interleaved output (the validation gate before the UI ripple). Home is always excluded
+    /// here, as in production. Computed off-main alongside `result`, never in a `body`.
+    private(set) var reviewClusters: [ReviewCluster] = []
     /// clusterID (medoid asset id) → suggested name. Accumulated across recomputes and reused: a
     /// medoid's coordinate is fixed, so its name is stable once resolved.
     private(set) var names: [String: String] = [:]
@@ -443,6 +448,13 @@ final class LocationSpikeModel {
         }.value
         guard mine == generation else { return }   // a newer recompute superseded this one
         result = computed
+        // The product timeline (same params; home excluded as in production) — off-main, never in a body.
+        let timeline = await Task.detached(priority: .utility) {
+            ReviewTimeline.clusters(for: assets, eps: params.epsMeters, minPts: params.minPts,
+                                    tripGapToleranceDays: params.gapToleranceDays, calendar: cal)
+        }.value
+        guard mine == generation else { return }
+        reviewClusters = timeline
         findings = findingsMarkdown()
         isComputing = false
         await geocode(computed, generation: mine)
@@ -505,6 +517,21 @@ final class LocationSpikeModel {
             lines.append("| \(name) | \(t.dayCount) | \(t.photoCount) | \(percent(t.gpsCoverage)) | \(span) |")
         }
         lines.append("")
+        if !reviewClusters.isEmpty {
+            lines.append("## Review timeline (product view)")
+            lines.append("| label | span | photos |")
+            lines.append("| --- | --- | ---: |")
+            for cluster in reviewClusters {
+                let days = cluster.days.filter { $0 != .undated }
+                let span = days.isEmpty ? "undated"
+                    : "\(days.min()!.description) → \(days.max()!.description)"
+                let label = cluster.tripCluster.map {
+                    TripLabel.sentence(for: $0.shape, place: names[$0.clusterID] ?? "unnamed")
+                } ?? "· \(span)"
+                lines.append("| \(label) | \(span) | \(cluster.count) |")
+            }
+            lines.append("")
+        }
         return lines.joined(separator: "\n")
     }
 
@@ -579,6 +606,15 @@ struct LocationSpikeProbeView: View {
                 if !model.kDistances.isEmpty {
                     KDistancePlot(distances: model.kDistances, k: model.kUsed, epsMeters: model.epsMeters)
                 }
+                if !model.reviewClusters.isEmpty {
+                    SpikeSectionHeader(title: "Review timeline", count: model.reviewClusters.count)
+                    Text(verbatim: "The product view: trips labelled over the date clusters, "
+                        + "home excluded — what the real Overview/grid will show.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach(model.reviewClusters) { cluster in
+                        SpikeTimelineRow(cluster: cluster, names: model.names, calendar: model.calendar)
+                    }
+                }
                 if let result = model.result {
                     if !result.trips.isEmpty {
                         SpikeSectionHeader(title: "Trips", count: result.trips.count)
@@ -594,6 +630,50 @@ struct LocationSpikeProbeView: View {
             }
             .padding()
         }
+    }
+}
+
+/// One row of the product review timeline: a trip carries its `TripLabel` sentence (pin) + span +
+/// count; a plain date cluster carries its date + count. Mirrors the signed-off Overview (`3ZP-0`).
+private struct SpikeTimelineRow: View {
+    let cluster: ReviewCluster
+    let names: [String: String]
+    let calendar: Calendar
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: cluster.tripCluster != nil ? "mappin.circle.fill" : "calendar")
+                .foregroundStyle(cluster.tripCluster != nil ? Color.orange : Color.secondary)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: title)
+                    .font(.subheadline)
+                    .fontWeight(cluster.tripCluster != nil ? .semibold : .regular)
+                Text(verbatim: subtitle)
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var title: String {
+        guard let trip = cluster.tripCluster else { return dateRange }
+        return TripLabel.sentence(for: trip.shape, place: names[trip.clusterID] ?? "unnamed place")
+    }
+
+    private var subtitle: String {
+        let photos = "\(cluster.count) photos"
+        return cluster.tripCluster != nil ? "\(dateRange) · \(photos)" : photos
+    }
+
+    private var dateRange: String {
+        let days = cluster.days.filter { $0 != .undated }
+        guard let first = days.min(), let last = days.max() else { return "Undated" }
+        func fmt(_ key: DayKey) -> String {
+            key.anchorDate(in: calendar)?.formatted(date: .abbreviated, time: .omitted) ?? key.description
+        }
+        return first == last ? fmt(first) : "\(fmt(first)) – \(fmt(last))"
     }
 }
 

@@ -16,11 +16,13 @@
 //    • **Contiguous time-run.** A run is a maximal chain of away days each within `gapToleranceDays`
 //      of the previous (reuse `DayGrouping.dayGap`). A **home day breaks the run** (fly-home-between-
 //      two-trips → two trips); intervening days with no located photos are neutral and bridged.
-//    • **Label = plurality, not merge.** The run is named by the cluster holding the plurality of its
-//      located (non-home) assets — ties broken by lower medoid id, the canonical cluster identity.
-//      *Label*-by-dominant, not *merge*-by-dominant: the clusters stay distinct, every place keeps its
-//      own browsable bucket, and only the run's *name* goes to the winner (the concurrent-location
-//      family case: both buckets exist, the mixed week is merely *named* by the plurality).
+//    • **Label = most DAYS (time), not most photos.** The run is named by the cluster that is the
+//      per-day dominant on the most days — where the most *time* was spent, by timestamps — so a
+//      photo-heavy day-excursion (an amusement-park day inside a week away) can't out-vote the place
+//      you were actually based. Tie-broken by total located photos, then by lower medoid id (the
+//      canonical cluster identity). Still *label*-by-dominant, not *merge*-by-dominant: the clusters
+//      stay distinct, every place keeps its own browsable bucket, and only the run's *name* goes to the
+//      winner (the concurrent-location family case: both buckets exist, the mixed week is merely *named*).
 //    • Sub-day place splits are out of scope (they'd break the done-day atom); two trips on one day
 //      resolve to that day's dominant label — a known v1.1 limitation (§6).
 //
@@ -110,18 +112,38 @@ public enum TripOverlay {
         }
         if !current.isEmpty { runs.append(current) }
 
-        // Label each run by the plurality of its located NON-home assets (an away run always has
-        // some, since every away day's plurality is non-home). Home is excluded from the label so a
-        // run is never named "home."
+        // Label each run by where the most DAYS were spent (time), not the most photos: pick each day's
+        // dominant non-home cluster, then name the run by the cluster that wins the most days. Tie-break:
+        // total located non-home photos, then lower medoid id. This stops a single photo-heavy excursion
+        // day (e.g. an amusement park) from renaming a longer stay it's nested inside.
         return runs.compactMap { runDays in
-            var runTally: [String: Int] = [:]
+            var dayWinners: [String] = []
+            var photosByCluster: [String: Int] = [:]
             for day in runDays {
-                for (clusterID, quantity) in tallyByDay[day] ?? [:] where clusterID != homeID {
-                    runTally[clusterID, default: 0] += quantity
-                }
+                var dayTally = tallyByDay[day] ?? [:]
+                if let homeID { dayTally[homeID] = nil }        // home never labels an away run
+                guard let winner = plurality(dayTally) else { continue }
+                dayWinners.append(winner)
+                for (clusterID, quantity) in dayTally { photosByCluster[clusterID, default: 0] += quantity }
             }
-            guard let label = plurality(runTally) else { return nil }
+            guard let label = runLabel(dayWinners: dayWinners, photos: photosByCluster) else { return nil }
             return Trip(clusterID: label, days: runDays)
+        }
+    }
+
+    /// The run's label: the cluster that is the per-day dominant on the most DAYS (where the most *time*
+    /// was spent), tie-broken by total located photos, then by lower medoid id (the canonical identity).
+    /// `nil` for an empty run. Order-independent (a max over the day-winner tally).
+    private static func runLabel(dayWinners: [String], photos: [String: Int]) -> String? {
+        guard !dayWinners.isEmpty else { return nil }
+        var days: [String: Int] = [:]
+        for id in dayWinners { days[id, default: 0] += 1 }
+        return days.keys.max { lhs, rhs in
+            let (dl, dr) = (days[lhs] ?? 0, days[rhs] ?? 0)
+            if dl != dr { return dl < dr }                       // more days wins
+            let (pl, pr) = (photos[lhs] ?? 0, photos[rhs] ?? 0)
+            if pl != pr { return pl < pr }                       // then more photos
+            return lhs > rhs                                     // then lower medoid id
         }
     }
 
