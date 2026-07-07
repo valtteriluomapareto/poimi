@@ -17,6 +17,9 @@
 //
 
 import SwiftUI
+#if DEBUG
+import UIKit   // UIPasteboard for the DEBUG "Copy scan diagnostics" tool
+#endif
 
 struct AlbumSettingsView: View {
     @Environment(ProjectStore.self) private var store
@@ -131,10 +134,18 @@ struct AlbumSettingsView: View {
                     Label { Text(verbatim: "Location clustering") } icon: { Image(systemName: "map") }
                 }
                 .tint(.primary)
+                Button {
+                    UIPasteboard.general.string = coordinator.candidateStore?.scanReport?.text
+                        ?? "No scan yet — open this album's overview first."
+                } label: {
+                    Label { Text(verbatim: "Copy scan diagnostics") } icon: { Image(systemName: "stopwatch") }
+                }
+                .tint(.primary)
             } header: {
                 Text(verbatim: "Developer")
             } footer: {
-                Text(verbatim: "Clusters this album's photos into places / trips; tune eps / minPts live.")
+                Text(verbatim: "Clusters this album live (tune eps / minPts). Scan diagnostics = where an "
+                    + "album-open's time goes (fetch / cluster / naming), copied for sharing.")
             }
             #endif
         }

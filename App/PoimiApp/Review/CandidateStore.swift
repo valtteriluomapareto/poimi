@@ -97,6 +97,38 @@ final class CandidateStore {
     /// retry paths (`onRetry`/`onRecovered`) that re-enter `load()` without cancelling the prior `.task`.
     private var loadGeneration = 0
 
+    /// Where an album-open's time goes — fetch vs cluster vs naming — so we can target caching at the
+    /// real bottleneck. Populated each `load`; `namingMillis`/`namesResolved` fill in when the detached
+    /// name pass completes. Just measured data (no behaviour); a copyable summary is surfaced from
+    /// Album Settings in DEBUG (`ScanReport.text`).
+    private(set) var scanReport: ScanReport?
+
+    struct ScanReport: Sendable {
+        let albumTitle: String
+        let candidateCount: Int
+        let clusterCount: Int
+        let tripCount: Int
+        let fetchMillis: Double
+        let clusterMillis: Double
+        var namingMillis: Double?
+        var namesResolved: Int?
+        let locationEnabled: Bool
+
+        /// A one-screen, copyable summary (shared per-album to see where the open time goes).
+        var text: String {
+            let naming = namingMillis.map { "\(Int($0)) ms (\(namesResolved ?? 0) names)" } ?? "pending…"
+            return """
+            Poimi scan diagnostics — \(albumTitle)
+            location grouping: \(locationEnabled ? "on" : "off")
+            candidates: \(candidateCount)
+            clusters: \(clusterCount) (\(tripCount) trips)
+            fetch:   \(Int(fetchMillis)) ms
+            cluster: \(Int(clusterMillis)) ms
+            naming:  \(naming)
+            """
+        }
+    }
+
     init(library: any PhotoLibraryProviding,
          calendar: Calendar = .current,
          locationEnabled: Bool = true,
@@ -130,12 +162,14 @@ final class CandidateStore {
         let interval = DateInterval(start: project.rangeStart, end: project.rangeEnd)
 
         do {
+            let fetchStart = Date()
             let fetched = try await library.fetchAssets(in: interval)
             let excludedAssetIDs = try await library.assetIDs(inAlbums: project.excludedAlbumIDs)
             let candidates = Filtering.included(
                 fetched,
                 excludeScreenshots: project.excludeScreenshots,
                 excludedAssetIDs: excludedAssetIDs)
+            let fetchMillis = Date().timeIntervalSince(fetchStart) * 1000
             // Assemble the timeline once, here, OFF the main actor — the grid renders it directly and
             // never recomputes it (Finding 1). Clustering (DBSCAN over the located set) is heavier than
             // the old day-grouping, so it runs on a detached task to keep the scan off the UI thread;
@@ -143,9 +177,11 @@ final class CandidateStore {
             // off (or no trips) the result is the date-only day-grouping wrapped as `.day` clusters.
             let locationOn = locationEnabled
             let cal = calendar
+            let clusterStart = Date()
             let clusters = await Task.detached(priority: .userInitiated) {
                 ReviewTimeline.clusters(for: candidates, calendar: cal, locationEnabled: locationOn)
             }.value
+            let clusterMillis = Date().timeIntervalSince(clusterStart) * 1000
             // Per-photo day map for the viewer's label (#36), built from the same candidates +
             // calendar so it agrees with the grouping (a busy day and the viewer read the same day).
             // In practice every value is a real day: a range fetch never returns a nil-capture-date
@@ -160,6 +196,12 @@ final class CandidateStore {
                 phase = .empty(fetched.isEmpty ? .noPhotosInRange : .allExcluded)
             } else {
                 phase = .ready(clusters)
+                scanReport = ScanReport(
+                    albumTitle: project.title, candidateCount: candidates.count,
+                    clusterCount: clusters.count,
+                    tripCount: clusters.filter { $0.tripCluster != nil }.count,
+                    fetchMillis: fetchMillis, clusterMillis: clusterMillis,
+                    namingMillis: nil, namesResolved: nil, locationEnabled: locationEnabled)
                 // Resolve trip place names in a DETACHED, cancellable task — geocoding is network-bound
                 // and slow (§7), so it must never block `.ready` (the grid/viewer publish + done reconcile
                 // happen as soon as we return). Names fill into `tripNames` when the pass completes
@@ -185,10 +227,14 @@ final class CandidateStore {
         guard locationEnabled, let naming, let nameCache,
               clusters.contains(where: { $0.tripCluster != nil }) else { return }
         let preprocessor = LocationPreprocessor(naming: naming, cache: nameCache)
+        let namingStart = Date()
         let names = await preprocessor.resolveTripNames(for: candidates, calendar: calendar)
         // Only publish if this is still the current load (a newer load bumps the token / cancels us).
         guard generation == loadGeneration, !Task.isCancelled else { return }
         tripNames = names
+        // Record the naming cost (fast = cache hits, slow = first-run geocoding) for the diagnostics.
+        scanReport?.namingMillis = Date().timeIntervalSince(namingStart) * 1000
+        scanReport?.namesResolved = names.count
     }
 
     /// The display label for a trip cluster: the resolved place sentence ("Week in Salo"), or `nil`
