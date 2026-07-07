@@ -36,28 +36,27 @@ enum GeocodeCell {
 /// constraint — SIGTRAP).
 @ModelActor
 actor NameCacheStore {
-    /// The cached name for a cell, or `nil` on a miss.
-    func cachedName(forCell cell: String) -> String? {
-        var descriptor = FetchDescriptor<GeocodedPlaceName>(predicate: #Predicate { $0.cellKey == cell })
-        descriptor.fetchLimit = 1
-        return (try? modelContext.fetch(descriptor))?.first?.name
+    /// ALL cached names as a cell→name dict, in ONE fetch. The naming pass loads this once and looks up
+    /// in memory — a per-place fetch cost ~0.5 s per SwiftData round-trip on device, so 12 of them was
+    /// ~6 s (the "slow cache"). One fetch of the whole small table is a single round-trip.
+    func allNames() -> [String: String] {
+        let rows = (try? modelContext.fetch(FetchDescriptor<GeocodedPlaceName>())) ?? []
+        return Dictionary(rows.map { ($0.cellKey, $0.name) }, uniquingKeysWith: { first, _ in first })
     }
 
-    /// Store (or refresh) a cell's name.
-    func store(name: String, forCell cell: String, at date: Date) {
-        var descriptor = FetchDescriptor<GeocodedPlaceName>(predicate: #Predicate { $0.cellKey == cell })
-        descriptor.fetchLimit = 1
-        if let existing = (try? modelContext.fetch(descriptor))?.first {
-            existing.name = name
-            existing.fetchedAt = date
-        } else {
-            modelContext.insert(GeocodedPlaceName(cellKey: cell, name: name, fetchedAt: date))
+    /// Insert freshly-geocoded cell→name rows in ONE save (skipping cells already present). No `.unique`
+    /// constraint (SIGTRAP), so the existing-set check keeps it idempotent.
+    func store(_ entries: [(cell: String, name: String)], at date: Date) {
+        guard !entries.isEmpty else { return }
+        let existing = Set(((try? modelContext.fetch(FetchDescriptor<GeocodedPlaceName>())) ?? []).map(\.cellKey))
+        for entry in entries where !existing.contains(entry.cell) {
+            modelContext.insert(GeocodedPlaceName(cellKey: entry.cell, name: entry.name, fetchedAt: date))
         }
         do {
             try modelContext.save()
         } catch {
             // A silent `try?` here would look exactly like "the cache never persists" — log it instead.
-            Log.location.error("Name-cache save failed (\(cell, privacy: .public)): \(String(describing: error))")
+            Log.location.error("Name-cache save failed: \(String(describing: error))")
         }
     }
 
@@ -107,12 +106,15 @@ actor LocationPreprocessor {
 
         lastCacheHits = 0
         lastGeocoded = 0
+        // Load the whole (small) cache in ONE fetch, then look up in memory — never a fetch per place.
+        let cachedByCell = await cache.allNames()
         var namesByClusterID: [String: String] = [:]
+        var freshlyGeocoded: [(cell: String, name: String)] = []
         for clusterID in tripClusterIDs {
             guard let cluster = clusterByID[clusterID] else { continue }
             let cell = GeocodeCell.key(for: cluster.medoid)
 
-            if let cached = await cache.cachedName(forCell: cell) {
+            if let cached = cachedByCell[cell] {
                 lastCacheHits += 1
                 namesByClusterID[clusterID] = cached
                 continue
@@ -120,8 +122,8 @@ actor LocationPreprocessor {
             do {
                 if let name = try await naming.name(for: cluster.medoid) {
                     lastGeocoded += 1
-                    await cache.store(name: name, forCell: cell, at: now())
                     namesByClusterID[clusterID] = name
+                    freshlyGeocoded.append((cell, name))
                 }
                 // A `nil` name is a valid "unnamed" place — leave it unresolved (don't cache "").
             } catch {
@@ -131,6 +133,7 @@ actor LocationPreprocessor {
                     "Reverse-geocode failed for place \(clusterID, privacy: .public): \(String(describing: error))")
             }
         }
+        await cache.store(freshlyGeocoded, at: now())   // one save for all new names (cache-hit pass → none)
         return namesByClusterID
     }
 }
