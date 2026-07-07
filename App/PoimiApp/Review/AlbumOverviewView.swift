@@ -273,7 +273,18 @@ enum ClusterIndexBuilder {
                       tripNames: [String: String] = [:],
                       calendar: Calendar = .current,
                       locale: Locale = .current) -> ClusterIndex {
+        // When the album's dated clusters span more than one calendar year, a bare month header is
+        // ambiguous — "February" could be two different years (Poimi supports any date range, not just a
+        // year). Include the year ("February 2025") only then; a single-year album keeps the bare month
+        // (no noise). Derived from the clusters actually present (not the range), so a range that merely
+        // straddles a year boundary with photos on one side stays single-year. Computed once here (#119).
+        let datedYears = Set(clusters.compactMap { cluster -> Int? in
+            guard !cluster.isUndated, let day = cluster.firstDay,
+                  let date = day.anchorDate(in: calendar) else { return nil }
+            return calendar.component(.year, from: date)
+        })
         var monthStyle = Date.FormatStyle.dateTime.month(.wide).locale(locale)
+        if datedYears.count > 1 { monthStyle = monthStyle.year() }
         monthStyle.timeZone = calendar.timeZone
 
         var sections: [MonthSection] = []
@@ -327,7 +338,8 @@ enum ClusterIndexBuilder {
 
 // MARK: - The cluster list row + sticky month header
 
-/// A sticky month header ("February") over its clusters. Opaque so scrolling rows don't bleed through.
+/// A sticky month header ("February", or "February 2025" for a multi-year album — #119) over its
+/// clusters. Opaque so scrolling rows don't bleed through.
 struct ClusterMonthHeader: View {
     let title: String
 

@@ -55,10 +55,10 @@ struct ClusterIndexBuilderTests {
         #expect(row.count == 6)
     }
 
-    @Test("same month in DIFFERENT years are distinct sections — the yyyy-MM id, not just month")
+    @Test("same month in DIFFERENT years are distinct sections, and the header shows the year (#119)")
     func yearBoundarySplitsSections() {
-        // Two Februaries a year apart must NOT collapse into one section (the whole point of keying on
-        // "yyyy-MM"). A month-only key would silently merge them.
+        // Two Februaries a year apart must NOT collapse into one section (keyed on "yyyy-MM"). And since
+        // the album spans >1 year, the headers include the year so they aren't ambiguously both "February".
         let groups = [
             group("a", 2024, 2, 10, count: 6),
             group("b", 2025, 2, 10, count: 6)
@@ -66,7 +66,41 @@ struct ClusterIndexBuilderTests {
         let index = ClusterIndexBuilder.build(from: groups, calendar: cal, locale: locale)
         #expect(index.sections.count == 2)
         #expect(index.sections.map(\.id) == ["2024-02", "2025-02"])
-        #expect(index.sections.map(\.title) == ["February", "February"])
+        #expect(index.sections.map(\.title) == ["February 2024", "February 2025"])
+    }
+
+    @Test("year appears in month headers only when the album spans multiple years (#119)")
+    func yearShownOnlyForMultiYearAlbums() {
+        // Single-year album → bare month (no noise). The undated bucket doesn't count as a "year", so an
+        // otherwise single-year album with undated photos still omits the year.
+        let singleYear = ClusterIndexBuilder.build(
+            from: [group("a", 2025, 2, 1, count: 3), group("b", 2025, 11, 1, count: 3), undatedGroup(count: 2)],
+            calendar: cal, locale: locale)
+        #expect(singleYear.sections.map(\.title) == ["February", "November", "Undated"])
+        // Multi-year album → every month header carries its year.
+        let multiYear = ClusterIndexBuilder.build(
+            from: [group("a", 2024, 12, 20, count: 3), group("b", 2025, 1, 5, count: 3)],
+            calendar: cal, locale: locale)
+        #expect(multiYear.sections.map(\.title) == ["December 2024", "January 2025"])
+
+        // Three+ years → all year-qualified (guards against a `== 2` off-by-one instead of `> 1`).
+        let threeYear = ClusterIndexBuilder.build(
+            from: [group("a", 2023, 6, 1, count: 2), group("b", 2024, 6, 1, count: 2),
+                   group("c", 2025, 6, 1, count: 2)],
+            calendar: cal, locale: locale)
+        #expect(threeYear.sections.map(\.title) == ["June 2023", "June 2024", "June 2025"])
+    }
+
+    @Test("a single run straddling a year boundary keys off its first day → no year (firstDay-only, #119)")
+    func yearFromFirstDayOfAStraddlingRun() {
+        // "Multi-year" is derived from each cluster's FIRST day (matching how sections are keyed), so a
+        // lone run spanning Dec 31 2024 → Jan 1 2025 registers only 2024 ⇒ single-year ⇒ bare "December".
+        // This locks the firstDay-only semantics rather than leaving them incidental.
+        let run = ReviewCluster.day(DayGroup(id: "nye", assetIDs: ["nye-0", "nye-1"],
+                           days: [.day(year: 2024, month: 12, day: 31), .day(year: 2025, month: 1, day: 1)],
+                           isBusyDay: false))
+        let index = ClusterIndexBuilder.build(from: [run], calendar: cal, locale: locale)
+        #expect(index.sections.map(\.title) == ["December"])
     }
 
     @Test("a multi-day (folded quiet-run) cluster sits in its FIRST day's month section")
