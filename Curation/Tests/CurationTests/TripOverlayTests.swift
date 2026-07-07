@@ -101,6 +101,24 @@ struct TripOverlayTests {
         #expect(trips[0].clusterID == "aaa-10-0")
     }
 
+    @Test("a run is labelled by where the most DAYS were spent, not where the most photos were taken")
+    func labelByTimeNotPhotoVolume() {
+        // A 4-day away run: BASED in city A for 3 days (few photos each), with a single photo-heavy
+        // day-excursion to city B (the "amusement park day" — one day, many photos). home: nil so both
+        // are away; gap 1 ≤ tolerance so it's ONE run. Photo-plurality would name it B (60 > 9); the
+        // time-based label names it A (3 days > 1). The Naantali case, distilled.
+        let cityA = place("aaa", 60.0, 24.0, offsets: [10, 11, 12], perDay: 3)   //  9 photos, 3 days
+        let cityB = place("bbb", 61.0, 25.0, offsets: [13], perDay: 60)          // 60 photos, 1 day
+        let assets = cityA + cityB
+        let clusters = PlaceClustering.clusters(for: assets, minPts: 3, calendar: cal)
+        let trips = TripOverlay.trips(assets: assets, clusters: clusters, home: nil,
+                                      gapToleranceDays: 2, calendar: cal)
+        #expect(trips.count == 1)
+        let cityACluster = clusters.clusters.first { $0.assetIDs.contains { $0.hasPrefix("aaa-") } }
+        #expect(trips[0].clusterID == cityACluster?.id)   // A (most days) wins over B (most photos)
+        #expect(Set(trips[0].days) == Set([key(10), key(11), key(12), key(13)]))
+    }
+
     // MARK: Invariant 7 — the §6 trip cases
 
     @Test("the same place visited in two separate months → two trips, same cluster")
