@@ -252,8 +252,10 @@ struct PlaceClusterTests {
             let east = i % 2 == 0
             assets.append(located("fij\(i)", -17.0, east ? 179.95 : -179.95, dayOffset: i))
         }
-        let result = PlaceClustering.clusters(for: assets, minPts: 3, calendar: cal)
-        // A naive longitude subtraction would split ±179.95 into two clusters ~40 000 km apart.
+        // eps pinned to 25 km (not the 3 km default): the two seam sides sit ~10 km apart, so this
+        // exercises the wrap-aware delta at a coarse radius — a naive subtraction would put ±179.95
+        // ~40 000 km apart, never clustering at ANY eps.
+        let result = PlaceClustering.clusters(for: assets, eps: 25_000, minPts: 3, calendar: cal)
         #expect(result.clusters.count == 1)
         #expect(result.clusters[0].count == 8)
     }
@@ -279,13 +281,14 @@ struct PlaceClusterTests {
     func medoidDriftsWithNearMass() {
         // Invariant 3 pins stability under FAR additions; the complement is that a near addition is
         // *allowed* to move the medoid. Five identical points → medoid = lowest id; adding 20 points
-        // ~5 km away (still one cluster, < eps) pulls the medoid to the new centre of gravity.
+        // ~5 km away (still one cluster at the pinned 25 km eps) pulls the medoid to the new centre.
+        // eps pinned (not the 3 km default) so this behaviour test doesn't hinge on the default radius.
         var points = (0..<5).map { located("a\($0)", 41.90, 12.50, dayOffset: $0) }
-        let before = PlaceClustering.clusters(for: points, minPts: 3, calendar: cal)
+        let before = PlaceClustering.clusters(for: points, eps: 25_000, minPts: 3, calendar: cal)
         #expect(before.clusters.count == 1)
         let originalMedoid = before.clusters[0].id
         points += (0..<20).map { located("b\($0)", 41.95, 12.50, dayOffset: 50 + $0) }
-        let after = PlaceClustering.clusters(for: points, minPts: 3, calendar: cal)
+        let after = PlaceClustering.clusters(for: points, eps: 25_000, minPts: 3, calendar: cal)
         #expect(after.clusters.count == 1)          // 5 km < eps 25 km → still one cluster
         #expect(after.clusters[0].id != originalMedoid)   // medoid drifted toward the added mass
     }
