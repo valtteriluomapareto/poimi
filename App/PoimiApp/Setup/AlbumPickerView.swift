@@ -60,7 +60,9 @@ struct AlbumPickerView: View {
         .navigationTitle(allowsMultiple ? "Exclude albums" : "Save to album")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            albums = (try? await library.albums()) ?? []
+            // Sorted A→Z (localized, case-insensitive, natural-numeric) so a specific album is easy to
+            // find in a long list — the library returns them in an arbitrary order (#124).
+            albums = ((try? await library.albums()) ?? []).sortedByTitle()
             loaded = true
         }
     }
