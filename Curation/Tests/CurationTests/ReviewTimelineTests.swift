@@ -359,4 +359,37 @@ struct ReviewTimelineTests {
         assets.shuffle(using: &rng)
         return assets
     }
+
+    // MARK: — Codable round-trip (the timeline cache serializes `[ReviewCluster]`, #130)
+
+    @Test("a computed timeline survives a JSON encode/decode round-trip byte-identically", arguments: 0..<50)
+    func codableRoundTrip(seed: Int) throws {
+        // The app-tier `TimelineCache` persists the assembled `[ReviewCluster]` as JSON and reloads it to
+        // skip re-clustering. That's only correct if the round-trip is lossless — trips (incl. medoid +
+        // shape), day-groups, and undated all preserved. Exercise a real, trip-bearing timeline.
+        var rng = SeededRNG(seed: UInt64(seed))
+        let assets = field(&rng, undated: true)
+        let timeline = ReviewTimeline.clusters(for: assets, calendar: cal)
+        let data = try JSONEncoder().encode(timeline)
+        let restored = try JSONDecoder().decode([ReviewCluster].self, from: data)
+        #expect(restored == timeline)
+    }
+
+    @Test("round-trip preserves a trip's medoid (present + absent) and an associated-value shape")
+    func codableRoundTripMedoidAndShape() throws {
+        // `field` trips always carry a medoid; pin the `nil`-medoid path and the `.longer(days:)`
+        // associated value explicitly, since the cache serializes exactly these.
+        let group = DayGroup(id: "2025-06-07", assetIDs: ["a", "b"], days: [key(157)], isBusyDay: false)
+        let coord = Coordinate(latitude: 60.1, longitude: 19.9)
+        let timeline: [ReviewCluster] = [
+            .trip(TripCluster(id: "t1", clusterID: "c1", shape: .longer(days: 15), dayGroups: [group], medoid: coord)),
+            .day(group),
+            .trip(TripCluster(id: "t2", clusterID: "c2", shape: .visit, dayGroups: [group], medoid: nil))
+        ]
+        let restored = try JSONDecoder().decode([ReviewCluster].self, from: JSONEncoder().encode(timeline))
+        #expect(restored == timeline)
+        #expect(restored[0].tripCluster?.medoid == coord)
+        #expect(restored[0].tripCluster?.shape == .longer(days: 15))
+        #expect(restored[2].tripCluster?.medoid == nil)
+    }
 }

@@ -93,7 +93,8 @@ struct AlbumOverviewView: View {
                 let store = coordinator.candidateStore(for: project) {
                     CandidateStore(library: library, locationEnabled: project.locationEnabled,
                                    naming: placeNaming,
-                                   nameCache: NameCacheStore(modelContainer: modelContext.container))
+                                   nameCache: NameCacheStore(modelContainer: modelContext.container),
+                                   timelineCache: coordinator.timelineCache)
                 }
                 self.store = store
                 if store.phase == .idle {

@@ -293,6 +293,51 @@ struct PlaceClusterTests {
         #expect(after.clusters[0].id != originalMedoid)   // medoid drifted toward the added mass
     }
 
+    @Test("a huge cluster (> exactMedoidLimit) still gets a central, deterministic medoid (sampled)")
+    func largeClusterMedoidIsCentralAndDeterministic() {
+        // Above the exact-medoid limit the medoid is scored against a strided sample, not all members.
+        // The result must still be (a) a real, central member — near the blob's centre — and (b) fully
+        // deterministic: order-independent (canonical sort) and stable under an order-preserving relabel.
+        var rng = SeededRNG(seed: 11)
+        let centre = Coordinate(latitude: 60.0, longitude: 24.0)
+        let n = PlaceClustering.exactMedoidLimit * 2   // 512 — comfortably over the limit
+        let assets = blob("home", centre, n: n, jitter: 0.001, &rng)   // ~111 m spread → one cluster
+        let result = PlaceClustering.clusters(for: assets, minPts: 3, calendar: cal)
+        #expect(result.clusters.count == 1)
+        #expect(result.clusters[0].count == n)
+        // Central: the sampled medoid sits within the blob's own jitter radius of the true centre —
+        // it is not dragged to an edge point (which would have a large summed distance to the sample).
+        let medoid = result.clusters[0].medoid
+        #expect(medoid.distance(to: centre) < 200)   // jitter 0.001° ≲ 124 m; a central member is well inside
+
+        // Determinism under an order-preserving id relabel (churn the smoke seed uses) + input shuffle.
+        let map = orderPreservingMap(assets.map(\.id))
+        let shuffled = relabel(assets, map).shuffled(using: &rng)
+        let again = PlaceClustering.clusters(for: shuffled, minPts: 3, calendar: cal)
+        #expect(again.clusters[0].id == (map[result.clusters[0].id] ?? result.clusters[0].id))
+    }
+
+    @Test("medoid across the exact/sampled boundary stays central + deterministic",
+          arguments: [PlaceClustering.exactMedoidLimit,        // 256 — last exact
+                      PlaceClustering.exactMedoidLimit + 1,     // 257 — first sampled, near-1.0 stride
+                      300])                                     // stride ≈1.17 → duplicate probe indices
+    func medoidAtSamplingBoundary(n: Int) {
+        // Exercises the exact path (n == limit) and the sampled path just above it, including a non-round
+        // stride whose `Int((k·step).rounded(.down))` produces repeated probe indices — the index math must
+        // stay in-bounds and the medoid central + shuffle-stable either way.
+        var rng = SeededRNG(seed: UInt64(n))
+        let centre = Coordinate(latitude: 48.0, longitude: 2.0)
+        let assets = blob("b", centre, n: n, jitter: 0.001, &rng)
+        let result = PlaceClustering.clusters(for: assets, minPts: 3, calendar: cal)
+        #expect(result.clusters.count == 1)
+        #expect(result.clusters[0].count == n)
+        #expect(result.clusters[0].medoid.distance(to: centre) < 250)
+        let map = orderPreservingMap(assets.map(\.id))
+        let again = PlaceClustering.clusters(for: relabel(assets, map).shuffled(using: &rng),
+                                             minPts: 3, calendar: cal)
+        #expect(again.clusters[0].id == (map[result.clusters[0].id] ?? result.clusters[0].id))
+    }
+
     // MARK: Spatial grid index — must equal the brute O(n²) form (§5.2)
 
     /// Canonical `(lat, lon, id)` order of the located points — mirrors `clusters(for:)` so grid/brute

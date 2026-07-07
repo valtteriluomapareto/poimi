@@ -36,25 +36,32 @@ enum GeocodeCell {
 /// constraint — SIGTRAP).
 @ModelActor
 actor NameCacheStore {
-    /// The cached name for a cell, or `nil` on a miss.
-    func cachedName(forCell cell: String) -> String? {
-        var descriptor = FetchDescriptor<GeocodedPlaceName>(predicate: #Predicate { $0.cellKey == cell })
-        descriptor.fetchLimit = 1
-        return (try? modelContext.fetch(descriptor))?.first?.name
+    /// ALL cached names as a cell→name dict, in ONE fetch. The naming pass loads this once and looks up
+    /// in memory — a per-place fetch cost ~0.5 s per SwiftData round-trip on device, so 12 of them was
+    /// ~6 s (the "slow cache"). One fetch of the whole small table is a single round-trip.
+    func allNames() -> [String: String] {
+        let rows = (try? modelContext.fetch(FetchDescriptor<GeocodedPlaceName>())) ?? []
+        return Dictionary(rows.map { ($0.cellKey, $0.name) }, uniquingKeysWith: { first, _ in first })
     }
 
-    /// Store (or refresh) a cell's name.
-    func store(name: String, forCell cell: String, at date: Date) {
-        var descriptor = FetchDescriptor<GeocodedPlaceName>(predicate: #Predicate { $0.cellKey == cell })
-        descriptor.fetchLimit = 1
-        if let existing = (try? modelContext.fetch(descriptor))?.first {
-            existing.name = name
-            existing.fetchedAt = date
-        } else {
-            modelContext.insert(GeocodedPlaceName(cellKey: cell, name: name, fetchedAt: date))
+    /// Insert freshly-geocoded cell→name rows in ONE save (skipping cells already present). No `.unique`
+    /// constraint (SIGTRAP), so the existing-set check keeps it idempotent.
+    func store(_ entries: [(cell: String, name: String)], at date: Date) {
+        guard !entries.isEmpty else { return }
+        let existing = Set(((try? modelContext.fetch(FetchDescriptor<GeocodedPlaceName>())) ?? []).map(\.cellKey))
+        for entry in entries where !existing.contains(entry.cell) {
+            modelContext.insert(GeocodedPlaceName(cellKey: entry.cell, name: entry.name, fetchedAt: date))
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            // A silent `try?` here would look exactly like "the cache never persists" — log it instead.
+            Log.location.error("Name-cache save failed: \(String(describing: error))")
+        }
     }
+
+    /// Total cached rows — a diagnostic: 0 right after a geocoding pass ⇒ saves aren't persisting.
+    func count() -> Int { (try? modelContext.fetchCount(FetchDescriptor<GeocodedPlaceName>())) ?? -1 }
 }
 
 /// Orchestrates the naming pass (§7): cluster + trips (pure) → for each trip's plurality place, resolve
@@ -65,6 +72,10 @@ actor LocationPreprocessor {
     private let naming: any PlaceNaming
     private let cache: NameCacheStore
     private let now: @Sendable () -> Date
+    /// Diagnostics for the last `resolveTripNames` — cache hits vs fresh geocodes (a healthy cache is
+    /// mostly hits on repeat opens).
+    private(set) var lastCacheHits = 0
+    private(set) var lastGeocoded = 0
 
     init(naming: any PlaceNaming, cache: NameCacheStore, now: @escaping @Sendable () -> Date = Date.init) {
         self.naming = naming
@@ -72,10 +83,9 @@ actor LocationPreprocessor {
         self.now = now
     }
 
-    /// Resolve names for the album's trip places. Returns `clusterID → name` for the places that
-    /// resolved; a geocode failure or a valid "unnamed" result simply omits that cluster (it still
-    /// exists — retried on a later pass). Persists each name as it resolves (partial progress). One
-    /// `calendar` threads through every pure sub-step so the day keys line up.
+    /// Standalone entry (tests / a caller without a precomputed timeline): cluster the assets, then name
+    /// the trip places. The production path uses `resolveNames(forPlaces:)` with the timeline's already-
+    /// computed trip clusters, so an album-open never clusters twice (the double-clustering fix).
     func resolveTripNames(
         for assets: [AssetRef],
         eps: Double = PlaceClustering.defaultEps,
@@ -87,34 +97,54 @@ actor LocationPreprocessor {
         let home = PlaceClustering.homeCluster(placeClusters.clusters, assets: assets, calendar: calendar)
         let trips = TripOverlay.trips(assets: assets, clusters: placeClusters, home: home,
                                       gapToleranceDays: gapToleranceDays, calendar: calendar)
-
         let clusterByID = Dictionary(placeClusters.clusters.map { ($0.id, $0) },
                                      uniquingKeysWith: { first, _ in first })
-        // Distinct places that name a trip (the same place can name several trips — geocode it once).
-        let tripClusterIDs = Set(trips.map(\.clusterID)).sorted()   // sorted → deterministic order
+        let places = Set(trips.map(\.clusterID)).sorted().compactMap { id -> (clusterID: String, medoid: Coordinate)? in
+            clusterByID[id].map { (id, $0.medoid) }
+        }
+        return await resolveNames(forPlaces: places)
+    }
 
+    /// Name a PRECOMPUTED set of trip places (`clusterID` + medoid coordinate) — NO clustering. Loads the
+    /// whole (small) cache in ONE fetch, looks up in memory, geocodes only misses (serially), and batches
+    /// the save. Returns `clusterID → name` for the places that resolved (a failure / valid-unnamed omits
+    /// that place; it's retried on a later pass). This is the production path (`CandidateStore` hands over
+    /// the timeline's trip clusters), so an album-open never re-clusters just to name.
+    func resolveNames(forPlaces places: [(clusterID: String, medoid: Coordinate)]) async -> [String: String] {
+        lastCacheHits = 0
+        lastGeocoded = 0
+        var seenCluster = Set<String>()                        // one place per cluster id (dedupe trips)
+        let cachedByCell = await cache.allNames()              // ONE fetch; look up in memory
         var namesByClusterID: [String: String] = [:]
-        for clusterID in tripClusterIDs {
-            guard let cluster = clusterByID[clusterID] else { continue }
-            let cell = GeocodeCell.key(for: cluster.medoid)
-
-            if let cached = await cache.cachedName(forCell: cell) {
-                namesByClusterID[clusterID] = cached
+        var freshByCell: [String: String] = [:]                // within-pass reuse for co-located places
+        var freshlyGeocoded: [(cell: String, name: String)] = []
+        for place in places where seenCluster.insert(place.clusterID).inserted {
+            let cell = GeocodeCell.key(for: place.medoid)
+            if let cached = cachedByCell[cell] {
+                lastCacheHits += 1
+                namesByClusterID[place.clusterID] = cached
+                continue
+            }
+            if let fresh = freshByCell[cell] {                 // already geocoded this cell this pass
+                namesByClusterID[place.clusterID] = fresh
                 continue
             }
             do {
-                if let name = try await naming.name(for: cluster.medoid) {
-                    await cache.store(name: name, forCell: cell, at: now())
-                    namesByClusterID[clusterID] = name
+                if let name = try await naming.name(for: place.medoid) {
+                    lastGeocoded += 1
+                    namesByClusterID[place.clusterID] = name
+                    freshByCell[cell] = name
+                    freshlyGeocoded.append((cell, name))
                 }
                 // A `nil` name is a valid "unnamed" place — leave it unresolved (don't cache "").
             } catch {
                 // Partial-failure by nature (§7): skip this place; it stays unnamed and is retried on a
                 // later pass. One failure never fails the whole pass.
                 Log.location.notice(
-                    "Reverse-geocode failed for place \(clusterID, privacy: .public): \(String(describing: error))")
+                    "Reverse-geocode failed (\(place.clusterID, privacy: .public)): \(String(describing: error))")
             }
         }
+        await cache.store(freshlyGeocoded, at: now())   // one save for all new names (cache-hit pass → none)
         return namesByClusterID
     }
 }

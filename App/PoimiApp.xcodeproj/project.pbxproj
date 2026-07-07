@@ -39,6 +39,7 @@
 		00000000B00000000000B0B2 /* NewAlbumSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000B00000000000A0B2 /* NewAlbumSetupView.swift */; };
 		00000000B00000000000B0B3 /* AlbumPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000B00000000000A0B3 /* AlbumPickerView.swift */; };
 		00000000C00000000000B0C1 /* CandidateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C1 /* CandidateStore.swift */; };
+		00000000C00000000000B1C0 /* TimelineCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A1C0 /* TimelineCache.swift */; };
 		00000000C00000000000B0C2 /* ScanningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C2 /* ScanningView.swift */; };
 		00000000C00000000000B0C3 /* AlbumOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C3 /* AlbumOverviewView.swift */; };
 		00000000C00000000000B0C4 /* PrefetchWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C4 /* PrefetchWindow.swift */; };
@@ -84,6 +85,7 @@
 		000000004000000000000078 /* HappyPathSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000077 /* HappyPathSmokeTests.swift */; };
 		00000000400000000000007A /* LocationSpikeProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000079 /* LocationSpikeProbeTests.swift */; };
 		00000000400000000000007C /* LocationNameCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000007B /* LocationNameCacheTests.swift */; };
+		00000000400000000000007E /* TimelineCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000007D /* TimelineCacheTests.swift */; };
 		000000004000000000000066 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000065 /* TestSupport.swift */; };
 /* End PBXBuildFile section */
 
@@ -138,6 +140,7 @@
 		00000000B00000000000A0B2 /* NewAlbumSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewAlbumSetupView.swift; sourceTree = "<group>"; };
 		00000000B00000000000A0B3 /* AlbumPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumPickerView.swift; sourceTree = "<group>"; };
 		00000000C00000000000A0C1 /* CandidateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CandidateStore.swift; sourceTree = "<group>"; };
+		00000000C00000000000A1C0 /* TimelineCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineCache.swift; sourceTree = "<group>"; };
 		00000000C00000000000A0C2 /* ScanningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanningView.swift; sourceTree = "<group>"; };
 		00000000C00000000000A0C3 /* AlbumOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumOverviewView.swift; sourceTree = "<group>"; };
 		00000000C00000000000A0C4 /* PrefetchWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrefetchWindow.swift; sourceTree = "<group>"; };
@@ -184,6 +187,7 @@
 		000000004000000000000077 /* HappyPathSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HappyPathSmokeTests.swift; sourceTree = "<group>"; };
 		000000004000000000000079 /* LocationSpikeProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationSpikeProbeTests.swift; sourceTree = "<group>"; };
 		00000000400000000000007B /* LocationNameCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationNameCacheTests.swift; sourceTree = "<group>"; };
+		00000000400000000000007D /* TimelineCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineCacheTests.swift; sourceTree = "<group>"; };
 		000000004000000000000065 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -353,6 +357,7 @@
 			isa = PBXGroup;
 			children = (
 				00000000C00000000000A0C1 /* CandidateStore.swift */,
+				00000000C00000000000A1C0 /* TimelineCache.swift */,
 				00000000C00000000000A0C2 /* ScanningView.swift */,
 				00000000C00000000000A0C3 /* AlbumOverviewView.swift */,
 				00000000C00000000000A0C4 /* PrefetchWindow.swift */,
@@ -407,6 +412,7 @@
 				000000004000000000000077 /* HappyPathSmokeTests.swift */,
 				000000004000000000000079 /* LocationSpikeProbeTests.swift */,
 				00000000400000000000007B /* LocationNameCacheTests.swift */,
+				00000000400000000000007D /* TimelineCacheTests.swift */,
 				000000004000000000000065 /* TestSupport.swift */,
 			);
 			path = PoimiAppTests;
@@ -539,6 +545,7 @@
 				00000000B00000000000B0B2 /* NewAlbumSetupView.swift in Sources */,
 				00000000B00000000000B0B3 /* AlbumPickerView.swift in Sources */,
 				00000000C00000000000B0C1 /* CandidateStore.swift in Sources */,
+				00000000C00000000000B1C0 /* TimelineCache.swift in Sources */,
 				00000000C00000000000B0C2 /* ScanningView.swift in Sources */,
 				00000000C00000000000B0C3 /* AlbumOverviewView.swift in Sources */,
 				00000000C00000000000B0C4 /* PrefetchWindow.swift in Sources */,
@@ -591,6 +598,7 @@
 				000000004000000000000078 /* HappyPathSmokeTests.swift in Sources */,
 				00000000400000000000007A /* LocationSpikeProbeTests.swift in Sources */,
 				00000000400000000000007C /* LocationNameCacheTests.swift in Sources */,
+				00000000400000000000007E /* TimelineCacheTests.swift in Sources */,
 				000000004000000000000066 /* TestSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
