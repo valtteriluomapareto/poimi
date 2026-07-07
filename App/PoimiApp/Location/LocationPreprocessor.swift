@@ -53,8 +53,16 @@ actor NameCacheStore {
         } else {
             modelContext.insert(GeocodedPlaceName(cellKey: cell, name: name, fetchedAt: date))
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            // A silent `try?` here would look exactly like "the cache never persists" — log it instead.
+            Log.location.error("Name-cache save failed (\(cell, privacy: .public)): \(String(describing: error))")
+        }
     }
+
+    /// Total cached rows — a diagnostic: 0 right after a geocoding pass ⇒ saves aren't persisting.
+    func count() -> Int { (try? modelContext.fetchCount(FetchDescriptor<GeocodedPlaceName>())) ?? -1 }
 }
 
 /// Orchestrates the naming pass (§7): cluster + trips (pure) → for each trip's plurality place, resolve
@@ -65,6 +73,10 @@ actor LocationPreprocessor {
     private let naming: any PlaceNaming
     private let cache: NameCacheStore
     private let now: @Sendable () -> Date
+    /// Diagnostics for the last `resolveTripNames` — cache hits vs fresh geocodes (a healthy cache is
+    /// mostly hits on repeat opens).
+    private(set) var lastCacheHits = 0
+    private(set) var lastGeocoded = 0
 
     init(naming: any PlaceNaming, cache: NameCacheStore, now: @escaping @Sendable () -> Date = Date.init) {
         self.naming = naming
@@ -93,17 +105,21 @@ actor LocationPreprocessor {
         // Distinct places that name a trip (the same place can name several trips — geocode it once).
         let tripClusterIDs = Set(trips.map(\.clusterID)).sorted()   // sorted → deterministic order
 
+        lastCacheHits = 0
+        lastGeocoded = 0
         var namesByClusterID: [String: String] = [:]
         for clusterID in tripClusterIDs {
             guard let cluster = clusterByID[clusterID] else { continue }
             let cell = GeocodeCell.key(for: cluster.medoid)
 
             if let cached = await cache.cachedName(forCell: cell) {
+                lastCacheHits += 1
                 namesByClusterID[clusterID] = cached
                 continue
             }
             do {
                 if let name = try await naming.name(for: cluster.medoid) {
+                    lastGeocoded += 1
                     await cache.store(name: name, forCell: cell, at: now())
                     namesByClusterID[clusterID] = name
                 }

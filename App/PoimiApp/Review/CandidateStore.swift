@@ -112,11 +112,20 @@ final class CandidateStore {
         let clusterMillis: Double
         var namingMillis: Double?
         var namesResolved: Int?
+        var cacheHits: Int?       // names served from the persistent cache
+        var geocoded: Int?        // names freshly reverse-geocoded (cache miss)
+        var cacheRows: Int?       // total rows in the name cache after the pass (0 ⇒ saves not persisting)
         let locationEnabled: Bool
 
         /// A one-screen, copyable summary (shared per-album to see where the open time goes).
         var text: String {
-            let naming = namingMillis.map { "\(Int($0)) ms (\(namesResolved ?? 0) names)" } ?? "pending…"
+            let naming: String
+            if let namingMillis {
+                naming = "\(Int(namingMillis)) ms — \(cacheHits ?? 0) cache hits, \(geocoded ?? 0) geocoded"
+                    + " (\(namesResolved ?? 0) named; cache rows: \(cacheRows ?? -1))"
+            } else {
+                naming = "pending…"
+            }
             return """
             Poimi scan diagnostics — \(albumTitle)
             location grouping: \(locationEnabled ? "on" : "off")
@@ -232,9 +241,12 @@ final class CandidateStore {
         // Only publish if this is still the current load (a newer load bumps the token / cancels us).
         guard generation == loadGeneration, !Task.isCancelled else { return }
         tripNames = names
-        // Record the naming cost (fast = cache hits, slow = first-run geocoding) for the diagnostics.
+        // Record the naming cost + cache stats (hits vs geocodes, and whether the cache persisted).
         scanReport?.namingMillis = Date().timeIntervalSince(namingStart) * 1000
         scanReport?.namesResolved = names.count
+        scanReport?.cacheHits = await preprocessor.lastCacheHits
+        scanReport?.geocoded = await preprocessor.lastGeocoded
+        scanReport?.cacheRows = await nameCache.count()
     }
 
     /// The display label for a trip cluster: the resolved place sentence ("Week in Salo"), or `nil`
