@@ -216,7 +216,7 @@ final class CandidateStore {
                 // happen as soon as we return). Names fill into `tripNames` when the pass completes
                 // (cache-fast on repeat opens); trips show a date fallback until then.
                 nameTask = Task { [weak self] in
-                    await self?.resolveTripNames(in: clusters, candidates: candidates, generation: generation)
+                    await self?.resolveTripNames(in: clusters, generation: generation)
                 }
             }
         } catch {
@@ -232,12 +232,18 @@ final class CandidateStore {
     /// Reverse-geocode the trip places (§7) and publish `tripNames`. No-ops without naming deps
     /// (debug/test) or when there are no trips. Serial + cache-backed inside `LocationPreprocessor`;
     /// a superseding `load()` cancels this task before it can publish stale names.
-    private func resolveTripNames(in clusters: [ReviewCluster], candidates: [AssetRef], generation: Int) async {
-        guard locationEnabled, let naming, let nameCache,
-              clusters.contains(where: { $0.tripCluster != nil }) else { return }
+    private func resolveTripNames(in clusters: [ReviewCluster], generation: Int) async {
+        guard locationEnabled, let naming, let nameCache else { return }
+        // Name the ALREADY-computed trip places (clusterID + medoid coordinate from the timeline) — no
+        // re-clustering here (that was the real cost behind "slow naming", not the cache).
+        let places: [(clusterID: String, medoid: Coordinate)] = clusters.compactMap { cluster in
+            guard let trip = cluster.tripCluster, let medoid = trip.medoid else { return nil }
+            return (trip.clusterID, medoid)
+        }
+        guard !places.isEmpty else { return }
         let preprocessor = LocationPreprocessor(naming: naming, cache: nameCache)
         let namingStart = Date()
-        let names = await preprocessor.resolveTripNames(for: candidates, calendar: calendar)
+        let names = await preprocessor.resolveNames(forPlaces: places)
         // Only publish if this is still the current load (a newer load bumps the token / cancels us).
         guard generation == loadGeneration, !Task.isCancelled else { return }
         tripNames = names

@@ -80,6 +80,10 @@ public struct TripCluster: Sendable, Identifiable, Equatable {
     public let shape: TripShape
     /// The constituent day-groups, chronological — the done-tracking substrate, preserved intact.
     public let dayGroups: [DayGroup]
+    /// The labeling place cluster's medoid COORDINATE — carried so the app-tier naming pass can
+    /// reverse-geocode without re-running clustering to recover it (the double-clustering fix). `nil`
+    /// only when a `TripCluster` is built without a cluster set (e.g. some unit tests).
+    public let medoid: Coordinate?
 
     /// The merged member ids, chronological (union of the day-groups).
     public var assetIDs: [String] { dayGroups.flatMap(\.assetIDs) }
@@ -88,11 +92,13 @@ public struct TripCluster: Sendable, Identifiable, Equatable {
     /// The member count.
     public var count: Int { dayGroups.reduce(0) { $0 + $1.count } }
 
-    public init(id: String, clusterID: String, shape: TripShape, dayGroups: [DayGroup]) {
+    public init(id: String, clusterID: String, shape: TripShape, dayGroups: [DayGroup],
+                medoid: Coordinate? = nil) {
         self.id = id
         self.clusterID = clusterID
         self.shape = shape
         self.dayGroups = dayGroups
+        self.medoid = medoid
     }
 }
 
@@ -195,7 +201,12 @@ public enum ReviewTimeline {
             assets: assets, clusters: placeClusters, home: home,
             gapToleranceDays: tripGapToleranceDays, calendar: calendar
         )
-        return assemble(dayGroups: dayGroups, trips: trips, calendar: calendar)
+        // The place medoid COORDINATE per cluster id — carried onto each trip so the app-tier naming
+        // pass geocodes without re-clustering to recover it (the double-clustering fix).
+        let medoidByCluster = Dictionary(placeClusters.clusters.map { ($0.id, $0.medoid) },
+                                         uniquingKeysWith: { first, _ in first })
+        return assemble(dayGroups: dayGroups, trips: trips,
+                        medoidByCluster: medoidByCluster, calendar: calendar)
     }
 
     /// The pure merge: fold whole day-groups into trip clusters, leaving the rest as date clusters.
@@ -207,6 +218,7 @@ public enum ReviewTimeline {
     public static func assemble(
         dayGroups: [DayGroup],
         trips: [Trip],
+        medoidByCluster: [String: Coordinate] = [:],
         calendar: Calendar = .current
     ) -> [ReviewCluster] {
         guard !trips.isEmpty else { return dayGroups.map(ReviewCluster.day) }
@@ -250,7 +262,8 @@ public enum ReviewTimeline {
             let owned = groupsByTrip[tid] ?? [group]
             let shape = TripShape.classify(days: trip.days, calendar: calendar)
             out.append(.trip(TripCluster(
-                id: trip.id, clusterID: trip.clusterID, shape: shape, dayGroups: owned
+                id: trip.id, clusterID: trip.clusterID, shape: shape, dayGroups: owned,
+                medoid: medoidByCluster[trip.clusterID]
             )))
         }
         return out
