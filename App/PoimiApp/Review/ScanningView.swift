@@ -26,13 +26,9 @@ struct ScanningView: View {
     @Environment(DoneStore.self) private var doneStore
     @Environment(\.placeNaming) private var placeNaming
     @Environment(\.modelContext) private var modelContext
+    /// The album's scanned store — shared via the coordinator with the Overview, so drilling in reuses
+    /// its clusters instead of re-fetching + re-clustering. Held here so `body` reads its phase.
     @State private var store: CandidateStore?
-    /// The album the current `store` loaded — so a reused view instance reloads for a NEW album
-    /// rather than republishing the previous one's candidates (the iPad detail-column retarget, #42).
-    @State private var loadedProjectID: UUID?
-    /// The location setting the current `store` loaded with — flipping the per-album "Trips & places"
-    /// toggle re-scans (the timeline is date-only vs trip-overlaid).
-    @State private var loadedLocationEnabled: Bool?
     /// Gates the scanning indicator behind a grace delay (below) so instant scans never flash it.
     @State private var indicatorVisible = false
 
@@ -54,34 +50,38 @@ struct ScanningView: View {
             // system backdrop reacting to a collapsing title), which removes the specific feedback loop
             // below — verified on device (no scroll flicker); re-check if the top-title layout changes.
             .toolbarBackground(.hidden, for: .navigationBar)
-            // Keyed by project id so re-targeting (e.g. iPad detail column) reloads for the new
-            // album rather than showing the previous one's candidates.
-            .task(id: ScanIdentity(id: project.id, locationEnabled: project.locationEnabled)) {
+            // Keyed by album + range + location so re-targeting (iPad detail column) / a Settings edit
+            // re-runs against the right candidate set; the coordinator's matching key decides scan-vs-reuse.
+            .task(id: ScanIdentity(id: project.id, start: project.rangeStart, end: project.rangeEnd,
+                                   locationEnabled: project.locationEnabled)) {
                 // Hydrate the selection + done-state for this project (idempotent — activate() no-ops
                 // if already active, so re-entry never clobbers unflushed picks/done-days).
                 selection.activate(project)
                 doneStore.activate(project)
-                // Reload when the album (or its location setting) changed, or first load; reuse only
-                // survives a benign re-appear of the SAME album, so returning from the viewer doesn't
-                // re-scan. Gating on identity (not `.idle`) stops a reused view instance from serving the
-                // previous album's candidates + day map to the viewer (#42).
-                if store == nil || loadedProjectID != project.id
-                    || loadedLocationEnabled != project.locationEnabled {
-                    store = CandidateStore(library: library, locationEnabled: project.locationEnabled,
-                                           naming: placeNaming,
-                                           nameCache: NameCacheStore(modelContainer: modelContext.container))
-                    loadedProjectID = project.id
-                    loadedLocationEnabled = project.locationEnabled
+                // Reuse the album's shared store: the Overview scanned it on the way in, so drilling here
+                // doesn't re-fetch + re-cluster. Scan only if WE are the first (iPad-direct / debug host);
+                // otherwise just reconcile done-state + publish the viewer's paging list.
+                let store = coordinator.candidateStore(for: project) {
+                    CandidateStore(library: library, locationEnabled: project.locationEnabled,
+                                   naming: placeNaming,
+                                   nameCache: NameCacheStore(modelContainer: modelContext.container))
+                }
+                self.store = store
+                if store.phase == .idle {
                     await scan()
-                } else {
-                    publishForViewer()   // benign re-appear (same album) — republish for the viewer
+                } else if case .ready = store.phase {
+                    doneStore.reconcile(currentIDsByDay: Self.idsByDay(store.dayByID))
+                    publishForViewer()
                 }
             }
     }
 
-    /// The `.task` identity: re-scan when the album changes OR its "Trips & places" setting flips.
+    /// The `.task` identity: re-run when the album, its range, or its "Trips & places" setting changes
+    /// (mirrors the coordinator's store key so scan-vs-reuse stays consistent).
     private struct ScanIdentity: Hashable {
         let id: UUID
+        let start: Date
+        let end: Date
         let locationEnabled: Bool
     }
 

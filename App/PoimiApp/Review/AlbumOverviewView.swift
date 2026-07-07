@@ -38,16 +38,12 @@ struct AlbumOverviewView: View {
     @Environment(DoneStore.self) private var doneStore
     @Environment(\.placeNaming) private var placeNaming
     @Environment(\.modelContext) private var modelContext
+    /// The album's scanned store — obtained from the coordinator (shared with the grid), held here so
+    /// `body` reads its phase. Store freshness (album / range / location) is the coordinator's key, so
+    /// this view no longer tracks the scanned range/setting itself.
     @State private var store: CandidateStore?
     /// The finished cluster index — built once when the scan settles, so `body` never groups/formats.
     @State private var index: ClusterIndex?
-    /// The date range the retained `store` was scanned for. When Settings edits the period (it mutates
-    /// this same project, so the change is observed here), this differs from the project's range and the
-    /// `.task` re-scans — otherwise the retained `.ready` store keeps serving the OLD range's clusters.
-    @State private var scannedRange: Range<Date>?
-    /// The location setting the retained `store` scanned with — flipping the per-album "Trips & places"
-    /// toggle re-scans (date-only vs trip-overlaid timeline).
-    @State private var scannedLocationEnabled: Bool?
     /// Gate the scanning indicator behind a short grace delay so an instant scan never flashes it.
     @State private var indicatorVisible = false
 
@@ -92,18 +88,18 @@ struct AlbumOverviewView: View {
                                       locationEnabled: project.locationEnabled)) {
                 selection.activate(project)     // hydrate persisted picks so the counts are live
                 doneStore.activate(project)     // hydrate marked-done days so the state colours are live
-                let range = project.rangeStart..<project.rangeEnd
-                // First load, or the period / location setting changed → re-scan from scratch (a retained
-                // .ready store holds the OLD clusters). Otherwise reuse the store and just (re)build the index.
-                if store == nil || scannedRange != range || scannedLocationEnabled != project.locationEnabled {
-                    store = CandidateStore(library: library, locationEnabled: project.locationEnabled,
-                                           naming: placeNaming,
-                                           nameCache: NameCacheStore(modelContainer: modelContext.container))
-                    scannedRange = range
-                    scannedLocationEnabled = project.locationEnabled
+                // Get the album's shared store (created here on the album-landing scan; the grid reuses
+                // it on drill-in). A Settings edit changes the coordinator's key → a fresh store to scan.
+                let store = coordinator.candidateStore(for: project) {
+                    CandidateStore(library: library, locationEnabled: project.locationEnabled,
+                                   naming: placeNaming,
+                                   nameCache: NameCacheStore(modelContainer: modelContext.container))
+                }
+                self.store = store
+                if store.phase == .idle {
                     await scan()
-                } else if index == nil, case .ready(let clusters) = store?.phase {
-                    index = ClusterIndexBuilder.build(from: clusters, tripNames: store?.tripNames ?? [:])
+                } else if case .ready(let clusters) = store.phase {
+                    index = ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames)
                 }
             }
             // Trip place names resolve asynchronously after `.ready` (§7); rebuild the (cheap) index so

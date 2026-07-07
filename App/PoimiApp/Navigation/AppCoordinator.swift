@@ -46,8 +46,47 @@ final class AppCoordinator {
     /// nav-pop (#36). `nil` when closed; the grid stays mounted underneath, exactly where you left it.
     var presentedPhotoID: String?
 
+    /// The active album's scanned candidate store, created ONCE by whichever review screen loads first
+    /// (the Overview, in the real navigation path) and REUSED by the grid — so drilling in doesn't
+    /// re-fetch + re-cluster the whole album (the double-scan the review flagged). Keyed by album +
+    /// range + location setting; a Settings edit that changes any of those yields a fresh store on the
+    /// next scan. Cleared on an album switch to free it.
+    private(set) var candidateStore: CandidateStore?
+    private var candidateStoreKey: CandidateStoreKey?
+
+    /// Identity of a scanned store — a change in any field means a genuinely different candidate set.
+    struct CandidateStoreKey: Equatable {
+        let id: UUID
+        let start: Date
+        let end: Date
+        let locationEnabled: Bool
+        init(_ project: CurationProject) {
+            id = project.id
+            start = project.rangeStart
+            end = project.rangeEnd
+            locationEnabled = project.locationEnabled
+        }
+    }
+
     init(library: any PhotoLibraryProviding) {
         self.library = library
+    }
+
+    /// The scanned candidate store for `project` — the existing one when the album/range/location are
+    /// unchanged (so the Overview + grid share ONE scan), or a fresh one via `make` otherwise. `make`
+    /// runs only on a miss, so the caller's environment deps are used just when a new scan is needed.
+    func candidateStore(for project: CurationProject, make: () -> CandidateStore) -> CandidateStore {
+        let key = CandidateStoreKey(project)
+        if candidateStoreKey == key, let candidateStore { return candidateStore }
+        let store = make()
+        candidateStore = store
+        candidateStoreKey = key
+        return store
+    }
+
+    private func clearCandidateStore() {
+        candidateStore = nil
+        candidateStoreKey = nil
     }
 
     /// The album at the root of the current path — the one shown in the iPad detail column — or `nil`
@@ -86,6 +125,7 @@ final class AppCoordinator {
     /// switching albums from the library starts a fresh stack.
     func openProject(_ id: UUID) {
         presentedPhotoID = nil          // dismiss any open viewer when switching albums
+        clearCandidateStore()           // a different album scans fresh (and frees the old one)
         path = [.albumOverview(id)]
     }
 
@@ -136,6 +176,7 @@ final class AppCoordinator {
     /// Back to the albums library root.
     func popToRoot() {
         presentedPhotoID = nil
+        clearCandidateStore()
         path.removeAll()
     }
 
@@ -145,6 +186,7 @@ final class AppCoordinator {
     /// (no prior project) lands on the library root.
     func restore(lastOpenedProjectID id: UUID?) {
         presentedPhotoID = nil
+        clearCandidateStore()
         guard let id else {
             path.removeAll()
             return
