@@ -87,10 +87,11 @@ public struct PlaceClusters: Sendable, Equatable {
 
 public enum PlaceClustering {
     /// Fixed neighbourhood radius in **metres** (§5.2 — the density adapts via `minPts`, not this).
-    /// Chosen so a home *metro* stays one cluster while trip *cities* (~100–300 km apart, the seed's
-    /// Rome/Florence/Venice) fall into separate clusters. Spike-tunable like `DayGrouping`'s threshold
-    /// (§5.5). Sensitivity: below ~10 km a spread-out metro fragments; above ~60 km nearby cities merge.
-    public static let defaultEps: Double = 25_000
+    /// **3 km**, validated on a real library of dense, nearby towns (Finnish towns ~10–30 km apart): at
+    /// 25 km they over-merged into one blob, while 3 km separates them yet still keeps a home *metro* one
+    /// cluster (density chaining via `minPts` holds a spread-out home together). Spike-tunable like
+    /// `DayGrouping`'s threshold (§5.5); the probe exposes it live, and this is the slider's start value.
+    public static let defaultEps: Double = 3_000
 
     /// Clamp bounds for `adaptiveMinPts` (the DBSCAN density floor). A place needs at least a few
     /// photos to exist (floor); a heavy-shooting year still forms places without demanding an
