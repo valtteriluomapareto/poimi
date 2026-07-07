@@ -64,6 +64,23 @@ struct LocationNameCacheTests {
         #expect(await fake.callCount == 2)                           // no new geocodes — all cache hits
     }
 
+    @Test("two trip places in the same geocode cell are geocoded once within a pass (freshByCell reuse)")
+    func coLocatedPlacesGeocodeOnce() async throws {
+        // `resolveNames(forPlaces:)` dedups by CELL within a single fresh pass: two distinct trip
+        // clusters whose medoids round to the same `GeocodeCell` trigger exactly one geocode, both
+        // resolving to that name — even before anything is persisted.
+        let coordA = Coordinate(latitude: 60.1701, longitude: 24.9402)
+        let coordB = Coordinate(latitude: 60.1699, longitude: 24.9398)   // ~metres away → same cell
+        #expect(GeocodeCell.key(for: coordA) == GeocodeCell.key(for: coordB))
+        let fake = FakePlaceNaming(names: [GeocodeCell.key(for: coordA): "Helsinki"])
+        let pre = LocationPreprocessor(naming: fake, cache: try makeCache())
+
+        let names = await pre.resolveNames(forPlaces: [(clusterID: "c1", medoid: coordA),
+                                                       (clusterID: "c2", medoid: coordB)])
+        #expect(names == ["c1": "Helsinki", "c2": "Helsinki"])
+        #expect(await fake.callCount == 1)                           // one geocode, reused within the pass
+    }
+
     // MARK: — home is never a trip, so never geocoded
 
     @Test("a home-only album yields no trips and geocodes nothing")

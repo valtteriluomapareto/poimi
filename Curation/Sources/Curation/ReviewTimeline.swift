@@ -82,7 +82,9 @@ public struct TripCluster: Sendable, Identifiable, Equatable, Codable {
     public let dayGroups: [DayGroup]
     /// The labeling place cluster's medoid COORDINATE — carried so the app-tier naming pass can
     /// reverse-geocode without re-running clustering to recover it (the double-clustering fix). `nil`
-    /// only when a `TripCluster` is built without a cluster set (e.g. some unit tests).
+    /// when a `TripCluster` is built without a cluster set (some unit tests) or when the trip's
+    /// `clusterID` isn't found in `assemble`'s `medoidByCluster` (a defensive miss / empty default);
+    /// the naming pass simply skips a `nil`-medoid trip and it stays unlabeled.
     public let medoid: Coordinate?
 
     /// The merged member ids, chronological (union of the day-groups).

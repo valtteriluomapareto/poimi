@@ -317,6 +317,27 @@ struct PlaceClusterTests {
         #expect(again.clusters[0].id == (map[result.clusters[0].id] ?? result.clusters[0].id))
     }
 
+    @Test("medoid across the exact/sampled boundary stays central + deterministic",
+          arguments: [PlaceClustering.exactMedoidLimit,        // 256 — last exact
+                      PlaceClustering.exactMedoidLimit + 1,     // 257 — first sampled, near-1.0 stride
+                      300])                                     // stride ≈1.17 → duplicate probe indices
+    func medoidAtSamplingBoundary(n: Int) {
+        // Exercises the exact path (n == limit) and the sampled path just above it, including a non-round
+        // stride whose `Int((k·step).rounded(.down))` produces repeated probe indices — the index math must
+        // stay in-bounds and the medoid central + shuffle-stable either way.
+        var rng = SeededRNG(seed: UInt64(n))
+        let centre = Coordinate(latitude: 48.0, longitude: 2.0)
+        let assets = blob("b", centre, n: n, jitter: 0.001, &rng)
+        let result = PlaceClustering.clusters(for: assets, minPts: 3, calendar: cal)
+        #expect(result.clusters.count == 1)
+        #expect(result.clusters[0].count == n)
+        #expect(result.clusters[0].medoid.distance(to: centre) < 250)
+        let map = orderPreservingMap(assets.map(\.id))
+        let again = PlaceClustering.clusters(for: relabel(assets, map).shuffled(using: &rng),
+                                             minPts: 3, calendar: cal)
+        #expect(again.clusters[0].id == (map[result.clusters[0].id] ?? result.clusters[0].id))
+    }
+
     // MARK: Spatial grid index — must equal the brute O(n²) form (§5.2)
 
     /// Canonical `(lat, lon, id)` order of the located points — mirrors `clusters(for:)` so grid/brute

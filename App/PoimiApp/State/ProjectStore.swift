@@ -22,13 +22,18 @@ final class ProjectStore {
     /// Injected clock — `Date.init` in the app, a fixed value in tests, so created/opened
     /// ordering is deterministic.
     private let now: () -> Date
+    /// The per-album timeline cache (#130), so `delete` drops the album's cached file — the single
+    /// choke point every delete path (albums-list swipe + album-settings) already funnels through, so
+    /// the cleanup can't be forgotten at a call site. `nil` in tests (no file is written there anyway).
+    private let timelineCache: TimelineCache?
 
     /// The library, most-recently-opened first (the album-list order, §12).
     private(set) var projects: [CurationProject] = []
 
-    init(container: ModelContainer, now: @escaping () -> Date = Date.init) {
+    init(container: ModelContainer, timelineCache: TimelineCache? = nil, now: @escaping () -> Date = Date.init) {
         self.container = container
         self.context = container.mainContext
+        self.timelineCache = timelineCache
         self.now = now
         refresh()
     }
@@ -146,6 +151,12 @@ final class ProjectStore {
     /// deleting or resetting the active project must `deactivate()` it first — otherwise the
     /// selection store holds a stale/dangling project. Harmless today (nothing activates yet).
     func delete(_ project: CurationProject) {
+        // Drop the album's cached timeline too (best-effort, off-main). A regenerable cache, so a
+        // leftover file would be harmless (the OS purges Caches), but a deleted album leaves nothing.
+        if let timelineCache {
+            let deletedID = project.id
+            Task { await timelineCache.remove(projectID: deletedID) }
+        }
         context.delete(project)
         save("delete")
         refresh()

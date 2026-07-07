@@ -219,12 +219,7 @@ struct AlbumSettingsView: View {
         isDeleting = true
         selection.deactivate()
         doneStore.deactivate()
-        // Drop the album's cached timeline too (best-effort, off-main) — a regenerable cache, so a
-        // leftover file would be harmless, but a deleted album should leave nothing behind.
-        let cache = coordinator.timelineCache
-        let deletedID = project.id
-        Task { await cache.remove(projectID: deletedID) }
-        store.delete(project)
+        store.delete(project)   // also drops the album's cached timeline (ProjectStore.delete, #130)
         coordinator.popToRoot()
     }
 

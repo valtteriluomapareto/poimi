@@ -336,9 +336,12 @@ public enum PlaceClustering {
     ///
     /// For a cluster larger than `exactMedoidLimit` the summed distance is taken over a **deterministic
     /// strided sample** of the members rather than all of them — O(n·cap) not O(n²). Every candidate is
-    /// still scored (the medoid stays a real member, so it's antimeridian-safe unlike a centroid) and the
-    /// stride is fixed (no RNG), so the result is deterministic. Below the limit it's the exact medoid, so
-    /// every cluster-scale test — and every real place — is unchanged.
+    /// still scored against the sample (so the medoid stays a real member — antimeridian-safe, unlike a
+    /// centroid), and the stride is fixed (no RNG), so the result is deterministic and order-independent
+    /// (the members follow their canonical within-role order — cores first, then borders — since `located`
+    /// is pre-sorted). A sampled candidate that is itself in the probe is scored against `cap-1` points
+    /// (the `j != i` self-exclusion); the tiny asymmetry doesn't affect which central member wins. Below
+    /// the limit it's the exact medoid, so every cluster-scale test — and every real place — is unchanged.
     static func medoidIndex(of members: [(id: String, coord: Coordinate)]) -> Int {
         // The reference set each candidate is scored against: all members when small, else a strided
         // sample of `exactMedoidLimit` of them (indices 0, step, 2·step, … over the canonical order).

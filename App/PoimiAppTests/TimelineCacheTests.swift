@@ -94,4 +94,32 @@ struct TimelineCacheTests {
         await cache.remove(projectID: id)
         #expect(await cache.lookup(projectID: id, fingerprint: "fp-1") == nil)   // removed
     }
+
+    @Test("a corrupt or wrong-shape cache file misses gracefully — recompute, never a crash")
+    func corruptFileMisses() async throws {
+        // The file doc-comment promises a decode failure is a benign miss. A future refactor that
+        // switched the `try?`s to a trapping decode would crash on album-open with a stale file after a
+        // formatVersion bump; this pins the contract.
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let cache = TimelineCache(directory: dir)
+        let id = UUID()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("\(id.uuidString).json")
+        try Data("not json at all".utf8).write(to: file)                 // garbage bytes
+        #expect(await cache.lookup(projectID: id, fingerprint: "fp") == nil)
+        try Data(#"{"unexpected":"shape"}"#.utf8).write(to: file)         // valid JSON, wrong shape
+        #expect(await cache.lookup(projectID: id, fingerprint: "fp") == nil)
+    }
+
+    @Test("the fingerprint is a well-formed SHA-256 digest (the format version is folded into its input)")
+    func fingerprintIsSHA256Digest() {
+        // The version participates by being hashed into the header (see `fingerprint`), so it can't be
+        // asserted literally in the digest — instead pin the digest shape (a change to the header format
+        // that dropped the version would still produce a 64-hex digest, but the round-trip + change tests
+        // above guard the semantics). This guards against an accidental non-hash return.
+        let fp = TimelineCache.fingerprint(candidates: [asset("x", day: 1)], locationEnabled: true, calendar: cal)
+        #expect(fp.count == 64)                                  // 32 bytes → 64 lowercase hex chars
+        #expect(fp.allSatisfy { $0.isHexDigit })
+    }
 }

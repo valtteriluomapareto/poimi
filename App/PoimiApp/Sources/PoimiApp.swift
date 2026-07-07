@@ -42,10 +42,13 @@ struct PoimiApp: App {
             fatalError("Poimi could not open its data store: \(error)")
         }
         modelContainer = container
-        _projectStore = State(initialValue: ProjectStore(container: container))
+        // One shared timeline cache (#130): the review screens read/write it through the coordinator,
+        // and `ProjectStore` uses the SAME instance to drop an album's cached file on delete.
+        let timelineCache = TimelineCache()
+        _projectStore = State(initialValue: ProjectStore(container: container, timelineCache: timelineCache))
         _selectionStore = State(initialValue: SelectionStore(container: container))
         _doneStore = State(initialValue: DoneStore(container: container))
-        _coordinator = State(initialValue: AppCoordinator(library: photoLibrary))
+        _coordinator = State(initialValue: AppCoordinator(library: photoLibrary, timelineCache: timelineCache))
         Log.app.notice("Poimi launched")
     }
 

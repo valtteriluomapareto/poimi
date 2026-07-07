@@ -416,6 +416,27 @@ struct CandidateStoreTests {
         #expect(second.scanReport?.cached == false)
     }
 
+    @Test("toggling location invalidates the cache: same photos, flipped setting → miss → recompute")
+    func timelineCacheMissOnLocationToggle() async throws {
+        let dir = tempCacheDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let cache = TimelineCache(directory: dir)
+        let project = makeProject()
+        // Location ON caches a trip-bearing timeline.
+        let on = CandidateStore(library: FakePhotoLibrary(assets: locatedSeed()),
+                                calendar: utcCalendar(), locationEnabled: true, timelineCache: cache)
+        await on.load(project)
+        #expect(on.scanReport?.cached == false)
+        #expect(readyClusters(on, "location on").contains { $0.tripCluster != nil })
+        // Same project id + photos, location OFF ⇒ a different fingerprint ⇒ miss ⇒ recompute a
+        // date-only timeline (no trips), rather than reusing the trip-bearing cached entry.
+        let off = CandidateStore(library: FakePhotoLibrary(assets: locatedSeed()),
+                                 calendar: utcCalendar(), locationEnabled: false, timelineCache: cache)
+        await off.load(project)
+        #expect(off.scanReport?.cached == false)
+        #expect(readyClusters(off, "location off").allSatisfy { $0.tripCluster == nil })
+    }
+
     private func readyClusters(_ store: CandidateStore, _ comment: Comment) -> [ReviewCluster] {
         guard case .ready(let clusters) = store.phase else {
             Issue.record("expected .ready, got \(store.phase) — \(comment)")

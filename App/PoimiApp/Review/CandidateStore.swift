@@ -126,7 +126,7 @@ final class CandidateStore {
             let naming: String
             if let namingMillis {
                 naming = "\(Int(namingMillis)) ms — \(cacheHits ?? 0) cache hits, \(geocoded ?? 0) geocoded"
-                    + " (\(namesResolved ?? 0) named; cache rows: \(cacheRows ?? -1))"
+                    + " (\(namesResolved ?? 0) named; cache rows: \(cacheRows.map(String.init) ?? "—"))"
             } else {
                 naming = "pending…"
             }
@@ -136,7 +136,7 @@ final class CandidateStore {
             candidates: \(candidateCount)
             clusters: \(clusterCount) (\(tripCount) trips)
             fetch:   \(Int(fetchMillis)) ms
-            cluster: \(Int(clusterMillis)) ms\(cached ? " (cached — clustering skipped)" : "")
+            cluster: \(Int(clusterMillis)) ms\(cached ? " (cached — fingerprint + reload, no clustering)" : "")
             naming:  \(naming)
             """
         }
@@ -236,6 +236,10 @@ final class CandidateStore {
     /// the result for next time. `timelineCache == nil` (debug/test) always recomputes. With location off
     /// (or no trips) the result is the date-only day-grouping wrapped as `.day` clusters. Returns whether
     /// the clusters came from the cache (for the scan report).
+    ///
+    /// - Note: on a cache HIT the small residual cost (fingerprint sort+hash + file reload) is still
+    ///   counted in the caller's `clusterMillis`; the clustering itself is what's skipped. The fetch that
+    ///   produced `candidates` (~1 s) is the remaining per-open floor — the cache doesn't touch it.
     private func assembleTimeline(
         for candidates: [AssetRef], project: CurationProject
     ) async -> (clusters: [ReviewCluster], fromCache: Bool) {
