@@ -338,7 +338,8 @@ enum ClusterIndexBuilder {
 
 // MARK: - The cluster list row + sticky month header
 
-/// A sticky month header ("February") over its clusters. Opaque so scrolling rows don't bleed through.
+/// A sticky month header ("February", or "February 2025" for a multi-year album — #119) over its
+/// clusters. Opaque so scrolling rows don't bleed through.
 struct ClusterMonthHeader: View {
     let title: String
 
