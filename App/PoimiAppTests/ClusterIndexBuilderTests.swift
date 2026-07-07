@@ -18,15 +18,15 @@ struct ClusterIndexBuilderTests {
     private let cal = utcCalendar()
     private let locale = Locale(identifier: "en_US")
 
-    private func group(_ id: String, _ year: Int, _ month: Int, _ day: Int, count: Int) -> DayGroup {
-        DayGroup(id: id,
-                 assetIDs: (0..<count).map { "\(id)-\($0)" },
-                 days: [.day(year: year, month: month, day: day)],
-                 isBusyDay: true)
+    private func group(_ id: String, _ year: Int, _ month: Int, _ day: Int, count: Int) -> ReviewCluster {
+        .day(DayGroup(id: id,
+                      assetIDs: (0..<count).map { "\(id)-\($0)" },
+                      days: [.day(year: year, month: month, day: day)],
+                      isBusyDay: true))
     }
 
-    private func undatedGroup(count: Int) -> DayGroup {
-        DayGroup(id: "undated", assetIDs: (0..<count).map { "u\($0)" }, days: [.undated], isBusyDay: false)
+    private func undatedGroup(count: Int) -> ReviewCluster {
+        .day(DayGroup(id: "undated", assetIDs: (0..<count).map { "u\($0)" }, days: [.undated], isBusyDay: false))
     }
 
     @Test("clusters group into month sections in chronological order, with the header/chart totals")
@@ -72,10 +72,10 @@ struct ClusterIndexBuilderTests {
     @Test("a multi-day (folded quiet-run) cluster sits in its FIRST day's month section")
     func multiDayRunSectionsByFirstDay() {
         // A run spanning Jan 30 → Feb 2 buckets by its first day (January), not its last.
-        let run = DayGroup(id: "run",
+        let run = ReviewCluster.day(DayGroup(id: "run",
                            assetIDs: ["run-0", "run-1", "run-2"],
                            days: [.day(year: 2025, month: 1, day: 30), .day(year: 2025, month: 2, day: 2)],
-                           isBusyDay: false)
+                           isBusyDay: false))
         let index = ClusterIndexBuilder.build(from: [run], calendar: cal, locale: locale)
         #expect(index.sections.map(\.title) == ["January"])
         #expect(index.sections.first?.rows.first?.firstDay == .day(year: 2025, month: 1, day: 30))
@@ -104,14 +104,35 @@ struct ClusterIndexBuilderTests {
 
     @Test("totalDays counts each dated day (a folded run's days all count); undated isn't a day")
     func totalDaysCountsDays() {
-        let run = DayGroup(id: "run", assetIDs: ["r0", "r1", "r2"],
+        let run = ReviewCluster.day(DayGroup(id: "run", assetIDs: ["r0", "r1", "r2"],
                            days: [.day(year: 2025, month: 1, day: 30), .day(year: 2025, month: 2, day: 2)],
-                           isBusyDay: false)
-        let undated = DayGroup(id: "u", assetIDs: ["u0"], days: [.undated], isBusyDay: false)
+                           isBusyDay: false))
+        let undated = ReviewCluster.day(DayGroup(id: "u", assetIDs: ["u0"], days: [.undated], isBusyDay: false))
         let index = ClusterIndexBuilder.build(from: [run, group("b", 2025, 3, 5, count: 8), undated],
                                               calendar: cal, locale: locale)
         #expect(index.totalClusters == 3)   // three clusters (incl. undated)
         #expect(index.totalDays == 3)       // run's 2 days + busy's 1; undated contributes no day
+    }
+
+    @Test("a trip row carries the location sentence + date subline; date fallback until the name lands")
+    func tripRow() throws {
+        let g1 = DayGroup(id: "d1", assetIDs: ["a1"], days: [.day(year: 2025, month: 11, day: 8)], isBusyDay: true)
+        let g2 = DayGroup(id: "d2", assetIDs: ["a2"], days: [.day(year: 2025, month: 11, day: 9)], isBusyDay: true)
+        let trip = ReviewCluster.trip(TripCluster(id: "t", clusterID: "aland", shape: .weekend, dayGroups: [g1, g2]))
+        let dateRange = DayGroupHeader.title(for: trip, calendar: cal, locale: locale)
+
+        // Named → the sentence is the title; the date range is the subline; it's flagged a trip.
+        let named = ClusterIndexBuilder.build(from: [trip], tripNames: ["aland": "Åland"], calendar: cal, locale: locale)
+        let namedRow = try #require(named.sections.first?.rows.first)
+        #expect(namedRow.isTrip)
+        #expect(namedRow.title == TripLabel.sentence(for: .weekend, place: "Åland"))
+        #expect(namedRow.dateSubtitle == dateRange)
+
+        // Not-yet-resolved → the date range is the fallback title (the async name hasn't landed).
+        let unnamed = ClusterIndexBuilder.build(from: [trip], tripNames: [:], calendar: cal, locale: locale)
+        let unnamedRow = try #require(unnamed.sections.first?.rows.first)
+        #expect(unnamedRow.title == dateRange)
+        #expect(unnamedRow.dateSubtitle == dateRange)
     }
 }
 
@@ -120,14 +141,14 @@ struct ChartBucketingTests {
     private let cal = utcCalendar()
     private let locale = Locale(identifier: "en_US")
 
-    private func group(_ id: String, _ year: Int, _ month: Int, _ day: Int, count: Int) -> DayGroup {
-        DayGroup(id: id,
-                 assetIDs: (0..<count).map { "\(id)-\($0)" },
-                 days: [.day(year: year, month: month, day: day)],
-                 isBusyDay: true)
+    private func group(_ id: String, _ year: Int, _ month: Int, _ day: Int, count: Int) -> ReviewCluster {
+        .day(DayGroup(id: id,
+                      assetIDs: (0..<count).map { "\(id)-\($0)" },
+                      days: [.day(year: year, month: month, day: day)],
+                      isBusyDay: true))
     }
 
-    private func buckets(_ groups: [DayGroup]) -> [ChartBucket] {
+    private func buckets(_ groups: [ReviewCluster]) -> [ChartBucket] {
         ClusterIndexBuilder.build(from: groups, calendar: cal, locale: locale).chartBuckets
     }
 
@@ -201,7 +222,7 @@ struct ChartBucketingTests {
 
     @Test("undated clusters get no bar (a timeline has no place for them)")
     func undatedExcluded() {
-        let undated = DayGroup(id: "u", assetIDs: ["u0", "u1"], days: [.undated], isBusyDay: false)
+        let undated = ReviewCluster.day(DayGroup(id: "u", assetIDs: ["u0", "u1"], days: [.undated], isBusyDay: false))
         let bars = buckets([group("a", 2025, 3, 1, count: 5), undated])
         #expect(bars.count == 1)                          // just the one dated cluster
         #expect(bars.first?.count == 5)                   // its 5 photos (undated's not counted)

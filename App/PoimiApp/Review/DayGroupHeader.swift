@@ -15,20 +15,32 @@ enum DayGroupHeader {
     /// The section title for `group`. `calendar`/`locale` are injected so tests pin a timezone and
     /// month-name language; the app passes the user's `.current`.
     static func title(for group: DayGroup, calendar: Calendar = .current, locale: Locale = .current) -> String {
-        if group.isUndated { return String(localized: "Undated") }
-        guard let firstKey = group.days.first, let firstDate = firstKey.anchorDate(in: calendar) else {
+        title(forDays: group.days, isUndated: group.isUndated, calendar: calendar, locale: locale)
+    }
+
+    /// The date-range title for any review cluster's days — a plain date cluster's section title, and
+    /// (for a trip) its date subline / the fallback title shown until its place name resolves. The trip
+    /// *sentence* itself is composed app-side by `TripLabel` from the resolved name.
+    static func title(for cluster: ReviewCluster, calendar: Calendar = .current, locale: Locale = .current) -> String {
+        title(forDays: cluster.days, isUndated: cluster.isUndated, calendar: calendar, locale: locale)
+    }
+
+    private static func title(forDays days: [DayKey], isUndated: Bool,
+                              calendar: Calendar, locale: Locale) -> String {
+        if isUndated { return String(localized: "Undated") }
+        guard let firstKey = days.first, let firstDate = firstKey.anchorDate(in: calendar) else {
             return ""
         }
         // Single day → weekday + month + day ("Sat, Jul 5"). `timeZone` is a settable property of
         // the style (the `.timeZone(_:)` builder configures a *display symbol*, not the zone used).
         var singleDay = Date.FormatStyle.dateTime.weekday(.abbreviated).month(.abbreviated).day().locale(locale)
         singleDay.timeZone = calendar.timeZone
-        guard group.days.count > 1, let lastKey = group.days.last,
+        guard days.count > 1, let lastKey = days.last,
               let lastDate = lastKey.anchorDate(in: calendar) else {
             return firstDate.formatted(singleDay)
         }
 
-        // Merged quiet run → "Jul 16 – Jul 18" (weekday dropped to keep the span scannable).
+        // Merged quiet run / multi-day trip → "Jul 16 – Jul 18" (weekday dropped to keep it scannable).
         var monthDay = Date.FormatStyle.dateTime.month(.abbreviated).day().locale(locale)
         monthDay.timeZone = calendar.timeZone
         return "\(firstDate.formatted(monthDay)) – \(lastDate.formatted(monthDay))"

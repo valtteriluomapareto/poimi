@@ -28,38 +28,38 @@ struct InitialPageTests {
         let groups = [group("a", days: [jul5], assets: ["a", "a2"]),
                       group("b", days: [jul6], assets: ["b", "b2"]),
                       group("c", days: [jul7])]
-        #expect(initialPage(groups: groups, scrollToDay: jul6, isDone: { _ in false }) == 1)
+        #expect(initialPage(clusters: groups.map(ReviewCluster.day), scrollToDay: jul6, isDone: { _ in false }) == 1)
     }
 
     @Test("a drill day matching NO group falls back to first-unreviewed")
     func drillNoMatch() {
         let groups = [group("a", days: [jul5]), group("b", days: [jul6])]
         let missing = DayKey.day(year: 2030, month: 1, day: 1)
-        #expect(initialPage(groups: groups, scrollToDay: missing, isDone: { $0.id == "a" }) == 1)  // a done → b
+        #expect(initialPage(clusters: groups.map(ReviewCluster.day), scrollToDay: missing, isDone: { $0.id == "a" }) == 1)  // a done → b
     }
 
     @Test("no drill opens the first UNREVIEWED cluster (resume)")
     func resumeFirstUnreviewed() {
         let groups = [group("a", days: [jul5]), group("b", days: [jul6]), group("c", days: [jul7])]
-        #expect(initialPage(groups: groups, scrollToDay: nil, isDone: { $0.id == "a" }) == 1)
+        #expect(initialPage(clusters: groups.map(ReviewCluster.day), scrollToDay: nil, isDone: { $0.id == "a" }) == 1)
     }
 
     @Test("no drill with every cluster done falls back to the first page")
     func resumeAllDone() {
         let groups = [group("a", days: [jul5]), group("b", days: [jul6])]
-        #expect(initialPage(groups: groups, scrollToDay: nil, isDone: { _ in true }) == 0)
+        #expect(initialPage(clusters: groups.map(ReviewCluster.day), scrollToDay: nil, isDone: { _ in true }) == 0)
     }
 
     @Test("a drill lands on the matching cluster even if a later one is the first unreviewed")
     func drillWinsOverResume() {
         let groups = [group("a", days: [jul5]), group("b", days: [jul6]), group("c", days: [jul7])]
         // a is unreviewed (resume would pick 0), but the drill targets jul7 → page 2.
-        #expect(initialPage(groups: groups, scrollToDay: jul7, isDone: { _ in false }) == 2)
+        #expect(initialPage(clusters: groups.map(ReviewCluster.day), scrollToDay: jul7, isDone: { _ in false }) == 2)
     }
 
     @Test("no groups → page 0")
     func emptyGroups() {
-        #expect(initialPage(groups: [], scrollToDay: jul5, isDone: { _ in false }) == 0)
+        #expect(initialPage(clusters: [], scrollToDay: jul5, isDone: { _ in false }) == 0)
     }
 }
 

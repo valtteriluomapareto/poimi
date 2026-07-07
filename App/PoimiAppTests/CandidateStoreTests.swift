@@ -42,13 +42,14 @@ struct CandidateStoreTests {
             excludedAlbumIDs: excludedAlbumIDs)
     }
 
-    /// Unwrap `.ready`'s day-groups, or fail loudly with the actual phase.
+    /// Unwrap `.ready`'s underlying day-groups (a trip cluster's `dayGroups` recover them, so this holds
+    /// whether or not the timeline overlaid any trips), or fail loudly with the actual phase.
     private func readyGroups(_ store: CandidateStore, _ comment: Comment) -> [DayGroup] {
-        guard case .ready(let groups) = store.phase else {
+        guard case .ready(let clusters) = store.phase else {
             Issue.record("expected .ready, got \(store.phase) — \(comment)")
             return []
         }
-        return groups
+        return clusters.flatMap(\.dayGroups)
     }
 
     /// The candidate ids in chronological order — concatenating the groups reproduces the flat
@@ -311,6 +312,70 @@ struct CandidateStoreTests {
         if case .ready = store.phase {} else {
             Issue.record("expected .ready after retry, got \(store.phase)")
         }
+    }
+
+    // MARK: - Location timeline: the per-album gate + trip naming (#130)
+
+    private func located(_ id: String, _ lat: Double, _ lon: Double, _ month: Int, _ day: Int) -> AssetRef {
+        AssetRef(id: id,
+                 captureDate: utcCalendar().date(from: DateComponents(year: 2025, month: month, day: day, hour: 12))!,
+                 coordinate: Coordinate(latitude: lat, longitude: lon))
+    }
+
+    /// A located 2025 seed: a Helsinki home run (Feb, 20 days) + one Åland away trip (May 10–11, busy).
+    private func locatedSeed() -> [AssetRef] {
+        var assets: [AssetRef] = []
+        for day in 1...20 { for shot in 0..<3 { assets.append(located("home-\(day)-\(shot)", 60.17, 24.94, 2, day)) } }
+        for day in [10, 11] {
+            for shot in 0..<25 { assets.append(located("aland-\(day)-\(shot)", 60.10, 19.90, 5, day)) }
+        }
+        return assets
+    }
+
+    private func makeCache() throws -> NameCacheStore {
+        NameCacheStore(modelContainer: try AppModelContainer.make(inMemory: true))
+    }
+
+    @Test("locationEnabled: false ⇒ the timeline is date-only (no trip clusters)")
+    func locationOffIsDateOnly() async throws {
+        let candidates = CandidateStore(library: FakePhotoLibrary(assets: locatedSeed()),
+                                        calendar: utcCalendar(), locationEnabled: false)
+        await candidates.load(makeProject())
+        let clusters = readyClusters(candidates, "location off")
+        #expect(!clusters.isEmpty)
+        #expect(clusters.allSatisfy { $0.tripCluster == nil })   // every element is a plain date cluster
+    }
+
+    @Test("locationEnabled: true forms a trip and resolves its name via the seam")
+    func locationOnFormsAndNamesTrip() async throws {
+        let candidates = CandidateStore(library: FakePhotoLibrary(assets: locatedSeed()),
+                                        calendar: utcCalendar(), locationEnabled: true,
+                                        naming: FakePlaceNaming(), nameCache: try makeCache())
+        await candidates.load(makeProject())
+        await candidates.awaitPendingNames()   // the name pass is detached from `.ready`
+
+        let trip = readyClusters(candidates, "location on").compactMap(\.tripCluster).first
+        #expect(trip != nil)                                     // the Åland run surfaced as a trip
+        #expect(!candidates.tripNames.isEmpty)                   // its name resolved via the fake geocoder
+        if let trip { #expect(candidates.tripLabel(for: trip) != nil) }   // composed sentence available
+    }
+
+    @Test("with no naming deps, trips still form but stay unlabelled")
+    func tripsFormWithoutNaming() async throws {
+        let candidates = CandidateStore(library: FakePhotoLibrary(assets: locatedSeed()),
+                                        calendar: utcCalendar(), locationEnabled: true)   // naming: nil
+        await candidates.load(makeProject())
+        await candidates.awaitPendingNames()
+        #expect(readyClusters(candidates, "no naming").contains { $0.tripCluster != nil })
+        #expect(candidates.tripNames.isEmpty)
+    }
+
+    private func readyClusters(_ store: CandidateStore, _ comment: Comment) -> [ReviewCluster] {
+        guard case .ready(let clusters) = store.phase else {
+            Issue.record("expected .ready, got \(store.phase) — \(comment)")
+            return []
+        }
+        return clusters
     }
 }
 

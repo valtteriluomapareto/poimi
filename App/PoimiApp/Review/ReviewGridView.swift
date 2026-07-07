@@ -33,8 +33,11 @@ enum ReviewGridColumns {
 }
 
 struct ReviewGridView: View {
-    /// The candidates split into adaptive day-groups (oldest → newest) — one page per group.
-    let groups: [DayGroup]
+    /// The review timeline (oldest → newest) — one page per cluster (a date day-group or a trip).
+    let clusters: [ReviewCluster]
+    /// Resolved trip place names (`TripCluster.clusterID → name`), filling in async — a trip page shows
+    /// its "Week in …" sentence once its name lands, and the date range until then.
+    var tripNames: [String: String] = [:]
     /// The album name — unused as a visible title now (the header shows the current cluster); kept so
     /// the call site (ScanningView / iPad detail) stays unchanged and it's available for a11y later.
     let title: String
@@ -81,19 +84,28 @@ struct ReviewGridView: View {
         Array(repeating: GridItem(.flexible(), spacing: spacing), count: columnCount)
     }
 
-    private var currentGroup: DayGroup? {
-        groups.first { $0.id == currentPageID } ?? groups.first
+    private var currentCluster: ReviewCluster? {
+        clusters.first { $0.id == currentPageID } ?? clusters.first
     }
 
     /// 0-based position of the current page — for the indicator + `advance` math. 0 if unresolved.
     private var currentIndex: Int {
-        groups.firstIndex { $0.id == currentPageID } ?? 0
+        clusters.firstIndex { $0.id == currentPageID } ?? 0
     }
 
-    /// The group id to open on entry / album switch: the drill-or-resume `initialPage` mapped to its id.
+    /// The cluster id to open on entry / album switch: the drill-or-resume `initialPage` mapped to its id.
     private func entryPageID() -> String? {
-        let idx = initialPage(groups: groups, scrollToDay: scrollToDay, isDone: { done.isDone($0) })
-        return groups.indices.contains(idx) ? groups[idx].id : groups.first?.id
+        let idx = initialPage(clusters: clusters, scrollToDay: scrollToDay, isDone: { done.isDone($0) })
+        return clusters.indices.contains(idx) ? clusters[idx].id : clusters.first?.id
+    }
+
+    /// The pinned header title for a cluster: a trip's resolved location sentence ("Week in Salo"), or
+    /// the date title (a plain date cluster always, or a trip whose name hasn't resolved yet).
+    private func headerTitle(for cluster: ReviewCluster) -> String {
+        if let trip = cluster.tripCluster, let name = tripNames[trip.clusterID] {
+            return TripLabel.sentence(for: trip.shape, place: name)
+        }
+        return DayGroupHeader.title(for: cluster)
     }
 
     /// Columns that best fill `width` at ~132pt cells, clamped to the size-class range — opens dense on
@@ -106,9 +118,11 @@ struct ReviewGridView: View {
 
     var body: some View {
         TabView(selection: $currentPageID) {
-            ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+            ForEach(Array(clusters.enumerated()), id: \.element.id) { index, cluster in
                 ClusterPage(
-                    group: group,
+                    cluster: cluster,
+                    headerTitle: headerTitle(for: cluster),
+                    isTrip: cluster.tripCluster != nil,
                     columns: columns,
                     spacing: spacing,
                     load: load,
@@ -116,13 +130,13 @@ struct ReviewGridView: View {
                     openAsset: openAsset,
                     // Only the ACTIVE page reports cell visibility — TabView pre-renders neighbours, and
                     // their cells reporting visible would churn the prefetch recompute on every swipe.
-                    isActive: group.id == currentPageID,
+                    isActive: cluster.id == currentPageID,
                     onVisible: { visibleIDs.insert($0) },
                     onHidden: { visibleIDs.remove($0) },
                     position: index + 1,
-                    total: groups.count,
-                    onMarkDone: { markDoneAndAdvance(group) })
-                    .tag(group.id as String?)
+                    total: clusters.count,
+                    onMarkDone: { markDoneAndAdvance(cluster) })
+                    .tag(cluster.id as String?)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
@@ -171,9 +185,9 @@ struct ReviewGridView: View {
 
     // MARK: Mark done → advance
 
-    private func markDoneAndAdvance(_ group: DayGroup) {
-        let wasDone = done.isDone(group)
-        done.toggle(group)
+    private func markDoneAndAdvance(_ cluster: ReviewCluster) {
+        let wasDone = done.isDone(cluster)
+        done.toggle(cluster)
         if !wasDone {
             AccessibilityNotification.Announcement("Marked done").post()
             advance()
@@ -184,10 +198,10 @@ struct ReviewGridView: View {
     /// (finished the last stretch). Finishing a day lands you on the next one to review. The choice is
     /// the pure `nextUnreviewedPage` (tested); this just applies it with animation.
     private func advance() {
-        let next = nextUnreviewedPage(after: currentIndex, count: groups.count,
-                                      isDone: { done.isDone(groups[$0]) })
-        guard groups.indices.contains(next) else { return }
-        withAnimation(reduceMotion ? nil : .snappy) { currentPageID = groups[next].id }
+        let next = nextUnreviewedPage(after: currentIndex, count: clusters.count,
+                                      isDone: { done.isDone(clusters[$0]) })
+        guard clusters.indices.contains(next) else { return }
+        withAnimation(reduceMotion ? nil : .snappy) { currentPageID = clusters[next].id }
     }
 
     // MARK: Cell load (the thumbnail seam)
@@ -208,14 +222,14 @@ struct ReviewGridView: View {
     // MARK: Prefetch window (scoped to the current cluster)
 
     private var groupIdentity: String {
-        "\(groups.first?.id ?? "∅")#\(groups.reduce(0) { $0 + $1.assetIDs.count })"
+        "\(clusters.first?.id ?? "∅")#\(clusters.reduce(0) { $0 + $1.assetIDs.count })"
     }
 
     /// Only the CURRENT cluster's cells render at full cell size, so the window's universe is just its
     /// ids — visible ± a row margin. A neighbouring page's cells (rendered by TabView for the swipe) may
     /// report visible, but they're not in this universe so `slice` filters them out.
     private func rebuildWindow() {
-        window = PrefetchWindow(orderedIDs: currentGroup?.assetIDs ?? [])
+        window = PrefetchWindow(orderedIDs: currentCluster?.assetIDs ?? [])
     }
 
     private func scheduleRecomputeWindow() {
@@ -246,7 +260,12 @@ struct ReviewGridView: View {
 /// cluster's scroll, not as a permanent bottom bar. Owns its own vertical scroll (each page starts at
 /// the top). Cells report visibility up so the parent's prefetch window tracks the visible ± margin.
 private struct ClusterPage: View {
-    let group: DayGroup
+    let cluster: ReviewCluster
+    /// The pinned header title — a trip's location sentence (or its date range until the name lands), or
+    /// a plain date cluster's date title. Computed by the parent from the resolved trip names.
+    let headerTitle: String
+    /// A trip/visit cluster → the done CTA reads "Mark trip done"; a date cluster → "Mark day done".
+    let isTrip: Bool
     let columns: [GridItem]
     let spacing: CGFloat
     let load: (String) async -> UIImage?
@@ -263,12 +282,13 @@ private struct ClusterPage: View {
     @Environment(DoneStore.self) private var done
 
     var body: some View {
-        // Formatted once per page (not per cell) — the cell a11y label + the day chip reuse it.
-        let dayLabel = DayGroupHeader.title(for: group)
+        // The per-cell day label stays the date (a cell is one photo on one day, even inside a trip);
+        // the header/chip carries the cluster title (trip sentence or date). Formatted once per page.
+        let dayLabel = DayGroupHeader.title(for: cluster)
         ScrollView {
             LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
                 Section {
-                    ForEach(group.assetIDs, id: \.self) { id in
+                    ForEach(cluster.assetIDs, id: \.self) { id in
                         ReviewGridCell(
                             id: id,
                             dayLabel: dayLabel,
@@ -280,9 +300,9 @@ private struct ClusterPage: View {
                             .onDisappear { if isActive { onHidden(id) } }
                     }
                 } header: {
-                    clusterHeader(dayLabel: dayLabel)
+                    clusterHeader()
                 } footer: {
-                    footer(isDone: done.isDone(group))
+                    footer(isDone: done.isDone(cluster))
                 }
             }
             .padding(.horizontal, spacing)
@@ -291,30 +311,32 @@ private struct ClusterPage: View {
     }
 
     /// The pinned per-cluster header: an always-visible page indicator (position + dots — the swipe
-    /// affordance + "where am I in the year" orientation the paged model needs) above the day +
-    /// Select-all glass pills.
-    @ViewBuilder private func clusterHeader(dayLabel: String) -> some View {
+    /// affordance + "where am I in the year" orientation the paged model needs) above the title +
+    /// Select-all glass pills. The title chip shows the trip sentence (or date) with a pin for trips.
+    @ViewBuilder private func clusterHeader() -> some View {
         VStack(alignment: .leading, spacing: 6) {
             if total > 1 { PageIndicatorPill(position: position, total: total) }
-            ClusterChips(group: group, title: dayLabel, isDone: done.isDone(group))
+            ClusterChips(cluster: cluster, title: headerTitle, isTrip: isTrip, isDone: done.isDone(cluster))
         }
     }
 
-    /// End-of-cluster CTA: the "Mark day done" button (advances to the next unreviewed cluster),
-    /// reached by scrolling to the end of the day (#38). Position now lives in the pinned header, so
-    /// the footer is just the button.
+    /// End-of-cluster CTA: "Mark trip done" for a trip (it spans several days) / "Mark day done" for a
+    /// date cluster — advances to the next unreviewed cluster, reached by scrolling to the end (#38).
     @ViewBuilder private func footer(isDone: Bool) -> some View {
+        let doneLabel = isTrip ? "Mark trip done" : "Mark day done"
         HStack {
             Spacer()
             Button(action: onMarkDone) {
-                Label(isDone ? "Mark as not done" : "Mark day done",
+                Label(isDone ? "Mark as not done" : doneLabel,
                       systemImage: isDone ? "checkmark.seal.fill" : "checkmark.seal")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .tint(isDone ? Color(.systemGray) : .brandGreen)
             .accessibilityIdentifier("markDoneButton")   // stable id though the label toggles
-            .accessibilityHint(isDone ? "Reopens this day for editing" : "Marks this day reviewed and opens the next")
+            .accessibilityHint(isDone
+                ? "Reopens this cluster for editing"
+                : "Marks this cluster reviewed and opens the next")
             Spacer()
         }
         .padding(.top, 16)
@@ -358,15 +380,16 @@ private struct PageIndicatorPill: View {
 /// chip is informational (no open/collapse in the paged model); Select-all toggles the whole cluster's
 /// picks. Observes the stores itself so the parent grid body stays independent of `selected`.
 private struct ClusterChips: View {
-    let group: DayGroup
+    let cluster: ReviewCluster
     let title: String
+    var isTrip: Bool = false
     let isDone: Bool
     @Environment(SelectionStore.self) private var selection
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        let selectedCount = selection.selected.intersection(group.assetIDs).count
-        let allSelected = !group.assetIDs.isEmpty && selectedCount == group.count
+        let selectedCount = selection.selected.intersection(cluster.assetIDs).count
+        let allSelected = !cluster.assetIDs.isEmpty && selectedCount == cluster.count
         // One GlassEffectContainer so the two co-located chips sample as a single lens (styleguide §5).
         GlassEffectContainer(spacing: 8) {
             if dynamicTypeSize.isAccessibilitySize {
@@ -389,14 +412,20 @@ private struct ClusterChips: View {
         .accessibilityAddTraits(.isHeader)
     }
 
-    /// The day identity capsule — date + count + (done) green seal. Non-interactive glass.
+    /// The cluster identity capsule — a pin (trips) + title + count + (done) green seal. Non-interactive.
     private var dayChip: some View {
         HStack(spacing: 6) {
+            if isTrip {
+                Image(systemName: "mappin.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(isDone ? .secondary : .primary)
                 .lineLimit(1)
-            Text("· \(group.count)")
+            Text("· \(cluster.count)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -416,7 +445,7 @@ private struct ClusterChips: View {
     /// Select-all / deselect-all for this cluster — its own glass capsule.
     private func selectAllChip(allSelected: Bool) -> some View {
         Button {
-            if allSelected { selection.deselect(group.assetIDs) } else { selection.select(group.assetIDs) }
+            if allSelected { selection.deselect(cluster.assetIDs) } else { selection.select(cluster.assetIDs) }
         } label: {
             Text(allSelected ? "Deselect all" : "Select all")
                 .font(.footnote.weight(.semibold))
@@ -475,11 +504,11 @@ private struct PageDots: View {
 /// (`scrollToDay` matching a group's days) opens that group's page; otherwise the first UNREVIEWED
 /// cluster (resume), else the first. Pure so the drill-vs-resume choice is unit-tested. Returns 0 for
 /// an empty slice (the view guards `currentGroup`).
-func initialPage(groups: [DayGroup], scrollToDay: DayKey?, isDone: (DayGroup) -> Bool) -> Int {
-    if let day = scrollToDay, let idx = groups.firstIndex(where: { $0.days.contains(day) }) {
+func initialPage(clusters: [ReviewCluster], scrollToDay: DayKey?, isDone: (ReviewCluster) -> Bool) -> Int {
+    if let day = scrollToDay, let idx = clusters.firstIndex(where: { $0.days.contains(day) }) {
         return idx
     }
-    return groups.firstIndex(where: { !isDone($0) }) ?? 0
+    return clusters.firstIndex(where: { !isDone($0) }) ?? 0
 }
 
 /// The page to land on after marking `current` done (#38 mark-done → next-day heartbeat): the first

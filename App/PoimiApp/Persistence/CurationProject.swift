@@ -29,6 +29,12 @@ final class CurationProject {
     var excludeScreenshots: Bool
     var excludedAlbumIDs: [String]          // PHAssetCollection localIdentifiers
 
+    /// Overlay trip/visit clusters in the review timeline (#130). Per-album so location relevance can
+    /// differ album to album; the Settings "Trips & places" toggle flips it. Additive attribute with a
+    /// default → SwiftData AUTOMATIC lightweight migration (no stage, a shared model class — the
+    /// AppSchema policy note). `false` → the byte-identical date-only timeline (the v1 screen).
+    var locationEnabled: Bool = true
+
     /// The exported Photos album's id — `nil` until first export creates-or-finds it (D19).
     var targetAlbumID: String?
 
@@ -63,6 +69,7 @@ final class CurationProject {
         targetCount: Int,
         excludeScreenshots: Bool = true,
         excludedAlbumIDs: [String] = [],
+        locationEnabled: Bool = true,
         targetAlbumID: String? = nil,
         selectionSnapshot: Data,
         doneDays: [String] = [],
@@ -80,6 +87,7 @@ final class CurationProject {
         self.targetCount = targetCount
         self.excludeScreenshots = excludeScreenshots
         self.excludedAlbumIDs = excludedAlbumIDs
+        self.locationEnabled = locationEnabled
         self.targetAlbumID = targetAlbumID
         self.selectionSnapshot = selectionSnapshot
         self.doneDays = doneDays

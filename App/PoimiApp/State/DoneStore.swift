@@ -68,6 +68,24 @@ final class DoneStore {
         scheduleFlush()
     }
 
+    /// Whether a review cluster renders done — every day it spans is done. A trip is done iff ALL its
+    /// constituent day-groups are (the done atom stays the day, D33 — a trip only groups them).
+    func isDone(_ cluster: ReviewCluster) -> Bool {
+        cluster.dayGroups.allSatisfy { Completion.isDone($0, doneDays: doneDays) }
+    }
+
+    /// Toggle a whole cluster's done state — "Mark trip done" marks EVERY constituent day done (undo
+    /// unmarks them all); a date cluster is the single-group case. Schedules a debounced flush.
+    func toggle(_ cluster: ReviewCluster) {
+        guard activeProject != nil else { return }
+        let markDone = !isDone(cluster)
+        for group in cluster.dayGroups {
+            doneDays = markDone ? Completion.markingDone(group, in: doneDays)
+                                : Completion.markingUndone(group, in: doneDays)
+        }
+        scheduleFlush()
+    }
+
     /// Reconcile the active project's done-days against a freshly-loaded candidate set (call once,
     /// after a load settles). A done day that **gained** an id since the last load re-opens, so a
     /// newly-added photo is never silently hidden inside a collapsed peek (D32(d)/D34 — the decided

@@ -24,10 +24,11 @@ struct ScanningView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
+    @Environment(\.placeNaming) private var placeNaming
+    @Environment(\.modelContext) private var modelContext
+    /// The album's scanned store — shared via the coordinator with the Overview, so drilling in reuses
+    /// its clusters instead of re-fetching + re-clustering. Held here so `body` reads its phase.
     @State private var store: CandidateStore?
-    /// The album the current `store` loaded — so a reused view instance reloads for a NEW album
-    /// rather than republishing the previous one's candidates (the iPad detail-column retarget, #42).
-    @State private var loadedProjectID: UUID?
     /// Gates the scanning indicator behind a grace delay (below) so instant scans never flash it.
     @State private var indicatorVisible = false
 
@@ -49,25 +50,39 @@ struct ScanningView: View {
             // system backdrop reacting to a collapsing title), which removes the specific feedback loop
             // below — verified on device (no scroll flicker); re-check if the top-title layout changes.
             .toolbarBackground(.hidden, for: .navigationBar)
-            // Keyed by project id so re-targeting (e.g. iPad detail column) reloads for the new
-            // album rather than showing the previous one's candidates.
-            .task(id: project.id) {
+            // Keyed by album + range + location so re-targeting (iPad detail column) / a Settings edit
+            // re-runs against the right candidate set; the coordinator's matching key decides scan-vs-reuse.
+            .task(id: ScanIdentity(id: project.id, start: project.rangeStart, end: project.rangeEnd,
+                                   locationEnabled: project.locationEnabled)) {
                 // Hydrate the selection + done-state for this project (idempotent — activate() no-ops
                 // if already active, so re-entry never clobbers unflushed picks/done-days).
                 selection.activate(project)
                 doneStore.activate(project)
-                // Reload when the album actually changed (or first load); reuse only survives a
-                // benign re-appear of the SAME album, so returning from the viewer doesn't re-scan.
-                // Gating on project identity (not `.idle`) stops a reused view instance from serving
-                // the previous album's candidates + day map to the viewer (#42).
-                if store == nil || loadedProjectID != project.id {
-                    store = CandidateStore(library: library)
-                    loadedProjectID = project.id
+                // Reuse the album's shared store: the Overview scanned it on the way in, so drilling here
+                // doesn't re-fetch + re-cluster. Scan only if WE are the first (iPad-direct / debug host);
+                // otherwise just reconcile done-state + publish the viewer's paging list.
+                let store = coordinator.candidateStore(for: project) {
+                    CandidateStore(library: library, locationEnabled: project.locationEnabled,
+                                   naming: placeNaming,
+                                   nameCache: NameCacheStore(modelContainer: modelContext.container))
+                }
+                self.store = store
+                if store.phase == .idle {
                     await scan()
-                } else {
-                    publishForViewer()   // benign re-appear (same album) — republish for the viewer
+                } else if case .ready = store.phase {
+                    doneStore.reconcile(currentIDsByDay: Self.idsByDay(store.dayByID))
+                    publishForViewer()
                 }
             }
+    }
+
+    /// The `.task` identity: re-run when the album, its range, or its "Trips & places" setting changes
+    /// (mirrors the coordinator's store key so scan-vs-reuse stays consistent).
+    private struct ScanIdentity: Hashable {
+        let id: UUID
+        let start: Date
+        let end: Date
+        let locationEnabled: Bool
     }
 
     /// Run (or re-run, e.g. a "Try again") the fetch pass, then reconcile done-state and publish the
@@ -87,8 +102,8 @@ struct ScanningView: View {
     /// Publish the candidate list + per-photo day map so the photo viewer can page through it and
     /// label each photo's day (#36). A no-op until the pass is `.ready`.
     private func publishForViewer() {
-        if case .ready(let groups) = store?.phase {
-            coordinator.reviewOrderedIDs = groups.flatMap(\.assetIDs)
+        if case .ready(let clusters) = store?.phase {
+            coordinator.reviewOrderedIDs = clusters.flatMap(\.assetIDs)
             coordinator.reviewDayByID = store?.dayByID ?? [:]
         }
     }
@@ -113,8 +128,8 @@ struct ScanningView: View {
 
     /// The header metadata line: total candidates + the album's period, e.g.
     /// "1,847 photos · Jan 2025 – Dec 2025".
-    private func headerSubtitle(_ groups: [DayGroup]) -> String {
-        let total = groups.reduce(0) { $0 + $1.count }
+    private func headerSubtitle(_ clusters: [ReviewCluster]) -> String {
+        let total = clusters.reduce(0) { $0 + $1.count }
         return String(localized: "\(total.formatted()) photos · \(periodLabel)",
                       comment: "Review header subtitle: photo count (grouped) · date-range period")
     }
@@ -163,13 +178,15 @@ struct ScanningView: View {
                 indicatorVisible = true
             }
 
-        case .ready(let groups):
-            // The store already grouped the candidates into adaptive day-groups, ONCE, when the pass
-            // settled (Finding 1). The grid renders them directly and never recomputes the grouping.
+        case .ready(let clusters):
+            // The store already assembled the timeline (date + trip clusters), ONCE, off-main when the
+            // pass settled (Finding 1). The grid renders it directly. `store?.tripNames` is read here so
+            // ScanningView re-renders as names resolve, handing the grid its fresh trip labels.
             ReviewGridView(
-                groups: groups,
+                clusters: clusters,
+                tripNames: store?.tripNames ?? [:],
                 title: project.title,
-                subtitle: headerSubtitle(groups),
+                subtitle: headerSubtitle(clusters),
                 openAsset: { coordinator.openPhoto($0) },
                 scrollToDay: scrollToDay)
 
