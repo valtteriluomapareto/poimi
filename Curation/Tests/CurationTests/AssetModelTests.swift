@@ -65,4 +65,28 @@ struct AssetModelTests {
         #expect(PhotoLibraryError.notAuthorized == .notAuthorized)
         #expect(PhotoLibraryError.notAuthorized != .fetchFailed)
     }
+
+    @Test("sortedByTitle: A→Z, case-insensitive, natural-numeric, id-stable for ties (#124)")
+    func albumsSortedByTitle() {
+        // Fixture is intentionally ASCII-Latin: `localizedStandardCompare` reads the ambient locale, but
+        // for pure-ASCII titles the ordering (case-fold + natural-numeric) is invariant across locales, so
+        // this asserts real behavior without a locale seam and won't flake under CI's locale.
+        let unsorted = [
+            AlbumRef(id: "a5", title: "Album 10"),
+            AlbumRef(id: "a1", title: "album 2"),        // lowercase must not sort after uppercase
+            AlbumRef(id: "z", title: "Zoo"),
+            AlbumRef(id: "dup-b", title: "Trip"),        // duplicate title, higher id
+            AlbumRef(id: "dup-a", title: "Trip"),        // duplicate title, lower id → first
+            AlbumRef(id: "a0", title: "Apples")
+        ]
+        let sorted = unsorted.sortedByTitle()
+        #expect(sorted.map(\.title) == ["album 2", "Album 10", "Apples", "Trip", "Trip", "Zoo"])
+        // "Album 2" before "Album 10" (natural numeric, not lexicographic "10" < "2").
+        #expect(sorted.map(\.id) == ["a1", "a5", "a0", "dup-a", "dup-b", "z"])
+        // Stable + idempotent: sorting the already-sorted list is a no-op (tie-break by id).
+        #expect(sorted.sortedByTitle() == sorted)
+        // Boundaries: empty and single-element are no-ops (not a crash / reorder).
+        #expect([AlbumRef]().sortedByTitle().isEmpty)
+        #expect([AlbumRef(id: "solo", title: "Only")].sortedByTitle().map(\.id) == ["solo"])
+    }
 }
