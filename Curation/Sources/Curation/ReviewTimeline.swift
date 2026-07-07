@@ -143,6 +143,25 @@ public enum ReviewCluster: Sendable, Identifiable, Equatable {
         if case let .trip(trip) = self { return trip }
         return nil
     }
+    /// Whether this is the trailing undated bucket (never a trip). Mirrors `DayGroup.isUndated`.
+    public var isUndated: Bool { days == [.undated] }
+    /// The cluster's first calendar day — the Overview's drill target + chronological anchor.
+    public var firstDay: DayKey? { days.first }
+
+    /// Up to `count` asset ids sampled evenly across the whole cluster (first + last included) — the
+    /// Overview thumbnail-strip preview (#35). Delegates to the day-group's sampler for a date cluster;
+    /// for a trip it samples across the merged members via the same algorithm.
+    public func evenlySampledIDs(_ count: Int) -> [String] {
+        switch self {
+        case let .day(group):
+            return group.evenlySampledIDs(count)
+        case let .trip(trip):
+            // Reuse the pinned sampler over the trip's merged ids (a throwaway carrier — cheap; called
+            // once per visible cluster, off the body).
+            return DayGroup(id: trip.id, assetIDs: trip.assetIDs, days: trip.days, isBusyDay: false)
+                .evenlySampledIDs(count)
+        }
+    }
 }
 
 public enum ReviewTimeline {

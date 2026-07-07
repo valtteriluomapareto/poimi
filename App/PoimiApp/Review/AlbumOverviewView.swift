@@ -35,6 +35,8 @@ struct AlbumOverviewView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
+    @Environment(\.placeNaming) private var placeNaming
+    @Environment(\.modelContext) private var modelContext
     @State private var store: CandidateStore?
     /// The finished cluster index — built once when the scan settles, so `body` never groups/formats.
     @State private var index: ClusterIndex?
@@ -89,12 +91,19 @@ struct AlbumOverviewView: View {
                 // First load, or the period changed → re-scan from scratch (a retained .ready store holds
                 // the OLD range's clusters). Otherwise reuse the loaded store and just (re)build the index.
                 if store == nil || scannedRange != range {
-                    store = CandidateStore(library: library)
+                    store = CandidateStore(library: library, naming: placeNaming,
+                                           nameCache: NameCacheStore(modelContainer: modelContext.container))
                     scannedRange = range
                     await scan()
-                } else if index == nil, case .ready(let groups) = store?.phase {
-                    index = ClusterIndexBuilder.build(from: groups)
+                } else if index == nil, case .ready(let clusters) = store?.phase {
+                    index = ClusterIndexBuilder.build(from: clusters, tripNames: store?.tripNames ?? [:])
                 }
+            }
+            // Trip place names resolve asynchronously after `.ready` (§7); rebuild the (cheap) index so
+            // the trip titles swap from their date fallback to "Week in …" as the names land.
+            .onChange(of: store?.tripNames ?? [:]) { _, names in
+                guard let store, case .ready(let clusters) = store.phase else { return }
+                index = ClusterIndexBuilder.build(from: clusters, tripNames: names)
             }
     }
 
@@ -104,8 +113,8 @@ struct AlbumOverviewView: View {
         guard let store else { return }
         index = nil
         await store.load(project)
-        if case .ready(let groups) = store.phase {
-            index = ClusterIndexBuilder.build(from: groups)
+        if case .ready(let clusters) = store.phase {
+            index = ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames)
         }
     }
 
@@ -206,19 +215,24 @@ struct AlbumOverviewView: View {
 
 // MARK: - The cluster index model (built once, off the body)
 
-/// One day-cluster as the Overview renders it. Carries the `DayGroup` itself so the row/bar can read
+/// One cluster as the Overview renders it. Carries the `ReviewCluster` itself so the row/bar can read
 /// its live done-state (DoneStore) + picked count (SelectionStore); everything else is formatted once.
 struct ClusterRow: Identifiable {
     let id: String
-    let group: DayGroup
-    /// "Sat, Jul 5" or "Jul 16 – Jul 18" — formatted once via `DayGroupHeader`.
+    let cluster: ReviewCluster
+    /// The primary title: a trip's location sentence ("Week in Salo") once its name resolves, else the
+    /// date title. A plain date cluster is always "Sat, Jul 5" / "Jul 16 – Jul 18" — formatted once.
     let title: String
+    /// A trip's date-range subline ("Jul 16 – Jul 18"); `nil` for a plain date cluster.
+    let dateSubtitle: String?
     let count: Int
     /// The representative thumbnail — the cluster's first asset.
     let thumbID: String?
     /// The drill target — the cluster's first day. For the undated bucket this is `.undated`, which
     /// the grid resolves to the undated cluster (so the drill lands on it, not the top).
     let firstDay: DayKey?
+    /// Whether this row is a trip/visit (drives the pin + the date subline).
+    var isTrip: Bool { cluster.tripCluster != nil }
 }
 
 /// A month's clusters under one sticky list header.
@@ -251,7 +265,8 @@ struct ClusterIndex {
 /// from `.task` (never a `body`): it walks the chronological groups into per-month list sections + the
 /// chart's adaptive time buckets, formatting each label a single time.
 enum ClusterIndexBuilder {
-    static func build(from groups: [DayGroup],
+    static func build(from clusters: [ReviewCluster],
+                      tripNames: [String: String] = [:],
                       calendar: Calendar = .current,
                       locale: Locale = .current) -> ClusterIndex {
         var monthStyle = Date.FormatStyle.dateTime.month(.wide).locale(locale)
@@ -259,36 +274,49 @@ enum ClusterIndexBuilder {
 
         var sections: [MonthSection] = []
         var rows: [ClusterRow] = []
-        for group in groups {
-            let row = ClusterRow(id: group.id,
-                                 group: group,
-                                 title: DayGroupHeader.title(for: group, calendar: calendar, locale: locale),
-                                 count: group.count,
-                                 thumbID: group.assetIDs.first,
-                                 firstDay: group.days.first)
+        for cluster in clusters {
+            let dateTitle = DayGroupHeader.title(for: cluster, calendar: calendar, locale: locale)
+            // A trip shows its location sentence once the name resolves, falling back to the date range
+            // until then; a plain date cluster is always the date title.
+            let title: String
+            let dateSubtitle: String?
+            if let trip = cluster.tripCluster {
+                title = tripNames[trip.clusterID].map { TripLabel.sentence(for: trip.shape, place: $0) } ?? dateTitle
+                dateSubtitle = dateTitle
+            } else {
+                title = dateTitle
+                dateSubtitle = nil
+            }
+            let row = ClusterRow(id: cluster.id,
+                                 cluster: cluster,
+                                 title: title,
+                                 dateSubtitle: dateSubtitle,
+                                 count: cluster.count,
+                                 thumbID: cluster.assetIDs.first,
+                                 firstDay: cluster.firstDay)
             rows.append(row)
 
-            let key: String, title: String
-            if !group.isUndated, let day = group.days.first, let date = day.anchorDate(in: calendar) {
+            let key: String, monthTitle: String
+            if !cluster.isUndated, let day = cluster.firstDay, let date = day.anchorDate(in: calendar) {
                 key = String(format: "%04d-%02d",
                              calendar.component(.year, from: date), calendar.component(.month, from: date))
-                title = date.formatted(monthStyle)
+                monthTitle = date.formatted(monthStyle)
             } else {
                 // The undated bucket (no capture date) sorts last as its own section.
-                key = "9999-99"; title = String(localized: "Undated")
+                key = "9999-99"; monthTitle = String(localized: "Undated")
             }
             if let last = sections.last, last.id == key {
                 sections[sections.count - 1].rows.append(row)
             } else {
-                sections.append(MonthSection(id: key, title: title, rows: [row]))
+                sections.append(MonthSection(id: key, title: monthTitle, rows: [row]))
             }
         }
-        // Distinct dated days with photos (a folded quiet run contributes each of its days) — the honest
-        // "N days" count; the undated bucket isn't a real day.
-        let totalDays = groups.reduce(0) { $0 + ($1.isUndated ? 0 : $1.days.count) }
+        // Distinct dated days with photos (a folded quiet run / trip contributes each of its days) — the
+        // honest "N days" count; the undated bucket isn't a real day.
+        let totalDays = clusters.reduce(0) { $0 + ($1.isUndated ? 0 : $1.days.count) }
         return ClusterIndex(sections: sections,
                             chartBuckets: ChartBucketing.buckets(for: rows, calendar: calendar, locale: locale),
-                            totalClusters: groups.count,
+                            totalClusters: clusters.count,
                             totalDays: totalDays)
     }
 }
@@ -320,7 +348,7 @@ struct ClusterListRow: View {
     @Environment(DoneStore.self) private var doneStore
 
     var body: some View {
-        let done = doneStore.isDone(row.group)
+        let done = doneStore.isDone(row.cluster)
         let picked = pickedCount()
         let state = ClusterState.of(isDone: done, pickedCount: picked)
 
@@ -328,10 +356,26 @@ struct ClusterListRow: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(row.title)
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
+                        HStack(spacing: 5) {
+                            // A gold pin marks a location (trip/visit) cluster; date clusters have none.
+                            if row.isTrip {
+                                Image(systemName: "mappin.circle.fill")
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color.accentColor)
+                                    .accessibilityHidden(true)
+                            }
+                            Text(row.title)
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                        }
+                        // A trip's date range sits under its sentence ("Jul 16 – Jul 18"); a date
+                        // cluster has none (its title already IS the date).
+                        if let dateSubtitle = row.dateSubtitle {
+                            Text(dateSubtitle)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                         subtitle(state: state, picked: picked)
                     }
                     Spacer(minLength: 8)
@@ -353,7 +397,7 @@ struct ClusterListRow: View {
                 // The evenly-sampled preview strip — replaces the single cover thumb, so a glance shows
                 // the whole cluster, not one photo (#35 paged-clusters). Leading inset only, so it runs
                 // off the right screen edge (the shelf "keep scrolling" read) instead of stopping short.
-                ClusterStrip(group: row.group)
+                ClusterStrip(cluster: row.cluster)
                     .padding(.leading, 20)
             }
             .padding(.vertical, 10)
@@ -386,7 +430,7 @@ struct ClusterListRow: View {
     }
 
     private func pickedCount() -> Int {
-        row.group.assetIDs.reduce(into: 0) { if selection.selected.contains($1) { $0 += 1 } }
+        row.cluster.assetIDs.reduce(into: 0) { if selection.selected.contains($1) { $0 += 1 } }
     }
 
     private func a11yLabel(state: ClusterState, picked: Int) -> String {

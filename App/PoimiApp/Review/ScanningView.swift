@@ -24,6 +24,8 @@ struct ScanningView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
+    @Environment(\.placeNaming) private var placeNaming
+    @Environment(\.modelContext) private var modelContext
     @State private var store: CandidateStore?
     /// The album the current `store` loaded — so a reused view instance reloads for a NEW album
     /// rather than republishing the previous one's candidates (the iPad detail-column retarget, #42).
@@ -61,7 +63,8 @@ struct ScanningView: View {
                 // Gating on project identity (not `.idle`) stops a reused view instance from serving
                 // the previous album's candidates + day map to the viewer (#42).
                 if store == nil || loadedProjectID != project.id {
-                    store = CandidateStore(library: library)
+                    store = CandidateStore(library: library, naming: placeNaming,
+                                           nameCache: NameCacheStore(modelContainer: modelContext.container))
                     loadedProjectID = project.id
                     await scan()
                 } else {
@@ -87,8 +90,8 @@ struct ScanningView: View {
     /// Publish the candidate list + per-photo day map so the photo viewer can page through it and
     /// label each photo's day (#36). A no-op until the pass is `.ready`.
     private func publishForViewer() {
-        if case .ready(let groups) = store?.phase {
-            coordinator.reviewOrderedIDs = groups.flatMap(\.assetIDs)
+        if case .ready(let clusters) = store?.phase {
+            coordinator.reviewOrderedIDs = clusters.flatMap(\.assetIDs)
             coordinator.reviewDayByID = store?.dayByID ?? [:]
         }
     }
@@ -113,8 +116,8 @@ struct ScanningView: View {
 
     /// The header metadata line: total candidates + the album's period, e.g.
     /// "1,847 photos · Jan 2025 – Dec 2025".
-    private func headerSubtitle(_ groups: [DayGroup]) -> String {
-        let total = groups.reduce(0) { $0 + $1.count }
+    private func headerSubtitle(_ clusters: [ReviewCluster]) -> String {
+        let total = clusters.reduce(0) { $0 + $1.count }
         return String(localized: "\(total.formatted()) photos · \(periodLabel)",
                       comment: "Review header subtitle: photo count (grouped) · date-range period")
     }
@@ -163,13 +166,15 @@ struct ScanningView: View {
                 indicatorVisible = true
             }
 
-        case .ready(let groups):
-            // The store already grouped the candidates into adaptive day-groups, ONCE, when the pass
-            // settled (Finding 1). The grid renders them directly and never recomputes the grouping.
+        case .ready(let clusters):
+            // The store already assembled the timeline (date + trip clusters), ONCE, off-main when the
+            // pass settled (Finding 1). The grid renders it directly. `store?.tripNames` is read here so
+            // ScanningView re-renders as names resolve, handing the grid its fresh trip labels.
             ReviewGridView(
-                groups: groups,
+                clusters: clusters,
+                tripNames: store?.tripNames ?? [:],
                 title: project.title,
-                subtitle: headerSubtitle(groups),
+                subtitle: headerSubtitle(clusters),
                 openAsset: { coordinator.openPhoto($0) },
                 scrollToDay: scrollToDay)
 

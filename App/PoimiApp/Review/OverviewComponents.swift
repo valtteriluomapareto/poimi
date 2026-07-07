@@ -44,13 +44,13 @@ struct OverviewThumb: View {
 }
 
 /// A horizontal, scrollable preview of a cluster's photos for the Overview (#35 paged-clusters): a
-/// handful of thumbnails **sampled evenly across the whole cluster** (via `DayGroup.evenlySampledIDs`),
-/// so a glance conveys the cluster's shape without opening it. Thumbs are sized so **`visibleThumbs`
-/// (6.5)** fill the strip's width — the half-thumb runs off the right screen edge, an unmistakable
-/// "keep scrolling" cue. `LazyHStack` so only on-screen thumbs load; the rest of the sample load on
-/// horizontal scroll, not up front.
+/// handful of thumbnails **sampled evenly across the whole cluster** (via `ReviewCluster.evenlySampledIDs`
+/// — a trip samples across its merged days), so a glance conveys the cluster's shape without opening it.
+/// Thumbs are sized so **`visibleThumbs` (6.5)** fill the strip's width — the half-thumb runs off the
+/// right screen edge, an unmistakable "keep scrolling" cue. `LazyHStack` so only on-screen thumbs load;
+/// the rest of the sample load on horizontal scroll, not up front.
 struct ClusterStrip: View {
-    let group: DayGroup
+    let cluster: ReviewCluster
     var spacing: CGFloat = 6
     /// How many thumbs fill the strip width — the fractional `.5` makes the next one run off the edge.
     var visibleThumbs: CGFloat = 6.5
@@ -62,7 +62,7 @@ struct ClusterStrip: View {
     @State private var thumbSize: CGFloat = 52
 
     var body: some View {
-        let ids = group.evenlySampledIDs(sampleCount)
+        let ids = cluster.evenlySampledIDs(sampleCount)
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: spacing) {
                 ForEach(ids, id: \.self) { id in

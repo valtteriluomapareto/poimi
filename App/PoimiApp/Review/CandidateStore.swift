@@ -52,14 +52,15 @@ final class CandidateStore {
     }
 
     /// The phases the scanning surface renders. `Equatable` so the view (and tests) can compare
-    /// without unwrapping the associated groups.
+    /// without unwrapping the associated clusters.
     enum Phase: Equatable {
         case idle
         case scanning
-        /// The filtered candidates grouped into adaptive day-groups, oldest → newest. Non-empty by
-        /// construction (empty → `.empty`). The review grid renders these directly — grouping is
-        /// done here, once, not in the view (Finding 1).
-        case ready([DayGroup])
+        /// The filtered candidates assembled into the review timeline (trip/visit clusters relabelled
+        /// over the date day-groups, #130), oldest → newest. Non-empty by construction (empty →
+        /// `.empty`). The review grid renders these directly — assembly is done here, once, off-main,
+        /// not in the view (Finding 1). With location off (or no trips) every element is a `.day`.
+        case ready([ReviewCluster])
         /// Nothing matched the range and filters — a real, expected outcome, not an error (#40).
         case empty(EmptyReason)
         case failed(FailureReason)
@@ -71,15 +72,35 @@ final class CandidateStore {
     /// so the per-asset day is derived here from `captureDate` under the same `calendar`. Empty
     /// until a pass settles to `.ready`.
     private(set) var dayByID: [String: DayKey] = [:]
-    private let library: any PhotoLibraryProviding
-    /// The calendar the day-grouping buckets by. Injected (default `.current`) so the timezone
-    /// policy is explicit and a test can pin it — and so a locale/timezone change is a property of
-    /// this store, not an accident of where grouping used to run.
-    private let calendar: Calendar
+    /// Resolved place names per trip-cluster id (`TripCluster.clusterID`) — fills in asynchronously
+    /// after `.ready` as reverse-geocoding settles (§7). A trip whose name hasn't resolved yet shows a
+    /// date fallback; `nil` naming deps (tests / location off) leaves this empty. `@Observable` drives
+    /// the label refresh with no live-recompute of the timeline.
+    private(set) var tripNames: [String: String] = [:]
 
-    init(library: any PhotoLibraryProviding, calendar: Calendar = .current) {
+    private let library: any PhotoLibraryProviding
+    /// The calendar the timeline buckets by. Injected (default `.current`) so the timezone policy is
+    /// explicit and a test can pin it — and so a locale/timezone change is a property of this store.
+    private let calendar: Calendar
+    /// Whether to overlay trip/visit clusters (v1.1). `false` → the timeline is byte-identical to the
+    /// date-only day-grouping (the v1 path). Default on now that the location layer is validated.
+    private let locationEnabled: Bool
+    /// The reverse-geocoding seam + persistent name cache (#130 Phase 2). `nil` on the debug/test
+    /// construction sites (no naming — trips still form, just unlabelled). The production sites inject
+    /// the environment's `PlaceNaming` + a `NameCacheStore` over the app container.
+    private let naming: (any PlaceNaming)?
+    private let nameCache: NameCacheStore?
+
+    init(library: any PhotoLibraryProviding,
+         calendar: Calendar = .current,
+         locationEnabled: Bool = true,
+         naming: (any PlaceNaming)? = nil,
+         nameCache: NameCacheStore? = nil) {
         self.library = library
         self.calendar = calendar
+        self.locationEnabled = locationEnabled
+        self.naming = naming
+        self.nameCache = nameCache
     }
 
     /// Run the fetch → resolve → filter pass for `project`, publishing each phase as it settles.
@@ -88,6 +109,7 @@ final class CandidateStore {
     func load(_ project: CurationProject) async {
         phase = .scanning
         dayByID = [:]   // clear any prior pass's map (e.g. a retry after .failed)
+        tripNames = [:]
 
         // An empty / inverted range has no candidates — and `DateInterval(start:end:)` traps when
         // end < start, so guard before constructing it. Setup disables Create on an inverted range
@@ -105,11 +127,16 @@ final class CandidateStore {
                 fetched,
                 excludeScreenshots: project.excludeScreenshots,
                 excludedAssetIDs: excludedAssetIDs)
-            // Group once, here — the grid renders the groups directly and never recomputes them
-            // (Finding 1). Concatenating the groups' `assetIDs` reproduces the chronological slice.
-            // The busy-day threshold is ADAPTIVE — derived from this album's own photo density (mean
-            // per active day, clamped) — so "busy" tracks how much this person shoots, not a fixed 10.
-            let groups = DayGrouping.groups(adaptiveFor: candidates, calendar: calendar)
+            // Assemble the timeline once, here, OFF the main actor — the grid renders it directly and
+            // never recomputes it (Finding 1). Clustering (DBSCAN over the located set) is heavier than
+            // the old day-grouping, so it runs on a detached task to keep the scan off the UI thread;
+            // the busy-day threshold within it stays ADAPTIVE (this album's own density). With location
+            // off (or no trips) the result is the date-only day-grouping wrapped as `.day` clusters.
+            let locationOn = locationEnabled
+            let cal = calendar
+            let clusters = await Task.detached(priority: .userInitiated) {
+                ReviewTimeline.clusters(for: candidates, calendar: cal, locationEnabled: locationOn)
+            }.value
             // Per-photo day map for the viewer's label (#36), built from the same candidates +
             // calendar so it agrees with the grouping (a busy day and the viewer read the same day).
             // In practice every value is a real day: a range fetch never returns a nil-capture-date
@@ -118,12 +145,16 @@ final class CandidateStore {
             dayByID = Dictionary(
                 candidates.map { ($0.id, DayKey(date: $0.captureDate, calendar: calendar)) },
                 uniquingKeysWith: { first, _ in first })
-            if groups.isEmpty {
+            if clusters.isEmpty {
                 // Distinguish WHY it's empty so the state is actionable (#40): the range yielded
                 // nothing (widen it) vs photos existed but were all filtered out (relax exclusions).
                 phase = .empty(fetched.isEmpty ? .noPhotosInRange : .allExcluded)
             } else {
-                phase = .ready(groups)
+                phase = .ready(clusters)
+                // Resolve the trip place names in the background (§7): geocoding is network-bound + paced,
+                // so it must never block the settled `.ready`. Names fill into `tripNames` when the pass
+                // completes (cache-fast on repeat opens); trips show a date fallback until then.
+                await resolveTripNames(in: clusters, candidates: candidates)
             }
         } catch {
             Log.photoLibrary.error("CandidateStore.load failed: \(String(describing: error), privacy: .public)")
@@ -133,5 +164,24 @@ final class CandidateStore {
             let stillAuthorized = await library.authorizationStatus() == .authorized
             phase = .failed(stillAuthorized ? .loadError : .accessLost)
         }
+    }
+
+    /// Reverse-geocode the trip places (§7) and publish `tripNames`. No-ops without naming deps
+    /// (debug/test) or when there are no trips. Serial + cache-backed inside `LocationPreprocessor`;
+    /// a superseding `load()` cancels this task before it can publish stale names.
+    private func resolveTripNames(in clusters: [ReviewCluster], candidates: [AssetRef]) async {
+        guard locationEnabled, let naming, let nameCache,
+              clusters.contains(where: { $0.tripCluster != nil }) else { return }
+        let preprocessor = LocationPreprocessor(naming: naming, cache: nameCache)
+        let names = await preprocessor.resolveTripNames(for: candidates, calendar: calendar)
+        guard !Task.isCancelled else { return }
+        tripNames = names
+    }
+
+    /// The display label for a trip cluster: the resolved place sentence ("Week in Salo"), or `nil`
+    /// until the name arrives — the caller then falls back to the date range. Date clusters keep their
+    /// existing date title (`DayGroupHeader`), unchanged.
+    func tripLabel(for trip: TripCluster) -> String? {
+        tripNames[trip.clusterID].map { TripLabel.sentence(for: trip.shape, place: $0) }
     }
 }

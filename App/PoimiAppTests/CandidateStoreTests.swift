@@ -42,13 +42,14 @@ struct CandidateStoreTests {
             excludedAlbumIDs: excludedAlbumIDs)
     }
 
-    /// Unwrap `.ready`'s day-groups, or fail loudly with the actual phase.
+    /// Unwrap `.ready`'s underlying day-groups (a trip cluster's `dayGroups` recover them, so this holds
+    /// whether or not the timeline overlaid any trips), or fail loudly with the actual phase.
     private func readyGroups(_ store: CandidateStore, _ comment: Comment) -> [DayGroup] {
-        guard case .ready(let groups) = store.phase else {
+        guard case .ready(let clusters) = store.phase else {
             Issue.record("expected .ready, got \(store.phase) — \(comment)")
             return []
         }
-        return groups
+        return clusters.flatMap(\.dayGroups)
     }
 
     /// The candidate ids in chronological order — concatenating the groups reproduces the flat
