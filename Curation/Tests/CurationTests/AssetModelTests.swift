@@ -68,6 +68,9 @@ struct AssetModelTests {
 
     @Test("sortedByTitle: A→Z, case-insensitive, natural-numeric, id-stable for ties (#124)")
     func albumsSortedByTitle() {
+        // Fixture is intentionally ASCII-Latin: `localizedStandardCompare` reads the ambient locale, but
+        // for pure-ASCII titles the ordering (case-fold + natural-numeric) is invariant across locales, so
+        // this asserts real behavior without a locale seam and won't flake under CI's locale.
         let unsorted = [
             AlbumRef(id: "a5", title: "Album 10"),
             AlbumRef(id: "a1", title: "album 2"),        // lowercase must not sort after uppercase
@@ -82,5 +85,8 @@ struct AssetModelTests {
         #expect(sorted.map(\.id) == ["a1", "a5", "a0", "dup-a", "dup-b", "z"])
         // Stable + idempotent: sorting the already-sorted list is a no-op (tie-break by id).
         #expect(sorted.sortedByTitle() == sorted)
+        // Boundaries: empty and single-element are no-ops (not a crash / reorder).
+        #expect([AlbumRef]().sortedByTitle().isEmpty)
+        #expect([AlbumRef(id: "solo", title: "Only")].sortedByTitle().map(\.id) == ["solo"])
     }
 }
