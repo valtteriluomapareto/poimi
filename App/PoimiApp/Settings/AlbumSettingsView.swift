@@ -83,8 +83,7 @@ struct AlbumSettingsView: View {
                         ? String(localized: "New album", comment: "Destination: a new album created on export")
                         : String(localized: "Existing album", comment: "Destination: an existing Photos album"))
                 }
-                Stepper("Aim for ^[\(project.targetCount) photo](inflect: true)",
-                        value: $project.targetCount, in: 1...10_000, step: 10)
+                TargetCountField("Aim for", count: $project.targetCount)
             } header: {
                 Text("Saves to")
             } footer: {

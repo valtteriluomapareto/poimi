@@ -42,8 +42,7 @@ struct NewAlbumSetupView: View {
                 }
 
                 Section("Target") {
-                    Stepper("Target: ^[\(draft.targetCount) photo](inflect: true)",
-                            value: $draft.targetCount, in: 1...10_000, step: 10)
+                    TargetCountField("Photos", count: $draft.targetCount)
                 }
 
                 Section("Exclude from source") {

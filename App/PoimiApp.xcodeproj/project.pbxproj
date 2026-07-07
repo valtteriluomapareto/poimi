@@ -37,6 +37,7 @@
 		00000000A00000000000B0A1 /* AlbumsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000A00000000000A0A1 /* AlbumsView.swift */; };
 		00000000B00000000000B0B1 /* NewAlbumDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000B00000000000A0B1 /* NewAlbumDraft.swift */; };
 		00000000B00000000000B0B2 /* NewAlbumSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000B00000000000A0B2 /* NewAlbumSetupView.swift */; };
+		00000000B00000000000B0B4 /* TargetCountField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000B00000000000A0B4 /* TargetCountField.swift */; };
 		00000000B00000000000B0B3 /* AlbumPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000B00000000000A0B3 /* AlbumPickerView.swift */; };
 		00000000C00000000000B0C1 /* CandidateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0C1 /* CandidateStore.swift */; };
 		00000000C00000000000B1C0 /* TimelineCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A1C0 /* TimelineCache.swift */; };
@@ -138,6 +139,7 @@
 		00000000A00000000000A0A1 /* AlbumsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumsView.swift; sourceTree = "<group>"; };
 		00000000B00000000000A0B1 /* NewAlbumDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewAlbumDraft.swift; sourceTree = "<group>"; };
 		00000000B00000000000A0B2 /* NewAlbumSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewAlbumSetupView.swift; sourceTree = "<group>"; };
+		00000000B00000000000A0B4 /* TargetCountField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetCountField.swift; sourceTree = "<group>"; };
 		00000000B00000000000A0B3 /* AlbumPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumPickerView.swift; sourceTree = "<group>"; };
 		00000000C00000000000A0C1 /* CandidateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CandidateStore.swift; sourceTree = "<group>"; };
 		00000000C00000000000A1C0 /* TimelineCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineCache.swift; sourceTree = "<group>"; };
@@ -348,6 +350,7 @@
 			children = (
 				00000000B00000000000A0B1 /* NewAlbumDraft.swift */,
 				00000000B00000000000A0B2 /* NewAlbumSetupView.swift */,
+				00000000B00000000000A0B4 /* TargetCountField.swift */,
 				00000000B00000000000A0B3 /* AlbumPickerView.swift */,
 			);
 			path = Setup;
@@ -543,6 +546,7 @@
 				00000000A00000000000B0A1 /* AlbumsView.swift in Sources */,
 				00000000B00000000000B0B1 /* NewAlbumDraft.swift in Sources */,
 				00000000B00000000000B0B2 /* NewAlbumSetupView.swift in Sources */,
+				00000000B00000000000B0B4 /* TargetCountField.swift in Sources */,
 				00000000B00000000000B0B3 /* AlbumPickerView.swift in Sources */,
 				00000000C00000000000B0C1 /* CandidateStore.swift in Sources */,
 				00000000C00000000000B1C0 /* TimelineCache.swift in Sources */,
