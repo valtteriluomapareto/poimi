@@ -323,16 +323,38 @@ public enum PlaceClustering {
         return neighbours
     }
 
+    /// Above this member count the exact O(n²) medoid is scored against a strided SAMPLE instead of the
+    /// whole cluster (see `medoidIndex`). 256 keeps the exact answer for every realistic *place* (a trip
+    /// stop, a city visit — hundreds of photos at most); only a home-scale blob (thousands of near-
+    /// identical points, whose medoid is then discarded — home is excluded from trips) crosses it, and
+    /// that O(n²) was ~half of an 8 k-photo year's ~6 s clustering.
+    static let exactMedoidLimit = 256
+
     /// The index of the medoid within `members`: the member minimizing summed distance to the others,
     /// tie-broken by lower id. Deterministic and order-independent (a min over the set). For an
     /// identical-coordinate burst every sum is 0, so the tie collapses to the lowest id (invariant 9).
+    ///
+    /// For a cluster larger than `exactMedoidLimit` the summed distance is taken over a **deterministic
+    /// strided sample** of the members rather than all of them — O(n·cap) not O(n²). Every candidate is
+    /// still scored (the medoid stays a real member, so it's antimeridian-safe unlike a centroid) and the
+    /// stride is fixed (no RNG), so the result is deterministic. Below the limit it's the exact medoid, so
+    /// every cluster-scale test — and every real place — is unchanged.
     static func medoidIndex(of members: [(id: String, coord: Coordinate)]) -> Int {
+        // The reference set each candidate is scored against: all members when small, else a strided
+        // sample of `exactMedoidLimit` of them (indices 0, step, 2·step, … over the canonical order).
+        let probe: [Int]
+        if members.count <= exactMedoidLimit {
+            probe = Array(members.indices)
+        } else {
+            let step = Double(members.count) / Double(exactMedoidLimit)
+            probe = (0..<exactMedoidLimit).map { Int((Double($0) * step).rounded(.down)) }
+        }
         var bestIndex = 0
         var bestSum = Double.infinity
         var bestID = ""
         for i in members.indices {
             var sum = 0.0
-            for j in members.indices where j != i {
+            for j in probe where j != i {
                 sum += members[i].coord.distance(to: members[j].coord)
             }
             if bestSum == Double.infinity || sum < bestSum
