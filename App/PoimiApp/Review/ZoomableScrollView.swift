@@ -15,7 +15,7 @@ import UIKit
 /// A self-laying-out zoomable image scroll view, used directly as each page's view in the
 /// `UIPageViewController` pager (`PhotoPagerView`). Sizing happens in `layoutSubviews` (when real
 /// bounds exist), avoiding the frame-timing pitfall of configuring it up front.
-final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate {
     private let imageView = UIImageView()
 
     /// A single tap on the photo (the viewer's secondary select accelerator — the bottom "Pick" button
@@ -53,22 +53,12 @@ final class ZoomableImageScrollView: UIScrollView, UIScrollViewDelegate, UIGestu
 
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
-        doubleTap.delegate = self
         addGestureRecognizer(doubleTap)
 
         let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
         singleTap.numberOfTapsRequired = 1
         singleTap.require(toFail: doubleTap)   // a double-tap-zoom must not also fire select
-        singleTap.delegate = self
         addGestureRecognizer(singleTap)
-    }
-
-    /// Only accept taps that land on the image itself (or this scroll view's letterbox) — a tap on an
-    /// overlaid SwiftUI control (the viewer's ⓘ button floats over this pager) hit-tests to that control's
-    /// view, so without this it would ALSO fire the photo's tap-to-pick / double-tap-zoom (#127). Normal
-    /// photo taps (`touch.view == imageView`) and empty-margin taps (`== self`) are unaffected.
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        touch.view == self || touch.view == imageView
     }
 
     @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {

@@ -193,29 +193,27 @@ struct PhotoViewerView: View {
             // Auto-done fires on a real SWIPE only (not a filmstrip tap), so browsing/jumping never marks (#128).
             onSwipe: { autoMarkDoneIfPagedPastCluster(from: $0, to: $1) })
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            // ⓘ at the photo's bottom-right corner — reveals the info panel; photo-first chrome is
-            // otherwise untouched until you tap it (#127).
-            .overlay(alignment: .bottomTrailing) { infoButton }
             .shadow(color: .black.opacity(0.35), radius: 20, y: 8)
             .padding(.horizontal, 12)
             .padding(.top, 28)   // clears the sheet grabber (harmless inset in the harness)
             .frame(maxHeight: .infinity)
     }
 
-    /// The ⓘ toggle: a small glass circle inset in the photo's bottom-right. Fills + tints gold while
-    /// the panel is open. Toggling animates the filmstrip↔panel swap in the chrome below.
+    /// The ⓘ toggle — a plain icon at the trailing edge of the title row, directly under the photo's
+    /// bottom-right. It lives in the CHROME, not over the UIKit pager: a SwiftUI control over the pager
+    /// also fired the photo's tap-to-pick (the pager's own tap recogniser swallows overlaid taps), so the
+    /// affordance sits just below the photo instead (#127). Fills + tints gold while the panel is open.
     private var infoButton: some View {
         Button {
             withAnimation(reduceMotion ? nil : .snappy) { showInfoPanel.toggle() }
         } label: {
             Image(systemName: showInfoPanel ? "info.circle.fill" : "info.circle")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(showInfoPanel ? Color.accentColor : .white)
-                .frame(width: 38, height: 38)
-                .glassSurface(in: Circle())   // native glass; RT → solid (styleguide §5)
+                .font(.title3)
+                .foregroundStyle(showInfoPanel ? Color.accentColor : .white.opacity(0.85))
+                .frame(width: 44, height: 44)     // ≥44pt touch target
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(12)
         .accessibilityIdentifier("photoInfoButton")
         .accessibilityLabel("Photo info")
         .accessibilityValue(showInfoPanel ? "Shown" : "Hidden")
@@ -245,8 +243,16 @@ struct PhotoViewerView: View {
     /// At accessibility Dynamic-Type sizes the tally drops BELOW the title instead of sharing one line
     /// (mirrors `ReviewSectionHeader` — shrinking the user's chosen size is itself an a11y regression,
     /// so we reflow, not squeeze). With no review context the day map is empty → just the position.
-    @ViewBuilder
     private var titleRow: some View {
+        HStack(alignment: .center, spacing: 8) {
+            titleAndTally
+                .frame(maxWidth: .infinity, alignment: .leading)
+            infoButton   // trailing — sits just under the photo's bottom-right (#127)
+        }
+    }
+
+    @ViewBuilder
+    private var titleAndTally: some View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 6) {
                 titleBlock
