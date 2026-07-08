@@ -156,4 +156,89 @@ struct AlbumSettingsTests {
         #expect(TargetCountField.clamped(1, in: range) == 1)           // lower bound kept
         #expect(TargetCountField.clamped(10_000, in: range) == 10_000) // upper bound kept
     }
+
+    // MARK: - #59 — delete/reset from the albums LIST must deactivate the active stores
+
+    /// The three stores over one in-memory container (the shape both delete/reset paths use).
+    private struct Stores {
+        let container: ModelContainer
+        let projects: ProjectStore
+        let selection: SelectionStore
+        let done: DoneStore
+    }
+    private func makeStores() throws -> Stores {
+        let container = try AppModelContainer.make(inMemory: true)
+        return Stores(container: container,
+                      projects: ProjectStore(container: container, now: monotonicClock()),
+                      selection: SelectionStore(container: container, debounce: .seconds(60)),
+                      done: DoneStore(container: container, debounce: .seconds(60)))
+    }
+
+    @Test("deactivateIfActive deactivates only the currently-active project (#59)")
+    func deactivateIfActiveGuards() throws {
+        let env = try makeStores()
+        let projects = env.projects, selection = env.selection, done = env.done
+        let a = project(projects, "A"), b = project(projects, "B")
+        selection.activate(a); done.activate(a)
+
+        selection.deactivateIfActive(b); done.deactivateIfActive(b)   // not active → no-op
+        #expect(selection.isActive)
+        #expect(done.isActive)
+
+        selection.deactivateIfActive(a); done.deactivateIfActive(a)   // the active one → deactivates
+        #expect(!selection.isActive)
+        #expect(!done.isActive)
+    }
+
+    @Test("Deleting the ACTIVE album from the library list deactivates the live stores (no dangling, #59)")
+    func albumsListDeleteOfActiveDeactivates() throws {
+        let env = try makeStores()
+        let container = env.container, projects = env.projects, selection = env.selection, done = env.done
+        let a = project(projects, "A")
+        let id = a.id
+        selection.activate(a); selection.select(["x", "y"]); done.activate(a)
+
+        // The exact sequence AlbumsView.deleteAlbum runs (the previously-unguarded list path).
+        selection.deactivateIfActive(a); done.deactivateIfActive(a)
+        projects.delete(a)
+
+        #expect(!selection.isActive)     // neither store holds the deleted model
+        #expect(!done.isActive)
+        let other = ModelContext(container)
+        #expect(!(try other.fetch(FetchDescriptor<CurationProject>()).contains { $0.id == id }))
+    }
+
+    @Test("Deleting a NON-active album from the list leaves the active album's picks intact (#59)")
+    func albumsListDeleteOfOtherKeepsActive() throws {
+        let env = try makeStores()
+        let projects = env.projects, selection = env.selection, done = env.done
+        let a = project(projects, "A"), b = project(projects, "B")
+        selection.activate(a); selection.select(["x", "y"]); done.activate(a)
+
+        selection.deactivateIfActive(b); done.deactivateIfActive(b)   // deleting B must not disturb A
+        projects.delete(b)
+
+        #expect(selection.isActive)
+        #expect(selection.selected == ["x", "y"])
+        #expect(done.isActive)
+    }
+
+    @Test("Resetting the ACTIVE album from the list clears picks and reactivates emptied — no resurrect (#59)")
+    func albumsListResetOfActiveClearsAndReactivates() throws {
+        let env = try makeStores()
+        let container = env.container, projects = env.projects, selection = env.selection, done = env.done
+        let a = project(projects, "A")
+        selection.activate(a); selection.select(["x", "y", "z"]); done.activate(a)
+
+        // AlbumsView.resetAlbum sequence for the active album: deactivate → reset → reactivate.
+        selection.deactivateIfActive(a); done.deactivateIfActive(a)
+        projects.reset(a)
+        selection.activate(a); done.activate(a)
+
+        #expect(selection.isActive)
+        #expect(selection.selected.isEmpty)   // emptied, not resurrected by a stale flush
+        let other = ModelContext(container)
+        let fetched = try #require(try other.fetch(FetchDescriptor<CurationProject>()).first { $0.id == a.id })
+        #expect(fetched.persistedPickedCount == 0)
+    }
 }
