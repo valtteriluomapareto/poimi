@@ -15,40 +15,117 @@
 import SwiftUI
 import Curation
 
-/// The header pinned beneath the large nav title: a metadata subtitle + the full-width tally. Pinned
-/// (not scrolled) so the tally stays glanceable while you scroll the grid — it's the orientation
-/// device. A Liquid Glass backing (`glassBarBackground`) refracts the photos passing under it and
-/// keeps the tally legible over bright thumbnails; Reduce Transparency falls back to a solid surface.
-struct ReviewHeader: View {
-    /// The album name — the screen's identity (the nav title is blanked so this is the one title).
-    let title: String
-    /// e.g. "1,847 photos · Jan 2025 – Dec 2025" — static metadata from the project, passed in.
-    let subtitle: String
+/// The review grid's fixed top bar (design 4AB). Two lanes on one glass surface: the CURRENT cluster's
+/// identity on the leading lane (a pin for trips · the cluster name · its photo count · a green seal
+/// once it's done) and the album's running progress on the trailing lane (a compact `ProgressRing` +
+/// "picked / target"). This replaces the old album-title + metadata + full-width tally header — the
+/// album's own identity now lives on the Overview you came from, so the grid top is PER-CLUSTER and
+/// updates as you swipe pages. It reads the `SelectionStore` itself (like the old header) so a pick
+/// toggle re-renders only this bar, never the grid body. Liquid Glass, bled to the top edge under the
+/// (backdrop-hidden) nav bar; Reduce Transparency falls back to a solid surface.
+struct ReviewTopBar: View {
+    /// The current cluster's title — a trip's location sentence ("Week in Salo") or a date title.
+    let clusterTitle: String
+    /// The current cluster's photo count (shown as "47 photos").
+    let count: Int
+    /// A trip/visit cluster → show the leading gold pin.
+    var isTrip = false
+    /// The cluster is marked done → show the green seal by the name.
+    var isDone = false
+    @Environment(SelectionStore.self) private var selection
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // The album identity. `.title` (not `.largeTitle`): this header is PINNED, so a full
-            // large title would permanently eat the photo wall; `.title.bold()` still reads as a
-            // real, on-brand title (vs the tiny centred inline nav title it replaces).
-            Text(title)
-                .font(.title.bold())
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(subtitle)
+        let progress = selection.progress
+        HStack(alignment: .center, spacing: 12) {
+            identity
+            Spacer(minLength: 8)
+            progressView(progress)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        // iOS 26 Liquid Glass, bled up under the status bar + (backdrop-hidden) nav bar so the whole top
+        // is one continuous surface — no bright photo band above it. RT → solid surface (styleguide §5).
+        .glassBarBackground(extendTop: true)
+    }
+
+    /// Leading lane: pin (trips) · cluster name · photo count · a done seal. Combined into one VoiceOver
+    /// element so it reads as a single "Nokia, 47 photos, done" phrase.
+    private var identity: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 6) {
+                if isTrip {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityHidden(true)
+                }
+                Text(clusterTitle)
+                    .font(.headline)
+                    .lineLimit(1)
+                if isDone {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.brandGreen)
+                        .accessibilityLabel(Text("Done"))
+                }
+            }
+            // Automatic grammar agreement: "1 photo" / "47 photos" from a single catalog entry.
+            Text("^[\(count) photo](inflect: true)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            ReviewTally()
-                .padding(.top, 8)
+                .monospacedDigit()
         }
-        // 20pt leading aligns the text under the design's title inset (cells are full-bleed at 0).
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // iOS 26 Liquid Glass, pinned over the scrolling photo wall (refracts the thumbnails passing
-        // under it — the effect the interim `.bar` only approximated). `extendTop` bleeds it up under
-        // the status bar + (backdrop-hidden) nav bar, so the whole top is one continuous glass surface
-        // — no bright photo band above the header. Reduce Transparency → solid surface (styleguide §5).
-        .glassBarBackground(extendTop: true)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Trailing lane: album progress toward the target — "picked / target" + a compact ring. The ring is
+    /// decorative (a11y-hidden); the count text next to it carries the spoken value.
+    private func progressView(_ progress: TargetProgress) -> some View {
+        HStack(spacing: 8) {
+            (Text("\(progress.picked)").fontWeight(.semibold)
+                + Text(" / \(progress.target)").foregroundStyle(.secondary))
+                .font(.subheadline)
+                .monospacedDigit()
+                .lineLimit(1)
+            ProgressRing(fraction: progress.fraction, isComplete: progress.isComplete)
+                .frame(width: 30, height: 30)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(progressA11y(progress))
+    }
+
+    private func progressA11y(_ progress: TargetProgress) -> String {
+        if progress.isComplete {
+            return String(localized: "\(progress.picked) of \(progress.target) picked, target reached",
+                          comment: "Grid top-bar progress a11y when the target is reached")
+        }
+        return String(localized: "\(progress.picked) of \(progress.target) picked",
+                      comment: "Grid top-bar progress a11y: picked of target")
+    }
+}
+
+/// A compact circular progress indicator — a gold arc over a faint track — showing how far the album's
+/// pick count has come toward the target. Replaces the review grid's full-width linear tally bar with a
+/// glanceable ring in the top bar (design 4AB). Turns brand-green at 100% (target reached). Decorative:
+/// the sibling "picked / target" text carries the accessible value, so the ring is hidden from VoiceOver.
+struct ProgressRing: View {
+    /// The fraction picked, 0…1 — clamped by the drawer so an over-target value still reads as full.
+    let fraction: Double
+    var isComplete = false
+    var lineWidth: CGFloat = 3.5
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.primary.opacity(0.15), lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: min(1, max(0, fraction)))
+                .stroke(isComplete ? Color.brandGreen : Color.accentColor,
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))   // start the arc at 12 o'clock
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -112,39 +189,6 @@ struct ReviewTally: View {
         return String(localized: """
             \(progress.picked) of \(progress.target) photos picked, \(progress.remaining) left
             """, comment: "Tally a11y label: picked / target / remaining")
-    }
-}
-
-/// The trailing nav actions: Clear (only when there's a selection) + Export (disabled until at
-/// least one photo is picked — there's nothing to export from an empty album).
-struct ReviewToolbarActions: View {
-    let onExport: () -> Void
-    @Environment(SelectionStore.self) private var selection
-    @State private var confirmingClear = false
-
-    var body: some View {
-        let picked = selection.progress.picked
-        HStack(spacing: 12) {
-            if picked > 0 {
-                // Confirm before wiping: a tap here used to clear every pick instantly (an hour of
-                // irreplaceable work) — `.destructive` only colours it red, it doesn't gate the action.
-                Button("Clear", role: .destructive) { confirmingClear = true }
-                    .accessibilityHint("Deselects all photos in this album.")
-            }
-            // Plain text (like "Clear") — clearer than a cryptic add-to-album glyph in the nav.
-            Button("Export", action: onExport)
-                .disabled(picked == 0)
-                .accessibilityIdentifier("exportButton")
-        }
-        .confirmationDialog("Clear all picks?", isPresented: $confirmingClear, titleVisibility: .visible) {
-            Button("Clear \(picked) picked", role: .destructive) { selection.clear() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("""
-                This deselects all \(picked) photos. Your photos aren't deleted — \
-                but you'd pick this album again from scratch.
-                """)
-        }
     }
 }
 

@@ -60,8 +60,8 @@ struct AlbumOverviewView: View {
             .toolbarBackground(Color(.systemBackground), for: .navigationBar)
             // Settings + Export at the album level. The Overview is the album's landing screen and shows
             // the running tally, so it's the natural "I'm done → make the album" spot; the gear reaches
-            // per-album settings (#41). No "Clear" here — clearing all picks now lives in Settings as
-            // "Reset picks"; Clear stays in the review grid for per-session use.
+            // per-album settings (#41). Export is here ONLY now (design 4AB removed it from the review
+            // grid, which is purely picking); clearing all picks lives in Settings as "Reset picks".
             // TWO separate trailing items, not one HStack in a single item: iOS 26 then lays them out in
             // its own Liquid Glass group with standard insets, instead of the glass hugging a hand-rolled
             // HStack tightly against the capsule edges (the icon + "Export" looked cramped otherwise).
@@ -77,6 +77,7 @@ struct AlbumOverviewView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Export") { coordinator.openExport(project.id) }
                         .disabled(selection.progress.picked == 0)
+                        .accessibilityIdentifier("exportButton")   // moved here from the grid (design 4AB)
                 }
             }
             // Done-state here is display-only — the Overview doesn't reconcile (the grid does, on entry),

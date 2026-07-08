@@ -34,21 +34,22 @@ struct ScanningView: View {
 
     var body: some View {
         content()
-            // Blanked once the grid is up — the pinned ReviewHeader carries the bold album title
-            // there, so a nav title too would be a double title. Other phases (scanning / empty /
-            // failed) keep it as their only label.
+            // Blanked once the grid is up — the pinned ReviewTopBar carries the current cluster's
+            // identity there, so a nav title too would be a double title. Other phases (scanning /
+            // empty / failed) keep it as their only label.
             .navigationTitle(isReady ? "" : project.title)
-            // Inline, not large: a collapsing large title fought the pinned `.safeAreaInset` tally
-            // header and the section headers in the same top zone (the "glitch between the title and
-            // the first group" seen on device) and drove the Liquid Glass nav backdrop into an
-            // observation feedback loop. The ReviewHeader below carries the album context prominently.
+            // Inline, not large: a collapsing large title fought the pinned `.safeAreaInset` top bar
+            // and the section headers in the same top zone (the "glitch between the title and the
+            // first group" seen on device) and drove the Liquid Glass nav backdrop into an observation
+            // feedback loop. The ReviewTopBar below carries the cluster context prominently.
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { reviewChrome }
-            // Hide the system nav backdrop so the ReviewHeader's own glass (extended to the top edge)
-            // is the single continuous glass surface up there — back/Clear/Export float on it, with no
-            // bright photo band between the nav bar and the header. We supply a STATIC glass (not the
-            // system backdrop reacting to a collapsing title), which removes the specific feedback loop
-            // below — verified on device (no scroll flicker); re-check if the top-title layout changes.
+            // No grid-level toolbar actions: Export now lives on the Overview (its own toolbar) and the
+            // grid top is purely picking (design 4AB). The nav bar keeps only the system back button.
+            // Hide the system nav backdrop so the ReviewTopBar's own glass (extended to the top edge) is
+            // the single continuous glass surface up there — the back button floats on it, with no bright
+            // photo band between the nav bar and the bar. We supply a STATIC glass (not the system
+            // backdrop reacting to a collapsing title), which removes the observation feedback loop
+            // — verified on device (no scroll flicker); re-check if the top-title layout changes.
             .toolbarBackground(.hidden, for: .navigationBar)
             // Keyed by album + range + location so re-targeting (iPad detail column) / a Settings edit
             // re-runs against the right candidate set; the coordinator's matching key decides scan-vs-reuse.
@@ -109,42 +110,9 @@ struct ScanningView: View {
         }
     }
 
-    /// The Export/Clear chrome, shown only once the grid is up (`.ready`). The large nav title keeps
-    /// the album name (Paper design); the tally lives in the scroll-top `ReviewHeader`, not the nav.
-    /// `ReviewToolbarActions` reads the `SelectionStore` internally, so hosting it here doesn't make
-    /// this view re-render on a selection toggle.
-    @ToolbarContentBuilder
-    private var reviewChrome: some ToolbarContent {
-        if isReady {
-            ToolbarItem(placement: .topBarTrailing) {
-                ReviewToolbarActions(onExport: { coordinator.openExport(project.id) })
-            }
-        }
-    }
-
     private var isReady: Bool {
         if case .ready = store?.phase { return true }
         return false
-    }
-
-    /// The header metadata line: total candidates + the album's period, e.g.
-    /// "1,847 photos · Jan 2025 – Dec 2025".
-    private func headerSubtitle(_ clusters: [ReviewCluster]) -> String {
-        let total = clusters.reduce(0) { $0 + $1.count }
-        return String(localized: "\(total.formatted()) photos · \(periodLabel)",
-                      comment: "Review header subtitle: photo count (grouped) · date-range period")
-    }
-
-    private var periodLabel: String {
-        let style = Date.FormatStyle.dateTime.month(.abbreviated).year()
-        let start = project.rangeStart.formatted(style)
-        // rangeEnd is exclusive: step back a calendar DAY to land on the last included day's month
-        // (a 2025 album ends at 2026-01-01 → "Dec 2025", not "Jan 2026"). A real calendar day (not a
-        // fixed interval) so it's correct across DST; a 1s step would land at 23:59:59 UTC, which a
-        // positive-offset timezone rolls back into January.
-        let lastDay = Calendar.current.date(byAdding: .day, value: -1, to: project.rangeEnd) ?? project.rangeEnd
-        let end = lastDay.formatted(style)
-        return start == end ? start : "\(start) – \(end)"
     }
 
     /// Invert the store's per-photo `id → DayKey` map into the `DayKey → ids` shape the done-state
@@ -187,7 +155,6 @@ struct ScanningView: View {
                 clusters: clusters,
                 tripNames: store?.tripNames ?? [:],
                 title: project.title,
-                subtitle: headerSubtitle(clusters),
                 openAsset: { coordinator.openPhoto($0) },
                 scrollToDay: scrollToDay)
 
