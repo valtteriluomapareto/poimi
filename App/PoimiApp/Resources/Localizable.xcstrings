@@ -2049,6 +2049,61 @@
           }
         }
       }
+    },
+    "Visit to %@": {
+      "comment": "Trip label for a single away day at a place",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Käynti kohteessa %@"
+          }
+        }
+      }
+    },
+    "Weekend in %@": {
+      "comment": "Trip label for a 2–3 day trip over a weekend",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viikonloppu kohteessa %@"
+          }
+        }
+      }
+    },
+    "Short trip to %@": {
+      "comment": "Trip label for a short (few-day) trip",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lyhyt reissu kohteeseen %@"
+          }
+        }
+      }
+    },
+    "Week in %@": {
+      "comment": "Trip label for a roughly week-long trip",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viikko kohteessa %@"
+          }
+        }
+      }
+    },
+    "%lld days in %@": {
+      "comment": "Trip label for a long trip of N days",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld päivää kohteessa %2$@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
