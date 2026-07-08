@@ -481,8 +481,10 @@ struct ClusterListRow: View {
 /// behind show just the number + bar, no directive words.
 ///
 /// It reads the `SelectionStore` itself (not a value baked into the Overview's scan `.task`, which is
-/// deliberately selection-blind), so it re-renders on each pick — the O(n) `pickFrontierFraction` scan over
-/// the pre-built `orderedIDs` is the only per-pick work, cheap and scoped to this card.
+/// deliberately selection-blind), so the projection updates on each pick. The added per-pick cost is just
+/// the O(n) `pickFrontierFraction` scan over the pre-built `orderedIDs` — the timeline is never re-derived.
+/// (The enclosing `AlbumOverviewView.body` already re-evaluates on a pick anyway — its toolbar reads
+/// `selection.progress` — but that only rebuilds view structs off already-built `@State`, no regrouping.)
 private struct PacingCard: View {
     /// Every candidate id in chronological order (from `ClusterIndex.orderedIDs`) — the frontier denominator.
     let orderedIDs: [String]
