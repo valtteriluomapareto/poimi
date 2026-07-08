@@ -41,6 +41,14 @@ struct PhotoViewerView: View {
     /// A copy of the current photo painting the sheet's ambient background (the Now-Playing colour
     /// wash). Loaded cache-first at the grid's 400² key, so it's usually instant.
     @State private var ambientImage: UIImage?
+    /// Whether the ⓘ info panel is showing (#127). It swaps in for the filmstrip in the lower chrome;
+    /// the Pick control stays above it, so you can judge + pick with the metadata in view. Deliberately
+    /// stays open across page swipes — its fields update live per photo (`refreshInfo`); ⓘ toggles it off.
+    @State private var showInfoPanel = false
+    /// The viewer's info labels, formatted ONCE when `currentID` settles (never in a `body`, repo rule):
+    /// the date line's capture time + the panel's resolution. Async fields (device, file size) are a
+    /// follow-up; this is the free tier (straight from the published `AssetRef`).
+    @State private var info = InfoLabels()
 
     private let windowBack = 25
     private let windowForward = 25
@@ -95,10 +103,12 @@ struct PhotoViewerView: View {
         // — it's driven off the pager's swipe delegate so a filmstrip tap can't mark a cluster done (#128).
         .onChange(of: currentID) { _, current in
             coordinator.lastViewedID = current
+            refreshInfo(for: current)
             slideFilmstripIfNeeded()
             prefetchFilmstrip(around: current)
         }
         .onAppear {
+            refreshInfo(for: startID)
             rebuildFilmstrip(around: startID)
             prefetchFilmstrip(around: startID)
         }
@@ -139,7 +149,7 @@ struct PhotoViewerView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .glassEffect(.regular, in: Capsule())   // native iOS 26 glass (pure-glass invariant)
+            .glassSurface(in: Capsule())   // native glass; RT → solid (styleguide §5) — unified with the info panel
             .foregroundStyle(.white)
             .padding(.bottom, 12)
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -189,13 +199,40 @@ struct PhotoViewerView: View {
             .frame(maxHeight: .infinity)
     }
 
+    /// The ⓘ toggle — a plain icon at the trailing edge of the title row, directly under the photo's
+    /// bottom-right. It lives in the CHROME, not over the UIKit pager: a SwiftUI control over the pager
+    /// also fired the photo's tap-to-pick (the pager's own tap recogniser swallows overlaid taps), so the
+    /// affordance sits just below the photo instead (#127). Fills + tints gold while the panel is open.
+    private var infoButton: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .snappy) { showInfoPanel.toggle() }
+        } label: {
+            Image(systemName: showInfoPanel ? "info.circle.fill" : "info.circle")
+                .font(.title3)
+                .foregroundStyle(showInfoPanel ? Color.accentColor : .white.opacity(0.85))
+                .frame(width: 44, height: 44)     // ≥44pt touch target
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("photoInfoButton")
+        .accessibilityLabel("Photo info")
+        .accessibilityValue(showInfoPanel ? "Shown" : "Hidden")
+        .accessibilityAddTraits(.isToggle)
+    }
+
     // MARK: The control band beneath the photo (title · tally · the Pick hero · the filmstrip scrubber)
 
     private var chrome: some View {
         VStack(spacing: 16) {
             titleRow
             pickButton
-            Filmstrip(pages: filmstripPages, currentID: $currentID)
+            // The info panel takes the filmstrip's slot while open — Pick + the title/tally stay above,
+            // so you can pick with the metadata in view; the photo above yields height as the panel grows.
+            if showInfoPanel {
+                PhotoInfoPanel(labels: info)
+            } else {
+                Filmstrip(pages: filmstripPages, currentID: $currentID)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 18)
@@ -206,8 +243,18 @@ struct PhotoViewerView: View {
     /// At accessibility Dynamic-Type sizes the tally drops BELOW the title instead of sharing one line
     /// (mirrors `ReviewSectionHeader` — shrinking the user's chosen size is itself an a11y regression,
     /// so we reflow, not squeeze). With no review context the day map is empty → just the position.
-    @ViewBuilder
     private var titleRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            titleAndTally
+                .frame(maxWidth: .infinity, alignment: .leading)
+            // Align the ⓘ on the row's TOP text line (day + tally), not the centre of the 2-line block.
+            infoButton
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] }
+        }
+    }
+
+    @ViewBuilder
+    private var titleAndTally: some View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 6) {
                 titleBlock
@@ -229,22 +276,22 @@ struct PhotoViewerView: View {
     private var titleBlock: some View {
         let ids = allIDs
         let position = (ids.firstIndex(of: currentID) ?? 0) + 1
-        let day = dayLabel(for: currentID)
+        let line = info.dateTime   // "Sat, Jul 5 · 14.32" — day + capture time (#127), formatted off-body
         return VStack(alignment: .leading, spacing: 2) {
-            if !day.isEmpty {
-                Text(day)
+            if !line.isEmpty {
+                Text(line)
                     .font(.title3.weight(.semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
             Text("\(position) of \(ids.count)")
-                .font(day.isEmpty ? .title3.weight(.semibold) : .subheadline)
-                .foregroundStyle(day.isEmpty ? .white : .white.opacity(0.7))
+                .font(line.isEmpty ? .title3.weight(.semibold) : .subheadline)
+                .foregroundStyle(line.isEmpty ? .white : .white.opacity(0.7))
                 .monospacedDigit()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(day.isEmpty ? "Photo \(position) of \(ids.count)"
-                                        : "\(day), photo \(position) of \(ids.count)")
+        .accessibilityLabel(line.isEmpty ? "Photo \(position) of \(ids.count)"
+                                         : "\(line), photo \(position) of \(ids.count)")
     }
 
     /// The live target tally, glanceable beside the title (gold count / target — echoes the grid tally).
@@ -300,6 +347,13 @@ struct PhotoViewerView: View {
         }
         .ignoresSafeArea()
     }
+}
+
+// MARK: - PhotoViewerView helpers (filmstrip window + label/info formatting)
+//
+// Kept in an extension so they don't count toward the view's `type_body_length`; behaviour unchanged
+// (same-file `private` stays reachable from the struct's `body`).
+extension PhotoViewerView {
 
     // MARK: Filmstrip window (the pager windows itself; this is just for the SwiftUI strip)
 
@@ -356,6 +410,33 @@ struct PhotoViewerView: View {
         coordinator.reviewDayByID[id].map { DayGroupHeader.dayLabel(for: $0) } ?? ""
     }
 
+    /// Re-format the info labels for `id` — called when `currentID` settles / on appear, NEVER in a body
+    /// (repo rule). Free tier (#127): the day + capture time for the date line, and the resolution for the
+    /// panel, both from the published `AssetRef`. Async device + file size are a follow-up.
+    private func refreshInfo(for id: String) {
+        let asset = coordinator.reviewAssetsByID[id]
+        let time = asset?.captureDate.map { $0.formatted(.dateTime.hour().minute()) } ?? ""
+        info = InfoLabels(
+            dateTime: PhotoInfoFormat.dateTimeLine(day: dayLabel(for: id), time: time),
+            resolution: asset.map { PhotoInfoFormat.resolution($0.pixelSize) } ?? "",
+            resolutionA11y: Self.resolutionA11y(asset?.pixelSize))
+    }
+
+    /// VoiceOver form of the resolution ("Resolution, 4032 by 3024, 12 megapixels"), or "Resolution
+    /// unavailable" when the size is missing/zero (so the row is never a silent blank for VoiceOver).
+    /// Goes through the shared `PhotoInfoFormat.megapixels`, so it can't diverge from the visible string.
+    private static func resolutionA11y(_ pixelSize: PixelSize?) -> String {
+        guard let pixelSize, pixelSize.width > 0, pixelSize.height > 0 else {
+            return String(localized: "Resolution unavailable", comment: "Viewer info a11y: no resolution")
+        }
+        if let mp = PhotoInfoFormat.megapixels(pixelSize) {
+            return String(localized: "Resolution, \(pixelSize.width) by \(pixelSize.height), \(mp) megapixels",
+                         comment: "Viewer info a11y: resolution + megapixels")
+        }
+        return String(localized: "Resolution, \(pixelSize.width) by \(pixelSize.height)",
+                     comment: "Viewer info a11y: resolution")
+    }
+
     /// The per-page VoiceOver label: "Photo, Sat, Jul 5, 7 of 13" (day dropped if unavailable).
     private func photoAXLabel(for id: String) -> String {
         let ids = allIDs
@@ -364,6 +445,84 @@ struct PhotoViewerView: View {
         return day.isEmpty
             ? String(localized: "Photo, \(position) of \(ids.count)", comment: "Viewer a11y: position, no day")
             : String(localized: "Photo, \(day), \(position) of \(ids.count)", comment: "Viewer a11y: day, position")
+    }
+}
+
+/// The viewer's preformatted info strings (#127) — held in `@State`, recomputed only when `currentID`
+/// settles, so no date/number formatting runs in a `body`.
+private struct InfoLabels: Equatable {
+    var dateTime = ""
+    var resolution = ""
+    var resolutionA11y = ""
+}
+
+/// The metadata panel (design 4FE) — a glass card revealed by the viewer's ⓘ, swapped in for the
+/// filmstrip. Phase 1 (free tier, #127) shows the resolution; the async device + file-size rows are a
+/// follow-up (they need a `metadata(for:)` provider capability + a persisted cache), and will slot in
+/// here. Closes by tapping ⓘ again.
+private struct PhotoInfoPanel: View {
+    let labels: InfoLabels
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            row(systemImage: "aspectratio",
+                value: labels.resolution.isEmpty ? "—" : labels.resolution,
+                a11y: labels.resolutionA11y)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassSurface(in: RoundedRectangle(cornerRadius: 20, style: .continuous))   // native glass; RT → solid
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private func row(systemImage: String, value: String, a11y: String) -> some View {
+        HStack(spacing: 13) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18))
+                .foregroundStyle(.white.opacity(0.65))
+                .frame(width: 24)
+            Text(value)
+                .font(.body)
+                .foregroundStyle(.white)
+        }
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(a11y)
+    }
+}
+
+/// Pure display formatting for the viewer's info fields (#127), kept out of the view so it's unit-tested
+/// (the no-formatting-in-body rule). `Curation` stays string-free (D14/D21), so these app-facing strings
+/// live here, not in the domain.
+enum PhotoInfoFormat {
+    /// Rounded megapixels (round-half-away-from-zero, so exactly 0.5 MP shows), or `nil` below ~0.5 MP /
+    /// for a zero size. The single source of the MP count — the visible resolution string AND the
+    /// VoiceOver label both go through this, so they can't drift.
+    static func megapixels(_ pixelSize: PixelSize) -> Int? {
+        guard pixelSize.width > 0, pixelSize.height > 0 else { return nil }
+        let mp = Int((Double(pixelSize.pixelCount) / 1_000_000).rounded())
+        return mp >= 1 ? mp : nil
+    }
+
+    /// "4032 × 3024 · 12 MP" — dimensions + rounded megapixels (MP dropped below ~0.5 MP). "" for a
+    /// zero/empty size.
+    static func resolution(_ pixelSize: PixelSize) -> String {
+        guard pixelSize.width > 0, pixelSize.height > 0 else { return "" }
+        let dims = "\(pixelSize.width) × \(pixelSize.height)"
+        return megapixels(pixelSize).map { "\(dims) · \($0) MP" } ?? dims
+    }
+
+    /// Join the day + capture time for the viewer's date line: "Sat, Jul 5 · 14.32". Either piece may be
+    /// empty (no review context → no day; an undated asset → no time); the " · " appears only when both do.
+    static func dateTimeLine(day: String, time: String) -> String {
+        switch (day.isEmpty, time.isEmpty) {
+        case (false, false): return "\(day) · \(time)"
+        case (false, true): return day
+        case (true, false): return time
+        case (true, true): return ""
+        }
     }
 }
 
