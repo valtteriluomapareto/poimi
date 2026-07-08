@@ -115,9 +115,6 @@ final class PhotoPageController: UIViewController {
     private let label: String
     private var loadTask: Task<Void, Never>?
     private var loadState = FullImageLoadState()
-    /// Invalidates an in-flight load's result when the page disappears / a newer load starts, so a stale
-    /// completion can't clobber a fresh one.
-    private var loadToken = 0
 
     init(id: String,
          cachedThumb: @escaping (String) -> UIImage?,
@@ -149,9 +146,10 @@ final class PhotoPageController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // Retry when the page (re)appears: a prebuilt neighbour's load may have been cancelled when it
-        // was scrolled past (see `loadFullIfNeeded`), leaving no image — this is the retry that keeps it
-        // from staying black once the page is actually shown.
+        // Retry when the page (re)appears: a prebuilt neighbour's load may have been cancelled when it was
+        // scrolled past (see `loadFullIfNeeded`), and a prior terminal failure is cleared here — this is
+        // the retry that keeps a page from staying black once it's actually shown.
+        loadState.retryOnReappear()
         loadFullIfNeeded()
     }
 
@@ -160,57 +158,86 @@ final class PhotoPageController: UIViewController {
         loadFullIfNeeded()
     }
 
-    /// (Re)load the full-res image once bounds are real — unless we already have it or a load is in
-    /// flight. Crucially, a load that returns nil (cancelled when the page was scrolled past during the
-    /// pager's ±1 prebuild, or a transient PhotoKit failure) is NOT latched: with no cached thumbnail for
-    /// this id, latching-on-failure left the page permanently black. `loadState` only latches on a real
-    /// image, so a nil result stays eligible to retry on the next appearance / layout.
+    /// (Re)load the full-res image once bounds are real — unless we already have it, one's in flight, or a
+    /// terminal failure is awaiting a re-appearance. Crucially, a load that returns nil (cancelled when the
+    /// page was scrolled past during the pager's ±1 prebuild, or an unavailable original) is NOT latched as
+    /// "loaded": with no cached thumbnail for this id, latching-on-failure left the page permanently black.
     private func loadFullIfNeeded() {
         guard loadState.shouldLoad(boundsReady: view.bounds.width > 0) else { return }
-        loadState.markLoading()
-        loadToken += 1
-        let token = loadToken
+        let token = loadState.begin()
         let scale = view.traitCollection.displayScale > 0 ? view.traitCollection.displayScale : 2
         let pixels = CGSize(width: view.bounds.width * scale, height: view.bounds.height * scale)
         loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let full = await self.loadFull(self.id, pixels)
-            guard self.loadToken == token else { return }   // superseded by a disappear / newer load
-            self.loadState.markCompleted(gotImage: full != nil)
-            if let full { self.scrollView.image = full }
+            // `completed` ignores a superseded token (a disappear / newer load) and reports whether it
+            // applied — paint only a current, successful load.
+            if self.loadState.completed(token: token, gotImage: full != nil), let full {
+                self.scrollView.image = full
+            }
         }
     }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         loadTask?.cancel()
-        loadToken += 1              // ignore the cancelled load's result
-        loadState.markCancelled()   // eligible to reload when shown again
+        loadState.cancel()   // supersede the in-flight load; eligible to reload when shown again
     }
+
+    deinit { loadTask?.cancel() }
 }
 
-/// Tracks whether a viewer page still needs its full-resolution image. Extracted from
-/// `PhotoPageController` so the load/retry policy is unit-testable. The load latches "loaded" ONLY on a
-/// real image — a nil result (a prebuilt page's load cancelled when scrolled past, or a transient
-/// failure) leaves the page eligible to retry, so it can't stay permanently black.
+/// The full-resolution load/retry policy for a viewer page. Extracted from `PhotoPageController` so the
+/// whole policy — including the stale-completion (clobber) guard — is pure and unit-testable. It latches
+/// "loaded" ONLY on a real image; a nil result is handled so the page can never stay permanently black:
+///
+///   • A **terminal failure** (PhotoKit returned nil — e.g. an iCloud original that won't download) sets
+///     `failed`, which stops layout passes from re-requesting on a loop, but `retryOnReappear()` clears it
+///     so showing the page again tries once more.
+///   • A **superseded** completion (the page disappeared / a newer load started, detected by the `token`)
+///     is ignored — it can't clobber a fresh load or paint a stale image.
+///
+/// The `token` lives here (not the controller) so that guard is testable rather than UIKit-only glue.
 struct FullImageLoadState {
     private(set) var loaded = false
     private(set) var loading = false
+    private(set) var failed = false
+    private var token = 0
 
-    /// Start a load only if we don't already have the image, none is in flight, and bounds are real.
-    func shouldLoad(boundsReady: Bool) -> Bool { !loaded && !loading && boundsReady }
+    /// Start a load only if we don't already have the image, none is in flight, no terminal failure is
+    /// pending a re-appearance, and bounds are real.
+    func shouldLoad(boundsReady: Bool) -> Bool { !loaded && !loading && !failed && boundsReady }
 
-    mutating func markLoading() { loading = true }
-
-    /// Record a finished load: a real image latches `loaded`; a nil result just clears the in-flight
-    /// flag, leaving the page eligible to retry.
-    mutating func markCompleted(gotImage: Bool) {
-        loading = false
-        if gotImage { loaded = true }
+    /// Begin a load; returns the token the caller passes back to `completed`. Only reachable when
+    /// `shouldLoad` is true (not already loading), so it never bumps the token mid-flight.
+    mutating func begin() -> Int {
+        loading = true
+        failed = false
+        token += 1
+        return token
     }
 
-    /// The in-flight load was cancelled (page disappeared) — clear the flag so a later appearance retries.
-    mutating func markCancelled() { loading = false }
+    /// Apply a finished load IF it's still current (`token` matches — else it was superseded and is
+    /// ignored). A real image latches `loaded`; a nil result is a terminal failure. Returns whether it
+    /// applied, so the caller paints the image only for a current, successful load.
+    @discardableResult
+    mutating func completed(token: Int, gotImage: Bool) -> Bool {
+        guard token == self.token else { return false }
+        loading = false
+        if gotImage { loaded = true } else { failed = true }
+        return true
+    }
+
+    /// The page disappeared with a load in flight: supersede it (bump `token` so its result is ignored)
+    /// and clear the in-flight flag. `loaded`/`failed` are untouched — a successfully-loaded page stays
+    /// loaded; it becomes eligible to reload only if it wasn't.
+    mutating func cancel() {
+        token += 1
+        loading = false
+    }
+
+    /// On (re)appearance, clear a prior terminal failure so we try once more now that we're on screen.
+    mutating func retryOnReappear() { failed = false }
 }
 
 /// The id `offset` away from `id` in `ids`, or nil at the ends / for an unknown id. Pulled out of the
