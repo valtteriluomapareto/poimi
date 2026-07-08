@@ -1,11 +1,11 @@
 //
 //  ReviewChrome.swift
-//  PoimiApp — the review-grid top chrome: tally + export + clear (issue #35, part 3).
+//  PoimiApp — the review chrome: the grid's top bar (#167, design 4AB) + the Overview's tally.
 //
-//  Per the Paper design, the review chrome lives at the TOP, not a floating bottom bar that fights
-//  the scroll/select gestures: the album title, a metadata subtitle, and a full-width running-tally
-//  strip stack under it, with Export as the nav's top-right action. The tally is the orientation
-//  device (count toward target).
+//  The review grid's fixed top bar (`ReviewTopBar`) carries the CURRENT cluster's identity on the
+//  leading lane and the album's progress on the trailing lane — a compact `ProgressRing` +
+//  "picked / target". The full linear `ReviewTally` ("147 / 200" + bar + "N left") lives on the
+//  Overview (the album's landing screen + "I'm done → export" spot), not the grid.
 //
 //  These pieces read the `SelectionStore` THEMSELVES (rather than taking values from the review
 //  screen) so the dependency on `selected` lives here — the grid's parent body stays independent of
@@ -63,6 +63,7 @@ struct ReviewTopBar: View {
                 Text(clusterTitle)
                     .font(.headline)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.7)   // a long trip sentence scales before truncating at AX sizes
                 if isDone {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.subheadline)
@@ -100,8 +101,8 @@ struct ReviewTopBar: View {
             return String(localized: "\(progress.picked) of \(progress.target) picked, target reached",
                           comment: "Grid top-bar progress a11y when the target is reached")
         }
-        return String(localized: "\(progress.picked) of \(progress.target) picked",
-                      comment: "Grid top-bar progress a11y: picked of target")
+        return String(localized: "\(progress.picked) of \(progress.target) picked, \(progress.remaining) left",
+                      comment: "Grid top-bar progress a11y: picked of target, remaining left")
     }
 }
 
@@ -116,11 +117,14 @@ struct ProgressRing: View {
     var lineWidth: CGFloat = 3.5
 
     var body: some View {
+        // Floor a non-zero fraction to a visible arc so the FIRST pick already moves the ring (mirrors
+        // the Overview tally bar's sliver floor); zero stays empty (track only).
+        let arcEnd = fraction > 0 ? max(0.04, min(1, fraction)) : 0
         ZStack {
             Circle()
                 .stroke(Color.primary.opacity(0.15), lineWidth: lineWidth)
             Circle()
-                .trim(from: 0, to: min(1, max(0, fraction)))
+                .trim(from: 0, to: arcEnd)
                 .stroke(isComplete ? Color.brandGreen : Color.accentColor,
                         style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))   // start the arc at 12 o'clock

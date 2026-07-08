@@ -455,14 +455,17 @@ private struct SelectAllIconChip: View {
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(allSelected ? Color.accentColor : Color.primary)
                 .frame(width: 36, height: 36)
+                .glassChip()                     // glass capsule at the 36pt visual size (aligns with the page pill)
+                .frame(width: 44, height: 44)    // ≥44pt hit area, glass centred (HIG touch floor)
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .glassChip()
         .accessibilityIdentifier("selectAllButton")
         .accessibilityLabel(allSelected
             ? String(localized: "Deselect all in \(title)", comment: "Select-all toggle: deselect state")
             : String(localized: "Select all in \(title)", comment: "Select-all toggle: select state"))
+        .accessibilityHint(String(localized: "Selects or deselects every photo in this cluster",
+                                  comment: "Select-all toggle hint"))
     }
 }
 
