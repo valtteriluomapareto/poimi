@@ -80,16 +80,27 @@ struct ReviewTopBar: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Trailing lane: album progress toward the target — "picked / target" + a compact ring. The ring is
-    /// decorative (a11y-hidden); the count text next to it carries the spoken value.
+    /// Trailing lane: album progress toward the target — "picked / target" (+ "+N over" once past it) + a
+    /// compact ring. The count turns amber and the ring's arc goes amber when over (unclamped honesty,
+    /// #170). The ring is decorative (a11y-hidden); the count text carries the spoken value.
     private func progressView(_ progress: TargetProgress) -> some View {
         HStack(spacing: 8) {
-            (Text("\(progress.picked)").fontWeight(.semibold)
-                + Text(" / \(progress.target)").foregroundStyle(.secondary))
-                .font(.subheadline)
-                .monospacedDigit()
-                .lineLimit(1)
-            ProgressRing(fraction: progress.fraction, isComplete: progress.isComplete)
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                (Text("\(progress.picked)").fontWeight(.semibold)
+                    .foregroundStyle(progress.isOver ? Color.brandWarning : Color.primary)
+                    + Text(" / \(progress.target)").foregroundStyle(.secondary))
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                if progress.isOver {
+                    Text("+\(progress.overage) over")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.brandWarning)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+            }
+            ProgressRing(fraction: progress.fraction, tint: pacingTint(progress))
                 .frame(width: 30, height: 30)
         }
         .accessibilityElement(children: .ignore)
@@ -97,6 +108,10 @@ struct ReviewTopBar: View {
     }
 
     private func progressA11y(_ progress: TargetProgress) -> String {
+        if progress.isOver {
+            return String(localized: "\(progress.picked) of \(progress.target) picked, \(progress.overage) over target",
+                          comment: "Grid top-bar progress a11y when over target")
+        }
         if progress.isComplete {
             return String(localized: "\(progress.picked) of \(progress.target) picked, target reached",
                           comment: "Grid top-bar progress a11y when the target is reached")
@@ -106,14 +121,15 @@ struct ReviewTopBar: View {
     }
 }
 
-/// A compact circular progress indicator — a gold arc over a faint track — showing how far the album's
-/// pick count has come toward the target. Replaces the review grid's full-width linear tally bar with a
-/// glanceable ring in the top bar (design 4AB). Turns brand-green at 100% (target reached). Decorative:
-/// the sibling "picked / target" text carries the accessible value, so the ring is hidden from VoiceOver.
+/// A compact circular progress indicator — an arc over a faint track — showing how far the album's pick
+/// count has come toward the target. Replaces the review grid's full-width linear tally bar with a
+/// glanceable ring in the top bar (design 4AB). The caller sets `tint` (gold climbing, green at target,
+/// amber over — `pacingTint`); the arc runs full when over (fraction is already clamped to 1).
+/// Decorative: the sibling "picked / target" text carries the accessible value, so it's hidden from VoiceOver.
 struct ProgressRing: View {
     /// The fraction picked, 0…1 — clamped by the drawer so an over-target value still reads as full.
     let fraction: Double
-    var isComplete = false
+    var tint: Color = .accentColor
     var lineWidth: CGFloat = 3.5
 
     var body: some View {
@@ -125,12 +141,21 @@ struct ProgressRing: View {
                 .stroke(Color.primary.opacity(0.15), lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: arcEnd)
-                .stroke(isComplete ? Color.brandGreen : Color.accentColor,
-                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))   // start the arc at 12 o'clock
         }
         .accessibilityHidden(true)
     }
+}
+
+/// The pacing tint shared by the ring, the top-bar count, and the Overview tally (#170): accent gold
+/// while climbing, brand-green when the target is reached exactly, and amber (`brandWarning`) once over —
+/// the "heads-up, never a scold" over-target signal. Order matters: `isOver` is checked before
+/// `isComplete` (which is also true past the target).
+func pacingTint(_ progress: TargetProgress) -> Color {
+    if progress.isOver { return .brandWarning }
+    if progress.isComplete { return .brandGreen }
+    return .accentColor
 }
 
 /// The running tally — "147 / 200" + a full-width progress bar + "N left" (Paper design). At
@@ -146,10 +171,19 @@ struct ReviewTally: View {
             HStack(alignment: .firstTextBaseline) {
                 counts(progress).font(.title3)
                 Spacer(minLength: 12)
-                Text("\(progress.remaining) left")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                // Once over, "+N over" (amber) replaces the clamped "N left" — the always-present text
+                // that carries the over-target signal at AX sizes (where the bar is dropped, below).
+                if progress.isOver {
+                    Text("+\(progress.overage) over")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.brandWarning)
+                        .monospacedDigit()
+                } else {
+                    Text("\(progress.remaining) left")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
             if !typeSize.isAccessibilitySize {
                 progressBar(progress)
@@ -161,6 +195,7 @@ struct ReviewTally: View {
 
     private func counts(_ progress: TargetProgress) -> some View {
         (Text("\(progress.picked)").fontWeight(.semibold)
+            .foregroundStyle(progress.isOver ? Color.brandWarning : Color.primary)
             + Text(" / \(progress.target)").foregroundStyle(.secondary))
             .monospacedDigit()
             .lineLimit(1)
@@ -168,15 +203,30 @@ struct ReviewTally: View {
 
     private func progressBar(_ progress: TargetProgress) -> some View {
         GeometryReader { geo in
-            Capsule()
-                .fill(.quaternary)
-                .overlay(alignment: .leading) {
-                    Capsule()
-                        .fill(progress.isComplete ? Color.brandGreen : Color.accentColor)   // brand green, not system
-                        // Floor the fill to a visible sliver once there's any pick, so the first pick
-                        // moves the bar; zero at zero.
-                        .frame(width: progress.picked > 0 ? max(4, geo.size.width * progress.fraction) : 0)
+            let width = geo.size.width
+            if progress.isOver {
+                // Rescale to 0…picked: gold up to the target tick, an amber cap for the overage past it —
+                // the clamped bar used to just sit full-green, hiding the overshoot.
+                let targetFrac = Double(progress.target) / Double(progress.picked)   // 0…1, target < picked
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(Color.brandWarning)                             // full (the overage cap)
+                    Rectangle().fill(Color.accentColor).frame(width: width * targetFrac)  // gold to target
+                    Rectangle().fill(Color(.systemBackground))                       // the target tick
+                        .frame(width: 2).offset(x: width * targetFrac - 1)
                 }
+                .clipShape(Capsule())
+            } else {
+                Capsule()
+                    .fill(.quaternary)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            // brand green at target, else accent gold (not system green)
+                            .fill(progress.isComplete ? Color.brandGreen : Color.accentColor)
+                            // Floor the fill to a visible sliver once there's any pick, so the first pick
+                            // moves the bar; zero at zero.
+                            .frame(width: progress.picked > 0 ? max(4, width * progress.fraction) : 0)
+                    }
+            }
         }
         .frame(height: 6)
         .accessibilityHidden(true)
@@ -185,6 +235,11 @@ struct ReviewTally: View {
     private func accessibilityLabel(_ progress: TargetProgress) -> String {
         // Two full independent keys (not a localized fragment embedded in another) so a translator can
         // reorder the whole sentence per language.
+        if progress.isOver {
+            return String(localized: """
+                \(progress.picked) of \(progress.target) photos picked, \(progress.overage) over target
+                """, comment: "Tally a11y label when over target")
+        }
         if progress.isComplete {
             return String(localized: """
                 \(progress.picked) of \(progress.target) photos picked, \(progress.remaining) left, target reached

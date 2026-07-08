@@ -84,6 +84,11 @@ struct PropertyTests {
         #expect(progress.remaining == max(0, target - picked))
         #expect(progress.isComplete == (target > 0 && picked >= target))
         if progress.isComplete { #expect(progress.fraction == 1) }       // complete ⇒ full bar
+        // Over-target (#170): unclamped overage, 0 without a target; isOver is the strict past-target case.
+        #expect(progress.overage == (target > 0 ? max(0, picked - target) : 0))
+        #expect(progress.isOver == (target > 0 && picked > target))
+        // The UI's text branch relies on this: when over, "N left" is 0 (replaced by "+N over").
+        if progress.isOver { #expect(progress.remaining == 0) }
     }
 
     @Test("CompletionStats invariants hold for arbitrary assets / done-days / selection",

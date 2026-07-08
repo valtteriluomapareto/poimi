@@ -197,8 +197,10 @@ struct AlbumOverviewView: View {
                     .foregroundStyle(.secondary)
             }
             ReviewTally()   // "147 / 200" + bar + "N left" — reads the SelectionStore
-            // The chart earns its place only with more than one cluster to distribute.
+            // The projection card + chart earn their place only with more than one cluster to pace/distribute
+            // across (a one-cluster album has no timeline). The card self-hides until there's a projection.
             if index.totalClusters > 1 {
+                PacingCard(orderedIDs: index.orderedIDs)
                 CoverageChart(buckets: index.chartBuckets)
             }
         }
@@ -264,6 +266,10 @@ struct ClusterIndex {
     let chartBuckets: [ChartBucket]
     let totalClusters: Int
     let totalDays: Int
+    /// Every candidate id in chronological order (oldest → newest, undated last) — the pick-frontier
+    /// denominator for the pacing projection (#170). Built once here, off `body`, so `PacingCard` only
+    /// scans it (never re-derives the timeline) as picks change.
+    let orderedIDs: [String]
 }
 
 /// Builds the overview view-model from the store's already-grouped `[DayGroup]`. Pure, and called once
@@ -333,7 +339,8 @@ enum ClusterIndexBuilder {
         return ClusterIndex(sections: sections,
                             chartBuckets: ChartBucketing.buckets(for: rows, calendar: calendar, locale: locale),
                             totalClusters: clusters.count,
-                            totalDays: totalDays)
+                            totalDays: totalDays,
+                            orderedIDs: clusters.flatMap(\.assetIDs))
     }
 }
 
@@ -462,5 +469,133 @@ struct ClusterListRow: View {
             return String(localized: "\(row.title). Not reviewed. \(row.count) photos.",
                           comment: "Cluster row a11y: %@ day, not reviewed, M photos")
         }
+    }
+}
+
+// MARK: - Pacing projection card (#170)
+
+/// The Overview's pacing projection (design 4C4 / docs/design/pacing.md): couples the picks so far to the
+/// PICK FRONTIER (how far the latest-dated pick reaches through the album) and projects the final count —
+/// *"At this pace: ~320"* — so a curator sees mid-review whether they're heading to overshoot. ORIENTATION
+/// ONLY (D5): it never enforces, and it only *characterises* pace when you're **ahead** (amber); on-pace /
+/// behind show just the number + bar, no directive words.
+///
+/// It reads the `SelectionStore` itself (not a value baked into the Overview's scan `.task`, which is
+/// deliberately selection-blind), so the projection updates on each pick. The added per-pick cost is just
+/// the O(n) `pickFrontierFraction` scan over the pre-built `orderedIDs` — the timeline is never re-derived.
+/// (The enclosing `AlbumOverviewView.body` already re-evaluates on a pick anyway — its toolbar reads
+/// `selection.progress` — but that only rebuilds view structs off already-built `@State`, no regrouping.)
+private struct PacingCard: View {
+    /// Every candidate id in chronological order (from `ClusterIndex.orderedIDs`) — the frontier denominator.
+    let orderedIDs: [String]
+    @Environment(SelectionStore.self) private var selection
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        let pacing = resolve()
+        // Self-hiding: nothing until the frontier clears the confidence floor (thin coverage is noise).
+        if let projected = pacing.projectedTotal, let pace = pacing.pace {
+            card(projected: projected, pace: pace, frontier: pacing.frontier, target: pacing.target)
+        }
+    }
+
+    /// Build the projection off the live selection (kept out of `body`'s ViewBuilder so the invariant
+    /// assert is legal). The numerator (all picks) + denominator (`orderedIDs`) must span the same universe.
+    private func resolve() -> Pacing {
+        let progress = selection.progress
+        let frontier = pickFrontierFraction(orderedIDs: orderedIDs, selected: selection.selected)
+        assert(orderedIDs.isEmpty || selection.selected.isSubset(of: Set(orderedIDs)),
+               "pacing: every pick must be within orderedIDs (same candidate universe)")
+        return Pacing(picked: progress.picked, frontier: frontier, target: progress.target)
+    }
+
+    private func card(projected: Int, pace: Pace, frontier: Double, target: Int) -> some View {
+        let ahead = pace == .ahead
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 9) {
+                Image(systemName: "gauge.with.needle")
+                    .font(.body)
+                    .foregroundStyle(ahead ? Color.brandWarning : .secondary)
+                    .accessibilityHidden(true)
+                (Text("At this pace: ", comment: "Pacing projection label").foregroundStyle(.secondary)
+                    + Text("~\(projected) photos").fontWeight(.semibold)
+                        .foregroundStyle(ahead ? Color.brandWarning : .primary))
+                    .font(.body)
+                    .monospacedDigit()
+            }
+            if !typeSize.isAccessibilitySize {
+                miniBar(projected: projected, target: target)
+                HStack {
+                    Text("Target \(target)", comment: "Pacing mini-bar: target label")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("projected ~\(projected)", comment: "Pacing mini-bar: projected label")
+                        .foregroundStyle(ahead ? Color.brandWarning : .secondary)
+                }
+                .font(.caption)
+                .monospacedDigit()
+            }
+            subline(frontier: frontier, ahead: ahead)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(ahead ? Color.brandWarning.opacity(0.3) : .clear, lineWidth: 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(a11y(projected: projected, ahead: ahead, frontier: frontier))
+    }
+
+    /// A compact 0…max(target, projected) bar: gold up to the target tick, an amber cap for any overshoot.
+    private func miniBar(projected: Int, target: Int) -> some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            let scale = Double(max(target, projected, 1))
+            let goldFrac = Double(min(target, projected)) / scale
+            let overFrac = projected > target ? Double(projected - target) / scale : 0
+            let targetFrac = Double(target) / scale
+            ZStack(alignment: .leading) {
+                Rectangle().fill(.quaternary)
+                Rectangle().fill(Color.accentColor).frame(width: width * goldFrac)
+                if overFrac > 0 {
+                    Rectangle().fill(Color.brandWarning)
+                        .frame(width: width * overFrac).offset(x: width * goldFrac)
+                }
+                Rectangle().fill(Color(.secondarySystemBackground))   // the target tick
+                    .frame(width: 2).offset(x: width * targetFrac - 1)
+            }
+            .clipShape(Capsule())
+        }
+        .frame(height: 8)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func subline(frontier: Double, ahead: Bool) -> some View {
+        let pct = Int((frontier * 100).rounded())
+        if ahead {
+            (Text("Picks reach \(pct)% of the album · ", comment: "Pacing frontier").foregroundStyle(.secondary)
+                + Text("picking ahead of pace", comment: "Pacing: ahead state").foregroundStyle(Color.brandWarning))
+                .font(.footnote)
+        } else {
+            Text("Picks reach \(pct)% of the album", comment: "Pacing frontier")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func a11y(projected: Int, ahead: Bool, frontier: Double) -> String {
+        let pct = Int((frontier * 100).rounded())
+        if ahead {
+            return String(localized: """
+                At this pace, about \(projected) photos. Picks reach \(pct) percent of the album, \
+                picking ahead of pace.
+                """, comment: "Pacing card a11y, ahead of pace")
+        }
+        return String(localized: """
+            At this pace, about \(projected) photos. Picks reach \(pct) percent of the album.
+            """, comment: "Pacing card a11y")
     }
 }

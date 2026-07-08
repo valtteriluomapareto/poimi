@@ -2104,6 +2104,246 @@
           }
         }
       }
+    },
+    "+%lld over": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%lld yli"
+          }
+        }
+      }
+    },
+    "%lld of %lld photos picked, %lld over target": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld / %2$lld kuvaa poimittu, %3$lld yli tavoitteen"
+          }
+        }
+      }
+    },
+    "%lld of %lld picked, %lld left": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld / %2$lld poimittu, %3$lld jäljellä"
+          }
+        }
+      }
+    },
+    "%lld of %lld picked, %lld over target": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld / %2$lld poimittu, %3$lld yli tavoitteen"
+          }
+        }
+      }
+    },
+    "%lld of %lld picked, target reached": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld / %2$lld poimittu, tavoite saavutettu"
+          }
+        }
+      }
+    },
+    "At this pace, about %lld photos. Picks reach %lld percent of the album, picking ahead of pace.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tällä tahdilla noin %1$lld kuvaa. Poiminnat kattavat %2$lld prosenttia albumista, poimit tahtia edellä."
+          }
+        }
+      }
+    },
+    "At this pace, about %lld photos. Picks reach %lld percent of the album.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tällä tahdilla noin %1$lld kuvaa. Poiminnat kattavat %2$lld prosenttia albumista."
+          }
+        }
+      }
+    },
+    "At this pace: ": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tällä tahdilla: "
+          }
+        }
+      }
+    },
+    "Picks reach %lld%% of the album": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poiminnat kattavat %lld %% albumista"
+          }
+        }
+      }
+    },
+    "Picks reach %lld%% of the album · ": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poiminnat kattavat %lld %% albumista · "
+          }
+        }
+      }
+    },
+    "Target %lld": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tavoite %lld"
+          }
+        }
+      }
+    },
+    "picking ahead of pace": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "poimit tahtia edellä"
+          }
+        }
+      }
+    },
+    "projected ~%lld": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "arvio ~%lld"
+          }
+        }
+      }
+    },
+    "~%lld photos": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~%lld kuvaa"
+          }
+        }
+      }
+    },
+    "Cluster %lld of %lld": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ryhmä %1$lld / %2$lld"
+          }
+        }
+      }
+    },
+    "Group by trips & places": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ryhmittele matkojen ja paikkojen mukaan"
+          }
+        }
+      }
+    },
+    "Groups a stretch away from home into one trip (“Week in Salo”) with its place name. Turn off to review strictly by date.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yhdistää kotoa poissaolon yhdeksi matkaksi (”Viikko Salossa”) ja nimeää sen paikan mukaan. Poista käytöstä käydäksesi läpi vain päivämäärän mukaan."
+          }
+        }
+      }
+    },
+    "Marked %@ done": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ merkitty valmiiksi"
+          }
+        }
+      }
+    },
+    "Marked done": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitty valmiiksi"
+          }
+        }
+      }
+    },
+    "Marks this cluster reviewed and opens the next": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitsee tämän ryhmän käsitellyksi ja avaa seuraavan"
+          }
+        }
+      }
+    },
+    "Reopens this cluster for editing": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avaa tämän ryhmän uudelleen muokkausta varten"
+          }
+        }
+      }
+    },
+    "Selects or deselects every photo in this cluster": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valitsee tai poistaa valinnan kaikista tämän ryhmän kuvista"
+          }
+        }
+      }
+    },
+    "Target photo count": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuvien tavoitemäärä"
+          }
+        }
+      }
+    },
+    "Undo": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kumoa"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
