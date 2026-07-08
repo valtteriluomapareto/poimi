@@ -147,9 +147,10 @@ final class ProjectStore {
     }
 
     /// Delete the project record. NEVER deletes the exported Photos album (D31, §12).
-    /// NOTE (#30): when the navigation coordinator can have a project *active* in `SelectionStore`,
-    /// deleting or resetting the active project must `deactivate()` it first — otherwise the
-    /// selection store holds a stale/dangling project. Harmless today (nothing activates yet).
+    /// Callers MUST `SelectionStore`/`DoneStore.deactivateIfActive(project)` first if it could be the
+    /// active one, so no live store is left holding the deleted model (a late debounce would then
+    /// `write(to:)` a dead project). Both delete sites do — `AlbumSettingsView.deleteAlbum` and
+    /// `AlbumsView.deleteAlbum` (#59).
     func delete(_ project: CurationProject) {
         // Drop the album's cached timeline too (best-effort, off-main). A regenerable cache, so a
         // leftover file would be harmless (the OS purges Caches), but a deleted album leaves nothing.

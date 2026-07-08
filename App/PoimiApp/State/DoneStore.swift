@@ -56,6 +56,12 @@ final class DoneStore {
         doneDays = []
     }
 
+    /// Deactivate ONLY if `project` is the currently-hydrated one — so deleting/resetting a project (from
+    /// any call site) never leaves this store holding a dangling/stale model (#59). A no-op otherwise.
+    func deactivateIfActive(_ project: CurationProject) {
+        if activeProjectID == project.persistentModelID { deactivate() }
+    }
+
     /// Whether `group` renders done — every calendar day it spans is done (Completion §20).
     func isDone(_ group: DayGroup) -> Bool { Completion.isDone(group, doneDays: doneDays) }
 

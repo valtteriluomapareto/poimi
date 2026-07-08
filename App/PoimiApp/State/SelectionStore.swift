@@ -77,6 +77,13 @@ final class SelectionStore {
         target = 0
     }
 
+    /// Deactivate ONLY if `project` is the currently-hydrated one — so deleting/resetting a project (from
+    /// any call site) never leaves this store holding a dangling/stale model whose late debounce could
+    /// `write(to:)` a deleted or just-zeroed project (#59). A no-op for any other project.
+    func deactivateIfActive(_ project: CurationProject) {
+        if activeProjectID == project.persistentModelID { deactivate() }
+    }
+
     func contains(_ id: String) -> Bool { selected.contains(id) }
 
     /// Toggle an asset's membership; returns whether it is now selected. Schedules a debounced
