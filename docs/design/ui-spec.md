@@ -94,46 +94,53 @@ every other cluster is a collapsed peek. "Done" is its own state (a green seal b
      accent is dark, not white, styleguide §1),
   2. a **dim** overlay,
   3. a **2px green inset border** (`brandGreen`) — structural. (Green is no longer *only* the
-     selection hairline: it now also marks **done** — the header seal badge, the "Mark as done"
-     button, and the at-target tally bar — the "green = kept / finished" vocabulary, styleguide §6.
-     The border uses the same `brandGreen`, unified with those.)
+     selection hairline: it now also marks **done** — the top-bar done seal, the "Mark as done"
+     button, and the at-target progress ring / Overview tally bar — the "green = kept / finished"
+     vocabulary, styleguide §6. The border uses the same `brandGreen`, unified with those.)
 - Source of truth is the in-memory `Set` in `SelectionStore` (D15); cells + headers observe it
   directly, so a toggle re-renders only visible cells, never the whole grid.
 
 ## Top chrome
 
-At the **top**, not a floating bottom bar (which would fight the scroll/select gestures). The **nav
-title is blanked** once the grid is up; the album name shows as a **bold title in the pinned
-`ReviewHeader`** instead — a full large nav title fought the pinned header and drove the glass nav
-backdrop into an observation feedback loop on device, so the identity title moved into the scroll-top
-header. Beneath the title:
+Since #167 (design 4AB) the grid top is a **two-lane fixed bar + floating per-page pills** — the old
+album-title + metadata-subtitle + full-width tally stack was too heavy and its pills were misaligned;
+album-level identity now lives on the Overview you came from, so the grid top is **per-cluster**. The
+**nav title is blanked** once the grid is up (only the system **back** button remains in the nav bar,
+floating on the bar's glass — the nav backdrop is hidden).
 
-- **Subtitle**: `<count> photos · <period>` (e.g. "1,847 photos · Jan 2025 – Dec 2025"). The period
-  is the album's range; the exclusive end is stepped back a day so a 2025 album reads "… – Dec 2025".
-- **Tally**: `picked / target` in `monospacedDigit` + a **full-width** progress bar + "`N left`"
-  (accent gold; **`brandGreen` at target**; fill floored to a visible sliver once there's any pick).
-  The orientation device. **AX reflow**: at accessibility text sizes the bar drops, numerals only.
-- The header is **pinned** (`.safeAreaInset(.top)`, **`.bar`** backing — a deliberate v1 interim; a
-  full iOS-26 glassEffect scroll-edge is deferred as a device-iteration item) so the tally stays
-  glanceable while scrolling. Day-group section headers pin too.
-- **Export** (nav top-right): the primary action; disabled until ≥1 photo is picked. Routes to #39.
-- **Clear** (nav top-right, destructive): shown only when there is a selection; **confirms before
-  wiping** (a `confirmationDialog` — a stray tap used to clear every pick with no undo). *(Per the
-  Paper design, bulk Clear/Select-all ultimately move to the separate Select mode; kept here
-  transitionally until that screen is built.)*
+- **`ReviewTopBar`** (fixed, `.safeAreaInset(.top)`, Liquid Glass bled to the top edge). Leading lane —
+  the **current cluster's identity**: a gold **pin** for a trip/visit · the cluster **name** (a trip's
+  "Week in …" sentence or a date title) · its **photo count** ("47 photos", auto-inflected) · a green
+  **done seal** once the cluster is done. Trailing lane — the album's **progress**: a compact
+  **`ProgressRing`** (gold arc on a faint track; **`brandGreen` at target**; floored to a visible arc
+  once there's any pick) + **`picked / target`** in `monospacedDigit`. It updates as you swipe pages and
+  reads the `SelectionStore` itself, so a pick re-renders only the bar, not the grid body.
+- **Floating per-page pills** (pinned over the photos, one aligned row): a **page-number pill** ("N / M"
+  with a stacked-page glyph — the paged position + swipe affordance; dots dropped) on the leading lane,
+  and a **Select-all icon** (`checkmark.square` → **filled gold** `checkmark.square.fill` when the whole
+  cluster is picked) on the trailing lane. Same visual height, vertically centred (glass capsules).
+- **Mark-day-done** is the end-of-cluster scroll **footer** (a trip reads "Mark trip done"); it advances
+  to the next unreviewed cluster.
+- **No Export/Clear on the grid.** Export lives on the **Overview** (its own toolbar, above the full
+  linear `ReviewTally`); album-wide clear is **"Reset picks"** in album Settings. The grid is purely
+  picking.
 
 ## Accessibility
 
 - Each cell: one element, label "Photo, <day>", a selected trait, a **default action** (open) + a
   named **Select/Deselect** action.
-- Each header: an `.isHeader` container; its open-toggle is a **button** with a "<title>. N photos,
-  M selected. [Done.]" label + an **Expanded/Collapsed value** + an open/collapse hint. Select-all is
-  a separate child button. Marking a day done posts a "Marked done" announcement (the footer button
-  is removed as it advances, so focus would otherwise be lost).
-- **Dynamic Type**: the header reflows to a vertical stack at accessibility sizes (title wraps, never
-  `minimumScaleFactor`); the tally drops its bar; the "Mark as done" button is a ≥44pt control.
-- Reduce Motion (no collapse/density animation) and Reduce Transparency (the `.bar` headers adapt for
-  free — no custom glass to make opaque) are built in.
+- **Top bar identity**: one **combined** element reading "<title>, N photos[, Done]" (the pin is
+  hidden; the seal contributes a "Done" label). The **progress ring is decorative** (`.accessibilityHidden`);
+  the sibling count text carries the value — "N of M picked, K left" (or "…, target reached").
+- **Floating pills**: the page-number pill is non-interactive (`children: .ignore`, label "Cluster N of
+  M"). **Select-all** is a **≥44pt** button (36pt glyph, 44pt hit area) labelled "Select/Deselect all in
+  <title>" + a hint. Marking a day done posts a "Marked done" announcement (the footer advances on mark,
+  so focus would otherwise be lost).
+- **Dynamic Type**: the identity title uses `minimumScaleFactor(0.7)` (a long trip sentence scales before
+  truncating); the "Mark as done" button is a ≥44pt control.
+- Reduce Motion (no page-advance animation) and Reduce Transparency (every custom glass surface —
+  `glassBarBackground`/`glassChip` — owns a solid `secondarySystemBackground` + hairline fallback,
+  styleguide §5) are built in.
 
 ## Other resolved screens (v1)
 

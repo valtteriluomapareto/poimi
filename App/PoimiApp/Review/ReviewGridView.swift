@@ -6,10 +6,11 @@
 //  selected by group id — not a positional index — so a re-scan can't strand the selection), replacing
 //  the earlier single-scroll accordion whose collapse/open reflow was jumpy on device now that the
 //  Overview is itself a full cluster index (with per-cluster thumbnail strips). Each page is that
-//  cluster's own vertical `LazyVGrid`. Chrome: a fixed album header on top (`ReviewHeader`: name +
-//  tally), then PINNED per-cluster over the photos — a page indicator ("3 / 12" + dots, the swipe
-//  affordance + orientation) and the day + Select-all glass pills; the "Mark day done" button is the
-//  end-of-scroll footer (advances to the next unreviewed cluster).
+//  cluster's own vertical `LazyVGrid`. Chrome (design 4AB): a fixed TOP BAR (`ReviewTopBar`) carrying
+//  the CURRENT cluster's identity (pin · name · count · done seal) + the album's progress ring, then
+//  PINNED per-cluster over the photos — a page-number pill ("3 / 12", the swipe affordance + position)
+//  on the leading lane and a Select-all icon on the trailing lane; the "Mark day done" button is the
+//  end-of-scroll footer (advances to the next unreviewed cluster). Export lives on the Overview.
 //
 //  Selection lives in the shared `SelectionStore` (in-memory `Set`, D15); the cells + header observe it
 //  themselves, so this parent body does NOT depend on `selected` — a toggle re-renders only the cell.
@@ -38,11 +39,9 @@ struct ReviewGridView: View {
     /// Resolved trip place names (`TripCluster.clusterID → name`), filling in async — a trip page shows
     /// its "Week in …" sentence once its name lands, and the date range until then.
     var tripNames: [String: String] = [:]
-    /// The album name — unused as a visible title now (the header shows the current cluster); kept so
-    /// the call site (ScanningView / iPad detail) stays unchanged and it's available for a11y later.
+    /// The album name — shown only as the top bar's fallback title before the first cluster resolves
+    /// (the bar otherwise shows the current cluster); also available for a11y.
     let title: String
-    /// Metadata line (kept for the same call-site-stability reason; the paged header shows per-cluster info).
-    let subtitle: String
     /// Open a cell full-screen (the parent pushes the viewer + records `lastViewedID`, #36).
     let openAsset: (String) -> Void
     /// A day-group to open on entry — the overview's "drill into this cluster" target (#37). Nil → open
@@ -152,13 +151,27 @@ struct ReviewGridView: View {
         .tabViewStyle(.page(indexDisplayMode: .never))
     }
 
+    /// The fixed top bar — the CURRENT cluster's identity + the album's progress ring (design 4AB).
+    /// Extracted from `body` (like `pager`) so the modifier chain type-checks as a smaller expression;
+    /// updates as `currentPageID` moves. Falls back to the album title before a cluster resolves.
+    @ViewBuilder private var topBar: some View {
+        if let cluster = currentCluster {
+            ReviewTopBar(clusterTitle: headerTitle(for: cluster),
+                         count: cluster.count,
+                         isTrip: cluster.tripCluster != nil,
+                         isDone: done.isDone(cluster))
+        } else {
+            ReviewTopBar(clusterTitle: title, count: 0)
+        }
+    }
+
     var body: some View {
         pager
-        // The album header (name + subtitle + tally) is the ONE fixed chrome — same as the accordion.
-        // The per-cluster day + Select-all glass pills, the "Mark day done" button, and the page dots
-        // all live INSIDE each page (a pinned section header + an end-of-scroll footer), so they aren't
-        // a permanent bottom bar — you reach mark-done/dots by scrolling to the end of the cluster.
-        .safeAreaInset(edge: .top, spacing: 0) { ReviewHeader(title: title, subtitle: subtitle) }
+        // The top bar (current cluster's identity + album progress ring) is the ONE fixed chrome. The
+        // per-cluster page indicator + Select-all glass pills live INSIDE each page (pinned over the
+        // photos) and the "Mark day done" button is its end-of-scroll footer — so they aren't a
+        // permanent bottom bar; you reach mark-done by scrolling to the end of the cluster.
+        .safeAreaInset(edge: .top, spacing: 0) { topBar }
         .background(Color(.systemBackground))
         // No implicit `.animation(value: currentPage)` — the TabView animates its own page transition;
         // a programmatic advance (mark-done) animates via `withAnimation` in `advance()`. Stacking both
@@ -351,14 +364,19 @@ private struct ClusterPage: View {
         }
     }
 
-    /// The pinned per-cluster header: an always-visible page indicator (position + dots — the swipe
-    /// affordance + "where am I in the year" orientation the paged model needs) above the title +
-    /// Select-all glass pills. The title chip shows the trip sentence (or date) with a pin for trips.
+    /// The pinned per-cluster controls, floating as aligned glass pills over the photos (design 4AB): a
+    /// page-number pill on the leading lane (the paged model's position + swipe affordance) and the
+    /// Select-all icon on the trailing lane. The cluster's identity, count, and done-state now live in
+    /// the fixed top bar, not here — so this row is just the per-page controls, one height, aligned.
     @ViewBuilder private func clusterHeader() -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 8) {
             if total > 1 { PageIndicatorPill(position: position, total: total) }
-            ClusterChips(cluster: cluster, title: headerTitle, isTrip: isTrip, isDone: done.isDone(cluster))
+            Spacer(minLength: 0)
+            SelectAllIconChip(cluster: cluster, title: headerTitle)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
     }
 
     /// End-of-cluster CTA: "Mark trip done" for a trip (it spans several days) / "Mark day done" for a
@@ -388,154 +406,66 @@ private struct ClusterPage: View {
 // MARK: - Page indicator (always-visible position + swipe affordance)
 
 /// A compact glass pill pinned atop each cluster page — the paged model's orientation device: an
-/// always-visible position across the album plus the cue you can swipe between clusters. Dots read
-/// only for a *small* album (HIG: page controls suit ≲10 pages); past that a dot ribbon is meaningless
-/// noise (a windowed "10 of 349 dots" tells you nothing), so it's the numeric position alone.
+/// always-visible position across the album plus the cue you can swipe between clusters. A stacked-page
+/// glyph reinforces "cluster N of M"; the position is numeric (dots were dropped — a windowed
+/// "10 of 349 dots" tells you nothing, and for a small album the number reads just as clearly, design 4AB).
 private struct PageIndicatorPill: View {
     let position: Int   // 1-based
     let total: Int
-    private let maxDots = 10
 
     var body: some View {
-        HStack(spacing: 8) {
-            if total <= maxDots {
-                PageDots(count: total, current: position - 1)
-            }
+        HStack(spacing: 6) {
+            Image(systemName: "rectangle.stack")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("\(position) / \(total)")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
         .padding(.horizontal, 12)
-        .frame(minHeight: 34)
+        .frame(minHeight: 36)
         .glassChip()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(position) / \(total)")
+        .accessibilityLabel(String(localized: "Cluster \(position) of \(total)",
+                                   comment: "Page-indicator a11y: current cluster of total"))
     }
 }
 
-// MARK: - The floating day + Select-all glass pills (pinned over the photos)
+// MARK: - The floating Select-all glass pill (pinned over the photos)
 
-/// The cluster's day chip (date · count · done seal) and its Select-all chip — floating glass capsules
-/// pinned at the top of the page, over the photos (styleguide §5, like the accordion's header). The day
-/// chip is informational (no open/collapse in the paged model); Select-all toggles the whole cluster's
-/// picks. Observes the stores itself so the parent grid body stays independent of `selected`.
-private struct ClusterChips: View {
+/// The cluster's Select-all control — an icon-only glass capsule floating on the trailing lane over the
+/// photos (design 4AB). It toggles the whole cluster's picks and reflects state: an outline checkbox
+/// when not everything's picked, a filled gold one when it is (tying to the gold-check selection
+/// language). Observes the `SelectionStore` itself so the parent grid body stays independent of
+/// `selected`. `title` is the resolved cluster title, used only for the VoiceOver label.
+private struct SelectAllIconChip: View {
     let cluster: ReviewCluster
     let title: String
-    var isTrip: Bool = false
-    let isDone: Bool
     @Environment(SelectionStore.self) private var selection
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let selectedCount = selection.selected.intersection(cluster.assetIDs).count
         let allSelected = !cluster.assetIDs.isEmpty && selectedCount == cluster.count
-        // One GlassEffectContainer so the two co-located chips sample as a single lens (styleguide §5).
-        GlassEffectContainer(spacing: 8) {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 6) {
-                    dayChip
-                    selectAllChip(allSelected: allSelected)
-                }
-            } else {
-                HStack(spacing: 8) {
-                    dayChip
-                    Spacer(minLength: 0)
-                    selectAllChip(allSelected: allSelected)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(.isHeader)
-    }
-
-    /// The cluster identity capsule — a pin (trips) + title + count + (done) green seal. Non-interactive.
-    private var dayChip: some View {
-        HStack(spacing: 6) {
-            if isTrip {
-                Image(systemName: "mappin.circle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
-            }
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isDone ? .secondary : .primary)
-                .lineLimit(1)
-            Text("· \(cluster.count)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-            if isDone {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.brandGreen)
-                    .accessibilityHidden(true)
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 44)   // ≥44pt touch floor even though it's non-interactive (visual balance)
-        .glassChip()
-        .accessibilityElement(children: .combine)
-    }
-
-    /// Select-all / deselect-all for this cluster — its own glass capsule.
-    private func selectAllChip(allSelected: Bool) -> some View {
         Button {
             if allSelected { selection.deselect(cluster.assetIDs) } else { selection.select(cluster.assetIDs) }
         } label: {
-            Text(allSelected ? "Deselect all" : "Select all")
-                .font(.footnote.weight(.semibold))
-                .padding(.horizontal, 14)
-                .frame(minHeight: 44)
+            Image(systemName: allSelected ? "checkmark.square.fill" : "checkmark.square")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(allSelected ? Color.accentColor : Color.primary)
+                .frame(width: 36, height: 36)
+                .glassChip()                     // glass capsule at the 36pt visual size (aligns with the page pill)
+                .frame(width: 44, height: 44)    // ≥44pt hit area, glass centred (HIG touch floor)
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.primary)
-        .glassChip()
         .accessibilityIdentifier("selectAllButton")
-        .accessibilityLabel(allSelected ? "Deselect all in \(title)" : "Select all in \(title)")
-    }
-}
-
-// MARK: - Page dots
-
-/// The cluster carousel's position indicator — one dot per cluster, the current one brighter + larger.
-/// Purely decorative (the header's "3 / 12" carries the a11y position), so hidden from VoiceOver.
-private struct PageDots: View {
-    let count: Int
-    let current: Int
-    /// Cap the rendered dots so a 200-cluster album doesn't draw a 200-dot ribbon; the header's numeric
-    /// position stays exact regardless.
-    private let maxDots = 15
-
-    var body: some View {
-        HStack(spacing: 6) {
-            if count <= maxDots {
-                ForEach(0..<count, id: \.self) { dot($0 == current) }
-            } else {
-                // Windowed: show a fixed ribbon around the current dot.
-                let window = windowRange()
-                ForEach(window, id: \.self) { dot($0 == current) }
-            }
-        }
-        .accessibilityHidden(true)
-    }
-
-    private func dot(_ isCurrent: Bool) -> some View {
-        Circle()
-            .fill(isCurrent ? Color.primary : Color.primary.opacity(0.3))
-            .frame(width: isCurrent ? 7 : 6, height: isCurrent ? 7 : 6)
-    }
-
-    private func windowRange() -> [Int] {
-        let half = maxDots / 2
-        let lower = max(0, min(current - half, count - maxDots))
-        return Array(lower..<(lower + maxDots))
+        .accessibilityLabel(allSelected
+            ? String(localized: "Deselect all in \(title)", comment: "Select-all toggle: deselect state")
+            : String(localized: "Select all in \(title)", comment: "Select-all toggle: select state"))
+        .accessibilityHint(String(localized: "Selects or deselects every photo in this cluster",
+                                  comment: "Select-all toggle hint"))
     }
 }
 
