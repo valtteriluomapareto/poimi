@@ -36,6 +36,12 @@ final class AppCoordinator {
     /// open (the viewer then just shows the position, no day label).
     var reviewDayByID: [String: DayKey] = [:]
 
+    /// The open album's review clusters, published alongside `reviewOrderedIDs`. The viewer reads them
+    /// to detect paging FORWARD past a cluster's last photo (auto-mark-done, #128); the grid reads them
+    /// to restore its page to the cluster of `lastViewedID` on return from the viewer (#126). Empty when
+    /// no review is open.
+    var reviewClusters: [ReviewCluster] = []
+
     /// The asset last viewed in the grid / viewer. The grid restores its scroll to it on return
     /// from the viewer (D22); set on cell tap and updated as the viewer swipes. Shared so scroll
     /// position survives the round-trip.

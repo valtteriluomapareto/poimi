@@ -105,6 +105,7 @@ struct ScanningView: View {
         if case .ready(let clusters) = store?.phase {
             coordinator.reviewOrderedIDs = clusters.flatMap(\.assetIDs)
             coordinator.reviewDayByID = store?.dayByID ?? [:]
+            coordinator.reviewClusters = clusters   // viewer auto-done (#128) + grid page-restore (#126)
         }
     }
 

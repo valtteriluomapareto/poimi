@@ -53,6 +53,7 @@ struct ReviewGridView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(DoneStore.self) private var done
+    @Environment(AppCoordinator.self) private var coordinator   // observe viewer dismissal to restore the page (#126)
 
     /// The current cluster page, identified by its GROUP ID (a stable id, not a positional index —
     /// so a re-scan that reshapes grouping can't leave the selection pointing at a different cluster).
@@ -116,7 +117,9 @@ struct ReviewGridView: View {
         if ideal != columnCount { columnCount = ideal }
     }
 
-    var body: some View {
+    /// The horizontal page pager — one `ClusterPage` per cluster, selected by group id. Extracted from
+    /// `body` so the (long) modifier chain below type-checks as a smaller expression.
+    private var pager: some View {
         TabView(selection: $currentPageID) {
             ForEach(Array(clusters.enumerated()), id: \.element.id) { index, cluster in
                 ClusterPage(
@@ -140,6 +143,10 @@ struct ReviewGridView: View {
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+    }
+
+    var body: some View {
+        pager
         // The album header (name + subtitle + tally) is the ONE fixed chrome — same as the accordion.
         // The per-cluster day + Select-all glass pills, the "Mark day done" button, and the page dots
         // all live INSIDE each page (a pinned section header + an end-of-scroll footer), so they aren't
@@ -180,6 +187,16 @@ struct ReviewGridView: View {
             currentPageID = entryPageID()
             rebuildWindow()
             scheduleRecomputeWindow()
+        }
+        // Restore the page you ended on when the viewer closes (#126): page to the cluster that holds the
+        // last-viewed photo. The viewer is a sheet, so the grid stays mounted underneath — we react to its
+        // dismissal (presentedPhotoID → nil), not `.onAppear`. Paging in the viewer may have auto-marked a
+        // cluster done (#128); landing on the current cluster keeps the grid consistent with where you were.
+        .onChange(of: coordinator.presentedPhotoID) { previous, current in
+            guard previous != nil, current == nil,
+                  let id = coordinator.lastViewedID,
+                  let cluster = clusters.first(where: { $0.assetIDs.contains(id) }) else { return }
+            currentPageID = cluster.id
         }
     }
 

@@ -16,16 +16,24 @@
 
 import SwiftUI
 import UIKit
+import Curation
 
 struct PhotoViewerView: View {
     /// The asset tapped in the grid — the page the viewer opens on.
     let startID: String
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
+    @Environment(DoneStore.self) private var doneStore
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.displayScale) private var displayScale
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var currentID: String
+    /// The cluster just auto-marked done by paging past its end (#128) — drives the undoable toast. `nil`
+    /// hides it. Auto-done is opinionated, so it MUST be obviously reversible: a haptic + this toast.
+    @State private var autoDoneCluster: ReviewCluster?
+    /// Bumped on each auto-mark so `.sensoryFeedback` fires a success haptic.
+    @State private var autoDoneHaptic = 0
     /// A bounded window of candidates around the current photo — for the FILMSTRIP only. The pager
     /// windows itself; the filmstrip is a SwiftUI `LazyHStack` whose `.scrollPosition` to a mid-list id
     /// would materialise its whole prefix, so this keeps it to a few dozen thumbs and slides as you swipe.
@@ -82,16 +90,76 @@ struct PhotoViewerView: View {
                 ambientImage = loaded
             }
         }
-        // Track the on-screen photo (grid restore anchor) and slide + warm the filmstrip with it.
-        .onChange(of: currentID) {
-            coordinator.lastViewedID = currentID
+        // Track the on-screen photo (grid restore anchor) and slide + warm the filmstrip with it. The
+        // OLD value lets us detect a forward page past a cluster's last photo → auto-mark it done (#128).
+        .onChange(of: currentID) { previous, current in
+            coordinator.lastViewedID = current
             slideFilmstripIfNeeded()
-            prefetchFilmstrip(around: currentID)
+            prefetchFilmstrip(around: current)
+            autoMarkDoneIfPagedPastCluster(from: previous, to: current)
         }
         .onAppear {
             rebuildFilmstrip(around: startID)
             prefetchFilmstrip(around: startID)
         }
+        .sensoryFeedback(.success, trigger: autoDoneHaptic)
+        .overlay(alignment: .bottom) { autoDoneToast }
+    }
+
+    // MARK: Auto-mark-done on paging past a cluster's end (#128)
+
+    /// Forward-paging past a cluster's last photo marks it done — once, forward-only (backward paging
+    /// never marks/un-marks), reconciling through the same `DoneStore`/`Completion` path as the grid's
+    /// button (so it reflects in the grid on return, #126). Opinionated, so it fires a success haptic +
+    /// an undoable toast. (Deferred to #128 follow-up: an end-of-album terminal affordance + an opt-out.)
+    private func autoMarkDoneIfPagedPastCluster(from previous: String, to current: String) {
+        guard let finished = clusterFinishedByPagingPast(from: previous, to: current,
+                                                          clusters: coordinator.reviewClusters),
+              !doneStore.isDone(finished) else { return }
+        doneStore.toggle(finished)
+        autoDoneHaptic &+= 1
+        autoDoneCluster = finished
+    }
+
+    /// A brief, undoable "Marked <day> done" toast — the reversibility affordance for the automatic mark.
+    @ViewBuilder
+    private var autoDoneToast: some View {
+        if let cluster = autoDoneCluster {
+            HStack(spacing: 12) {
+                Label(toastTitle(for: cluster), systemImage: "checkmark.seal.fill")
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                Button("Undo") {
+                    doneStore.toggle(cluster)      // reverse the auto-mark
+                    autoDoneCluster = nil
+                }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.borderless)
+                .tint(Color.accentColor)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .glassEffect(.regular, in: Capsule())   // native iOS 26 glass (pure-glass invariant)
+            .foregroundStyle(.white)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .accessibilityElement(children: .combine)
+            // Auto-dismiss after a few seconds (re-armed each time a new cluster is marked).
+            .task(id: cluster.id) {
+                try? await Task.sleep(for: .seconds(4))
+                guard !Task.isCancelled else { return }
+                withAnimation(reduceMotion ? nil : .easeOut) { autoDoneCluster = nil }
+            }
+        }
+    }
+
+    /// "Marked <day> done" — the finished cluster's day (its first photo's day; the trip name isn't in
+    /// the viewer's scope, so the date reads consistently for both plain days and trips).
+    private func toastTitle(for cluster: ReviewCluster) -> String {
+        let day = cluster.assetIDs.first.map(dayLabel) ?? ""
+        return day.isEmpty
+            ? String(localized: "Marked done", comment: "Viewer auto-done toast, no day available")
+            : String(localized: "Marked \(day) done", comment: "Viewer auto-done toast: which day was marked")
     }
 
     // MARK: The centred photo — the "album art": a rounded, shadowed pager the chrome never overlaps.
@@ -305,4 +373,19 @@ func viewerWindow(count: Int, around index: Int, back: Int, forward: Int) -> Ran
     let lo = max(0, clamped - back)
     let hi = min(count, clamped + forward + 1)
     return lo..<hi
+}
+
+/// The cluster to auto-mark done (#128) when the viewer pages from `previousID` to `currentID`: non-nil
+/// ONLY when `previousID` was the LAST photo of its cluster and `currentID` is the FIRST photo of the
+/// immediately-following cluster — the deliberate "I paged past the end of this cluster" signal. Returns
+/// nil for backward paging (never un-marks), mid-cluster paging, a non-adjacent filmstrip jump, or the
+/// final cluster (nothing to page into). Pure + unit-tested; the trigger/toast is eyeballed on device.
+func clusterFinishedByPagingPast(from previousID: String, to currentID: String,
+                                 clusters: [ReviewCluster]) -> ReviewCluster? {
+    guard let prev = clusters.firstIndex(where: { $0.assetIDs.contains(previousID) }),
+          previousID == clusters[prev].assetIDs.last,          // was on that cluster's LAST photo
+          clusters.indices.contains(prev + 1),                 // there is a next cluster
+          currentID == clusters[prev + 1].assetIDs.first       // landed on its FIRST photo (adjacent, fwd)
+    else { return nil }
+    return clusters[prev]
 }

@@ -10,6 +10,7 @@
 //
 
 import Testing
+import Curation
 @testable import PoimiApp
 
 @Suite("Viewer render window (#36)")
@@ -172,5 +173,51 @@ struct FullImageLoadStateTests {
         #expect(applied)
         #expect(state.loaded)
         #expect(!state.shouldLoad(boundsReady: true))
+    }
+}
+
+@Suite("Viewer auto-mark-done boundary (#128)")
+struct ViewerAutoDoneTests {
+    /// A date cluster from a list of asset ids (days/busy are irrelevant to the boundary logic).
+    private func cluster(_ id: String, _ ids: [String]) -> ReviewCluster {
+        .day(DayGroup(id: id, assetIDs: ids, days: [.day(year: 2025, month: 1, day: 1)], isBusyDay: false))
+    }
+    /// A / B / C: A and B multi-photo, C a single final photo.
+    private var clusters: [ReviewCluster] {
+        [cluster("A", ["a1", "a2"]), cluster("B", ["b1", "b2"]), cluster("C", ["c1"])]
+    }
+
+    @Test("forward past a cluster's LAST photo into the next cluster's FIRST → marks that cluster")
+    func forwardPastLastMarks() {
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "b1", clusters: clusters)?.id == "A")
+        #expect(clusterFinishedByPagingPast(from: "b2", to: "c1", clusters: clusters)?.id == "B")
+    }
+
+    @Test("mid-cluster paging never marks")
+    func midClusterDoesNotMark() {
+        #expect(clusterFinishedByPagingPast(from: "a1", to: "a2", clusters: clusters) == nil)
+    }
+
+    @Test("backward paging never marks (or un-marks)")
+    func backwardDoesNotMark() {
+        #expect(clusterFinishedByPagingPast(from: "b1", to: "a2", clusters: clusters) == nil)  // B.first → A.last
+        #expect(clusterFinishedByPagingPast(from: "c1", to: "b2", clusters: clusters) == nil)  // C → B.last
+    }
+
+    @Test("a non-adjacent filmstrip jump from a last photo never marks")
+    func nonAdjacentJumpDoesNotMark() {
+        // a2 is A's last, but landing on C's first (skipping B) is a jump, not paging past into the next.
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "c1", clusters: clusters) == nil)
+    }
+
+    @Test("the final cluster has no next to page into → never marks")
+    func finalClusterDoesNotMark() {
+        // From C's only photo there's nowhere forward; and it's the last cluster.
+        #expect(clusterFinishedByPagingPast(from: "c1", to: "a1", clusters: clusters) == nil)
+    }
+
+    @Test("an unknown previous id is a safe no-op")
+    func unknownIsNoOp() {
+        #expect(clusterFinishedByPagingPast(from: "zzz", to: "b1", clusters: clusters) == nil)
     }
 }
