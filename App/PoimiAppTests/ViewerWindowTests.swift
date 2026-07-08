@@ -220,4 +220,46 @@ struct ViewerAutoDoneTests {
     func unknownIsNoOp() {
         #expect(clusterFinishedByPagingPast(from: "zzz", to: "b1", clusters: clusters) == nil)
     }
+
+    @Test("an unknown CURRENT id (landed nowhere / off the strip) is a safe no-op")
+    func unknownCurrentIsNoOp() {
+        // previous is a real cluster's last, but current isn't the next cluster's first.
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "zzz", clusters: clusters) == nil)
+    }
+
+    @Test("an empty clusters list never marks (no trap)")
+    func emptyClustersIsNoOp() {
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "b1", clusters: []) == nil)
+    }
+
+    @Test("a SINGLE-photo cluster in the middle marks correctly (its only photo is both first and last)")
+    func singlePhotoMiddleCluster() {
+        // S sits BETWEEN two multi-photo clusters — the case the all-multi/last-is-final fixtures miss.
+        let mid = [cluster("A", ["a1", "a2"]), cluster("S", ["s1"]), cluster("B", ["b1", "b2"])]
+        #expect(clusterFinishedByPagingPast(from: "s1", to: "b1", clusters: mid)?.id == "S")  // paging OUT of S
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "s1", clusters: mid)?.id == "A")  // paging INTO S marks A
+    }
+
+    @Test("an undated trailing cluster participates like any other (day-agnostic)")
+    func undatedClusterParticipates() {
+        let undated = ReviewCluster.day(DayGroup(id: "U", assetIDs: ["u1"], days: [.undated], isBusyDay: false))
+        let withUndated = [cluster("A", ["a1", "a2"]), undated]
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "u1", clusters: withUndated)?.id == "A")
+    }
+
+    // MARK: the idempotency guard (clusterToAutoMarkDone folds in !isDone — testable, not inline)
+
+    @Test("guarded auto-mark returns the cluster when not-done, but nil once it's done — no re-toggle (#128)")
+    func guardedAutoMarkIsIdempotent() {
+        let fromLast = "a2", toNext = "b1"
+        // Not done yet → returns A to mark.
+        let first = clusterToAutoMarkDone(from: fromLast, to: toNext, clusters: clusters, isDone: { _ in false })
+        #expect(first?.id == "A")
+        // A already done (a re-cross) → nil, so the view never toggles it back off.
+        let second = clusterToAutoMarkDone(from: fromLast, to: toNext, clusters: clusters,
+                                           isDone: { $0.id == "A" })
+        #expect(second == nil)
+        // Backward paging is nil regardless of done-state.
+        #expect(clusterToAutoMarkDone(from: "b1", to: "a2", clusters: clusters, isDone: { _ in false }) == nil)
+    }
 }

@@ -100,6 +100,12 @@ final class AppCoordinator {
     private func clearCandidateStore() {
         candidateStore = nil
         candidateStoreKey = nil
+        // Drop the published review context too, so a switched-away album's ids/clusters can't linger
+        // until the next scan republishes (tidiness; the viewer/grid also guard by cluster membership).
+        reviewOrderedIDs = []
+        reviewDayByID = [:]
+        reviewClusters = []
+        lastViewedID = nil
     }
 
     /// The album at the root of the current path — the one shown in the iPad detail column — or `nil`

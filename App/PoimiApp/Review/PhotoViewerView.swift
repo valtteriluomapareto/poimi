@@ -90,13 +90,13 @@ struct PhotoViewerView: View {
                 ambientImage = loaded
             }
         }
-        // Track the on-screen photo (grid restore anchor) and slide + warm the filmstrip with it. The
-        // OLD value lets us detect a forward page past a cluster's last photo → auto-mark it done (#128).
-        .onChange(of: currentID) { previous, current in
+        // Track the on-screen photo (grid restore anchor) and slide + warm the filmstrip with it. This
+        // fires for ANY currentID change (swipe, filmstrip tap, open); auto-done is deliberately NOT here
+        // — it's driven off the pager's swipe delegate so a filmstrip tap can't mark a cluster done (#128).
+        .onChange(of: currentID) { _, current in
             coordinator.lastViewedID = current
             slideFilmstripIfNeeded()
             prefetchFilmstrip(around: current)
-            autoMarkDoneIfPagedPastCluster(from: previous, to: current)
         }
         .onAppear {
             rebuildFilmstrip(around: startID)
@@ -113,9 +113,9 @@ struct PhotoViewerView: View {
     /// button (so it reflects in the grid on return, #126). Opinionated, so it fires a success haptic +
     /// an undoable toast. (Deferred to #128 follow-up: an end-of-album terminal affordance + an opt-out.)
     private func autoMarkDoneIfPagedPastCluster(from previous: String, to current: String) {
-        guard let finished = clusterFinishedByPagingPast(from: previous, to: current,
-                                                          clusters: coordinator.reviewClusters),
-              !doneStore.isDone(finished) else { return }
+        guard let finished = clusterToAutoMarkDone(from: previous, to: current,
+                                                   clusters: coordinator.reviewClusters,
+                                                   isDone: doneStore.isDone) else { return }
         doneStore.toggle(finished)
         autoDoneHaptic &+= 1
         autoDoneCluster = finished
@@ -153,13 +153,15 @@ struct PhotoViewerView: View {
         }
     }
 
-    /// "Marked <day> done" — the finished cluster's day (its first photo's day; the trip name isn't in
-    /// the viewer's scope, so the date reads consistently for both plain days and trips).
+    /// The toast label. For a SINGLE-day cluster, name the day ("Marked Sat, Jul 5 done"). For a trip or a
+    /// merged multi-day run, a single date would mislead (it marks the whole span, and the trip name isn't
+    /// in the viewer's scope), so fall back to the plain "Marked done".
     private func toastTitle(for cluster: ReviewCluster) -> String {
-        let day = cluster.assetIDs.first.map(dayLabel) ?? ""
+        let datedDays = cluster.days.filter { $0 != .undated }
+        let day = datedDays.count == 1 ? (cluster.assetIDs.first.map(dayLabel) ?? "") : ""
         return day.isEmpty
-            ? String(localized: "Marked done", comment: "Viewer auto-done toast, no day available")
-            : String(localized: "Marked \(day) done", comment: "Viewer auto-done toast: which day was marked")
+            ? String(localized: "Marked done", comment: "Viewer auto-done toast (trip / multi-day / undated)")
+            : String(localized: "Marked \(day) done", comment: "Viewer auto-done toast: which single day was marked")
     }
 
     // MARK: The centred photo — the "album art": a rounded, shadowed pager the chrome never overlaps.
@@ -177,7 +179,9 @@ struct PhotoViewerView: View {
             },
             loadFull: { await thumbnails.fullImage(for: $0, targetSize: $1) },
             axLabel: { photoAXLabel(for: $0) },
-            onTapPhoto: { selection.toggle($0) })   // single-tap the photo = pick (Pick button is primary)
+            onTapPhoto: { selection.toggle($0) },   // single-tap the photo = pick (Pick button is primary)
+            // Auto-done fires on a real SWIPE only (not a filmstrip tap), so browsing/jumping never marks (#128).
+            onSwipe: { autoMarkDoneIfPagedPastCluster(from: $0, to: $1) })
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .shadow(color: .black.opacity(0.35), radius: 20, y: 8)
             .padding(.horizontal, 12)
@@ -388,4 +392,15 @@ func clusterFinishedByPagingPast(from previousID: String, to currentID: String,
           currentID == clusters[prev + 1].assetIDs.first       // landed on its FIRST photo (adjacent, fwd)
     else { return nil }
     return clusters[prev]
+}
+
+/// The cluster to actually auto-mark done on a swipe from `previousID`→`currentID`: the finished cluster
+/// (per `clusterFinishedByPagingPast`) UNLESS it's already done. Folding the idempotency guard in here (vs
+/// inline in the view) makes it unit-testable — re-crossing an already-done boundary must be a no-op, so a
+/// back-and-forth never re-toggles (#128). `isDone` is injected (the view passes `doneStore.isDone`).
+func clusterToAutoMarkDone(from previousID: String, to currentID: String, clusters: [ReviewCluster],
+                           isDone: (ReviewCluster) -> Bool) -> ReviewCluster? {
+    guard let finished = clusterFinishedByPagingPast(from: previousID, to: currentID, clusters: clusters),
+          !isDone(finished) else { return nil }
+    return finished
 }
