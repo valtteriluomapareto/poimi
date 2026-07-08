@@ -111,6 +111,13 @@ struct CandidateStoreTests {
         #expect(ids.allSatisfy { store.dayByID[$0] != nil })
         #expect(store.dayByID.count == ids.count)
         #expect(store.dayByID["fake/shot"] == nil)
+
+        // The AssetRef map (viewer info panel, #127) covers exactly the same candidates, and carries the
+        // capture date + pixel size the viewer reads synchronously.
+        #expect(store.assetsByID.count == ids.count)
+        #expect(ids.allSatisfy { store.assetsByID[$0] != nil })
+        #expect(store.assetsByID["fake/busy/2"]?.captureDate != nil)
+        #expect(store.assetsByID["fake/shot"] == nil)
     }
 
     @Test("a reload that finds nothing clears the day map — no stale labels on the next album (#36)")
@@ -121,9 +128,11 @@ struct CandidateStoreTests {
         let store = CandidateStore(library: FakePhotoLibrary(), calendar: utcCalendar())
         await store.load(makeProject(excludeScreenshots: true, excludedAlbumIDs: ["album/whatsapp"]))
         #expect(!store.dayByID.isEmpty)
+        #expect(!store.assetsByID.isEmpty)   // the #127 AssetRef map resets on the same path
         // An inverted range degrades to .empty via the guard (before any fetch) — the map must clear.
         await store.load(makeProject(rangeStart: TestDates.year2025End, rangeEnd: TestDates.year2025Start))
         #expect(store.dayByID.isEmpty)
+        #expect(store.assetsByID.isEmpty)
     }
 
     @Test("the store groups by its injected calendar (timezone shifts day bucketing)")

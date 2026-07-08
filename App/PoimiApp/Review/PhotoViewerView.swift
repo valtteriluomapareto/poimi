@@ -42,7 +42,8 @@ struct PhotoViewerView: View {
     /// wash). Loaded cache-first at the grid's 400² key, so it's usually instant.
     @State private var ambientImage: UIImage?
     /// Whether the ⓘ info panel is showing (#127). It swaps in for the filmstrip in the lower chrome;
-    /// the Pick control stays above it, so you can judge + pick with the metadata in view.
+    /// the Pick control stays above it, so you can judge + pick with the metadata in view. Deliberately
+    /// stays open across page swipes — its fields update live per photo (`refreshInfo`); ⓘ toggles it off.
     @State private var showInfoPanel = false
     /// The viewer's info labels, formatted ONCE when `currentID` settles (never in a `body`, repo rule):
     /// the date line's capture time + the panel's resolution. Async fields (device, file size) are a
@@ -148,7 +149,7 @@ struct PhotoViewerView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .glassEffect(.regular, in: Capsule())   // native iOS 26 glass (pure-glass invariant)
+            .glassSurface(in: Capsule())   // native glass; RT → solid (styleguide §5) — unified with the info panel
             .foregroundStyle(.white)
             .padding(.bottom, 12)
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -211,10 +212,11 @@ struct PhotoViewerView: View {
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(showInfoPanel ? Color.accentColor : .white)
                 .frame(width: 38, height: 38)
-                .glassEffect(.regular, in: Circle())   // native iOS 26 glass (pure-glass invariant)
+                .glassSurface(in: Circle())   // native glass; RT → solid (styleguide §5)
         }
         .buttonStyle(.plain)
         .padding(12)
+        .accessibilityIdentifier("photoInfoButton")
         .accessibilityLabel("Photo info")
         .accessibilityValue(showInfoPanel ? "Shown" : "Hidden")
         .accessibilityAddTraits(.isToggle)
@@ -337,6 +339,13 @@ struct PhotoViewerView: View {
         }
         .ignoresSafeArea()
     }
+}
+
+// MARK: - PhotoViewerView helpers (filmstrip window + label/info formatting)
+//
+// Kept in an extension so they don't count toward the view's `type_body_length`; behaviour unchanged
+// (same-file `private` stays reachable from the struct's `body`).
+extension PhotoViewerView {
 
     // MARK: Filmstrip window (the pager windows itself; this is just for the SwiftUI strip)
 
@@ -399,21 +408,24 @@ struct PhotoViewerView: View {
     private func refreshInfo(for id: String) {
         let asset = coordinator.reviewAssetsByID[id]
         let time = asset?.captureDate.map { $0.formatted(.dateTime.hour().minute()) } ?? ""
-        let pixelSize = asset?.pixelSize
         info = InfoLabels(
             dateTime: PhotoInfoFormat.dateTimeLine(day: dayLabel(for: id), time: time),
-            resolution: pixelSize.map(PhotoInfoFormat.resolution) ?? "",
-            resolutionA11y: pixelSize.map(Self.resolutionA11y) ?? "")
+            resolution: asset.map { PhotoInfoFormat.resolution($0.pixelSize) } ?? "",
+            resolutionA11y: Self.resolutionA11y(asset?.pixelSize))
     }
 
-    /// VoiceOver form of the resolution ("Resolution, 4032 by 3024, 12 megapixels").
-    private static func resolutionA11y(_ pixelSize: PixelSize) -> String {
-        guard pixelSize.width > 0, pixelSize.height > 0 else { return "" }
-        let mp = Int((Double(pixelSize.pixelCount) / 1_000_000).rounded())
-        return mp >= 1
-            ? String(localized: "Resolution, \(pixelSize.width) by \(pixelSize.height), \(mp) megapixels",
-                     comment: "Viewer info a11y: resolution + megapixels")
-            : String(localized: "Resolution, \(pixelSize.width) by \(pixelSize.height)",
+    /// VoiceOver form of the resolution ("Resolution, 4032 by 3024, 12 megapixels"), or "Resolution
+    /// unavailable" when the size is missing/zero (so the row is never a silent blank for VoiceOver).
+    /// Goes through the shared `PhotoInfoFormat.megapixels`, so it can't diverge from the visible string.
+    private static func resolutionA11y(_ pixelSize: PixelSize?) -> String {
+        guard let pixelSize, pixelSize.width > 0, pixelSize.height > 0 else {
+            return String(localized: "Resolution unavailable", comment: "Viewer info a11y: no resolution")
+        }
+        if let mp = PhotoInfoFormat.megapixels(pixelSize) {
+            return String(localized: "Resolution, \(pixelSize.width) by \(pixelSize.height), \(mp) megapixels",
+                         comment: "Viewer info a11y: resolution + megapixels")
+        }
+        return String(localized: "Resolution, \(pixelSize.width) by \(pixelSize.height)",
                      comment: "Viewer info a11y: resolution")
     }
 
@@ -452,7 +464,7 @@ private struct PhotoInfoPanel: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))   // native iOS 26 glass
+        .glassSurface(in: RoundedRectangle(cornerRadius: 20, style: .continuous))   // native glass; RT → solid
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
@@ -477,13 +489,21 @@ private struct PhotoInfoPanel: View {
 /// (the no-formatting-in-body rule). `Curation` stays string-free (D14/D21), so these app-facing strings
 /// live here, not in the domain.
 enum PhotoInfoFormat {
+    /// Rounded megapixels (round-half-away-from-zero, so exactly 0.5 MP shows), or `nil` below ~0.5 MP /
+    /// for a zero size. The single source of the MP count — the visible resolution string AND the
+    /// VoiceOver label both go through this, so they can't drift.
+    static func megapixels(_ pixelSize: PixelSize) -> Int? {
+        guard pixelSize.width > 0, pixelSize.height > 0 else { return nil }
+        let mp = Int((Double(pixelSize.pixelCount) / 1_000_000).rounded())
+        return mp >= 1 ? mp : nil
+    }
+
     /// "4032 × 3024 · 12 MP" — dimensions + rounded megapixels (MP dropped below ~0.5 MP). "" for a
     /// zero/empty size.
     static func resolution(_ pixelSize: PixelSize) -> String {
         guard pixelSize.width > 0, pixelSize.height > 0 else { return "" }
         let dims = "\(pixelSize.width) × \(pixelSize.height)"
-        let mp = Int((Double(pixelSize.pixelCount) / 1_000_000).rounded())
-        return mp >= 1 ? "\(dims) · \(mp) MP" : dims
+        return megapixels(pixelSize).map { "\(dims) · \($0) MP" } ?? dims
     }
 
     /// Join the day + capture time for the viewer's date line: "Sat, Jul 5 · 14.32". Either piece may be

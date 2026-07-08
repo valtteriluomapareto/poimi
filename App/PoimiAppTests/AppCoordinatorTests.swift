@@ -193,4 +193,21 @@ struct AppCoordinatorTests {
         coord.reviewDayByID = ["a": .day(year: 2025, month: 7, day: 5)]   // published with the list
         #expect(coord.reviewDayByID["a"] == .day(year: 2025, month: 7, day: 5))
     }
+
+    @Test("AssetRef map shared for the info panel; the review context clears on an album switch (#127)")
+    func reviewAssetMapSharedAndCleared() {
+        let coord = coordinator(.authorized)
+        #expect(coord.reviewAssetsByID.isEmpty)
+        // Publish the review context the way the review screen does on `.ready`.
+        coord.reviewOrderedIDs = ["a"]
+        coord.reviewDayByID = ["a": .day(year: 2025, month: 7, day: 5)]
+        coord.reviewAssetsByID = ["a": AssetRef(id: "a", captureDate: Date(timeIntervalSince1970: 0),
+                                                pixelSize: PixelSize(width: 4032, height: 3024))]
+        #expect(coord.reviewAssetsByID["a"]?.pixelSize.width == 4032)
+        // Switching albums must clear ALL of it — no stale metadata / labels bleed into the next album.
+        coord.openProject(UUID())
+        #expect(coord.reviewAssetsByID.isEmpty)
+        #expect(coord.reviewDayByID.isEmpty)
+        #expect(coord.reviewOrderedIDs.isEmpty)
+    }
 }

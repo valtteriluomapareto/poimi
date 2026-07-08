@@ -300,10 +300,32 @@ private struct GlassChipBackground: ViewModifier {
     }
 }
 
+/// Liquid Glass backing for an arbitrary shape (the photo viewer's ⓘ button + info panel, #127) — the
+/// shape-generic sibling of `GlassChipBackground`. Under Reduce Transparency it swaps to a solid
+/// `secondarySystemBackground` fill + a `Color(.separator)` hairline, so must-read text over a photo
+/// stays legible (styleguide §5/§8 — every glass surface owns its RT appearance; the guard is a separate
+/// axis, so this satisfies both).
+private struct GlassSurfaceBackground<S: InsettableShape>: ViewModifier {
+    let shape: S
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content
+                .background(Color(.secondarySystemBackground), in: shape)
+                .overlay { shape.strokeBorder(Color(.separator), lineWidth: 0.5) }
+        } else {
+            content.glassEffect(.regular, in: shape)
+        }
+    }
+}
+
 extension View {
     /// Liquid Glass backing for the pinned TOP header; `extendTop` bleeds it to the very top edge.
     func glassBarBackground(extendTop: Bool = false) -> some View { modifier(GlassBarBackground(extendTop: extendTop)) }
     /// Liquid Glass backing for a floating day-group chip (capsule) — RT-safe. Group co-located chips
     /// in a `GlassEffectContainer`.
     func glassChip() -> some View { modifier(GlassChipBackground()) }
+    /// Liquid Glass backing for an arbitrary shape (viewer ⓘ / info panel) — RT-safe (solid fallback).
+    func glassSurface<S: InsettableShape>(in shape: S) -> some View { modifier(GlassSurfaceBackground(shape: shape)) }
 }
