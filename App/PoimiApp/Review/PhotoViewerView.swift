@@ -244,10 +244,12 @@ struct PhotoViewerView: View {
     /// (mirrors `ReviewSectionHeader` — shrinking the user's chosen size is itself an a11y regression,
     /// so we reflow, not squeeze). With no review context the day map is empty → just the position.
     private var titleRow: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             titleAndTally
                 .frame(maxWidth: .infinity, alignment: .leading)
-            infoButton   // trailing — sits just under the photo's bottom-right (#127)
+            // Align the ⓘ on the row's TOP text line (day + tally), not the centre of the 2-line block.
+            infoButton
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] }
         }
     }
 
