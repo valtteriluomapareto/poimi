@@ -96,3 +96,81 @@ struct PagerNeighbourTests {
         #expect(adjacentID(in: ["only"], to: "only", offset: -1) == nil)
     }
 }
+
+@Suite("Viewer full-image load state — no permanent-black page (#158)")
+struct FullImageLoadStateTests {
+
+    @Test("a fresh page loads only once bounds are real")
+    func loadsWhenReady() {
+        var state = FullImageLoadState()
+        #expect(!state.shouldLoad(boundsReady: false))   // no bounds yet → wait
+        #expect(state.shouldLoad(boundsReady: true))
+    }
+
+    @Test("appear + first layout on first show start only ONE load")
+    func appearThenLayoutLoadsOnce() {
+        var state = FullImageLoadState()
+        #expect(state.shouldLoad(boundsReady: true))     // viewWillAppear would load…
+        _ = state.begin()
+        #expect(!state.shouldLoad(boundsReady: true))    // …so viewDidLayoutSubviews must NOT double-load
+    }
+
+    @Test("a real image latches — never reloads")
+    func successLatches() {
+        var state = FullImageLoadState()
+        let token = state.begin()
+        let applied = state.completed(token: token, gotImage: true)
+        #expect(applied)
+        #expect(state.loaded)
+        #expect(!state.shouldLoad(boundsReady: true))            // loaded → stays put
+    }
+
+    @Test("a terminal nil doesn't latch loaded, doesn't re-storm on layout, but retries on re-appear")
+    func failureRetriesOnAppearNotLayout() {
+        var state = FullImageLoadState()
+        let token = state.begin()
+        let applied = state.completed(token: token, gotImage: false)  // PhotoKit returned nil (unavailable)
+        #expect(applied)
+        #expect(!state.loaded)
+        #expect(!state.shouldLoad(boundsReady: true))            // `failed` → layout passes don't hammer
+        state.retryOnReappear()
+        #expect(state.shouldLoad(boundsReady: true))             // …but showing the page again retries
+    }
+
+    @Test("a superseded completion is ignored — can't clobber a fresh load or paint a stale image")
+    func staleCompletionIgnored() {
+        var state = FullImageLoadState()
+        let stale = state.begin()
+        state.cancel()                                           // page disappeared → token bumped
+        let applied = state.completed(token: stale, gotImage: true)
+        #expect(!applied)                                        // stale result rejected
+        #expect(!state.loaded)                                   // not latched by the stale completion
+        #expect(state.shouldLoad(boundsReady: true))             // eligible to reload afresh
+    }
+
+    @Test("a cancelled in-flight load (page scrolled past) stays eligible to reload; doesn't unlatch")
+    func cancelKeepsEligibilityAndLatch() {
+        var cancelled = FullImageLoadState()
+        _ = cancelled.begin()
+        cancelled.cancel()
+        #expect(cancelled.shouldLoad(boundsReady: true))         // never loaded → retry on re-appear
+
+        var loaded = FullImageLoadState()
+        let token = loaded.begin()
+        _ = loaded.completed(token: token, gotImage: true)
+        loaded.cancel()                                          // disappear AFTER a successful load
+        #expect(!loaded.shouldLoad(boundsReady: true))           // stays latched — no needless reload/flicker
+    }
+
+    @Test("full recovery lifecycle: prebuild → cancelled → reappear → success ends latched")
+    func fullRecoveryLifecycle() {
+        var state = FullImageLoadState()
+        _ = state.begin(); state.cancel()                        // prebuilt neighbour, scrolled past
+        #expect(state.shouldLoad(boundsReady: true))
+        let token = state.begin()                                // shown for real → reload
+        let applied = state.completed(token: token, gotImage: true)
+        #expect(applied)
+        #expect(state.loaded)
+        #expect(!state.shouldLoad(boundsReady: true))
+    }
+}

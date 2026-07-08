@@ -38,6 +38,15 @@ struct PhotoViewerView: View {
     private let windowForward = 25
     private let rebuildMargin = 5
 
+    /// The grid's quantized thumbnail size — the primary instant-paint cache for a viewer page.
+    private var gridThumbSize: CGSize { CGSize(width: 400, height: 400) }
+    /// The filmstrip's small thumbnail size (same key `prefetchFilmstrip` warms) — the fallback floor so
+    /// a page paints something even when the 400² isn't cached (#158).
+    private var filmstripThumbSize: CGSize {
+        let px = Filmstrip.thumbnailLoadSide * displayScale
+        return CGSize(width: px, height: px)
+    }
+
     init(startID: String) {
         self.startID = startID
         _currentID = State(initialValue: startID)
@@ -91,7 +100,13 @@ struct PhotoViewerView: View {
         PhotoPagerView(
             allIDs: allIDs,
             currentID: $currentID,
-            cachedThumb: { thumbnails.cachedThumbnail(for: $0, targetSize: CGSize(width: 400, height: 400)) },
+            // Paint whatever thumbnail is ALREADY cached so a page is never a bare black rectangle while
+            // its full-res loads (or if that fails): the grid's 400² first, else the filmstrip's small
+            // thumb — which is often warm for the current photo even when the 400² isn't (#158).
+            cachedThumb: { id in
+                thumbnails.cachedThumbnail(for: id, targetSize: gridThumbSize)
+                    ?? thumbnails.cachedThumbnail(for: id, targetSize: filmstripThumbSize)
+            },
             loadFull: { await thumbnails.fullImage(for: $0, targetSize: $1) },
             axLabel: { photoAXLabel(for: $0) },
             onTapPhoto: { selection.toggle($0) })   // single-tap the photo = pick (Pick button is primary)
