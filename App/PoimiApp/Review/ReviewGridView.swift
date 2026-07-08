@@ -61,6 +61,9 @@ struct ReviewGridView: View {
     @State private var currentPageID: String?
     /// Pick the entry page once per appearance (drill target, or first-unreviewed resume).
     @State private var didInitialOpen = false
+    /// One-shot: the photo to scroll the active cluster page to on return from the viewer (#126). Set on
+    /// `viewerReturnTick`; the matching `ClusterPage` scrolls to it, then clears it.
+    @State private var pendingScrollID: String?
 
     @State private var columnCount = 3
     @State private var visibleIDs: Set<String> = []
@@ -138,7 +141,11 @@ struct ReviewGridView: View {
                     onHidden: { visibleIDs.remove($0) },
                     position: index + 1,
                     total: clusters.count,
-                    onMarkDone: { markDoneAndAdvance(cluster) })
+                    onMarkDone: { markDoneAndAdvance(cluster) },
+                    // Restore scroll to the photo you ended on in the viewer (#126); each page acts only
+                    // if it holds the id, then clears it (one-shot).
+                    scrollToID: pendingScrollID,
+                    onScrolledToTarget: { pendingScrollID = nil })
                     .tag(cluster.id as String?)
             }
         }
@@ -188,15 +195,16 @@ struct ReviewGridView: View {
             rebuildWindow()
             scheduleRecomputeWindow()
         }
-        // Restore the page you ended on when the viewer closes (#126): page to the cluster that holds the
-        // last-viewed photo. The viewer is a sheet, so the grid stays mounted underneath — we react to its
-        // dismissal (presentedPhotoID → nil), not `.onAppear`. Paging in the viewer may have auto-marked a
-        // cluster done (#128); landing on the current cluster keeps the grid consistent with where you were.
-        .onChange(of: coordinator.presentedPhotoID) { previous, current in
-            guard previous != nil, current == nil,
-                  let id = coordinator.lastViewedID,
-                  let cluster = clusters.first(where: { $0.assetIDs.contains(id) }) else { return }
-            currentPageID = cluster.id
+        // Restore where you ended when the viewer closes (#126): page to the cluster holding the last-
+        // viewed photo AND scroll that page to it. Driven off `viewerReturnTick` (a monotonic bump on
+        // dismiss), not `presentedPhotoID` — while the full-screen sheet covers the grid it may not re-
+        // evaluate on the open, so a nil-transition `.onChange` can silently miss. `pendingScrollID` is
+        // handed to the active `ClusterPage`, which scrolls to it (then clears it, one-shot).
+        .onChange(of: coordinator.viewerReturnTick) {
+            guard let id = coordinator.lastViewedID,
+                  let target = clusters.first(where: { $0.assetIDs.contains(id) }) else { return }
+            currentPageID = target.id
+            pendingScrollID = id
         }
     }
 
@@ -296,34 +304,50 @@ private struct ClusterPage: View {
     let position: Int
     let total: Int
     let onMarkDone: () -> Void
+    /// On return from the viewer, scroll to this photo if it's in THIS cluster (#126); nil otherwise.
+    let scrollToID: String?
+    /// Called after this page consumed `scrollToID`, so the parent clears it (one-shot).
+    let onScrolledToTarget: () -> Void
     @Environment(DoneStore.self) private var done
 
     var body: some View {
         // The per-cell day label stays the date (a cell is one photo on one day, even inside a trip);
         // the header/chip carries the cluster title (trip sentence or date). Formatted once per page.
         let dayLabel = DayGroupHeader.title(for: cluster)
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
-                Section {
-                    ForEach(cluster.assetIDs, id: \.self) { id in
-                        ReviewGridCell(
-                            id: id,
-                            dayLabel: dayLabel,
-                            load: load,
-                            cachedImage: cachedImage,
-                            onOpen: { Perf.event("grid.tap \(id.suffix(8))"); openAsset(id) })
-                            .id(id)
-                            .onAppear { if isActive { onVisible(id) } }
-                            .onDisappear { if isActive { onHidden(id) } }
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: spacing, pinnedViews: [.sectionHeaders]) {
+                    Section {
+                        ForEach(cluster.assetIDs, id: \.self) { id in
+                            ReviewGridCell(
+                                id: id,
+                                dayLabel: dayLabel,
+                                load: load,
+                                cachedImage: cachedImage,
+                                onOpen: { Perf.event("grid.tap \(id.suffix(8))"); openAsset(id) })
+                                .id(id)
+                                .onAppear { if isActive { onVisible(id) } }
+                                .onDisappear { if isActive { onHidden(id) } }
+                        }
+                    } header: {
+                        clusterHeader()
+                    } footer: {
+                        footer(isDone: done.isDone(cluster))
                     }
-                } header: {
-                    clusterHeader()
-                } footer: {
-                    footer(isDone: done.isDone(cluster))
                 }
+                .padding(.horizontal, spacing)
+                .scrollTargetLayout()
             }
-            .padding(.horizontal, spacing)
-            .scrollTargetLayout()
+            // Restore scroll to the ended-on photo on return from the viewer (#126). Only the cluster that
+            // holds it acts; deferred a beat so a just-paged-to page has laid out before `scrollTo`. Then
+            // clear the one-shot so a later swipe back here doesn't re-snap.
+            .task(id: scrollToID) {
+                guard let target = scrollToID, cluster.assetIDs.contains(target) else { return }
+                try? await Task.sleep(for: .milliseconds(120))
+                guard !Task.isCancelled else { return }
+                proxy.scrollTo(target, anchor: .center)
+                onScrolledToTarget()
+            }
         }
     }
 

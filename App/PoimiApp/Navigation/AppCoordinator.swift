@@ -52,6 +52,13 @@ final class AppCoordinator {
     /// nav-pop (#36). `nil` when closed; the grid stays mounted underneath, exactly where you left it.
     var presentedPhotoID: String?
 
+    /// Bumped each time the viewer is dismissed back to the grid (`dismissPhoto`). The grid observes THIS
+    /// (a monotonic tick), not `presentedPhotoID`'s nil-transition, to restore its position (#126): while
+    /// the full-screen sheet covers it, the grid may not re-evaluate on the open, so an `.onChange(of:
+    /// presentedPhotoID)` baseline can miss nil→id and then never fire on id→nil. A monotonic tick always
+    /// differs, so the restore fires reliably.
+    private(set) var viewerReturnTick = 0
+
     /// The active album's scanned candidate store, created ONCE by whichever review screen loads first
     /// (the Overview, in the real navigation path) and REUSED by the grid — so drilling in doesn't
     /// re-fetch + re-cluster the whole album (the double-scan the review flagged). Keyed by album +
@@ -167,6 +174,7 @@ final class AppCoordinator {
     func dismissPhoto() {
         Perf.event("dismissPhoto (→ grid revealed)")
         presentedPhotoID = nil
+        viewerReturnTick &+= 1   // signal the grid to restore its position to `lastViewedID` (#126)
     }
 
     /// Push the export / completion step.
