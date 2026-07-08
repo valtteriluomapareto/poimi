@@ -31,10 +31,18 @@ struct NewAlbumSetupView: View {
                 Section {
                     // Mutually bounded so an inverted/zero range is unreachable (Create can't be
                     // silently disabled with no explanation): From ≤ the inclusive To, and vice-versa.
-                    DatePicker("From", selection: $draft.rangeStart, in: ...inclusiveEndDate,
-                               displayedComponents: .date)
-                    DatePicker("To", selection: inclusiveEnd, in: draft.rangeStart...,
-                               displayedComponents: .date)
+                    // Row label on `LabeledContent`, not the picker (`labelsHidden`), so the date button
+                    // keeps its natural width (no truncation at larger text sizes) + stacks at AX sizes (#173).
+                    LabeledContent("From") {
+                        DatePicker("From", selection: $draft.rangeStart, in: ...inclusiveEndDate,
+                                   displayedComponents: .date)
+                            .labelsHidden()
+                    }
+                    LabeledContent("To") {
+                        DatePicker("To", selection: inclusiveEnd, in: draft.rangeStart...,
+                                   displayedComponents: .date)
+                            .labelsHidden()
+                    }
                 } header: {
                     Text("Period")
                 } footer: {

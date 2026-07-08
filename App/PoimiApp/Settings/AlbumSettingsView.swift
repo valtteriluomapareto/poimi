@@ -61,11 +61,19 @@ struct AlbumSettingsView: View {
 
             Section {
                 // Mutually bounded so an inverted/zero range is unreachable (same as setup): From ≤ the
-                // inclusive To, and To ≥ From.
-                DatePicker("From", selection: $project.rangeStart, in: ...inclusiveEndDate,
-                           displayedComponents: .date)
-                DatePicker("To", selection: inclusiveEnd, in: project.rangeStart...,
-                           displayedComponents: .date)
+                // inclusive To, and To ≥ From. The row label goes on `LabeledContent`, not the picker
+                // (`labelsHidden`), so the compact date button keeps its natural width and never truncates
+                // the date at larger text sizes; LabeledContent also stacks label-over-date at AX sizes (#173).
+                LabeledContent("From") {
+                    DatePicker("From", selection: $project.rangeStart, in: ...inclusiveEndDate,
+                               displayedComponents: .date)
+                        .labelsHidden()
+                }
+                LabeledContent("To") {
+                    DatePicker("To", selection: inclusiveEnd, in: project.rangeStart...,
+                               displayedComponents: .date)
+                        .labelsHidden()
+                }
             } header: {
                 Text("Period")
             } footer: {
