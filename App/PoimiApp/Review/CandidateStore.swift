@@ -72,6 +72,10 @@ final class CandidateStore {
     /// so the per-asset day is derived here from `captureDate` under the same `calendar`. Empty
     /// until a pass settles to `.ready`.
     private(set) var dayByID: [String: DayKey] = [:]
+    /// Each candidate keyed by id — so the photo viewer can read `captureDate` (for the capture time on
+    /// its date line) + `pixelSize` (for the resolution in its info panel) synchronously, without a
+    /// re-fetch (#127). Empty until a pass settles to `.ready`; published to the coordinator by the review.
+    private(set) var assetsByID: [String: AssetRef] = [:]
     /// Resolved place names per trip-cluster id (`TripCluster.clusterID`) — fills in asynchronously
     /// after `.ready` as reverse-geocoding settles (§7). A trip whose name hasn't resolved yet shows a
     /// date fallback; `nil` naming deps (tests / location off) leaves this empty. `@Observable` drives
@@ -162,6 +166,7 @@ final class CandidateStore {
     func load(_ project: CurationProject) async {
         phase = .scanning
         dayByID = [:]   // clear any prior pass's map (e.g. a retry after .failed)
+        assetsByID = [:]
         tripNames = [:]
         nameTask?.cancel()        // supersede any in-flight name pass from a prior load
         loadGeneration += 1
@@ -198,6 +203,8 @@ final class CandidateStore {
             dayByID = Dictionary(
                 candidates.map { ($0.id, DayKey(date: $0.captureDate, calendar: calendar)) },
                 uniquingKeysWith: { first, _ in first })
+            // Keep each candidate reachable by id for the viewer's info panel (#127) — same source array.
+            assetsByID = Dictionary(candidates.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             if clusters.isEmpty {
                 // Distinguish WHY it's empty so the state is actionable (#40): the range yielded
                 // nothing (widen it) vs photos existed but were all filtered out (relax exclusions).

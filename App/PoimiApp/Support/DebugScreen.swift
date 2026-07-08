@@ -731,6 +731,11 @@ struct DebugPhotoViewerHostView: View {
             let coord = AppCoordinator(library: library)
             coord.reviewOrderedIDs = Self.ids
             coord.reviewDayByID = Self.dayByID
+            // Publish the AssetRefs so the viewer's date line shows the capture time + the info panel the
+            // resolution (#127) — mirrors ScanningView.publishForViewer against the fake's seeded assets.
+            let interval = DateInterval(start: DebugScanningHostView.yearStart, end: DebugScanningHostView.yearEnd)
+            let fetched = (try? await library.fetchAssets(in: interval)) ?? []
+            coord.reviewAssetsByID = Dictionary(fetched.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             coord.lastViewedID = Self.startID
             projectStore = projects
             selectionStore = selection

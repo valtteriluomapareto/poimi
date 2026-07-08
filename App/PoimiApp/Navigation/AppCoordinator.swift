@@ -36,6 +36,11 @@ final class AppCoordinator {
     /// open (the viewer then just shows the position, no day label).
     var reviewDayByID: [String: DayKey] = [:]
 
+    /// Each candidate keyed by id — the photo viewer reads `captureDate` (capture time on its date line)
+    /// + `pixelSize` (resolution in its info panel) from this synchronously (#127). Published alongside
+    /// `reviewDayByID`; empty when no review is open.
+    var reviewAssetsByID: [String: AssetRef] = [:]
+
     /// The open album's review clusters, published alongside `reviewOrderedIDs`. The viewer reads them
     /// to detect paging FORWARD past a cluster's last photo (auto-mark-done, #128); the grid reads them
     /// to restore its page to the cluster of `lastViewedID` on return from the viewer (#126). Empty when
@@ -111,6 +116,7 @@ final class AppCoordinator {
         // until the next scan republishes (tidiness; the viewer/grid also guard by cluster membership).
         reviewOrderedIDs = []
         reviewDayByID = [:]
+        reviewAssetsByID = [:]
         reviewClusters = []
         lastViewedID = nil
     }
