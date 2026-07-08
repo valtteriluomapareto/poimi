@@ -96,3 +96,45 @@ struct PagerNeighbourTests {
         #expect(adjacentID(in: ["only"], to: "only", offset: -1) == nil)
     }
 }
+
+@Suite("Viewer full-image load state — no permanent-black page")
+struct FullImageLoadStateTests {
+
+    @Test("a fresh page loads once bounds are real")
+    func loadsWhenReady() {
+        var state = FullImageLoadState()
+        #expect(!state.shouldLoad(boundsReady: false))   // no bounds yet → wait
+        #expect(state.shouldLoad(boundsReady: true))
+    }
+
+    @Test("no re-entrant load while one is in flight")
+    func noConcurrentLoad() {
+        var state = FullImageLoadState()
+        state.markLoading()
+        #expect(!state.shouldLoad(boundsReady: true))
+    }
+
+    @Test("a real image latches — never reloads")
+    func successLatches() {
+        var state = FullImageLoadState()
+        state.markLoading()
+        state.markCompleted(gotImage: true)
+        #expect(!state.shouldLoad(boundsReady: true))   // loaded → stays put
+    }
+
+    @Test("a nil result does NOT latch — the page retries (the blank-page fix)")
+    func failureRetries() {
+        var state = FullImageLoadState()
+        state.markLoading()
+        state.markCompleted(gotImage: false)            // cancelled / transient failure
+        #expect(state.shouldLoad(boundsReady: true))    // eligible again — no permanent black
+    }
+
+    @Test("a cancelled in-flight load clears the flag so a later appearance retries")
+    func cancelRetries() {
+        var state = FullImageLoadState()
+        state.markLoading()
+        state.markCancelled()                            // page scrolled past mid-load
+        #expect(state.shouldLoad(boundsReady: true))
+    }
+}
