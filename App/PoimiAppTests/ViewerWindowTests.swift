@@ -10,6 +10,7 @@
 //
 
 import Testing
+import Curation
 @testable import PoimiApp
 
 @Suite("Viewer render window (#36)")
@@ -172,5 +173,93 @@ struct FullImageLoadStateTests {
         #expect(applied)
         #expect(state.loaded)
         #expect(!state.shouldLoad(boundsReady: true))
+    }
+}
+
+@Suite("Viewer auto-mark-done boundary (#128)")
+struct ViewerAutoDoneTests {
+    /// A date cluster from a list of asset ids (days/busy are irrelevant to the boundary logic).
+    private func cluster(_ id: String, _ ids: [String]) -> ReviewCluster {
+        .day(DayGroup(id: id, assetIDs: ids, days: [.day(year: 2025, month: 1, day: 1)], isBusyDay: false))
+    }
+    /// A / B / C: A and B multi-photo, C a single final photo.
+    private var clusters: [ReviewCluster] {
+        [cluster("A", ["a1", "a2"]), cluster("B", ["b1", "b2"]), cluster("C", ["c1"])]
+    }
+
+    @Test("forward past a cluster's LAST photo into the next cluster's FIRST → marks that cluster")
+    func forwardPastLastMarks() {
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "b1", clusters: clusters)?.id == "A")
+        #expect(clusterFinishedByPagingPast(from: "b2", to: "c1", clusters: clusters)?.id == "B")
+    }
+
+    @Test("mid-cluster paging never marks")
+    func midClusterDoesNotMark() {
+        #expect(clusterFinishedByPagingPast(from: "a1", to: "a2", clusters: clusters) == nil)
+    }
+
+    @Test("backward paging never marks (or un-marks)")
+    func backwardDoesNotMark() {
+        #expect(clusterFinishedByPagingPast(from: "b1", to: "a2", clusters: clusters) == nil)  // B.first → A.last
+        #expect(clusterFinishedByPagingPast(from: "c1", to: "b2", clusters: clusters) == nil)  // C → B.last
+    }
+
+    @Test("a non-adjacent filmstrip jump from a last photo never marks")
+    func nonAdjacentJumpDoesNotMark() {
+        // a2 is A's last, but landing on C's first (skipping B) is a jump, not paging past into the next.
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "c1", clusters: clusters) == nil)
+    }
+
+    @Test("the final cluster has no next to page into → never marks")
+    func finalClusterDoesNotMark() {
+        // From C's only photo there's nowhere forward; and it's the last cluster.
+        #expect(clusterFinishedByPagingPast(from: "c1", to: "a1", clusters: clusters) == nil)
+    }
+
+    @Test("an unknown previous id is a safe no-op")
+    func unknownIsNoOp() {
+        #expect(clusterFinishedByPagingPast(from: "zzz", to: "b1", clusters: clusters) == nil)
+    }
+
+    @Test("an unknown CURRENT id (landed nowhere / off the strip) is a safe no-op")
+    func unknownCurrentIsNoOp() {
+        // previous is a real cluster's last, but current isn't the next cluster's first.
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "zzz", clusters: clusters) == nil)
+    }
+
+    @Test("an empty clusters list never marks (no trap)")
+    func emptyClustersIsNoOp() {
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "b1", clusters: []) == nil)
+    }
+
+    @Test("a SINGLE-photo cluster in the middle marks correctly (its only photo is both first and last)")
+    func singlePhotoMiddleCluster() {
+        // S sits BETWEEN two multi-photo clusters — the case the all-multi/last-is-final fixtures miss.
+        let mid = [cluster("A", ["a1", "a2"]), cluster("S", ["s1"]), cluster("B", ["b1", "b2"])]
+        #expect(clusterFinishedByPagingPast(from: "s1", to: "b1", clusters: mid)?.id == "S")  // paging OUT of S
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "s1", clusters: mid)?.id == "A")  // paging INTO S marks A
+    }
+
+    @Test("an undated trailing cluster participates like any other (day-agnostic)")
+    func undatedClusterParticipates() {
+        let undated = ReviewCluster.day(DayGroup(id: "U", assetIDs: ["u1"], days: [.undated], isBusyDay: false))
+        let withUndated = [cluster("A", ["a1", "a2"]), undated]
+        #expect(clusterFinishedByPagingPast(from: "a2", to: "u1", clusters: withUndated)?.id == "A")
+    }
+
+    // MARK: the idempotency guard (clusterToAutoMarkDone folds in !isDone — testable, not inline)
+
+    @Test("guarded auto-mark returns the cluster when not-done, but nil once it's done — no re-toggle (#128)")
+    func guardedAutoMarkIsIdempotent() {
+        let fromLast = "a2", toNext = "b1"
+        // Not done yet → returns A to mark.
+        let first = clusterToAutoMarkDone(from: fromLast, to: toNext, clusters: clusters, isDone: { _ in false })
+        #expect(first?.id == "A")
+        // A already done (a re-cross) → nil, so the view never toggles it back off.
+        let second = clusterToAutoMarkDone(from: fromLast, to: toNext, clusters: clusters,
+                                           isDone: { $0.id == "A" })
+        #expect(second == nil)
+        // Backward paging is nil regardless of done-state.
+        #expect(clusterToAutoMarkDone(from: "b1", to: "a2", clusters: clusters, isDone: { _ in false }) == nil)
     }
 }

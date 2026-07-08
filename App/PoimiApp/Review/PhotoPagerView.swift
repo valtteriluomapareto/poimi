@@ -31,6 +31,10 @@ struct PhotoPagerView: UIViewControllerRepresentable {
     let axLabel: (String) -> String
     /// A single tap on a page's photo → toggle that id's selection (the secondary select path).
     let onTapPhoto: (String) -> Void
+    /// A user-driven page SWIPE settled: `(from, to)`. Fired ONLY from the gesture-completion delegate —
+    /// NOT for a filmstrip tap or programmatic page set (those go through `updateUIViewController`). So a
+    /// caller can treat this as "the user deliberately paged," distinct from any `currentID` change (#128).
+    var onSwipe: (String, String) -> Void = { _, _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -98,7 +102,11 @@ struct PhotoPagerView: UIViewControllerRepresentable {
                                 previousViewControllers: [UIViewController], transitionCompleted: Bool) {
             guard transitionCompleted,
                   let id = (pvc.viewControllers?.first as? PhotoPageController)?.id else { return }
+            let from = (previousViewControllers.first as? PhotoPageController)?.id
             parent.currentID = id
+            // A real user swipe settled (this delegate fires for gesture transitions only, not programmatic
+            // `setViewControllers`) — report from→to so the caller can act on deliberate paging (#128).
+            if let from { parent.onSwipe(from, id) }
         }
 
     }

@@ -36,6 +36,12 @@ final class AppCoordinator {
     /// open (the viewer then just shows the position, no day label).
     var reviewDayByID: [String: DayKey] = [:]
 
+    /// The open album's review clusters, published alongside `reviewOrderedIDs`. The viewer reads them
+    /// to detect paging FORWARD past a cluster's last photo (auto-mark-done, #128); the grid reads them
+    /// to restore its page to the cluster of `lastViewedID` on return from the viewer (#126). Empty when
+    /// no review is open.
+    var reviewClusters: [ReviewCluster] = []
+
     /// The asset last viewed in the grid / viewer. The grid restores its scroll to it on return
     /// from the viewer (D22); set on cell tap and updated as the viewer swipes. Shared so scroll
     /// position survives the round-trip.
@@ -45,6 +51,13 @@ final class AppCoordinator {
     /// push — you pull it DOWN to dismiss (the sheet owns the interactive drag), never a sideways
     /// nav-pop (#36). `nil` when closed; the grid stays mounted underneath, exactly where you left it.
     var presentedPhotoID: String?
+
+    /// Bumped each time the viewer is dismissed back to the grid (`dismissPhoto`). The grid observes THIS
+    /// (a monotonic tick), not `presentedPhotoID`'s nil-transition, to restore its position (#126): while
+    /// the full-screen sheet covers it, the grid may not re-evaluate on the open, so an `.onChange(of:
+    /// presentedPhotoID)` baseline can miss nil→id and then never fire on id→nil. A monotonic tick always
+    /// differs, so the restore fires reliably.
+    private(set) var viewerReturnTick = 0
 
     /// The active album's scanned candidate store, created ONCE by whichever review screen loads first
     /// (the Overview, in the real navigation path) and REUSED by the grid — so drilling in doesn't
@@ -94,6 +107,12 @@ final class AppCoordinator {
     private func clearCandidateStore() {
         candidateStore = nil
         candidateStoreKey = nil
+        // Drop the published review context too, so a switched-away album's ids/clusters can't linger
+        // until the next scan republishes (tidiness; the viewer/grid also guard by cluster membership).
+        reviewOrderedIDs = []
+        reviewDayByID = [:]
+        reviewClusters = []
+        lastViewedID = nil
     }
 
     /// The album at the root of the current path — the one shown in the iPad detail column — or `nil`
@@ -155,6 +174,7 @@ final class AppCoordinator {
     func dismissPhoto() {
         Perf.event("dismissPhoto (→ grid revealed)")
         presentedPhotoID = nil
+        viewerReturnTick &+= 1   // signal the grid to restore its position to `lastViewedID` (#126)
     }
 
     /// Push the export / completion step.
