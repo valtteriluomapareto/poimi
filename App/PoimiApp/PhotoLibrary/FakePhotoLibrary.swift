@@ -147,6 +147,12 @@ extension FakePhotoLibrary {
         FakePhotoLibrary(assets: [], albums: [], membership: [:], status: .authorized)
     }
 
+    /// The year-shaped library plus two videos — the authorized fixture for the include-videos path (#125).
+    static func videoMixed() -> FakePhotoLibrary {
+        FakePhotoLibrary(assets: videoMixedSeed(), albums: defaultAlbums,
+                         membership: defaultMembership, status: .authorized)
+    }
+
     /// Limited-access state (drives the limited recovery flow).
     static func limited() -> FakePhotoLibrary {
         FakePhotoLibrary(assets: yearMixedSeed(), albums: defaultAlbums,

@@ -2344,6 +2344,26 @@
           }
         }
       }
+    },
+    "Include videos": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sisällytä videot"
+          }
+        }
+      }
+    },
+    "Off by default. Turn on to pick from videos too — they're copied to the album like photos.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pois päältä oletuksena. Ota käyttöön poimiaksesi myös videoita — ne kopioidaan albumiin kuvien tavoin."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

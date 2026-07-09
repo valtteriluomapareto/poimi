@@ -32,6 +32,24 @@ struct FakePhotoLibrarySeedTests {
         #expect(albums.count == 2)
     }
 
+    @Test("videoMixed: extends the year seed with exactly two videos, each with a positive duration (#125)")
+    func videoMixed() async throws {
+        // videoMixedSeed must be yearMixedSeed PLUS two videos — nothing removed or renumbered (the
+        // stills' exact-count assertions depend on that separation).
+        let seed = FakePhotoLibrary.videoMixedSeed()
+        let base = FakePhotoLibrary.yearMixedSeed()
+        #expect(seed.count == base.count + 2)
+        #expect(seed.filter(\.isVideo).map(\.id) == ["fake/video/1", "fake/video/2"])
+        #expect(base.allSatisfy { !$0.isVideo })                 // the base seed stays stills-only
+        // Each video carries a positive duration; the stills carry none (the media-type contract).
+        #expect(seed.filter(\.isVideo).allSatisfy { ($0.duration ?? 0) > 0 })
+        #expect(seed.filter { !$0.isVideo }.allSatisfy { $0.duration == nil })
+
+        // Through a range fetch the videos come back (they're dated + in range), alongside the stills.
+        let fetched = try await FakePhotoLibrary.videoMixed().fetchAssets(in: .everything)
+        #expect(fetched.filter(\.isVideo).count == 2)
+    }
+
     @Test("empty: no assets, no albums, no membership, authorized")
     func empty() async throws {
         let library = FakePhotoLibrary.empty()

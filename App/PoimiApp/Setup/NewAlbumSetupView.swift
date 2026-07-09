@@ -53,6 +53,12 @@ struct NewAlbumSetupView: View {
                     TargetCountField(count: $draft.targetCount)
                 }
 
+                Section {
+                    Toggle("Include videos", isOn: $draft.includeVideos)
+                } footer: {
+                    Text("Off by default. Turn on to pick from videos too — they're copied to the album like photos.")
+                }
+
                 Section("Exclude from source") {
                     Toggle("Exclude screenshots", isOn: $draft.excludeScreenshots)
                     NavigationLink {

@@ -98,6 +98,12 @@ struct AlbumSettingsView: View {
                 Text("Picks are copied to this Photos album — your library and originals aren't changed.")
             }
 
+            Section {
+                Toggle("Include videos", isOn: $project.includeVideos)
+            } footer: {
+                Text("Off by default. Turn on to pick from videos too — they're copied to the album like photos.")
+            }
+
             // Source exclusions grouped together (matching setup) — both levers the "all excluded"
             // empty state points at, so "Review exclusions" lands somewhere it can actually fix.
             Section {
