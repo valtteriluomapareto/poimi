@@ -514,6 +514,19 @@ enum PhotoInfoFormat {
         return megapixels(pixelSize).map { "\(dims) · \($0) MP" } ?? dims
     }
 
+    /// A video's running time as a compact clock: `nil` → `nil` (a still, so no badge); otherwise
+    /// "M:SS" under an hour ("0:14", "1:05") and "H:MM:SS" at/over an hour ("1:02:09"). Seconds are
+    /// floored to whole seconds. Negative input clamps to 0. The single source of the duration string —
+    /// the grid badge (#125) and the viewer read through this, so they can't drift.
+    static func duration(_ seconds: Double?) -> String? {
+        guard let seconds else { return nil }
+        let total = max(0, Int(seconds))          // floor to whole seconds; clamp any negative
+        let (h, m, s) = (total / 3600, (total % 3600) / 60, total % 60)
+        return h > 0
+            ? String(format: "%d:%02d:%02d", h, m, s)
+            : String(format: "%d:%02d", m, s)
+    }
+
     /// Join the day + capture time for the viewer's date line: "Sat, Jul 5 · 14.32". Either piece may be
     /// empty (no review context → no day; an undated asset → no time); the " · " appears only when both do.
     static func dateTimeLine(day: String, time: String) -> String {
