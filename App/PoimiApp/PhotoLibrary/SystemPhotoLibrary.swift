@@ -36,12 +36,19 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
         // creationDate, so undated assets are excluded from a range fetch — they reach the
         // "Undated" section via a separate Phase-2 path, never through this method.
         let options = PHFetchOptions()
-        options.predicate = NSPredicate(
+        // Fetch photos AND videos in range; the pure `Filtering` layer drops videos unless the album
+        // opted in (#125) — so the media-type include/exclude stays testable in the domain, and this
+        // fetch is media-type-agnostic (metadata-only, so the extra video refs are cheap).
+        let datePredicate = NSPredicate(
             format: "creationDate >= %@ AND creationDate < %@",
             interval.start as NSDate, interval.end as NSDate)
+        let mediaPredicate = NSPredicate(
+            format: "mediaType == %d OR mediaType == %d",
+            PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
+        options.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [datePredicate, mediaPredicate])
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
 
-        let result = PHAsset.fetchAssets(with: .image, options: options)
+        let result = PHAsset.fetchAssets(with: options)
         var refs: [AssetRef] = []
         refs.reserveCapacity(result.count)
         result.enumerateObjects { asset, _, _ in
@@ -71,15 +78,13 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
     func assetIDs(inAlbums albumIDs: [String]) async throws -> Set<String> {
         guard !albumIDs.isEmpty else { return [] }
         var ids: Set<String> = []
-        // Only images can be candidates (fetchAssets fetches `.image`), so restrict membership to
-        // images too — tighter and cheaper than enumerating an excluded album's videos/audio.
-        let imageOptions = PHFetchOptions()
-        imageOptions.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
+        // Collect ALL media types in the excluded album — candidates now include videos when the album
+        // opts in (#125), so an excluded album must drop its videos too, not just its images.
         // Resolve each excluded album by localIdentifier, then collect its assets' ids. Only the
         // id strings escape the actor — the `PHAsset`s never do.
         let collections = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: albumIDs, options: nil)
         collections.enumerateObjects { collection, _, _ in
-            PHAsset.fetchAssets(in: collection, options: imageOptions).enumerateObjects { asset, _, _ in
+            PHAsset.fetchAssets(in: collection, options: nil).enumerateObjects { asset, _, _ in
                 ids.insert(asset.localIdentifier)
             }
         }
@@ -197,7 +202,8 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
     }
 
     private static func ref(from asset: PHAsset) -> AssetRef {
-        AssetRef(
+        let isVideo = asset.mediaType == .video
+        return AssetRef(
             id: asset.localIdentifier,
             captureDate: asset.creationDate,
             coordinate: asset.location.map {
@@ -205,6 +211,8 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
             },
             pixelSize: PixelSize(width: asset.pixelWidth, height: asset.pixelHeight),
             isScreenshot: asset.mediaSubtypes.contains(.photoScreenshot),
-            isFavorite: asset.isFavorite)
+            isFavorite: asset.isFavorite,
+            isVideo: isVideo,
+            duration: isVideo ? asset.duration : nil)   // seconds; nil for a still (media-type contract)
     }
 }

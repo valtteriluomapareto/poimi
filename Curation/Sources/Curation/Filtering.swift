@@ -14,14 +14,18 @@ public enum Filtering {
     /// - Parameters:
     ///   - assets: the fetched slice.
     ///   - excludeScreenshots: drop assets flagged `isScreenshot`.
+    ///   - includeVideos: keep video assets; when `false` (the default), videos are dropped —
+    ///     the app is images-only unless the album opts in (#125).
     ///   - excludedAssetIDs: ids belonging to excluded albums (precomputed membership).
     public static func included(
         _ assets: [AssetRef],
         excludeScreenshots: Bool,
+        includeVideos: Bool = false,
         excludedAssetIDs: Set<String> = []
     ) -> [AssetRef] {
         assets.filter { asset in
             if excludeScreenshots, asset.isScreenshot { return false }
+            if !includeVideos, asset.isVideo { return false }
             if excludedAssetIDs.contains(asset.id) { return false }
             return true
         }

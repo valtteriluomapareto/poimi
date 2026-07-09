@@ -187,6 +187,24 @@ extension FakePhotoLibrary {
         return assets
     }
 
+    /// `yearMixedSeed` plus videos (dated, in range) — the fixture for the include-videos path (#125).
+    /// Kept SEPARATE from `yearMixedSeed()` on purpose: the many exact-count/id assertions against that
+    /// seed must not churn. Durations are literal constants (no clock / randomness, D25). A video ⇒
+    /// non-nil positive duration, a still ⇒ nil duration (the media-type conformance contract).
+    static func videoMixedSeed() -> [AssetRef] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 12) -> Date {
+            calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+        }
+        var assets = yearMixedSeed()
+        assets.append(AssetRef(id: "fake/video/1", captureDate: date(2025, 7, 5, 13),
+                               pixelSize: PixelSize(width: 1920, height: 1080), isVideo: true, duration: 14))
+        assets.append(AssetRef(id: "fake/video/2", captureDate: date(2025, 7, 6),
+                               pixelSize: PixelSize(width: 1280, height: 720), isVideo: true, duration: 9))
+        return assets
+    }
+
     /// A spread-out year of clusters (Feb → Nov, varying sizes) for eyeballing the cluster-index
     /// Overview (#37, design 3BL): enough day-clusters across enough months that the bar chart reads
     /// as a real year skyline and the month sections stack. Ids are `fake/ov/<month>-<day>-<i>` so the
