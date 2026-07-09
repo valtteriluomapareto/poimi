@@ -255,6 +255,10 @@ final class VideoPageController: UIViewController, ViewerPage {
     private var playerTask: Task<Void, Never>?
     private var posterTask: Task<Void, Never>?
     private var posterState = FullImageLoadState()
+    /// Our INTENDED play state — the pause toggle branches on this, not `AVPlayer.timeControlStatus`.
+    /// During an iCloud buffer the status is `.waitingToPlayAtSpecifiedRate` (neither paused nor playing),
+    /// so reading it would treat a "still loading" tap as pause and stall the clip (review finding).
+    private var intendedPlaying = false
 
     init(id: String,
          cachedThumb: @escaping (String) -> UIImage?,
@@ -353,13 +357,9 @@ final class VideoPageController: UIViewController, ViewerPage {
     /// restores the play button — never a dead spinner.
     private func togglePlayback() {
         if let player {
-            if player.timeControlStatus == .paused {
-                player.play()
-                playButton.isHidden = true
-            } else {
-                player.pause()
-                playButton.isHidden = false
-            }
+            intendedPlaying.toggle()
+            if intendedPlaying { player.play() } else { player.pause() }
+            playButton.isHidden = intendedPlaying
             return
         }
         guard playerTask == nil else { return }   // a load is already in flight
@@ -379,6 +379,10 @@ final class VideoPageController: UIViewController, ViewerPage {
     }
 
     private func startPlaying(_ item: AVPlayerItem) {
+        // Route audio through `.playback` so the clip is audible even with the ring/silent switch on —
+        // judging a video means judging its sound, and this matches Photos' inline playback.
+        try? AVAudioSession.sharedInstance().setCategory(.playback)
+        try? AVAudioSession.sharedInstance().setActive(true)
         let player = AVPlayer(playerItem: item)
         let layer = AVPlayerLayer(player: player)
         layer.videoGravity = .resizeAspect
@@ -390,8 +394,10 @@ final class VideoPageController: UIViewController, ViewerPage {
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
             self?.player?.seek(to: .zero)
+            self?.intendedPlaying = false
             self?.playButton.isHidden = false
         }
+        intendedPlaying = true
         playButton.isHidden = true
         player.play()
     }
@@ -414,6 +420,7 @@ final class VideoPageController: UIViewController, ViewerPage {
         playerLayer?.removeFromSuperlayer()
         playerLayer = nil
         player = nil
+        intendedPlaying = false
         spinner.stopAnimating()
         playButton.isHidden = false   // back to the poster + play affordance
     }

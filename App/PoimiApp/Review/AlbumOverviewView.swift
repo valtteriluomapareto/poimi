@@ -21,28 +21,6 @@ import SwiftUI
 import UIKit
 import Curation
 
-/// The `.task` identity for the Overview scan: re-scan when the album changes, its period does, its
-/// "Trips & places" setting flips, OR any source filter changes (a Settings edit mutates these on this
-/// same project), so the cluster index never lags the settings. Mirrors `AppCoordinator.CandidateStoreKey`.
-private struct OverviewScanKey: Hashable {
-    let id: UUID
-    let start: Date
-    let end: Date
-    let locationEnabled: Bool
-    let excludeScreenshots: Bool
-    let excludedAlbumIDs: [String]
-    let includeVideos: Bool
-    init(_ project: CurationProject) {
-        id = project.id
-        start = project.rangeStart
-        end = project.rangeEnd
-        locationEnabled = project.locationEnabled
-        excludeScreenshots = project.excludeScreenshots
-        excludedAlbumIDs = project.excludedAlbumIDs.sorted()
-        includeVideos = project.includeVideos
-    }
-}
-
 struct AlbumOverviewView: View {
     let project: CurationProject
     @Environment(\.photoLibrary) private var library
@@ -98,7 +76,10 @@ struct AlbumOverviewView: View {
             // Keyed on the range too (not just the id): a period edit in Settings mutates this same
             // project, so the key changes and the task re-runs, re-scanning even while Settings is still
             // on top — so the cluster index is fresh by the time you pop back.
-            .task(id: OverviewScanKey(project)) {
+            // Keyed by the SAME `CandidateStoreKey` the coordinator uses — album + range + location + the
+            // source filters — so a Settings edit to any of them re-scans (even while Settings is still on
+            // top), keeping the cluster index fresh. One key type, so it can't drift from the coordinator.
+            .task(id: AppCoordinator.CandidateStoreKey(project)) {
                 selection.activate(project)     // hydrate persisted picks so the counts are live
                 doneStore.activate(project)     // hydrate marked-done days so the state colours are live
                 // Get the album's shared store (created here on the album-landing scan; the grid reuses

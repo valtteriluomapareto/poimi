@@ -325,7 +325,7 @@ struct PhotoViewerView: View {
         }
         .controlSize(.large)
         .sensoryFeedback(.selection, trigger: isSelected)
-        .accessibilityLabel("Pick photo")
+        .accessibilityLabel(isVideo(currentID) ? "Pick video" : "Pick photo")   // media-aware (#125)
         .accessibilityValue(isSelected ? "Picked" : "Not picked")
         .accessibilityAddTraits(.isToggle)
 
@@ -414,6 +414,12 @@ extension PhotoViewerView {
         coordinator.reviewDayByID[id].map { DayGroupHeader.dayLabel(for: $0) } ?? ""
     }
 
+    /// Whether `id` is a video — so the viewer's a11y (page label + Pick control) reads "Video" like the
+    /// grid cell does, rather than always "Photo" (#125). Reads the same published `AssetRef` map.
+    private func isVideo(_ id: String) -> Bool {
+        coordinator.reviewAssetsByID[id]?.isVideo ?? false
+    }
+
     /// Re-format the info labels for `id` — called when `currentID` settles / on appear, NEVER in a body
     /// (repo rule). Free tier (#127): the day + capture time for the date line, and the resolution for the
     /// panel, both from the published `AssetRef`. Async device + file size are a follow-up.
@@ -423,7 +429,9 @@ extension PhotoViewerView {
         info = InfoLabels(
             dateTime: PhotoInfoFormat.dateTimeLine(day: dayLabel(for: id), time: time),
             resolution: asset.map { PhotoInfoFormat.resolution($0.pixelSize) } ?? "",
-            resolutionA11y: Self.resolutionA11y(asset?.pixelSize))
+            resolutionA11y: Self.resolutionA11y(asset?.pixelSize),
+            // A video → its running time (#125); a still → "" (the panel omits the row).
+            duration: asset?.isVideo == true ? (PhotoInfoFormat.duration(asset?.duration) ?? "") : "")
     }
 
     /// VoiceOver form of the resolution ("Resolution, 4032 by 3024, 12 megapixels"), or "Resolution
@@ -441,11 +449,17 @@ extension PhotoViewerView {
                      comment: "Viewer info a11y: resolution")
     }
 
-    /// The per-page VoiceOver label: "Photo, Sat, Jul 5, 7 of 13" (day dropped if unavailable).
+    /// The per-page VoiceOver label: "Photo, Sat, Jul 5, 7 of 13" — or "Video, …" for a video (#125),
+    /// matching the grid cell (day dropped if unavailable).
     private func photoAXLabel(for id: String) -> String {
         let ids = allIDs
         let position = (ids.firstIndex(of: id) ?? 0) + 1
         let day = dayLabel(for: id)
+        if isVideo(id) {
+            return day.isEmpty
+                ? String(localized: "Video, \(position) of \(ids.count)", comment: "Viewer a11y: video position, no day")
+                : String(localized: "Video, \(day), \(position) of \(ids.count)", comment: "Viewer a11y: video day, position")
+        }
         return day.isEmpty
             ? String(localized: "Photo, \(position) of \(ids.count)", comment: "Viewer a11y: position, no day")
             : String(localized: "Photo, \(day), \(position) of \(ids.count)", comment: "Viewer a11y: day, position")
@@ -458,6 +472,8 @@ private struct InfoLabels: Equatable {
     var dateTime = ""
     var resolution = ""
     var resolutionA11y = ""
+    /// A video's running time ("0:14"), empty for a still (#125) — the panel shows the row only for videos.
+    var duration = ""
 }
 
 /// The metadata panel (design 4FE) — a glass card revealed by the viewer's ⓘ, swapped in for the
@@ -469,6 +485,13 @@ private struct PhotoInfoPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Videos lead with their running time (#125); still-only assets show just the resolution.
+            if !labels.duration.isEmpty {
+                row(systemImage: "video",
+                    value: labels.duration,
+                    a11y: String(localized: "Video length, \(labels.duration)",
+                                 comment: "Viewer info a11y: a video's running time"))
+            }
             row(systemImage: "aspectratio",
                 value: labels.resolution.isEmpty ? "—" : labels.resolution,
                 a11y: labels.resolutionA11y)

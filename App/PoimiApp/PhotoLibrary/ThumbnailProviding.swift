@@ -24,8 +24,10 @@ struct PlayerItemBox: @unchecked Sendable {
     let item: AVPlayerItem
 }
 
-/// The abstract image-loading seam. `Sendable` because the implementations are actors and their
-/// `UIImage` results cross the actor boundary; methods are `async` for the same reason.
+/// The abstract media-loading seam — thumbnails, full-resolution stills, AND video player items (#125).
+/// `Sendable` because the implementations are actors and their results cross the actor boundary; methods
+/// are `async` for the same reason. (It grew past "just thumbnails": the real impl already resolves
+/// `PHAsset`s and owns the caching manager, so vending player items here avoids duplicating that wiring.)
 protocol ThumbnailProviding: Sendable {
     /// A thumbnail for `assetID` at roughly `targetSize`, awaiting the first usable (opportunistic)
     /// image. Cancellation-aware: cancelling the calling `Task` cancels the underlying PhotoKit

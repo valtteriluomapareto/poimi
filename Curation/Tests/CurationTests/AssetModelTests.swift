@@ -44,11 +44,13 @@ struct AssetModelTests {
         #expect(ref.duration == nil)
     }
 
-    @Test("AssetRef is Hashable on its full value")
+    @Test("AssetRef is Hashable/Equatable on its full value — incl. isVideo/duration (#125)")
     func assetRefHashable() {
         let a = AssetRef(id: "x", captureDate: nil)
         let b = AssetRef(id: "x", captureDate: nil)
         #expect(Set([a, b]).count == 1)
+        // The new media-type fields participate in equality: a video and a still with the same id differ.
+        #expect(AssetRef(id: "x", captureDate: nil, isVideo: true, duration: 1) != AssetRef(id: "x", captureDate: nil))
     }
 
     @Test("AlbumRef carries id / title / count")

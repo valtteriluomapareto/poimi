@@ -2374,6 +2374,46 @@
           }
         }
       }
+    },
+    "Pick video": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimi video"
+          }
+        }
+      }
+    },
+    "Video, %lld of %lld": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video, %1$lld / %2$lld"
+          }
+        }
+      }
+    },
+    "Video, %@, %lld of %lld": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video, %1$@, %2$lld / %3$lld"
+          }
+        }
+      }
+    },
+    "Video length, %@": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Videon kesto, %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

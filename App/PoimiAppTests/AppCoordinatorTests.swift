@@ -218,6 +218,25 @@ struct AppCoordinatorTests {
         #expect(Key(project(excludedAlbumIDs: ["a", "b"])) == Key(project(excludedAlbumIDs: ["b", "a"])))
     }
 
+    @Test("candidateStore reuses one store per key, and rebuilds when a source filter is edited (#125)")
+    func candidateStoreReuseAcrossFilterEdit() {
+        let coord = coordinator(.authorized)
+        let project = CurationProject(
+            title: "A",
+            rangeStart: Date(timeIntervalSince1970: 0), rangeEnd: Date(timeIntervalSince1970: 86_400),
+            targetCount: 100, selectionSnapshot: Data(),
+            createdAt: Date(timeIntervalSince1970: 0), lastOpenedAt: Date(timeIntervalSince1970: 0))
+        // Same key twice → the SAME store (Overview + grid share one scan; no double-fetch/re-cluster).
+        let first = coord.candidateStore(for: project) { CandidateStore(library: FakePhotoLibrary()) }
+        let reused = coord.candidateStore(for: project) { CandidateStore(library: FakePhotoLibrary()) }
+        #expect(first === reused)
+        // A Settings filter edit flips the key → a FRESH store, so the next scan runs the new candidate
+        // set (not the stale cached one). This is the reuse path the key-equality test only proxies.
+        project.includeVideos.toggle()
+        let rebuilt = coord.candidateStore(for: project) { CandidateStore(library: FakePhotoLibrary()) }
+        #expect(rebuilt !== first)
+    }
+
     @Test("AssetRef map shared for the info panel; the review context clears on an album switch (#127)")
     func reviewAssetMapSharedAndCleared() {
         let coord = coordinator(.authorized)
