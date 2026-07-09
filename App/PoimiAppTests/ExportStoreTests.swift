@@ -54,6 +54,23 @@ struct ExportStoreTests {
         #expect(project.markedDoneAt != nil)               // finalized → status .done
     }
 
+    @Test("a video pick exports into the album like a photo (mixed selection, #125)")
+    func exportsVideosLikePhotos() async throws {
+        // Export is media-type-agnostic (it resolves ids → assets → album membership), so a picked video
+        // must land in the album alongside the stills — nothing special-cases it out.
+        let project = makeProject()
+        let fake = FakePhotoLibrary(assets: FakePhotoLibrary.videoMixedSeed())
+        let store = ExportStore(library: fake)
+        let mixed: Set<String> = ["fake/busy/2", "fake/video/1"]   // one still + one video
+        await store.run(project: project, picks: mixed)
+
+        guard case .done(let result, _) = store.phase else {
+            Issue.record("expected .done, got \(store.phase)"); return
+        }
+        #expect(result.added == 2)
+        #expect(await fake.exportedAssetIDs(inAlbum: result.albumID) == mixed)   // the video is in the album
+    }
+
     @Test("the finalize is durably saved — a fresh context re-fetches targetAlbumID + markedDoneAt")
     func finalizePersistsAcrossContext() async throws {
         let project = makeProject()
