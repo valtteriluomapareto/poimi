@@ -194,6 +194,49 @@ struct AppCoordinatorTests {
         #expect(coord.reviewDayByID["a"] == .day(year: 2025, month: 7, day: 5))
     }
 
+    @Test("CandidateStoreKey tracks every source filter — a Settings filter edit forces a re-scan (#125)")
+    func candidateStoreKeyTracksFilters() {
+        let fixedID = UUID()   // same album id, so only the filter under test differs
+        func project(includeVideos: Bool = false, excludeScreenshots: Bool = true,
+                     excludedAlbumIDs: [String] = []) -> CurationProject {
+            CurationProject(
+                id: fixedID, title: "A",
+                rangeStart: Date(timeIntervalSince1970: 0), rangeEnd: Date(timeIntervalSince1970: 86_400),
+                targetCount: 100, excludeScreenshots: excludeScreenshots,
+                excludedAlbumIDs: excludedAlbumIDs, includeVideos: includeVideos,
+                selectionSnapshot: Data(),
+                createdAt: Date(timeIntervalSince1970: 0), lastOpenedAt: Date(timeIntervalSince1970: 0))
+        }
+        typealias Key = AppCoordinator.CandidateStoreKey
+        let base = Key(project())
+        #expect(base == Key(project()))                                   // same config → reuse the scan
+        #expect(base != Key(project(includeVideos: true)))               // videos toggled → re-scan (#125)
+        #expect(base != Key(project(excludeScreenshots: false)))         // screenshots toggled → re-scan
+        #expect(base != Key(project(excludedAlbumIDs: ["x"])))           // an excluded album added → re-scan
+        // Excluded-album ORDER must not matter — the picker's Set is unordered, so the key sorts it; an
+        // order-only difference must NOT spuriously invalidate the scan.
+        #expect(Key(project(excludedAlbumIDs: ["a", "b"])) == Key(project(excludedAlbumIDs: ["b", "a"])))
+    }
+
+    @Test("candidateStore reuses one store per key, and rebuilds when a source filter is edited (#125)")
+    func candidateStoreReuseAcrossFilterEdit() {
+        let coord = coordinator(.authorized)
+        let project = CurationProject(
+            title: "A",
+            rangeStart: Date(timeIntervalSince1970: 0), rangeEnd: Date(timeIntervalSince1970: 86_400),
+            targetCount: 100, selectionSnapshot: Data(),
+            createdAt: Date(timeIntervalSince1970: 0), lastOpenedAt: Date(timeIntervalSince1970: 0))
+        // Same key twice → the SAME store (Overview + grid share one scan; no double-fetch/re-cluster).
+        let first = coord.candidateStore(for: project) { CandidateStore(library: FakePhotoLibrary()) }
+        let reused = coord.candidateStore(for: project) { CandidateStore(library: FakePhotoLibrary()) }
+        #expect(first === reused)
+        // A Settings filter edit flips the key → a FRESH store, so the next scan runs the new candidate
+        // set (not the stale cached one). This is the reuse path the key-equality test only proxies.
+        project.includeVideos.toggle()
+        let rebuilt = coord.candidateStore(for: project) { CandidateStore(library: FakePhotoLibrary()) }
+        #expect(rebuilt !== first)
+    }
+
     @Test("AssetRef map shared for the info panel; the review context clears on an album switch (#127)")
     func reviewAssetMapSharedAndCleared() {
         let coord = coordinator(.authorized)

@@ -15,6 +15,7 @@
 
 import Photos
 import UIKit
+import AVFoundation
 
 actor SystemThumbnailProvider: ThumbnailProviding {
     private let cachingManager = PHCachingImageManager()
@@ -118,6 +119,32 @@ actor SystemThumbnailProvider: ThumbnailProviding {
                     // failure can't leave the awaiting task parked forever.
                     guard image != nil || isTerminal else { return }
                     if resumed.setOnce() { continuation.resume(returning: image) }
+                }
+                requestIDBox.value = id
+                if Task.isCancelled { manager.cancelImageRequest(id) }
+            }
+        } onCancel: {
+            if let id = requestIDBox.value { manager.cancelImageRequest(id) }
+        }
+    }
+
+    func playerItem(for assetID: String) async -> PlayerItemBox? {
+        guard let asset = resolve(assetID), asset.mediaType == .video else { return nil }
+        let manager = cachingManager
+        let requestIDBox = LockedBox<PHImageRequestID>()
+
+        return await withTaskCancellationHandler {
+            if Task.isCancelled { return nil }
+            return await withCheckedContinuation { (continuation: CheckedContinuation<PlayerItemBox?, Never>) in
+                let options = PHVideoRequestOptions()
+                options.deliveryMode = .automatic
+                options.isNetworkAccessAllowed = true   // iCloud-optimized originals download to play
+                // Called once, on a background queue: hand back the boxed item (nil on error/cancel).
+                let resumed = LockedFlag()
+                let id = manager.requestPlayerItem(forVideo: asset, options: options) { item, _ in
+                    if resumed.setOnce() {
+                        continuation.resume(returning: item.map { PlayerItemBox(item: $0) })
+                    }
                 }
                 requestIDBox.value = id
                 if Task.isCancelled { manager.cancelImageRequest(id) }

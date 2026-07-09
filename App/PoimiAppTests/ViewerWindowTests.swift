@@ -98,6 +98,21 @@ struct PagerNeighbourTests {
     }
 }
 
+@Suite("Viewer page kind — photo vs video (#125)")
+struct ViewerPageKindTests {
+    @Test("a video id → .video; a still, an absent id, or an empty map → .photo")
+    func kinds() {
+        let assets: [String: AssetRef] = [
+            "vid": AssetRef(id: "vid", captureDate: nil, isVideo: true, duration: 14),
+            "still": AssetRef(id: "still", captureDate: nil)
+        ]
+        #expect(pageKind(for: "vid", assets: assets) == .video)
+        #expect(pageKind(for: "still", assets: assets) == .photo)
+        #expect(pageKind(for: "unknown", assets: assets) == .photo)   // absent → photo (never crashes)
+        #expect(pageKind(for: "vid", assets: [:]) == .photo)          // empty map → photo
+    }
+}
+
 @Suite("Viewer full-image load state — no permanent-black page (#158)")
 struct FullImageLoadStateTests {
 

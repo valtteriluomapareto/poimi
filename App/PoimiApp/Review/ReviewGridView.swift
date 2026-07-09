@@ -132,6 +132,7 @@ struct ReviewGridView: View {
                     spacing: spacing,
                     load: load,
                     cachedImage: cachedImage,
+                    videoBadge: videoBadge,
                     openAsset: openAsset,
                     // Only the ACTIVE page reports cell visibility — TabView pre-renders neighbours, and
                     // their cells reporting visible would churn the prefetch recompute on every swipe.
@@ -257,6 +258,14 @@ struct ReviewGridView: View {
         thumbnails.cachedThumbnail(for: id, targetSize: thumbnailTarget)
     }
 
+    /// A cell's video badge text — the formatted running time for a video, `nil` for a still (#125). The
+    /// AssetRef map is published to the coordinator on `.ready` (the same source the viewer reads), so
+    /// this is an O(1) dictionary lookup + a pure format, done once per cell — not work in a `body`.
+    private func videoBadge(_ id: String) -> String? {
+        guard let asset = coordinator.reviewAssetsByID[id], asset.isVideo else { return nil }
+        return PhotoInfoFormat.duration(asset.duration)
+    }
+
     // MARK: Prefetch window (scoped to the current cluster)
 
     private var groupIdentity: String {
@@ -308,6 +317,9 @@ private struct ClusterPage: View {
     let spacing: CGFloat
     let load: (String) async -> UIImage?
     let cachedImage: (String) -> UIImage?
+    /// A cell's video badge text ("0:14"), or `nil` for a still (#125) — a dictionary lookup + pure format
+    /// done once per cell, off the body.
+    let videoBadge: (String) -> String?
     let openAsset: (String) -> Void
     /// Only the active (current) page reports cell visibility — keeps the prefetch recompute off the
     /// swipe hot path, since TabView pre-renders neighbours whose cells would otherwise churn it.
@@ -335,6 +347,7 @@ private struct ClusterPage: View {
                             ReviewGridCell(
                                 id: id,
                                 dayLabel: dayLabel,
+                                videoBadge: videoBadge(id),
                                 load: load,
                                 cachedImage: cachedImage,
                                 onOpen: { Perf.event("grid.tap \(id.suffix(8))"); openAsset(id) })

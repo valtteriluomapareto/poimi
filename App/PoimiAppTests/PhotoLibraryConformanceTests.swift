@@ -29,6 +29,16 @@ func assertFetchContract(_ library: any PhotoLibraryProviding, in interval: Date
     #expect(dates == dates.sorted())
     // 3. No duplicate ids.
     #expect(Set(assets.map(\.id)).count == assets.count)
+    // 4. Media-type ⇔ duration invariant (#125): a video carries a positive duration; a still carries
+    //    none. Both impls derive `duration` from `mediaType`, so this must hold regardless of seed.
+    for asset in assets {
+        if asset.isVideo {
+            let duration = try #require(asset.duration, "a video must carry a duration")
+            #expect(duration > 0, "a video's duration must be positive")
+        } else {
+            #expect(asset.duration == nil, "a still must not carry a duration")
+        }
+    }
 }
 
 /// The album-membership contract for `assetIDs(inAlbums:)` — content-agnostic, so it holds for
@@ -48,6 +58,16 @@ struct PhotoLibraryConformanceTests {
     func fakeFetchContract() async throws {
         try await assertFetchContract(FakePhotoLibrary.yearMixed(), in: .year2025)
         try await assertAlbumMembershipContract(FakePhotoLibrary.yearMixed())
+    }
+
+    @Test("the video-bearing seed satisfies the contract — the media-type ⇔ duration invariant is exercised (#125)")
+    func videoSeedFetchContract() async throws {
+        // yearMixed is stills-only, so its videos-branch is vacuous — assert against a seed that
+        // actually returns videos, so invariant #4's positive-duration path is genuinely tested.
+        let library = FakePhotoLibrary.videoMixed()
+        try await assertFetchContract(library, in: .year2025)
+        let assets = try await library.fetchAssets(in: .year2025)
+        #expect(assets.contains { $0.isVideo })   // the fetch really returned videos (not filtered out here)
     }
 
     @Test("empty FakePhotoLibrary satisfies the contract")

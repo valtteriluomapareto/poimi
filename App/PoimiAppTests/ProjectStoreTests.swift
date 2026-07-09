@@ -123,7 +123,7 @@ struct ProjectStoreTests {
         #expect(store.projects.first?.targetAlbumID == "album/B")
     }
 
-    @Test("create(from:) persists the full setup draft — exclusions (sorted) + export target")
+    @Test("create(from:) persists the full setup draft — exclusions (sorted) + videos + export target")
     func createFromDraft() throws {
         let store = try makeStore()
         let draft = NewAlbumDraft(
@@ -133,6 +133,7 @@ struct ProjectStoreTests {
             targetCount: 80,
             excludeScreenshots: false,
             excludedAlbumIDs: ["album/whatsapp", "album/downloads"],
+            includeVideos: true,
             targetAlbumID: "album/existing")
 
         let project = store.create(from: draft)
@@ -142,8 +143,25 @@ struct ProjectStoreTests {
         #expect(project.targetCount == 80)
         #expect(project.excludeScreenshots == false)
         #expect(project.excludedAlbumIDs == ["album/downloads", "album/whatsapp"])   // stored sorted
+        #expect(project.includeVideos == true)                   // the video opt-in threads through (#125)
         #expect(project.targetAlbumID == "album/existing")
         #expect(store.projects.contains { $0.id == project.id })
+    }
+
+    @Test("includeVideos defaults off, and duplicate carries it (+ locationEnabled) forward")
+    func includeVideosDefaultAndDuplicate() throws {
+        let store = try makeStore()
+        // A plain create() leaves videos off (the images-only default, #125).
+        let plain = makeProject(store, title: "Plain")
+        #expect(plain.includeVideos == false)
+
+        // Duplicate must copy the CONFIG — including includeVideos and locationEnabled (the latter a
+        // latent omission fixed alongside #125).
+        plain.includeVideos = true
+        plain.locationEnabled = false
+        let copy = store.duplicate(plain)
+        #expect(copy.includeVideos == true)
+        #expect(copy.locationEnabled == false)
     }
 
     @Test("status derives from persisted state: empty → inProgress → done")

@@ -35,6 +35,13 @@ final class CurationProject {
     /// AppSchema policy note). `false` → the byte-identical date-only timeline (the v1 screen).
     var locationEnabled: Bool = true
 
+    /// Include video assets in the candidate set (#125). **Opt-in** — defaults `false`, so an album is
+    /// images-only unless the user turns videos on (product truth: the human curates; videos add noise
+    /// for most). Additive attribute with a default → SwiftData AUTOMATIC lightweight migration (no stage,
+    /// a shared model class — the AppSchema policy note; same pattern as `locationEnabled`). Toggling it
+    /// re-runs the scan (it feeds `Filtering.included(includeVideos:)`), so the candidate set changes.
+    var includeVideos: Bool = false
+
     /// The exported Photos album's id — `nil` until first export creates-or-finds it (D19).
     var targetAlbumID: String?
 
@@ -70,6 +77,7 @@ final class CurationProject {
         excludeScreenshots: Bool = true,
         excludedAlbumIDs: [String] = [],
         locationEnabled: Bool = true,
+        includeVideos: Bool = false,
         targetAlbumID: String? = nil,
         selectionSnapshot: Data,
         doneDays: [String] = [],
@@ -88,6 +96,7 @@ final class CurationProject {
         self.excludeScreenshots = excludeScreenshots
         self.excludedAlbumIDs = excludedAlbumIDs
         self.locationEnabled = locationEnabled
+        self.includeVideos = includeVideos
         self.targetAlbumID = targetAlbumID
         self.selectionSnapshot = selectionSnapshot
         self.doneDays = doneDays

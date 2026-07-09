@@ -59,4 +59,19 @@ struct PhotoInfoFormatTests {
         #expect(PhotoInfoFormat.dateTimeLine(day: "", time: "14.32") == "14.32")              // no review context
         #expect(PhotoInfoFormat.dateTimeLine(day: "", time: "") == "")                        // nothing
     }
+
+    @Test("duration: nil → nil (a still); M:SS under an hour; H:MM:SS at/over an hour (#125)")
+    func duration() {
+        #expect(PhotoInfoFormat.duration(nil) == nil)          // a still carries no duration → no badge
+        #expect(PhotoInfoFormat.duration(0) == "0:00")
+        #expect(PhotoInfoFormat.duration(9) == "0:09")
+        #expect(PhotoInfoFormat.duration(14) == "0:14")
+        #expect(PhotoInfoFormat.duration(65) == "1:05")        // seconds zero-padded, minutes not
+        #expect(PhotoInfoFormat.duration(600) == "10:00")
+        #expect(PhotoInfoFormat.duration(3661) == "1:01:01")   // an hour+ switches to H:MM:SS
+        #expect(PhotoInfoFormat.duration(3600) == "1:00:00")
+        // Fractional seconds floor; a stray negative clamps to zero (never a "-1" or a crash).
+        #expect(PhotoInfoFormat.duration(14.9) == "0:14")
+        #expect(PhotoInfoFormat.duration(-5) == "0:00")
+    }
 }

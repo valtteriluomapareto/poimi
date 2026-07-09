@@ -30,6 +30,27 @@ struct FilteringTests {
         let kept = Filtering.included([a, b], excludeScreenshots: false, excludedAssetIDs: ["b"])
         #expect(kept.map(\.id) == ["a"])
     }
+
+    @Test("drops videos unless includeVideos is on (default off = images only, #125)")
+    func videos() {
+        let photo = AssetRef(id: "p", captureDate: nil)
+        let video = AssetRef(id: "v", captureDate: nil, isVideo: true, duration: 14)
+        // Default (off) → images only.
+        #expect(Filtering.included([photo, video], excludeScreenshots: false).map(\.id) == ["p"])
+        // On → both.
+        #expect(Filtering.included([photo, video], excludeScreenshots: false, includeVideos: true)
+            .map(\.id) == ["p", "v"])
+    }
+
+    @Test("an excluded-album video is dropped even when includeVideos is on (#125)")
+    func excludedAlbumVideo() {
+        let photo = AssetRef(id: "p", captureDate: nil)
+        let video = AssetRef(id: "v", captureDate: nil, isVideo: true, duration: 9)
+        // Videos on, but the video is a member of an excluded album → still dropped.
+        let kept = Filtering.included([photo, video], excludeScreenshots: false,
+                                      includeVideos: true, excludedAssetIDs: ["v"])
+        #expect(kept.map(\.id) == ["p"])
+    }
 }
 
 // MARK: - Target math

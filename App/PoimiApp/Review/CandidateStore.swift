@@ -188,6 +188,7 @@ final class CandidateStore {
             let candidates = Filtering.included(
                 fetched,
                 excludeScreenshots: project.excludeScreenshots,
+                includeVideos: project.includeVideos,
                 excludedAssetIDs: excludedAssetIDs)
             let fetchMillis = Date().timeIntervalSince(fetchStart) * 1000
             // Assemble the timeline once, here — the grid renders it directly and never recomputes it

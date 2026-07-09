@@ -68,13 +68,24 @@ public struct AssetRef: Sendable, Identifiable, Equatable, Hashable, Codable {
     /// User favorite flag.
     public let isFavorite: Bool
 
+    /// Whether this asset is a video rather than a still — the media-type flag the grid badges
+    /// and the viewer plays (#125). Default `false` keeps every existing still-only call site.
+    public let isVideo: Bool
+
+    /// Video duration in seconds; `nil` for a still. Surfaced as the grid badge + the viewer's
+    /// info-panel duration. Always non-nil for a video, always nil for a still — the media-type
+    /// contract the provider conformance suite pins.
+    public let duration: Double?
+
     public init(
         id: String,
         captureDate: Date?,
         coordinate: Coordinate? = nil,
         pixelSize: PixelSize = .zero,
         isScreenshot: Bool = false,
-        isFavorite: Bool = false
+        isFavorite: Bool = false,
+        isVideo: Bool = false,
+        duration: Double? = nil
     ) {
         self.id = id
         self.captureDate = captureDate
@@ -82,6 +93,8 @@ public struct AssetRef: Sendable, Identifiable, Equatable, Hashable, Codable {
         self.pixelSize = pixelSize
         self.isScreenshot = isScreenshot
         self.isFavorite = isFavorite
+        self.isVideo = isVideo
+        self.duration = duration
     }
 }
 

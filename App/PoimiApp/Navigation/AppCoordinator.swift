@@ -67,8 +67,8 @@ final class AppCoordinator {
     /// The active album's scanned candidate store, created ONCE by whichever review screen loads first
     /// (the Overview, in the real navigation path) and REUSED by the grid — so drilling in doesn't
     /// re-fetch + re-cluster the whole album (the double-scan the review flagged). Keyed by album +
-    /// range + location setting; a Settings edit that changes any of those yields a fresh store on the
-    /// next scan. Cleared on an album switch to free it.
+    /// range + location setting + the source filters (`CandidateStoreKey`); a Settings edit that changes
+    /// any of those yields a fresh store on the next scan. Cleared on an album switch to free it.
     private(set) var candidateStore: CandidateStore?
     private var candidateStoreKey: CandidateStoreKey?
 
@@ -78,17 +78,28 @@ final class AppCoordinator {
     /// screens build; the SAME instance is handed to `ProjectStore` so a delete drops the cache file.
     let timelineCache: TimelineCache
 
-    /// Identity of a scanned store — a change in any field means a genuinely different candidate set.
+    /// Identity of a scanned store — a change in any field means a genuinely different candidate set,
+    /// so the store is rebuilt (and every `.task(id:)` mirror re-fires). Covers the fetch inputs
+    /// (`start`/`end`), the clustering setting (`locationEnabled`), AND the source filters
+    /// (`excludeScreenshots` / `excludedAlbumIDs` / `includeVideos`) — a Settings edit to any filter must
+    /// re-scan too, else the grid keeps showing the old candidate set. `excludedAlbumIDs` is sorted so the
+    /// picker's unordered `Set` edits don't churn the key spuriously.
     struct CandidateStoreKey: Equatable {
         let id: UUID
         let start: Date
         let end: Date
         let locationEnabled: Bool
+        let excludeScreenshots: Bool
+        let excludedAlbumIDs: [String]
+        let includeVideos: Bool
         init(_ project: CurationProject) {
             id = project.id
             start = project.rangeStart
             end = project.rangeEnd
             locationEnabled = project.locationEnabled
+            excludeScreenshots = project.excludeScreenshots
+            excludedAlbumIDs = project.excludedAlbumIDs.sorted()
+            includeVideos = project.includeVideos
         }
     }
 

@@ -188,6 +188,10 @@ struct PhotoViewerView: View {
                     ?? thumbnails.cachedThumbnail(for: id, targetSize: filmstripThumbSize)
             },
             loadFull: { await thumbnails.fullImage(for: $0, targetSize: $1) },
+            // The published AssetRef map decides each page's kind (photo vs video, #125); the player item
+            // loads lazily on the first play tap and is unboxed here for the video page's own AVPlayer.
+            assets: coordinator.reviewAssetsByID,
+            loadPlayerItem: { await thumbnails.playerItem(for: $0)?.item },
             axLabel: { photoAXLabel(for: $0) },
             onTapPhoto: { selection.toggle($0) },   // single-tap the photo = pick (Pick button is primary)
             // Auto-done fires on a real SWIPE only (not a filmstrip tap), so browsing/jumping never marks (#128).
@@ -321,7 +325,7 @@ struct PhotoViewerView: View {
         }
         .controlSize(.large)
         .sensoryFeedback(.selection, trigger: isSelected)
-        .accessibilityLabel("Pick photo")
+        .accessibilityLabel(isVideo(currentID) ? "Pick video" : "Pick photo")   // media-aware (#125)
         .accessibilityValue(isSelected ? "Picked" : "Not picked")
         .accessibilityAddTraits(.isToggle)
 
@@ -410,6 +414,12 @@ extension PhotoViewerView {
         coordinator.reviewDayByID[id].map { DayGroupHeader.dayLabel(for: $0) } ?? ""
     }
 
+    /// Whether `id` is a video — so the viewer's a11y (page label + Pick control) reads "Video" like the
+    /// grid cell does, rather than always "Photo" (#125). Reads the same published `AssetRef` map.
+    private func isVideo(_ id: String) -> Bool {
+        coordinator.reviewAssetsByID[id]?.isVideo ?? false
+    }
+
     /// Re-format the info labels for `id` — called when `currentID` settles / on appear, NEVER in a body
     /// (repo rule). Free tier (#127): the day + capture time for the date line, and the resolution for the
     /// panel, both from the published `AssetRef`. Async device + file size are a follow-up.
@@ -419,7 +429,9 @@ extension PhotoViewerView {
         info = InfoLabels(
             dateTime: PhotoInfoFormat.dateTimeLine(day: dayLabel(for: id), time: time),
             resolution: asset.map { PhotoInfoFormat.resolution($0.pixelSize) } ?? "",
-            resolutionA11y: Self.resolutionA11y(asset?.pixelSize))
+            resolutionA11y: Self.resolutionA11y(asset?.pixelSize),
+            // A video → its running time (#125); a still → "" (the panel omits the row).
+            duration: asset?.isVideo == true ? (PhotoInfoFormat.duration(asset?.duration) ?? "") : "")
     }
 
     /// VoiceOver form of the resolution ("Resolution, 4032 by 3024, 12 megapixels"), or "Resolution
@@ -437,11 +449,17 @@ extension PhotoViewerView {
                      comment: "Viewer info a11y: resolution")
     }
 
-    /// The per-page VoiceOver label: "Photo, Sat, Jul 5, 7 of 13" (day dropped if unavailable).
+    /// The per-page VoiceOver label: "Photo, Sat, Jul 5, 7 of 13" — or "Video, …" for a video (#125),
+    /// matching the grid cell (day dropped if unavailable).
     private func photoAXLabel(for id: String) -> String {
         let ids = allIDs
         let position = (ids.firstIndex(of: id) ?? 0) + 1
         let day = dayLabel(for: id)
+        if isVideo(id) {
+            return day.isEmpty
+                ? String(localized: "Video, \(position) of \(ids.count)", comment: "Viewer a11y: video position, no day")
+                : String(localized: "Video, \(day), \(position) of \(ids.count)", comment: "Viewer a11y: video day, position")
+        }
         return day.isEmpty
             ? String(localized: "Photo, \(position) of \(ids.count)", comment: "Viewer a11y: position, no day")
             : String(localized: "Photo, \(day), \(position) of \(ids.count)", comment: "Viewer a11y: day, position")
@@ -454,6 +472,8 @@ private struct InfoLabels: Equatable {
     var dateTime = ""
     var resolution = ""
     var resolutionA11y = ""
+    /// A video's running time ("0:14"), empty for a still (#125) — the panel shows the row only for videos.
+    var duration = ""
 }
 
 /// The metadata panel (design 4FE) — a glass card revealed by the viewer's ⓘ, swapped in for the
@@ -465,6 +485,13 @@ private struct PhotoInfoPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Videos lead with their running time (#125); still-only assets show just the resolution.
+            if !labels.duration.isEmpty {
+                row(systemImage: "video",
+                    value: labels.duration,
+                    a11y: String(localized: "Video length, \(labels.duration)",
+                                 comment: "Viewer info a11y: a video's running time"))
+            }
             row(systemImage: "aspectratio",
                 value: labels.resolution.isEmpty ? "—" : labels.resolution,
                 a11y: labels.resolutionA11y)
@@ -512,6 +539,19 @@ enum PhotoInfoFormat {
         guard pixelSize.width > 0, pixelSize.height > 0 else { return "" }
         let dims = "\(pixelSize.width) × \(pixelSize.height)"
         return megapixels(pixelSize).map { "\(dims) · \($0) MP" } ?? dims
+    }
+
+    /// A video's running time as a compact clock: `nil` → `nil` (a still, so no badge); otherwise
+    /// "M:SS" under an hour ("0:14", "1:05") and "H:MM:SS" at/over an hour ("1:02:09"). Seconds are
+    /// floored to whole seconds. Negative input clamps to 0. The single source of the duration string —
+    /// the grid badge (#125) and the viewer read through this, so they can't drift.
+    static func duration(_ seconds: Double?) -> String? {
+        guard let seconds else { return nil }
+        let total = max(0, Int(seconds))          // floor to whole seconds; clamp any negative
+        let (h, m, s) = (total / 3600, (total % 3600) / 60, total % 60)
+        return h > 0
+            ? String(format: "%d:%02d:%02d", h, m, s)
+            : String(format: "%d:%02d", m, s)
     }
 
     /// Join the day + capture time for the viewer's date line: "Sat, Jul 5 · 14.32". Either piece may be

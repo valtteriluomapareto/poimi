@@ -18,13 +18,17 @@ struct AssetModelTests {
             coordinate: Coordinate(latitude: 60.17, longitude: 24.94),
             pixelSize: PixelSize(width: 4032, height: 3024),
             isScreenshot: false,
-            isFavorite: true
+            isFavorite: true,
+            isVideo: true,
+            duration: 14
         )
         let data = try JSONEncoder().encode(ref)
         let decoded = try JSONDecoder().decode(AssetRef.self, from: data)
         #expect(decoded == ref)
         #expect(decoded.id == "asset/1")
         #expect(decoded.pixelSize.pixelCount == 4032 * 3024)
+        #expect(decoded.isVideo == true)      // media type + duration round-trip (#125)
+        #expect(decoded.duration == 14)
     }
 
     @Test("AssetRef identity is its localIdentifier; optional fields default to nil/empty")
@@ -36,13 +40,17 @@ struct AssetModelTests {
         #expect(ref.pixelSize == .zero)
         #expect(ref.isScreenshot == false)
         #expect(ref.isFavorite == false)
+        #expect(ref.isVideo == false)         // defaults to a still (#125)
+        #expect(ref.duration == nil)
     }
 
-    @Test("AssetRef is Hashable on its full value")
+    @Test("AssetRef is Hashable/Equatable on its full value — incl. isVideo/duration (#125)")
     func assetRefHashable() {
         let a = AssetRef(id: "x", captureDate: nil)
         let b = AssetRef(id: "x", captureDate: nil)
         #expect(Set([a, b]).count == 1)
+        // The new media-type fields participate in equality: a video and a still with the same id differ.
+        #expect(AssetRef(id: "x", captureDate: nil, isVideo: true, duration: 1) != AssetRef(id: "x", captureDate: nil))
     }
 
     @Test("AlbumRef carries id / title / count")

@@ -19,6 +19,9 @@ struct NewAlbumDraft: Equatable {
     var excludeScreenshots: Bool
     /// `PHAssetCollection` localIdentifiers to drop from the source pool (WhatsApp, Downloads, …).
     var excludedAlbumIDs: Set<String>
+    /// Include videos in the candidate set (#125). Opt-in — defaults `false` (images-only), matching
+    /// `CurationProject.includeVideos`.
+    var includeVideos: Bool
     /// The export target: `nil` → create a new album on first export (D19); set → add to this
     /// existing album.
     var targetAlbumID: String?
@@ -38,6 +41,7 @@ struct NewAlbumDraft: Equatable {
             targetCount: 100,
             excludeScreenshots: true,
             excludedAlbumIDs: [],
+            includeVideos: false,
             targetAlbumID: nil)
     }
 

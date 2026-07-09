@@ -51,10 +51,10 @@ struct ScanningView: View {
             // backdrop reacting to a collapsing title), which removes the observation feedback loop
             // — verified on device (no scroll flicker); re-check if the top-title layout changes.
             .toolbarBackground(.hidden, for: .navigationBar)
-            // Keyed by album + range + location so re-targeting (iPad detail column) / a Settings edit
-            // re-runs against the right candidate set; the coordinator's matching key decides scan-vs-reuse.
-            .task(id: ScanIdentity(id: project.id, start: project.rangeStart, end: project.rangeEnd,
-                                   locationEnabled: project.locationEnabled)) {
+            // Keyed by the SAME `CandidateStoreKey` the coordinator uses for scan-vs-reuse (album + range +
+            // location + the source filters), so re-targeting (iPad detail column) / any Settings edit
+            // re-runs against the right candidate set — one key type, so this can't drift from the coordinator.
+            .task(id: AppCoordinator.CandidateStoreKey(project)) {
                 // Hydrate the selection + done-state for this project (idempotent — activate() no-ops
                 // if already active, so re-entry never clobbers unflushed picks/done-days).
                 selection.activate(project)
@@ -75,15 +75,6 @@ struct ScanningView: View {
                     publishForViewer()
                 }
             }
-    }
-
-    /// The `.task` identity: re-run when the album, its range, or its "Trips & places" setting changes
-    /// (mirrors the coordinator's store key so scan-vs-reuse stays consistent).
-    private struct ScanIdentity: Hashable {
-        let id: UUID
-        let start: Date
-        let end: Date
-        let locationEnabled: Bool
     }
 
     /// Run (or re-run, e.g. a "Try again") the fetch pass, then reconcile done-state and publish the

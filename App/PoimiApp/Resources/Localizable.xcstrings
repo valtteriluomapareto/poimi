@@ -2344,6 +2344,76 @@
           }
         }
       }
+    },
+    "Include videos": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sisällytä videot"
+          }
+        }
+      }
+    },
+    "Off by default. Turn on to pick from videos too — they're copied to the album like photos.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pois päältä oletuksena. Ota käyttöön poimiaksesi myös videoita — ne kopioidaan albumiin kuvien tavoin."
+          }
+        }
+      }
+    },
+    "Play video": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toista video"
+          }
+        }
+      }
+    },
+    "Pick video": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimi video"
+          }
+        }
+      }
+    },
+    "Video, %lld of %lld": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video, %1$lld / %2$lld"
+          }
+        }
+      }
+    },
+    "Video, %@, %lld of %lld": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video, %1$@, %2$lld / %3$lld"
+          }
+        }
+      }
+    },
+    "Video length, %@": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Videon kesto, %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -59,6 +59,7 @@ final class ProjectStore {
         targetCount: Int,
         excludeScreenshots: Bool = true,
         excludedAlbumIDs: [String] = [],
+        includeVideos: Bool = false,
         targetAlbumID: String? = nil
     ) -> CurationProject {
         let timestamp = now()
@@ -69,6 +70,7 @@ final class ProjectStore {
             targetCount: targetCount,
             excludeScreenshots: excludeScreenshots,
             excludedAlbumIDs: excludedAlbumIDs,
+            includeVideos: includeVideos,
             targetAlbumID: targetAlbumID,
             selectionSnapshot: Self.emptySnapshot,
             createdAt: timestamp,
@@ -90,6 +92,7 @@ final class ProjectStore {
             targetCount: draft.targetCount,
             excludeScreenshots: draft.excludeScreenshots,
             excludedAlbumIDs: draft.excludedAlbumIDs.sorted(),
+            includeVideos: draft.includeVideos,
             targetAlbumID: draft.targetAlbumID)
     }
 
@@ -112,6 +115,8 @@ final class ProjectStore {
             targetCount: project.targetCount,
             excludeScreenshots: project.excludeScreenshots,
             excludedAlbumIDs: project.excludedAlbumIDs,
+            locationEnabled: project.locationEnabled,
+            includeVideos: project.includeVideos,
             targetAlbumID: nil,
             selectionSnapshot: Self.emptySnapshot,
             createdAt: timestamp,

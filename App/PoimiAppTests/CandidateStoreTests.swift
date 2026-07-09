@@ -31,6 +31,7 @@ struct CandidateStoreTests {
     private func makeProject(
         excludeScreenshots: Bool = true,
         excludedAlbumIDs: [String] = [],
+        includeVideos: Bool = false,
         rangeStart: Date = TestDates.year2025Start,
         rangeEnd: Date = TestDates.year2025End
     ) -> CurationProject {
@@ -39,7 +40,8 @@ struct CandidateStoreTests {
             rangeStart: rangeStart, rangeEnd: rangeEnd,
             targetCount: 100,
             excludeScreenshots: excludeScreenshots,
-            excludedAlbumIDs: excludedAlbumIDs)
+            excludedAlbumIDs: excludedAlbumIDs,
+            includeVideos: includeVideos)
     }
 
     /// Unwrap `.ready`'s underlying day-groups (a trip cluster's `dayGroups` recover them, so this holds
@@ -452,6 +454,48 @@ struct CandidateStoreTests {
             return []
         }
         return clusters
+    }
+}
+
+// MARK: - Videos — the opt-in media-type filter (#125)
+//
+// In an extension (not the main struct body) so these don't push the suite over SwiftLint's
+// type_body_length. `private` helpers (`makeProject`/`readyIDs`) are file-scoped, so still in reach.
+extension CandidateStoreTests {
+
+    @Test("videos are dropped by default; the includeVideos flag lets exactly them through (#125)")
+    func videosGatedByFlag() async throws {
+        let seed = FakePhotoLibrary.videoMixedSeed()   // yearMixed + fake/video/1 + fake/video/2 (both dated, in range)
+        // Default OFF: the two videos are absent; the stills are untouched.
+        let offStore = CandidateStore(library: FakePhotoLibrary(assets: seed), calendar: utcCalendar())
+        await offStore.load(makeProject(excludeScreenshots: false))
+        let offIDs = Set(readyIDs(offStore, "videos off"))
+        #expect(!offIDs.contains("fake/video/1"))
+        #expect(!offIDs.contains("fake/video/2"))
+        #expect(offIDs.contains("fake/busy/0"))              // a still is unaffected by the video gate
+
+        // ON: both videos join the candidate set — and NOTHING else changes (exactly +2).
+        let onStore = CandidateStore(library: FakePhotoLibrary(assets: seed), calendar: utcCalendar())
+        await onStore.load(makeProject(excludeScreenshots: false, includeVideos: true))
+        let onIDs = Set(readyIDs(onStore, "videos on"))
+        #expect(onIDs.contains("fake/video/1"))
+        #expect(onIDs.contains("fake/video/2"))
+        #expect(onIDs.count == offIDs.count + 2)
+    }
+
+    @Test("an excluded-album video is dropped even with includeVideos on (#125)")
+    func excludedAlbumVideoDropped() async throws {
+        // One video lives in the WhatsApp album; exclude WhatsApp AND turn videos on — the album
+        // exclusion must still win (an excluded album drops its videos too, not just its images).
+        let library = FakePhotoLibrary(assets: FakePhotoLibrary.videoMixedSeed(),
+                                       membership: ["album/whatsapp": ["fake/video/2"]])
+        let project = makeProject(excludeScreenshots: false,
+                                  excludedAlbumIDs: ["album/whatsapp"], includeVideos: true)
+        let store = CandidateStore(library: library, calendar: utcCalendar())
+        await store.load(project)
+        let ids = Set(readyIDs(store, "excluded-album video"))
+        #expect(ids.contains("fake/video/1"))    // the free-standing video survives
+        #expect(!ids.contains("fake/video/2"))   // the WhatsApp video is dropped despite videos being on
     }
 }
 

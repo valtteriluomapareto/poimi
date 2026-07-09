@@ -14,9 +14,20 @@
 
 import SwiftUI
 import UIKit
+import AVFoundation
 
-/// The abstract image-loading seam. `Sendable` because the implementations are actors and their
-/// `UIImage` results cross the actor boundary; methods are `async` for the same reason.
+/// Boxes a non-`Sendable` `AVPlayerItem` so it can cross the `Sendable` provider seam back to the
+/// caller (#125). The item is ONLY ever touched on the main actor (the viewer's `AVPlayer`), so the
+/// `@unchecked` promise is exactly that — we never race it — rather than leaking a bare cross-actor
+/// `AVPlayerItem`.
+struct PlayerItemBox: @unchecked Sendable {
+    let item: AVPlayerItem
+}
+
+/// The abstract media-loading seam — thumbnails, full-resolution stills, AND video player items (#125).
+/// `Sendable` because the implementations are actors and their results cross the actor boundary; methods
+/// are `async` for the same reason. (It grew past "just thumbnails": the real impl already resolves
+/// `PHAsset`s and owns the caching manager, so vending player items here avoids duplicating that wiring.)
 protocol ThumbnailProviding: Sendable {
     /// A thumbnail for `assetID` at roughly `targetSize`, awaiting the first usable (opportunistic)
     /// image. Cancellation-aware: cancelling the calling `Task` cancels the underlying PhotoKit
@@ -35,6 +46,12 @@ protocol ThumbnailProviding: Sendable {
     /// thumbnail first and swaps to this when it arrives (progressive). Cancellation-aware; `nil` if
     /// the asset can't be resolved or the request is cancelled.
     func fullImage(for assetID: String, targetSize: CGSize) async -> UIImage?
+
+    /// A playable AV item for a VIDEO `assetID` (#125), for inline playback in the full-screen viewer.
+    /// Built off-main (PhotoKit resolves + prepares the asset) and boxed for main-actor use. `nil` if the
+    /// id can't be resolved, isn't a video, or the request is cancelled. Loaded lazily on the first play
+    /// tap — never as part of paging, so a swipe past a video costs nothing.
+    func playerItem(for assetID: String) async -> PlayerItemBox?
 
     /// Set the prefetch/caching window to `assetIDs` (the grid's visible range ± a row margin), so
     /// PhotoKit pre-decodes just ahead of the scroll. Diffs against the previous window internally.

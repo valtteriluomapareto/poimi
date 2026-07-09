@@ -27,6 +27,10 @@ actor FakeThumbnailProvider: ThumbnailProviding {
     // only the real PhotoKit round-trip, which the fake doesn't make).
     nonisolated func cachedThumbnail(for assetID: String, targetSize: CGSize) -> UIImage? { nil }
 
+    // No real video to vend (the fake renders flat tiles, not media): a video page shows its poster tile
+    // and the play button is inert. Playback is a device-only concern (#125) — nothing here to test.
+    func playerItem(for assetID: String) async -> PlayerItemBox? { nil }
+
     // The prefetch window / cache lifecycle is a no-op for the fake — there's nothing to pre-decode.
     func updateCachingWindow(to assetIDs: [String]) {}
     func resetCache() {}

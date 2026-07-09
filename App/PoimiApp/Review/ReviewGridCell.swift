@@ -21,6 +21,10 @@ struct ReviewGridCell: View {
     /// The cell's day-group title, for the VoiceOver label — so a wall of cells reads "Photo, Sat
     /// Jul 5" rather than an undifferentiated "Photo, Photo, Photo".
     let dayLabel: String
+    /// A video's formatted running time ("0:14"), or `nil` for a still (#125). Non-nil ⇒ the cell paints
+    /// a corner video badge and reads as "Video" to VoiceOver. Precomputed by the parent (a dictionary
+    /// lookup + pure format) so the cell body does no work.
+    var videoBadge: String? = nil
     /// Inject the thumbnail load; the closure owns PhotoKit access (the seam), so the cell stays
     /// free of any live `PHAsset`.
     let load: (String) async -> UIImage?
@@ -85,13 +89,18 @@ struct ReviewGridCell: View {
                     .allowsHitTesting(false)
             }
         }
+        // Video badge bottom-leading (opposite the top-trailing selection check so they never collide):
+        // a play glyph + running time, Apple-Photos-style. Non-interactive so a tap anywhere still opens.
+        .overlay(alignment: .bottomLeading) {
+            if let videoBadge { videoDurationBadge(videoBadge) }
+        }
         // Badge top-trailing (Paper design): the gold check sits in the top-right corner.
         .overlay(alignment: .topTrailing) { selectionBadge(isSelected) }
         .contentShape(Rectangle())
         .onTapGesture { onOpen() }
         // VoiceOver: double-tap opens; a named rotor action selects (the badge is a touch target).
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Photo, \(dayLabel)")
+        .accessibilityLabel(videoBadge.map { "Video, \(dayLabel), \($0)" } ?? "Photo, \(dayLabel)")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { onOpen() }
         .accessibilityAction(named: isSelected ? "Deselect" : "Select") { selection.toggle(id) }
@@ -141,6 +150,24 @@ struct ReviewGridCell: View {
         .frame(width: 44, height: 44)
         .contentShape(Rectangle())
         .onTapGesture { selection.toggle(id) }
+    }
+
+    /// The corner video badge: a play glyph + running time on a dark capsule (legible over any
+    /// thumbnail), non-interactive. `Text(verbatim:)` — the duration is a formatted value, not a
+    /// catalog string, so it must not be extracted for localization.
+    private func videoDurationBadge(_ text: String) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: "play.fill")
+            Text(verbatim: text)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(Color.black.opacity(0.55)))
+        .shadow(radius: 1)
+        .padding(5)
+        .allowsHitTesting(false)
     }
 }
 
