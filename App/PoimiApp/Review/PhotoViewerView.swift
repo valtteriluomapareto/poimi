@@ -188,6 +188,10 @@ struct PhotoViewerView: View {
                     ?? thumbnails.cachedThumbnail(for: id, targetSize: filmstripThumbSize)
             },
             loadFull: { await thumbnails.fullImage(for: $0, targetSize: $1) },
+            // The published AssetRef map decides each page's kind (photo vs video, #125); the player item
+            // loads lazily on the first play tap and is unboxed here for the video page's own AVPlayer.
+            assets: coordinator.reviewAssetsByID,
+            loadPlayerItem: { await thumbnails.playerItem(for: $0)?.item },
             axLabel: { photoAXLabel(for: $0) },
             onTapPhoto: { selection.toggle($0) },   // single-tap the photo = pick (Pick button is primary)
             // Auto-done fires on a real SWIPE only (not a filmstrip tap), so browsing/jumping never marks (#128).

@@ -2364,6 +2364,16 @@
           }
         }
       }
+    },
+    "Play video": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toista video"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

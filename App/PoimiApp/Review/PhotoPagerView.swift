@@ -16,6 +16,26 @@
 
 import SwiftUI
 import UIKit
+import AVFoundation
+import Curation
+
+/// A page in the viewer's pager — either a photo (`PhotoPageController`) or a video
+/// (`VideoPageController`). The pager holds them uniformly and reads only the `id`; the concrete type
+/// decides how the page paints and what a tap does. A UIViewController-constrained protocol so a page
+/// is always a real view controller the `UIPageViewController` can host.
+protocol ViewerPage: UIViewController {
+    var id: String { get }
+}
+
+/// Which page a candidate id renders as. Pulled out of the pager as a pure decision so it's unit-tested
+/// without UIKit: a video id → a `.video` page (poster + inline play), everything else → `.photo` (#125).
+enum ViewerPageKind: Equatable { case photo, video }
+
+/// The page kind for `id`, from the published `AssetRef` map (the same map the grid badge + info panel
+/// read). An id absent from the map, or a still, is a `.photo`; only a known video is a `.video`.
+func pageKind(for id: String, assets: [String: AssetRef]) -> ViewerPageKind {
+    (assets[id]?.isVideo ?? false) ? .video : .photo
+}
 
 struct PhotoPagerView: UIViewControllerRepresentable {
     /// The pager's universe: every candidate id, in order. Prev/next come straight off this.
@@ -27,9 +47,17 @@ struct PhotoPagerView: UIViewControllerRepresentable {
     let cachedThumb: (String) -> UIImage?
     /// Full-resolution load at a pixel size (async, off the thumbnail actor).
     let loadFull: (String, CGSize) async -> UIImage?
+    /// The published `AssetRef` map — decides each page's kind (`photo` vs `video`, #125). Same map the
+    /// grid badge + info panel read.
+    let assets: [String: AssetRef]
+    /// Lazily load a video's player item on the first play tap (async, off-main); `nil` for a still /
+    /// unresolvable id (#125). A video page owns its own `AVPlayer` built from this.
+    let loadPlayerItem: (String) async -> AVPlayerItem?
     /// VoiceOver label for a page.
     let axLabel: (String) -> String
-    /// A single tap on a page's photo → toggle that id's selection (the secondary select path).
+    /// A single tap on a PHOTO page → toggle that id's selection (the secondary select path). A VIDEO
+    /// page's tap plays/pauses instead (tap-to-pick is disabled there; pick a video via the viewer's
+    /// Picked control, #125).
     let onTapPhoto: (String) -> Void
     /// A user-driven page SWIPE settled: `(from, to)`. Fired ONLY from the gesture-completion delegate —
     /// NOT for a filmstrip tap or programmatic page set (those go through `updateUIViewController`). So a
@@ -56,7 +84,7 @@ struct PhotoPagerView: UIViewControllerRepresentable {
         context.coordinator.parent = self
         // An external change (filmstrip tap) turns the page; a page-turn-published change is already
         // shown, so this no-ops then.
-        let shownID = (pager.viewControllers?.first as? PhotoPageController)?.id
+        let shownID = (pager.viewControllers?.first as? (any ViewerPage))?.id
         guard shownID != currentID, let target = context.coordinator.makePage(for: currentID) else { return }
         let toIndex = context.coordinator.index(of: currentID) ?? 0
         let fromIndex = shownID.flatMap(context.coordinator.index) ?? 0
@@ -72,13 +100,22 @@ struct PhotoPagerView: UIViewControllerRepresentable {
 
         func index(of id: String) -> Int? { parent.allIDs.firstIndex(of: id) }
 
-        func makePage(for id: String) -> PhotoPageController? {
+        func makePage(for id: String) -> UIViewController? {
             guard parent.allIDs.contains(id) else { return nil }
-            return PhotoPageController(id: id,
-                                       cachedThumb: parent.cachedThumb,
-                                       loadFull: parent.loadFull,
-                                       axLabel: parent.axLabel(id),
-                                       onTap: parent.onTapPhoto)
+            switch pageKind(for: id, assets: parent.assets) {
+            case .photo:
+                return PhotoPageController(id: id,
+                                           cachedThumb: parent.cachedThumb,
+                                           loadFull: parent.loadFull,
+                                           axLabel: parent.axLabel(id),
+                                           onTap: parent.onTapPhoto)
+            case .video:
+                return VideoPageController(id: id,
+                                           cachedThumb: parent.cachedThumb,
+                                           loadFull: parent.loadFull,
+                                           loadPlayerItem: parent.loadPlayerItem,
+                                           axLabel: parent.axLabel(id))
+            }
         }
 
         // MARK: Data source — prev / next over `allIDs`
@@ -91,8 +128,8 @@ struct PhotoPagerView: UIViewControllerRepresentable {
             page(adjacentTo: vc, offset: +1)
         }
 
-        private func page(adjacentTo vc: UIViewController, offset: Int) -> PhotoPageController? {
-            guard let id = (vc as? PhotoPageController)?.id,
+        private func page(adjacentTo vc: UIViewController, offset: Int) -> UIViewController? {
+            guard let id = (vc as? (any ViewerPage))?.id,
                   let neighbour = adjacentID(in: parent.allIDs, to: id, offset: offset) else { return nil }
             return makePage(for: neighbour)
         }
@@ -101,8 +138,8 @@ struct PhotoPagerView: UIViewControllerRepresentable {
         func pageViewController(_ pvc: UIPageViewController, didFinishAnimating finished: Bool,
                                 previousViewControllers: [UIViewController], transitionCompleted: Bool) {
             guard transitionCompleted,
-                  let id = (pvc.viewControllers?.first as? PhotoPageController)?.id else { return }
-            let from = (previousViewControllers.first as? PhotoPageController)?.id
+                  let id = (pvc.viewControllers?.first as? (any ViewerPage))?.id else { return }
+            let from = (previousViewControllers.first as? (any ViewerPage))?.id
             parent.currentID = id
             // A real user swipe settled (this delegate fires for gesture transitions only, not programmatic
             // `setViewControllers`) — report from→to so the caller can act on deliberate paging (#128).
@@ -115,7 +152,7 @@ struct PhotoPagerView: UIViewControllerRepresentable {
 /// One full-screen page: a `ZoomableImageScrollView` that paints the cached thumbnail immediately,
 /// then the full-resolution image. Created fresh by the data source each time a page comes into
 /// view, so it always starts at fit (no stale zoom to track).
-final class PhotoPageController: UIViewController {
+final class PhotoPageController: UIViewController, ViewerPage {
     let id: String
     private let scrollView = ZoomableImageScrollView()
     private let cachedThumb: (String) -> UIImage?
@@ -193,6 +230,202 @@ final class PhotoPageController: UIViewController {
     }
 
     deinit { loadTask?.cancel() }
+}
+
+/// One full-screen VIDEO page (#125): a poster (the cached thumbnail, upgraded to the full-res still)
+/// under a centered play button. Tapping plays/pauses an inline `AVPlayer` built lazily from the seam on
+/// the first play — there's no scrubber (a deliberately minimal player; the design is "glance + play, not
+/// edit"). The player is torn down on disappear, so paging away always frees it and a re-appear starts
+/// from the poster. Tap-to-PICK is disabled here (a tap plays) — a video is picked via the viewer's Picked
+/// control, so a play tap can never be mistaken for a pick.
+final class VideoPageController: UIViewController, ViewerPage {
+    let id: String
+    private let cachedThumb: (String) -> UIImage?
+    private let loadFull: (String, CGSize) async -> UIImage?
+    private let loadPlayerItem: (String) async -> AVPlayerItem?
+    private let label: String
+
+    private let posterView = UIImageView()
+    private let playButton = UIButton(type: .system)
+    private let spinner = UIActivityIndicatorView(style: .large)
+
+    private var player: AVPlayer?
+    private var playerLayer: AVPlayerLayer?
+    private var endObserver: (any NSObjectProtocol)?
+    private var playerTask: Task<Void, Never>?
+    private var posterTask: Task<Void, Never>?
+    private var posterState = FullImageLoadState()
+
+    init(id: String,
+         cachedThumb: @escaping (String) -> UIImage?,
+         loadFull: @escaping (String, CGSize) async -> UIImage?,
+         loadPlayerItem: @escaping (String) async -> AVPlayerItem?,
+         axLabel: String) {
+        self.id = id
+        self.cachedThumb = cachedThumb
+        self.loadFull = loadFull
+        self.loadPlayerItem = loadPlayerItem
+        self.label = axLabel
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+
+        posterView.frame = view.bounds
+        posterView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        posterView.contentMode = .scaleAspectFit
+        posterView.isAccessibilityElement = true
+        posterView.accessibilityLabel = label
+        posterView.accessibilityTraits = .image
+        if let cached = cachedThumb(id) { posterView.image = cached }   // instant poster, no black flash
+        view.addSubview(posterView)
+
+        // A large, legible play button (white glyph + shadow over any poster). A real UIButton so
+        // VoiceOver can focus + activate it; a tap anywhere on the page also toggles playback.
+        var config = UIButton.Configuration.plain()
+        config.image = UIImage(systemName: "play.circle.fill",
+                               withConfiguration: UIImage.SymbolConfiguration(pointSize: 64))
+        config.baseForegroundColor = .white
+        playButton.configuration = config
+        playButton.layer.shadowOpacity = 0.4
+        playButton.layer.shadowRadius = 4
+        playButton.layer.shadowOffset = .zero
+        playButton.accessibilityLabel = String(localized: "Play video", comment: "Viewer: play an inline video")
+        playButton.addAction(UIAction { [weak self] _ in self?.togglePlayback() }, for: .touchUpInside)
+        playButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(playButton)
+
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.color = .white
+        spinner.hidesWhenStopped = true
+        view.addSubview(spinner)
+
+        NSLayoutConstraint.activate([
+            playButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            playButton.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        ])
+
+        // A tap anywhere plays/pauses (not just the button) — matches the photo page's tap-to-act ergonomics.
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+        view.addGestureRecognizer(tap)
+    }
+
+    @objc private func handleTap() { togglePlayback() }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        posterState.retryOnReappear()
+        loadPosterIfNeeded()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        playerLayer?.frame = view.bounds
+        loadPosterIfNeeded()
+    }
+
+    /// Upgrade the poster from the thumbnail to the full-res still once bounds are real (same policy as a
+    /// photo page). The player layer, once playing, sits above this — so the poster is what shows before
+    /// play and again after teardown.
+    private func loadPosterIfNeeded() {
+        guard posterState.shouldLoad(boundsReady: view.bounds.width > 0) else { return }
+        let token = posterState.begin()
+        let scale = view.traitCollection.displayScale > 0 ? view.traitCollection.displayScale : 2
+        let pixels = CGSize(width: view.bounds.width * scale, height: view.bounds.height * scale)
+        posterTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let full = await self.loadFull(self.id, pixels)
+            if self.posterState.completed(token: token, gotImage: full != nil), let full {
+                self.posterView.image = full
+            }
+        }
+    }
+
+    /// First tap: load the player item (spinner up), build the player, play. Later taps: play ⇄ pause,
+    /// toggling the play button. A load that yields no item (fake provider / unavailable original) simply
+    /// restores the play button — never a dead spinner.
+    private func togglePlayback() {
+        if let player {
+            if player.timeControlStatus == .paused {
+                player.play()
+                playButton.isHidden = true
+            } else {
+                player.pause()
+                playButton.isHidden = false
+            }
+            return
+        }
+        guard playerTask == nil else { return }   // a load is already in flight
+        playButton.isHidden = true
+        spinner.startAnimating()
+        playerTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let item = await self.loadPlayerItem(self.id)
+            self.spinner.stopAnimating()
+            self.playerTask = nil
+            guard !Task.isCancelled, let item else {
+                self.playButton.isHidden = false   // couldn't load → let the user try again
+                return
+            }
+            self.startPlaying(item)
+        }
+    }
+
+    private func startPlaying(_ item: AVPlayerItem) {
+        let player = AVPlayer(playerItem: item)
+        let layer = AVPlayerLayer(player: player)
+        layer.videoGravity = .resizeAspect
+        layer.frame = view.bounds
+        view.layer.insertSublayer(layer, above: posterView.layer)
+        self.player = player
+        self.playerLayer = layer
+        // At end: rewind and re-show the play button, so the page rests on the first frame ready to replay.
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
+            self?.player?.seek(to: .zero)
+            self?.playButton.isHidden = false
+        }
+        playButton.isHidden = true
+        player.play()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        teardownPlayer()
+        posterTask?.cancel()
+        posterState.cancel()
+    }
+
+    /// Stop + free the player entirely (paging away, or the sheet closing). Cheap to rebuild on the next
+    /// play tap, and keeping a torn-down page player-free avoids N idle players across a long album.
+    private func teardownPlayer() {
+        player?.pause()
+        playerTask?.cancel()
+        playerTask = nil
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        endObserver = nil
+        playerLayer?.removeFromSuperlayer()
+        playerLayer = nil
+        player = nil
+        spinner.stopAnimating()
+        playButton.isHidden = false   // back to the poster + play affordance
+    }
+
+    // No `endObserver` cleanup here: the observer is created only in `startPlaying` (a play tap on a
+    // visible page), and `teardownPlayer()` on `viewDidDisappear` — which always precedes dealloc for a
+    // shown page — removes it. A never-shown prebuilt page never made one. (A nonisolated deinit also
+    // can't touch the non-Sendable token.)
+    deinit {
+        playerTask?.cancel()
+        posterTask?.cancel()
+    }
 }
 
 /// The full-resolution load/retry policy for a viewer page. Extracted from `PhotoPageController` so the
