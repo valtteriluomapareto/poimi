@@ -98,6 +98,43 @@ struct PagerNeighbourTests {
     }
 }
 
+@Suite("Viewer pick + auto-advance (#180)")
+struct ViewerPickTests {
+    @Test("picking an unpicked photo adds it AND advances; tapping a picked one un-picks and stays")
+    func pickOutcomeRules() {
+        // The load-bearing rule: auto-advance ONLY when a pick is added — so churning forward is one tap,
+        // but a correction (un-pick) leaves you on the photo to see what you removed.
+        #expect(pickOutcome(currentlyPicked: false) == PickOutcome(nowPicked: true, advance: true))
+        #expect(pickOutcome(currentlyPicked: true) == PickOutcome(nowPicked: false, advance: false))
+    }
+
+    @Test("viewerStep gives prev/next within bounds and nil at the ends (‹ › disable / end-of-set)")
+    func stepBounds() {
+        let ids = ["a", "b", "c"]
+        #expect(viewerStep(from: "b", in: ids, offset: 1) == "c")
+        #expect(viewerStep(from: "b", in: ids, offset: -1) == "a")
+        #expect(viewerStep(from: "c", in: ids, offset: 1) == nil)    // no next past the last
+        #expect(viewerStep(from: "a", in: ids, offset: -1) == nil)   // no previous before the first
+    }
+
+    @Test("pickPlan: add advances (or ends on the last photo); remove stays put — the whole orchestration")
+    func pickPlanRules() {
+        let ids = ["a", "b", "c"]
+        // Add mid-list → toggle this one, advance to the next, not the end.
+        #expect(pickPlan(currentID: "b", in: ids, currentlyPicked: false)
+            == PickPlan(toggleID: "b", advanceTo: "c", reachedEnd: false))
+        // Add on the LAST photo → toggle it, no advance, end-of-set.
+        #expect(pickPlan(currentID: "c", in: ids, currentlyPicked: false)
+            == PickPlan(toggleID: "c", advanceTo: nil, reachedEnd: true))
+        // Remove (already picked) → toggle it, stay put (no advance, not the end).
+        #expect(pickPlan(currentID: "b", in: ids, currentlyPicked: true)
+            == PickPlan(toggleID: "b", advanceTo: nil, reachedEnd: false))
+        // A single-photo set: the first pick is also the last → straight to end-of-set.
+        #expect(pickPlan(currentID: "solo", in: ["solo"], currentlyPicked: false)
+            == PickPlan(toggleID: "solo", advanceTo: nil, reachedEnd: true))
+    }
+}
+
 @Suite("Viewer page kind — photo vs video (#125)")
 struct ViewerPageKindTests {
     @Test("a video id → .video; a still, an absent id, or an empty map → .photo")

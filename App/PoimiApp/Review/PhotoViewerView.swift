@@ -49,6 +49,15 @@ struct PhotoViewerView: View {
     /// the date line's capture time + the panel's resolution. Async fields (device, file size) are a
     /// follow-up; this is the free tier (straight from the published `AssetRef`).
     @State private var info = InfoLabels()
+    /// Bumped on each pick/un-pick so `.sensoryFeedback` fires the selection haptic — the single,
+    /// intent-driven confirmation a fast, eyes-on-photo triage loop needs (#180).
+    @State private var pickHaptic = 0
+    /// A brief bounce-guard (~150ms) after a pick auto-advances, so a fumbled double-tap on Pick can't
+    /// also pick the photo that just slid in. Navigation isn't guarded — programmatic turns are instant, so
+    /// rapid Next is immediate (#180).
+    @State private var pickBounce = false
+    /// True once you pick/Next past the LAST photo — shows the end-of-set card instead of a dead tap (#180).
+    @State private var endReached = false
 
     private let windowBack = 25
     private let windowForward = 25
@@ -113,7 +122,14 @@ struct PhotoViewerView: View {
             prefetchFilmstrip(around: startID)
         }
         .sensoryFeedback(.success, trigger: autoDoneHaptic)
+        .sensoryFeedback(.selection, trigger: pickHaptic)
         .overlay(alignment: .bottom) { autoDoneToast }
+        .overlay { endOfSetCard }
+        // Move VoiceOver focus to the end-of-set card when it appears (it's a modal takeover; otherwise a
+        // VO user wouldn't notice the controls behind it went away).
+        .onChange(of: endReached) { _, reached in
+            if reached { UIAccessibility.post(notification: .screenChanged, argument: nil) }
+        }
     }
 
     // MARK: Auto-mark-done on paging past a cluster's end (#128)
@@ -174,6 +190,42 @@ struct PhotoViewerView: View {
             : String(localized: "Marked \(day) done", comment: "Viewer auto-done toast: which single day was marked")
     }
 
+    /// The end-of-set card (#180): shown after Pick/Next past the LAST photo, instead of a dead tap. Names
+    /// the finish, shows the tally, and offers "Back to grid" (where Export/finalize live) — the richer
+    /// "mark album done" affordance is #179's. A full-screen scrim blocks the controls behind it.
+    @ViewBuilder
+    private var endOfSetCard: some View {
+        if endReached {
+            VStack(spacing: 14) {
+                Image(systemName: "flag.checkered")
+                    .font(.system(size: 40))
+                    .foregroundStyle(Color.accentColor)
+                Text("You've reached the end")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text("\(selection.progress.picked) of \(selection.progress.target) picked")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .monospacedDigit()
+                VStack(spacing: 10) {
+                    Button { coordinator.dismissPhoto() } label: {
+                        Text("Back to grid").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glassProminent).tint(Color.accentColor).foregroundStyle(Color.onAccent)
+                    Button("Keep reviewing") { endReached = false }
+                        .buttonStyle(.glass).foregroundStyle(.white)
+                }
+                .padding(.top, 6)
+            }
+            .padding(28)
+            .frame(maxWidth: 300)
+            .glassSurface(in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black.opacity(0.55).ignoresSafeArea())
+            .accessibilityAddTraits(.isModal)
+        }
+    }
+
     // MARK: The centred photo — the "album art": a rounded, shadowed pager the chrome never overlaps.
 
     private var photoCard: some View {
@@ -193,7 +245,9 @@ struct PhotoViewerView: View {
             assets: coordinator.reviewAssetsByID,
             loadPlayerItem: { await thumbnails.playerItem(for: $0)?.item },
             axLabel: { photoAXLabel(for: $0) },
-            onTapPhoto: { selection.toggle($0) },   // single-tap the photo = pick (Pick button is primary)
+            // Single-tap the photo = the same Pick action as the button (toggle + auto-advance) — the
+            // accelerator (#180). The tapped page is always the current one, so `performPick` acts on it.
+            onTapPhoto: { _ in performPick() },
             // Auto-done fires on a real SWIPE only (not a filmstrip tap), so browsing/jumping never marks (#128).
             onSwipe: { autoMarkDoneIfPagedPastCluster(from: $0, to: $1) })
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -229,7 +283,7 @@ struct PhotoViewerView: View {
     private var chrome: some View {
         VStack(spacing: 16) {
             titleRow
-            pickButton
+            transportControls
             // The info panel takes the filmstrip's slot while open — Pick + the title/tally stay above,
             // so you can pick with the metadata in view; the photo above yields height as the panel grows.
             if showInfoPanel {
@@ -308,32 +362,81 @@ struct PhotoViewerView: View {
             .accessibilityLabel("\(progress.picked) of \(progress.target) picked")
     }
 
-    /// The primary pick action — the Now-Playing "play" analog: a big glass toggle centred under the
-    /// photo. Clear glass "Pick" when unpicked; a prominent GOLD "Picked" (dark check) when picked —
-    /// gold is the interactive accent (styleguide §1/§6), matching the grid's gold check, and
-    /// "Pick/Picked" matches the tally's vocabulary. Tapping the photo is the secondary accelerator;
-    /// the filmstrip stays navigation-only (each thumb already carries its own gold check).
-    @ViewBuilder
-    private var pickButton: some View {
-        let isSelected = selection.contains(currentID)
-        let button = Button { selection.toggle(currentID) } label: {
-            Label(isSelected ? "Picked" : "Pick",
-                  systemImage: isSelected ? "checkmark.circle.fill" : "circle")
-                .font(.headline)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 4)
+    /// The triage control band (#180): **‹ Previous · Pick · Next ›**, centre-weighted like a Now-Playing
+    /// transport. Pick is the hero; the chevrons are pure navigation (‹ › + swipe never change a pick —
+    /// "Skip" is honestly just Next, since the only per-photo decision the model has is *picked*).
+    private var transportControls: some View {
+        let ids = allIDs
+        let isPicked = selection.contains(currentID)
+        let hasPrev = viewerStep(from: currentID, in: ids, offset: -1) != nil
+        // TOP-aligned so the chevrons line up with the Pick CIRCLE's centre, not the centre of the
+        // circle-plus-label block (the label hangs below and would otherwise drag the chevrons down). The
+        // chevron frames match the circle's 64pt height, so top-aligned their glyph centres coincide.
+        return HStack(alignment: .top, spacing: 0) {
+            navButton(system: "chevron.backward", label: "Previous photo", enabled: hasPrev) { goToStep(-1) }
+            Spacer(minLength: 0)
+            pickToggle(isPicked: isPicked)
+            Spacer(minLength: 0)
+            // Next stays enabled on the last photo — there it opens the end-of-set card rather than a dead tap.
+            navButton(system: "chevron.forward", label: "Next photo", enabled: true) { goToStep(1) }
         }
-        .controlSize(.large)
-        .sensoryFeedback(.selection, trigger: isSelected)
-        .accessibilityLabel(isVideo(currentID) ? "Pick video" : "Pick photo")   // media-aware (#125)
-        .accessibilityValue(isSelected ? "Picked" : "Not picked")
-        .accessibilityAddTraits(.isToggle)
+        .padding(.horizontal, 24)
+    }
 
-        if isSelected {
-            button.buttonStyle(.glassProminent).tint(Color.accentColor).foregroundStyle(Color.onAccent)
-        } else {
-            button.buttonStyle(.glass).foregroundStyle(.white)
+    /// The reversible **Pick** hero. Reflects the current photo's state: a hollow gold ring + "Pick" when
+    /// unpicked; a filled gold circle + dark check + "Picked" when picked. Tapping an unpicked photo adds
+    /// it and auto-advances; tapping a picked one removes it and stays (`pickOutcome`).
+    private func pickToggle(isPicked: Bool) -> some View {
+        Button(action: performPick) {
+            VStack(spacing: 5) {
+                ZStack {
+                    Circle()
+                        .fill(isPicked ? Color.accentColor : Color.accentColor.opacity(0.12))
+                        .frame(width: 64, height: 64)
+                    if !isPicked {
+                        Circle().strokeBorder(Color.accentColor, lineWidth: 3).frame(width: 64, height: 64)
+                    }
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(isPicked ? Color.onAccent : Color.accentColor)
+                }
+                Text(isPicked ? "Picked" : "Pick")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+            }
         }
+        .buttonStyle(.plain)
+        // Haptic fires from the ROOT `pickHaptic` (one intent-driven source); no `trigger: isPicked` here —
+        // that would double-buzz on un-pick and buzz spuriously on plain navigation between picked/unpicked.
+        .accessibilityLabel(pickActionLabel(isPicked: isPicked))
+        .accessibilityValue(isPicked ? "Picked" : "Not picked")
+        // State-aware: adding advances; removing stays put (so don't promise "moves to the next photo").
+        .accessibilityHint(isPicked ? "Removes it from the album."
+                                    : "Adds it to the album and moves to the next photo.")
+        .accessibilityAddTraits(.isToggle)
+    }
+
+    /// The Pick control's VoiceOver label, reflecting what a tap does: add (media-aware) vs remove (#180).
+    private func pickActionLabel(isPicked: Bool) -> String {
+        if isPicked { return String(localized: "Remove pick", comment: "Viewer: un-pick the current photo") }
+        return isVideo(currentID) ? "Pick video" : "Pick photo"
+    }
+
+    /// A pure-navigation chevron (‹ / ›). Icon-only but each carries a VoiceOver label; disabled (dimmed)
+    /// when there's nowhere to go (‹ on the first photo). ≥44pt target.
+    private func navButton(system: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.white.opacity(enabled ? 0.9 : 0.25))
+                // Height matches the Pick circle (64) so, top-aligned in the row, the chevron glyph's
+                // centre lines up with the circle's centre — the label hangs below without dragging it down.
+                .frame(width: 56, height: 64)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .accessibilityLabel(label)
     }
 
     // MARK: Ambient background — a heavy blur of the current photo (the card's colour wash)
@@ -358,6 +461,55 @@ struct PhotoViewerView: View {
 // Kept in an extension so they don't count toward the view's `type_body_length`; behaviour unchanged
 // (same-file `private` stays reachable from the struct's `body`).
 extension PhotoViewerView {
+
+    // MARK: Pick + navigation actions (#180)
+    // In the extension (not the struct body) so they don't push the view over SwiftLint's type_body_length;
+    // same-file `private` keeps them reachable from the control views.
+
+    /// Toggle the current photo's pick, then apply the pure `pickPlan`: adding advances (or opens the
+    /// end-of-set card if it was the last photo); removing stays put so you see what you dropped. Guarded by
+    /// `isPaging` so a fast double-tap can't act on the photo that just slid in.
+    private func performPick() {
+        guard !pickBounce else { return }   // swallow a fumbled double-tap, not deliberate picks
+        let plan = pickPlan(currentID: currentID, in: allIDs, currentlyPicked: selection.contains(currentID))
+        selection.toggle(plan.toggleID)
+        pickHaptic &+= 1
+        if let next = plan.advanceTo {
+            armPickBounce()
+            advance(to: next, from: plan.toggleID)
+        } else if plan.reachedEnd {
+            endReached = true
+        }
+        // else: a removal — stay on this photo.
+    }
+
+    /// A chevron step. Forward past the last photo opens the end-of-set card; otherwise a forward step seals
+    /// a crossed cluster done (matching swipe, #128). Pure navigation — never changes a pick. NOT guarded:
+    /// programmatic turns are instant (pager `animated: false`), so rapid Next registers immediately and
+    /// can't overlap/desync the pager.
+    private func goToStep(_ offset: Int) {
+        let from = currentID
+        guard let target = viewerStep(from: from, in: allIDs, offset: offset) else {
+            if offset > 0 { endReached = true }
+            return
+        }
+        if offset > 0 { advance(to: target, from: from) } else { currentID = target }
+    }
+
+    /// Apply a FORWARD programmatic advance: seal the cluster if this crossed its boundary (the pager's
+    /// swipe delegate doesn't fire for a programmatic set, #128), then turn the page instantly.
+    private func advance(to target: String, from: String) {
+        autoMarkDoneIfPagedPastCluster(from: from, to: target)
+        currentID = target   // instant (pager uses animated: false) — safe to fire back-to-back
+    }
+
+    /// A short guard so a *fumbled double-tap* on Pick can't pick the photo that just slid in — a
+    /// finger-bounce window, deliberately tiny so it never throttles intentional picking. Released even on
+    /// cancellation (`try?` falls through), so Pick can't get stuck disabled.
+    private func armPickBounce() {
+        pickBounce = true
+        Task { @MainActor in try? await Task.sleep(for: .milliseconds(150)); pickBounce = false }
+    }
 
     // MARK: Filmstrip window (the pager windows itself; this is just for the SwiftUI strip)
 
@@ -602,4 +754,48 @@ func clusterToAutoMarkDone(from previousID: String, to currentID: String, cluste
     guard let finished = clusterFinishedByPagingPast(from: previousID, to: currentID, clusters: clusters),
           !isDone(finished) else { return nil }
     return finished
+}
+
+/// The outcome of a **Pick** tap in the viewer (#180). Picking an *unpicked* photo adds it and advances to
+/// the next; tapping an *already-picked* photo removes it and STAYS put (a reversible correction, e.g.
+/// dropping one when over target). Pure so the load-bearing rule — "auto-advance only when a pick is added,
+/// never when it's removed" — is unit-tested rather than buried in the control's closure.
+struct PickOutcome: Equatable {
+    /// The photo's selection state after the tap.
+    let nowPicked: Bool
+    /// Whether the viewer should auto-advance to the next photo after this tap.
+    let advance: Bool
+}
+
+func pickOutcome(currentlyPicked: Bool) -> PickOutcome {
+    currentlyPicked
+        ? PickOutcome(nowPicked: false, advance: false)   // un-pick → stay, so you can see what you removed
+        : PickOutcome(nowPicked: true, advance: true)     // pick → add + move on (the one-tap churn)
+}
+
+/// The id to move to for a navigation step (`offset` −1 previous / +1 next), or `nil` at the ends — so the
+/// viewer disables the chevron there and a Next past the last photo becomes the end-of-set state instead of
+/// a dead tap (#180). Thin wrapper over `adjacentID` naming the end-of-set intent at the call site.
+func viewerStep(from id: String, in ids: [String], offset: Int) -> String? {
+    adjacentID(in: ids, to: id, offset: offset)
+}
+
+/// The full plan for a **Pick** tap (#180) — pure, so the whole wiring is unit-tested instead of living in
+/// the View: flip `toggleID`, then either move to `advanceTo`, show the end-of-set card (`reachedEnd`), or
+/// stay put. Adding a pick advances (to the next id, or the end card if it was the last photo); removing a
+/// pick stays where you are so you see what you dropped.
+struct PickPlan: Equatable {
+    let toggleID: String     // the id to flip in the selection
+    let advanceTo: String?   // move here after adding; nil ⇒ stay (a removal) or the end was reached
+    let reachedEnd: Bool     // added on the LAST photo ⇒ show the end-of-set card
+}
+
+func pickPlan(currentID: String, in ids: [String], currentlyPicked: Bool) -> PickPlan {
+    guard pickOutcome(currentlyPicked: currentlyPicked).advance else {
+        return PickPlan(toggleID: currentID, advanceTo: nil, reachedEnd: false)   // un-pick → stay
+    }
+    if let next = adjacentID(in: ids, to: currentID, offset: 1) {
+        return PickPlan(toggleID: currentID, advanceTo: next, reachedEnd: false)  // pick → advance
+    }
+    return PickPlan(toggleID: currentID, advanceTo: nil, reachedEnd: true)         // picked the last → end
 }

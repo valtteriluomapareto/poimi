@@ -82,14 +82,18 @@ struct PhotoPagerView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ pager: UIPageViewController, context: Context) {
         context.coordinator.parent = self
-        // An external change (filmstrip tap) turns the page; a page-turn-published change is already
-        // shown, so this no-ops then.
+        // An external change (Next/Prev button, filmstrip tap, pick auto-advance) turns the page; a
+        // swipe-published change is already shown, so this no-ops then.
         let shownID = (pager.viewControllers?.first as? (any ViewerPage))?.id
         guard shownID != currentID, let target = context.coordinator.makePage(for: currentID) else { return }
         let toIndex = context.coordinator.index(of: currentID) ?? 0
         let fromIndex = shownID.flatMap(context.coordinator.index) ?? 0
+        // Programmatic page turns are INSTANT (`animated: false`): the built-in ~0.3s slide made rapid
+        // Next-button taps feel laggy, and instant turns also can't overlap/desync the pager, so the caller
+        // needn't debounce navigation. Swipes keep their natural interactive slide (they don't come through
+        // here). Instant is also the correct Reduce-Motion behaviour, so no separate gate is needed.
         pager.setViewControllers([target], direction: toIndex >= fromIndex ? .forward : .reverse,
-                                 animated: !UIAccessibility.isReduceMotionEnabled)   // RM → jump, don't slide
+                                 animated: false)
     }
 
     final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
