@@ -52,9 +52,10 @@ struct PhotoViewerView: View {
     /// Bumped on each pick/un-pick so `.sensoryFeedback` fires the selection haptic — the single,
     /// intent-driven confirmation a fast, eyes-on-photo triage loop needs (#180).
     @State private var pickHaptic = 0
-    /// Guard held for ~one page-turn after a programmatic advance: a fast double-tap can't pick the photo
-    /// that just slid in, and mashing ‹ › can't stack overlapping pager transitions (which desync it, #180).
-    @State private var isPaging = false
+    /// A brief bounce-guard (~150ms) after a pick auto-advances, so a fumbled double-tap on Pick can't
+    /// also pick the photo that just slid in. Navigation isn't guarded — programmatic turns are instant, so
+    /// rapid Next is immediate (#180).
+    @State private var pickBounce = false
     /// True once you pick/Next past the LAST photo — shows the end-of-set card instead of a dead tap (#180).
     @State private var endReached = false
 
@@ -469,11 +470,12 @@ extension PhotoViewerView {
     /// end-of-set card if it was the last photo); removing stays put so you see what you dropped. Guarded by
     /// `isPaging` so a fast double-tap can't act on the photo that just slid in.
     private func performPick() {
-        guard !isPaging else { return }
+        guard !pickBounce else { return }   // swallow a fumbled double-tap, not deliberate picks
         let plan = pickPlan(currentID: currentID, in: allIDs, currentlyPicked: selection.contains(currentID))
         selection.toggle(plan.toggleID)
         pickHaptic &+= 1
         if let next = plan.advanceTo {
+            armPickBounce()
             advance(to: next, from: plan.toggleID)
         } else if plan.reachedEnd {
             endReached = true
@@ -482,31 +484,31 @@ extension PhotoViewerView {
     }
 
     /// A chevron step. Forward past the last photo opens the end-of-set card; otherwise a forward step seals
-    /// a crossed cluster done (matching swipe, #128). Pure navigation — never changes a pick. Guarded by
-    /// `isPaging` so mashing ‹ › can't stack overlapping programmatic page transitions (which desync the pager).
+    /// a crossed cluster done (matching swipe, #128). Pure navigation — never changes a pick. NOT guarded:
+    /// programmatic turns are instant (pager `animated: false`), so rapid Next registers immediately and
+    /// can't overlap/desync the pager.
     private func goToStep(_ offset: Int) {
-        guard !isPaging else { return }
         let from = currentID
         guard let target = viewerStep(from: from, in: allIDs, offset: offset) else {
             if offset > 0 { endReached = true }
             return
         }
-        if offset > 0 { advance(to: target, from: from) } else { beginPaging(); currentID = target }
+        if offset > 0 { advance(to: target, from: from) } else { currentID = target }
     }
 
     /// Apply a FORWARD programmatic advance: seal the cluster if this crossed its boundary (the pager's
-    /// swipe delegate doesn't fire for a programmatic set, #128), guard re-entrancy, then turn the page.
+    /// swipe delegate doesn't fire for a programmatic set, #128), then turn the page instantly.
     private func advance(to target: String, from: String) {
         autoMarkDoneIfPagedPastCluster(from: from, to: target)
-        beginPaging()
-        currentID = target
+        currentID = target   // instant (pager uses animated: false) — safe to fire back-to-back
     }
 
-    /// Hold the paging guard for roughly one page-turn, then release it — even on cancellation (`try?`
-    /// falls through), so Pick/‹/› can never get stuck disabled.
-    private func beginPaging() {
-        isPaging = true
-        Task { @MainActor in try? await Task.sleep(for: .milliseconds(280)); isPaging = false }
+    /// A short guard so a *fumbled double-tap* on Pick can't pick the photo that just slid in — a
+    /// finger-bounce window, deliberately tiny so it never throttles intentional picking. Released even on
+    /// cancellation (`try?` falls through), so Pick can't get stuck disabled.
+    private func armPickBounce() {
+        pickBounce = true
+        Task { @MainActor in try? await Task.sleep(for: .milliseconds(150)); pickBounce = false }
     }
 
     // MARK: Filmstrip window (the pager windows itself; this is just for the SwiftUI strip)
