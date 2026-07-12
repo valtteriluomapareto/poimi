@@ -2435,16 +2435,6 @@
         }
       }
     },
-    "Adds it to the album and moves to the next photo. Double-tap again to remove.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lisää sen albumiin ja siirtyy seuraavaan kuvaan. Poista poiminta kaksoisnapauttamalla uudelleen."
-          }
-        }
-      }
-    },
     "You've reached the end": {
       "localizations": {
         "fi": {
@@ -2471,6 +2461,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jatka läpikäyntiä"
+          }
+        }
+      }
+    },
+    "Adds it to the album and moves to the next photo.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lisää sen albumiin ja siirtyy seuraavaan kuvaan."
+          }
+        }
+      }
+    },
+    "Removes it from the album.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poistaa sen albumista."
+          }
+        }
+      }
+    },
+    "Remove pick": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poista poiminta"
           }
         }
       }

@@ -117,14 +117,21 @@ struct ViewerPickTests {
         #expect(viewerStep(from: "a", in: ids, offset: -1) == nil)   // no previous before the first
     }
 
-    @Test("isEndOfSet is true only on the last photo; false for an empty set")
-    func endOfSet() {
+    @Test("pickPlan: add advances (or ends on the last photo); remove stays put — the whole orchestration")
+    func pickPlanRules() {
         let ids = ["a", "b", "c"]
-        #expect(isEndOfSet("c", in: ids))
-        #expect(!isEndOfSet("b", in: ids))
-        #expect(!isEndOfSet("a", in: ids))
-        #expect(!isEndOfSet("x", in: []))          // no photos → no end (never a dead terminal card)
-        #expect(!isEndOfSet("z", in: ids))         // unknown id isn't the end
+        // Add mid-list → toggle this one, advance to the next, not the end.
+        #expect(pickPlan(currentID: "b", in: ids, currentlyPicked: false)
+            == PickPlan(toggleID: "b", advanceTo: "c", reachedEnd: false))
+        // Add on the LAST photo → toggle it, no advance, end-of-set.
+        #expect(pickPlan(currentID: "c", in: ids, currentlyPicked: false)
+            == PickPlan(toggleID: "c", advanceTo: nil, reachedEnd: true))
+        // Remove (already picked) → toggle it, stay put (no advance, not the end).
+        #expect(pickPlan(currentID: "b", in: ids, currentlyPicked: true)
+            == PickPlan(toggleID: "b", advanceTo: nil, reachedEnd: false))
+        // A single-photo set: the first pick is also the last → straight to end-of-set.
+        #expect(pickPlan(currentID: "solo", in: ["solo"], currentlyPicked: false)
+            == PickPlan(toggleID: "solo", advanceTo: nil, reachedEnd: true))
     }
 }
 
