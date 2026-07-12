@@ -2414,6 +2414,66 @@
           }
         }
       }
+    },
+    "Previous photo": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edellinen kuva"
+          }
+        }
+      }
+    },
+    "Next photo": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seuraava kuva"
+          }
+        }
+      }
+    },
+    "Adds it to the album and moves to the next photo. Double-tap again to remove.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lisää sen albumiin ja siirtyy seuraavaan kuvaan. Poista poiminta kaksoisnapauttamalla uudelleen."
+          }
+        }
+      }
+    },
+    "You've reached the end": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Olet päässyt loppuun"
+          }
+        }
+      }
+    },
+    "Back to grid": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Takaisin ruudukkoon"
+          }
+        }
+      }
+    },
+    "Keep reviewing": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jatka läpikäyntiä"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

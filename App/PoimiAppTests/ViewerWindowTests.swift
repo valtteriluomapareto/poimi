@@ -98,6 +98,36 @@ struct PagerNeighbourTests {
     }
 }
 
+@Suite("Viewer pick + auto-advance (#180)")
+struct ViewerPickTests {
+    @Test("picking an unpicked photo adds it AND advances; tapping a picked one un-picks and stays")
+    func pickOutcomeRules() {
+        // The load-bearing rule: auto-advance ONLY when a pick is added — so churning forward is one tap,
+        // but a correction (un-pick) leaves you on the photo to see what you removed.
+        #expect(pickOutcome(currentlyPicked: false) == PickOutcome(nowPicked: true, advance: true))
+        #expect(pickOutcome(currentlyPicked: true) == PickOutcome(nowPicked: false, advance: false))
+    }
+
+    @Test("viewerStep gives prev/next within bounds and nil at the ends (‹ › disable / end-of-set)")
+    func stepBounds() {
+        let ids = ["a", "b", "c"]
+        #expect(viewerStep(from: "b", in: ids, offset: 1) == "c")
+        #expect(viewerStep(from: "b", in: ids, offset: -1) == "a")
+        #expect(viewerStep(from: "c", in: ids, offset: 1) == nil)    // no next past the last
+        #expect(viewerStep(from: "a", in: ids, offset: -1) == nil)   // no previous before the first
+    }
+
+    @Test("isEndOfSet is true only on the last photo; false for an empty set")
+    func endOfSet() {
+        let ids = ["a", "b", "c"]
+        #expect(isEndOfSet("c", in: ids))
+        #expect(!isEndOfSet("b", in: ids))
+        #expect(!isEndOfSet("a", in: ids))
+        #expect(!isEndOfSet("x", in: []))          // no photos → no end (never a dead terminal card)
+        #expect(!isEndOfSet("z", in: ids))         // unknown id isn't the end
+    }
+}
+
 @Suite("Viewer page kind — photo vs video (#125)")
 struct ViewerPageKindTests {
     @Test("a video id → .video; a still, an absent id, or an empty map → .photo")
