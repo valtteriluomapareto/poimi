@@ -2405,16 +2405,6 @@
         }
       }
     },
-    "Video length, %@": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Videon kesto, %@"
-          }
-        }
-      }
-    },
     "Previous photo": {
       "localizations": {
         "fi": {
@@ -2491,6 +2481,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Poista poiminta"
+          }
+        }
+      }
+    },
+    "Video length %@. %@": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Videon kesto %1$@. %2$@"
           }
         }
       }

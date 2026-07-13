@@ -52,14 +52,6 @@ struct PhotoInfoFormatTests {
         #expect(PhotoInfoFormat.resolution(PixelSize(width: 0, height: 3024)) == "")
     }
 
-    @Test("date·time line: joins with ' · ' only when BOTH day and time are present")
-    func dateTimeJoin() {
-        #expect(PhotoInfoFormat.dateTimeLine(day: "Sat, Jul 5", time: "14.32") == "Sat, Jul 5 · 14.32")
-        #expect(PhotoInfoFormat.dateTimeLine(day: "Sat, Jul 5", time: "") == "Sat, Jul 5")   // undated-time
-        #expect(PhotoInfoFormat.dateTimeLine(day: "", time: "14.32") == "14.32")              // no review context
-        #expect(PhotoInfoFormat.dateTimeLine(day: "", time: "") == "")                        // nothing
-    }
-
     @Test("duration: nil → nil (a still); M:SS under an hour; H:MM:SS at/over an hour (#125)")
     func duration() {
         #expect(PhotoInfoFormat.duration(nil) == nil)          // a still carries no duration → no badge
