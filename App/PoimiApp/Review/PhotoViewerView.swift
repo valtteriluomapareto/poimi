@@ -265,31 +265,32 @@ struct PhotoViewerView: View {
         .padding(.bottom, 8)
     }
 
-    /// The photo's identity + progress, Apple-Photos-styled (#183): a regular-weight, fully-spelled
-    /// localized date+time on its OWN line (so a long locale form — e.g. Finnish "lauantai 11. heinäkuuta
-    /// 2026 klo 17.15" — has room), then a muted photo-info line on the left with the two counts grouped on
-    /// the right (gold pick tally over the "N of M" position). All strings are formatted off-body in
-    /// `refreshInfo` (repo rule); this only lays them out.
+    /// The photo's identity + progress (#183): a compact ISO date+time over a muted photo-info line on the
+    /// left, and the two counts (gold pick tally over the "N of M" position) on the right — top-aligned so
+    /// the tally sits on the date's line. All strings are formatted off-body in `refreshInfo` (repo rule);
+    /// this only lays them out.
     private var metaHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if !info.dateTime.isEmpty {
-                Text(info.dateTime)
-                    .font(.body)                       // ~17pt REGULAR — not semibold
-                    .monospacedDigit()                 // tidy, aligned digits for the ISO timestamp
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-            }
-            HStack(alignment: .top, spacing: 12) {
+        // Two TOP-aligned columns: date over info on the left, the counts block on the right — so the pick
+        // tally lines up with the date line (not one line below it) and the position lines up with the info.
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                if !info.dateTime.isEmpty {
+                    Text(info.dateTime)
+                        .font(.body)                   // ~17pt REGULAR — not semibold
+                        .monospacedDigit()             // tidy, aligned digits for the ISO timestamp
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
+                }
                 if !detailLine.isEmpty {
                     Text(detailLine)
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.6))
                         .accessibilityLabel(detailA11y)
                 }
-                Spacer(minLength: 0)
-                countsBlock
             }
+            Spacer(minLength: 0)
+            countsBlock
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
