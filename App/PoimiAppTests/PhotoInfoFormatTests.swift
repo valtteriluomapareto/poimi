@@ -7,6 +7,7 @@
 //
 
 import Testing
+import Foundation
 import Curation
 @testable import PoimiApp
 
@@ -65,5 +66,20 @@ struct PhotoInfoFormatTests {
         // Fractional seconds floor; a stray negative clamps to zero (never a "-1" or a crash).
         #expect(PhotoInfoFormat.duration(14.9) == "0:14")
         #expect(PhotoInfoFormat.duration(-5) == "0:00")
+    }
+
+    @Test("timestamp: compact ISO date + 24h time, zero-padded, locale-independent (#183)")
+    func timestamp() {
+        let utc = TimeZone(identifier: "UTC")!
+        // 2025-01-01 17:34:00 UTC.
+        #expect(PhotoInfoFormat.timestamp(Date(timeIntervalSince1970: 1_735_752_840), timeZone: utc)
+            == "2025-01-01 17:34")
+        // 2025-03-05 04:07 UTC — single-digit month/day/hour/minute all zero-padded.
+        #expect(PhotoInfoFormat.timestamp(Date(timeIntervalSince1970: 1_741_147_620), timeZone: utc)
+            == "2025-03-05 04:07")
+        // The timezone shifts the wall-clock: UTC−5 rolls 2025-01-01 17:34Z back to 12:34 the same day.
+        let minus5 = TimeZone(secondsFromGMT: -5 * 3600)!
+        #expect(PhotoInfoFormat.timestamp(Date(timeIntervalSince1970: 1_735_752_840), timeZone: minus5)
+            == "2025-01-01 12:34")
     }
 }

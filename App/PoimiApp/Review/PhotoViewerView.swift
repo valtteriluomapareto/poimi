@@ -274,10 +274,10 @@ struct PhotoViewerView: View {
         VStack(alignment: .leading, spacing: 6) {
             if !info.dateTime.isEmpty {
                 Text(info.dateTime)
-                    .font(.body)                       // ~17pt REGULAR (Photos style) — not semibold
+                    .font(.body)                       // ~17pt REGULAR — not semibold
+                    .monospacedDigit()                 // tidy, aligned digits for the ISO timestamp
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)           // shrink a long localized date rather than clip it
                     .accessibilityAddTraits(.isHeader)
             }
             HStack(alignment: .top, spacing: 12) {
@@ -541,10 +541,9 @@ extension PhotoViewerView {
     /// panel, both from the published `AssetRef`. Async device + file size are a follow-up.
     private func refreshInfo(for id: String) {
         let asset = coordinator.reviewAssetsByID[id]
-        // Apple-Photos-style: the SYSTEM localized long date + short time (#183), so it matches the OS per
-        // locale — Finnish renders "lauantai 11. heinäkuuta 2026 klo 17.15" (weekday + spelled month + klo),
-        // English the spelled equivalent — instead of the old cramped hand-built "Sat 5 Jul · 14.32".
-        let dateTime = asset?.captureDate.map { $0.formatted(date: .complete, time: .shortened) } ?? ""
+        // Compact ISO timestamp "2025-01-01 17:34" (#183) — the localized spelled form ran edge-to-edge
+        // (esp. Finnish "keskiviikkona 1. tammikuuta 2025 klo 17.34"); ISO is short + unambiguous everywhere.
+        let dateTime = asset?.captureDate.map { PhotoInfoFormat.timestamp($0) } ?? ""
         info = InfoLabels(
             dateTime: dateTime,
             resolution: asset.map { PhotoInfoFormat.resolution($0.pixelSize) } ?? "",
@@ -600,6 +599,19 @@ private struct InfoLabels: Equatable {
 /// (the no-formatting-in-body rule). `Curation` stays string-free (D14/D21), so these app-facing strings
 /// live here, not in the domain.
 enum PhotoInfoFormat {
+    /// A compact capture timestamp — "2025-01-01 17:34" (ISO date + 24-hour time, no seconds). Deliberately
+    /// **not localized**: the spelled localized form (`.formatted(date: .complete, …)`) ran edge-to-edge in
+    /// the viewer, especially in Finnish ("keskiviikkona 1. tammikuuta 2025 klo 17.34"); ISO is compact and
+    /// unambiguous in every language (#183). Built from `DateComponents` so it's pure + deterministic;
+    /// `timeZone` is injectable for tests, and the app passes `.current` to show the device's local time.
+    static func timestamp(_ date: Date, timeZone: TimeZone = .current) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let c = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return String(format: "%04d-%02d-%02d %02d:%02d",
+                      c.year ?? 0, c.month ?? 0, c.day ?? 0, c.hour ?? 0, c.minute ?? 0)
+    }
+
     /// Rounded megapixels (round-half-away-from-zero, so exactly 0.5 MP shows), or `nil` below ~0.5 MP /
     /// for a zero size. The single source of the MP count — the visible resolution string AND the
     /// VoiceOver label both go through this, so they can't drift.
