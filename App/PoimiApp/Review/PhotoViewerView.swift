@@ -265,15 +265,13 @@ struct PhotoViewerView: View {
         .padding(.bottom, 8)
     }
 
-    /// The photo's identity + progress (#183): a compact ISO date+time over a muted photo-info line on the
-    /// left, and the two counts (gold pick tally over the "N of M" position) on the right — top-aligned so
-    /// the tally sits on the date's line. All strings are formatted off-body in `refreshInfo` (repo rule);
-    /// this only lays them out.
+    /// The photo's identity + progress (#183): TWO center-aligned rows — the compact ISO date + the gold
+    /// pick tally on the first, the muted photo-info + the "N of M" position on the second. Center-aligning
+    /// each row keeps the (bigger) gold tally's centre on the date's line, rather than top-aligned where it
+    /// hangs below. All strings are formatted off-body in `refreshInfo` (repo rule); this only lays them out.
     private var metaHeader: some View {
-        // Two TOP-aligned columns: date over info on the left, the counts block on the right — so the pick
-        // tally lines up with the date line (not one line below it) and the position lines up with the info.
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 12) {
                 if !info.dateTime.isEmpty {
                     Text(info.dateTime)
                         .font(.body)                   // ~17pt REGULAR — not semibold
@@ -282,15 +280,19 @@ struct PhotoViewerView: View {
                         .lineLimit(1)
                         .accessibilityAddTraits(.isHeader)
                 }
+                Spacer(minLength: 0)
+                tallyText
+            }
+            HStack(alignment: .center, spacing: 12) {
                 if !detailLine.isEmpty {
                     Text(detailLine)
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.6))
                         .accessibilityLabel(detailA11y)
                 }
+                Spacer(minLength: 0)
+                positionText
             }
-            Spacer(minLength: 0)
-            countsBlock
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -308,23 +310,24 @@ struct PhotoViewerView: View {
                      comment: "Viewer info a11y: a video's running time then its resolution")
     }
 
-    /// The two counts, right-aligned (#183): the gold pick tally (echoes the grid tally) over the "N of M"
-    /// position — grouped so the left column stays pure photo facts.
-    private var countsBlock: some View {
+    /// The gold pick tally "163 / 500" (echoes the grid tally) — the first row's trailing item.
+    private var tallyText: some View {
         let progress = selection.progress
+        return (Text("\(progress.picked)").font(.title2.weight(.semibold)).foregroundStyle(Color.accentColor)
+            + Text(" / \(progress.target)").font(.body).foregroundStyle(.white.opacity(0.6)))
+            .monospacedDigit()
+            .accessibilityLabel("\(progress.picked) of \(progress.target) picked")
+    }
+
+    /// The "N of M" position within the album — the second row's trailing item, under the tally.
+    private var positionText: some View {
         let ids = allIDs
         let position = (ids.firstIndex(of: currentID) ?? 0) + 1
-        return VStack(alignment: .trailing, spacing: 2) {
-            (Text("\(progress.picked)").font(.title2.weight(.semibold)).foregroundStyle(Color.accentColor)
-                + Text(" / \(progress.target)").font(.body).foregroundStyle(.white.opacity(0.6)))
-                .monospacedDigit()
-            Text("\(position) of \(ids.count)")
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.6))
-                .monospacedDigit()
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(progress.picked) of \(progress.target) picked, photo \(position) of \(ids.count)")
+        return Text("\(position) of \(ids.count)")
+            .font(.footnote)
+            .foregroundStyle(.white.opacity(0.6))
+            .monospacedDigit()
+            .accessibilityLabel("Photo \(position) of \(ids.count)")
     }
 
     /// The triage control band (#180): **‹ Previous · Pick · Next ›**, centre-weighted like a Now-Playing
