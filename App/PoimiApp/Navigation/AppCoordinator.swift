@@ -47,6 +47,12 @@ final class AppCoordinator {
     /// no review is open.
     var reviewClusters: [ReviewCluster] = []
 
+    /// Whether the open album already has a Photos album (`targetAlbumID != nil`) — published by the
+    /// review scan so the finish-action affordances (#187) can pick #185's re-export-aware label
+    /// ("Update in Photos") without the viewer/grid holding a `CurationProject` reference. Reset with
+    /// the rest of the review context on album switch.
+    var reviewIsReExport = false
+
     /// The asset last viewed in the grid / viewer. The grid restores its scroll to it on return
     /// from the viewer (D22); set on cell tap and updated as the viewer swipes. Shared so scroll
     /// position survives the round-trip.
@@ -129,6 +135,7 @@ final class AppCoordinator {
         reviewDayByID = [:]
         reviewAssetsByID = [:]
         reviewClusters = []
+        reviewIsReExport = false
         lastViewedID = nil
     }
 
@@ -197,6 +204,16 @@ final class AppCoordinator {
     /// Push the export / completion step.
     func openExport(_ projectID: UUID) {
         path.append(.export(projectID))
+    }
+
+    /// The forward path out of review (#187): from the viewer's end-of-set card or the fully-reviewed
+    /// grid. Dismisses the viewer sheet FIRST so export isn't pushed under a mounted sheet, then pushes
+    /// export for the active album. One transition, so the two affordances share it (and it's testable
+    /// as a single call). No-op if there's no active album.
+    func finishToExport() {
+        guard let id = activeAlbumID else { return }
+        presentedPhotoID = nil          // drop the sheet before the push (no dangling viewer over export)
+        path.append(.export(id))
     }
 
     /// Push the album's settings screen (#41).

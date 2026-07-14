@@ -99,6 +99,7 @@ struct ScanningView: View {
             coordinator.reviewDayByID = store?.dayByID ?? [:]
             coordinator.reviewAssetsByID = store?.assetsByID ?? [:]   // viewer info panel (#127)
             coordinator.reviewClusters = clusters   // viewer auto-done (#128) + grid page-restore (#126)
+            coordinator.reviewIsReExport = project.targetAlbumID != nil   // finish-action label (#185/#187)
         }
     }
 

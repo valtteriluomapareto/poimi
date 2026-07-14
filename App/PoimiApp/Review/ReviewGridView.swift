@@ -145,7 +145,9 @@ struct ReviewGridView: View {
                     // Restore scroll to the photo you ended on in the viewer (#126); each page acts only
                     // if it holds the id, then clears it (one-shot).
                     scrollToID: pendingScrollID,
-                    onScrolledToTarget: { pendingScrollID = nil })
+                    onScrolledToTarget: { pendingScrollID = nil },
+                    reviewComplete: reviewComplete,
+                    totalPhotos: totalCandidatePhotos)
                     .tag(cluster.id as String?)
             }
         }
@@ -164,6 +166,18 @@ struct ReviewGridView: View {
         } else {
             ReviewTopBar(clusterTitle: title, count: 0)
         }
+    }
+
+    /// Whether every cluster is marked done — the album is fully reviewed, so the grid shows the forward
+    /// path to export (#187) instead of `advance()` silently holding. Pure `isReviewComplete` (guards an
+    /// empty slice). Reads `done` (already observed); O(clusters), not heavy work in a body.
+    private var reviewComplete: Bool {
+        isReviewComplete(clusters: clusters, isDone: { done.isDone($0) })
+    }
+
+    /// Total candidate photos across the album — the review-complete bar's "N photos" summary.
+    private var totalCandidatePhotos: Int {
+        clusters.reduce(0) { $0 + $1.count }
     }
 
     var body: some View {
@@ -333,6 +347,11 @@ private struct ClusterPage: View {
     let scrollToID: String?
     /// Called after this page consumed `scrollToID`, so the parent clears it (one-shot).
     let onScrolledToTarget: () -> Void
+    /// When every cluster is done, the pinned header shows the review-complete forward bar (#187) in
+    /// place of the per-page pills. Album-level, rendered on the current page (all pages are done).
+    let reviewComplete: Bool
+    /// Total candidate photos across the album — the review-complete bar's "N photos" summary.
+    let totalPhotos: Int
     @Environment(DoneStore.self) private var done
 
     var body: some View {
@@ -382,14 +401,21 @@ private struct ClusterPage: View {
     /// Select-all icon on the trailing lane. The cluster's identity, count, and done-state now live in
     /// the fixed top bar, not here — so this row is just the per-page controls, one height, aligned.
     @ViewBuilder private func clusterHeader() -> some View {
-        HStack(spacing: 8) {
-            if total > 1 { PageIndicatorPill(position: position, total: total) }
-            Spacer(minLength: 0)
-            SelectAllIconChip(cluster: cluster, title: headerTitle)
+        if reviewComplete {
+            // Every cluster done → the forward path replaces the per-page pills (paging/select-all are
+            // moot once you're finished). Pinned like the pills, so it stays reachable as you scroll.
+            ReviewCompleteBar(totalPhotos: totalPhotos)
+                .frame(maxWidth: .infinity)
+        } else {
+            HStack(spacing: 8) {
+                if total > 1 { PageIndicatorPill(position: position, total: total) }
+                Spacer(minLength: 0)
+                SelectAllIconChip(cluster: cluster, title: headerTitle)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity)
     }
 
     /// End-of-cluster CTA: "Mark trip done" for a trip (it spans several days) / "Mark day done" for a
@@ -422,6 +448,51 @@ private struct ClusterPage: View {
 /// always-visible position across the album plus the cue you can swipe between clusters. A stacked-page
 /// glyph reinforces "cluster N of M"; the position is numeric (dots were dropped — a windowed
 /// "10 of 349 dots" tells you nothing, and for a small album the number reads just as clearly, design 4AB).
+/// The review-complete forward affordance (#187): once EVERY cluster is marked done, this replaces the
+/// per-page pills in the pinned header — a green check + "All photos reviewed · N photos · M picks" + the
+/// Photos-qualified finish action (#185's re-export-aware label). Reads the shared `SelectionStore` ITSELF
+/// (like the cells + top bar) so the grid parent stays independent of `selected`; adaptive `.primary`/
+/// `.secondary` over glass (never hardcoded white — matches the pills, sidesteps the RT-legibility trap).
+/// Its action is the one coordinator transition that dismisses any viewer then pushes export.
+private struct ReviewCompleteBar: View {
+    let totalPhotos: Int
+    @Environment(SelectionStore.self) private var selection
+    @Environment(AppCoordinator.self) private var coordinator
+
+    var body: some View {
+        let picked = selection.progress.picked
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(Color.brandGreen)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("All photos reviewed")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("^[\(totalPhotos) photo](inflect: true) · ^[\(picked) pick](inflect: true)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Spacer(minLength: 8)
+            Button { coordinator.finishToExport() } label: {
+                Text(finishActionLabel(isReExport: coordinator.reviewIsReExport))
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.glassProminent).tint(Color.accentColor).foregroundStyle(Color.onAccent)
+            .disabled(picked == 0)   // nothing to save with zero picks
+            .accessibilityIdentifier("reviewCompleteFinishButton")
+        }
+        .padding(.vertical, 8)
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .glassSurface(in: Capsule())
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+}
+
 private struct PageIndicatorPill: View {
     let position: Int   // 1-based
     let total: Int
@@ -503,4 +574,12 @@ func nextUnreviewedPage(after current: Int, count: Int, isDone: (Int) -> Bool) -
     guard count > 0 else { return 0 }
     if let next = (current + 1..<count).first(where: { !isDone($0) }) { return next }
     return current + 1 < count ? current + 1 : current
+}
+
+/// True when EVERY cluster is marked done — the whole album is reviewed, so the grid offers the forward
+/// path to export instead of `advance()` silently holding (#187). Pure, unit-tested. Guarded on a
+/// NON-EMPTY slice: `allSatisfy` is vacuously true for an empty list, which would falsely report
+/// "review complete" (and offer to create an album) for an empty-range album — so guard it explicitly.
+func isReviewComplete(clusters: [ReviewCluster], isDone: (ReviewCluster) -> Bool) -> Bool {
+    !clusters.isEmpty && clusters.allSatisfy(isDone)
 }
