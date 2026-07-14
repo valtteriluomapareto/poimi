@@ -56,7 +56,7 @@ struct HappyPathSmokeTests {
         // cluster to act on. Ids are unique (nonce + index), so the count comparisons below are clean.
         #expect(groups.count >= 2)
 
-        // 4 — select every candidate. (In the grid, Select all picks one cluster; here we select the
+        // 4 — select every candidate. (In the grid, "Pick all" picks one cluster; here we select the
         // whole scan at the store — the same SelectionStore path the UI drives.)
         selection.activate(project)
         selection.select(scannedIDs)
