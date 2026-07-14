@@ -95,20 +95,23 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
             // A valid target is one we exported before OR a pre-existing album the user chose at setup
             // (a seeded album, with its current membership). Only a truly unknown id is `.albumMissing`.
             if exportedAlbums[existing] == nil {
-                guard seededAlbums.contains(where: { $0.id == existing }) else {
+                guard let seeded = seededAlbums.first(where: { $0.id == existing }) else {
                     throw ExportError.albumMissing
                 }
-                exportedAlbums[existing] = (name, membership[existing] ?? [])
+                // Seeded album's OWN title, not `name` (the project title) — mirrors the real impl's
+                // `collection.localizedTitle`, so the #193 divergence is real in the double (#193).
+                exportedAlbums[existing] = (seeded.title, membership[existing] ?? [])
             }
             albumID = existing
         } else {
             exportSeq += 1
             albumID = "album/exported/\(exportSeq)"
-            exportedAlbums[albumID] = (name, [])
+            exportedAlbums[albumID] = (name, [])   // created with `name` → that's its title
         }
         let added = resolved.subtracting(exportedAlbums[albumID]!.ids)   // dupe guard
         exportedAlbums[albumID]!.ids.formUnion(added)
-        return ExportResult(albumID: albumID, added: added.count, total: exportedAlbums[albumID]!.ids.count)
+        return ExportResult(albumID: albumID, added: added.count,
+                            total: exportedAlbums[albumID]!.ids.count, title: exportedAlbums[albumID]!.name)
     }
 
     /// Test/debug peek at a created album's membership (the export write isn't observable otherwise).

@@ -125,7 +125,7 @@ struct ExportView: View {
                 .controlSize(.large)
                 .tint(.accentColor)
                 .opacity(spinnerVisible ? 1 : 0)
-            albumLabel
+            albumLabel(project.title)   // destination not yet resolved mid-write — use the project title
             Text(isReExport ? "Updating your album…" : "Creating your album…")
                 .font(.largeTitle.bold())
                 .multilineTextAlignment(.center)
@@ -151,7 +151,7 @@ struct ExportView: View {
         return VStack(spacing: 0) {
             Spacer(minLength: 40)
             VStack(spacing: 16) {
-                albumLabel
+                albumLabel(result.title)   // the album the photos actually landed in (#193)
                 Text(wasReExport ? "Album updated" : "Your album is ready")
                     .font(.largeTitle.bold())
                     .multilineTextAlignment(.center)
@@ -174,8 +174,9 @@ struct ExportView: View {
                         .padding(.top, 4)
                 }
                 // Where the payoff landed — iOS has no public deep-link to a specific album, so point
-                // the user at Photos by name rather than a button that can't reach it.
-                Text("Find it in Photos, in the album “\(project.title)”.")
+                // the user at Photos by name rather than a button that can't reach it. Use the resolved
+                // destination title so a re-export names the album the photos are actually in (#193).
+                Text("Find it in Photos, in the album “\(result.title)”.")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
@@ -192,11 +193,13 @@ struct ExportView: View {
     private func completionSubtitle(result: ExportResult, wasReExport: Bool, stats: CompletionStats) -> String {
         // `.formatted()` keeps locale number grouping ("1,847"); it lands as a %@ arg in the key.
         if wasReExport {
+            // `result.title` (not `project.title`): a re-export can target an existing album whose name
+            // differs from the project — name the album the photos are actually in (#193).
             return result.added > 0
                 ? String(localized: """
-                    Added \(result.added.formatted()) photos · \(project.title) now holds \(result.total.formatted()).
+                    Added \(result.added.formatted()) photos · \(result.title) now holds \(result.total.formatted()).
                     """, comment: "Re-export subtitle: N newly added, album total M")
-                : String(localized: "\(project.title) is already up to date · \(result.total.formatted()) photos.",
+                : String(localized: "\(result.title) is already up to date · \(result.total.formatted()) photos.",
                          comment: "Re-export subtitle: nothing new to add")
         }
         return stats.markedDone > 0
@@ -254,7 +257,7 @@ struct ExportView: View {
                     .font(.system(size: 52, weight: .regular))
                     .foregroundStyle(Color.accentColor)
                     .padding(.bottom, 8)
-                albumLabel
+                albumLabel(project.title)   // export failed — no resolved destination to name
                 Text(canCreateNew ? "Couldn’t update the album" : "Couldn’t create the album")
                     .font(.largeTitle.bold())
                     .multilineTextAlignment(.center)
@@ -306,9 +309,11 @@ struct ExportView: View {
 
     // MARK: Shared bits
 
-    /// The album name in gold caps — "BEST OF 2025".
-    private var albumLabel: some View {
-        Text(project.title.uppercased())
+    /// The album name in gold caps — "BEST OF 2025". Takes the title so completion can show the
+    /// resolved destination album's real name (#193), while working/failure use the project title
+    /// (the destination isn't resolved until the export returns).
+    private func albumLabel(_ title: String) -> some View {
+        Text(title.uppercased())
             .font(.footnote.weight(.semibold))
             .tracking(2)
             .foregroundStyle(Color.accentColor)

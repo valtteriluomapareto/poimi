@@ -80,6 +80,7 @@ struct HappyPathSmokeTests {
         }
         #expect(!wasReExport)                         // first export
         #expect(result.added == scannedIDs.count)     // every pick landed (churned ids resolve fine)
+        #expect(result.title == "Best of 2025")       // #193: create path returns the requested name
         #expect(project.targetAlbumID != nil)         // finalized …
         #expect(project.markedDoneAt != nil)          // … and stamped done
         #expect(project.status == .done)
