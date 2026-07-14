@@ -35,7 +35,7 @@ struct ReviewEmptyCopy: Equatable {
                                 comment: "Empty scan message: %@ is the date range"))
         case .allExcluded:
             return ReviewEmptyCopy(
-                title: String(localized: "Everything's filtered out",
+                title: String(localized: "Everything’s filtered out",
                               comment: "Empty scan title: all candidates excluded"),
                 message: String(localized: """
                     Every photo between \(range) is a screenshot or in an excluded album. \
@@ -80,7 +80,7 @@ struct ReviewLoadFailedView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("Couldn't load your photos", systemImage: "exclamationmark.triangle")
+            Label("Couldn’t load your photos", systemImage: "exclamationmark.triangle")
         } description: {
             Text("Something went wrong reaching your library. Check your connection and try again.")
         } actions: {

@@ -180,7 +180,7 @@ struct ExportView: View {
                 if !wasReExport, result.added < stats.totalPicked {
                     Text("""
                         ^[\(stats.totalPicked - result.added) photo](inflect: true) \
-                        couldn't be added — no longer in your library.
+                        couldn’t be added — no longer in your library.
                         """)
                         .font(.footnote)
                         .foregroundStyle(.secondary)

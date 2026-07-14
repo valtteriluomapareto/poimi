@@ -195,7 +195,7 @@ struct PhotoViewerView: View {
                 Image(systemName: "flag.checkered")
                     .font(.system(size: 40))
                     .foregroundStyle(Color.accentColor)
-                Text("You've reached the end")
+                Text("You’ve reached the end")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.white)
                 Text("\(selection.progress.picked) of \(selection.progress.target) picked")
