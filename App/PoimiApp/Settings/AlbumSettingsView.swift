@@ -95,7 +95,7 @@ struct AlbumSettingsView: View {
                 }
                 TargetCountField(count: $project.targetCount)
             } header: {
-                Text("Saves to")
+                Text("Destination")
             } footer: {
                 Text("Picks are copied to this Photos album — your library and originals aren't changed.")
             }

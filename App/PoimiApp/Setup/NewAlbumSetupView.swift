@@ -49,8 +49,12 @@ struct NewAlbumSetupView: View {
                     Text("Photos captured in this date range are the candidates to pick from.")
                 }
 
-                Section("Target") {
+                Section {
                     TargetCountField(count: $draft.targetCount)
+                } header: {
+                    Text("Target")
+                } footer: {
+                    Text("A goal, not a limit — you can pick past it.")
                 }
 
                 Section {
@@ -59,23 +63,24 @@ struct NewAlbumSetupView: View {
                     Text("Off by default. Turn on to pick from videos too — they're copied to the album like photos.")
                 }
 
-                Section("Exclude from source") {
+                Section {
                     Toggle("Exclude screenshots", isOn: $draft.excludeScreenshots)
                     NavigationLink {
                         AlbumPickerView(selection: $draft.excludedAlbumIDs, allowsMultiple: true)
                     } label: {
-                        let excluded = draft.excludedAlbumIDs
-                        LabeledContent("Exclude albums", value: excluded.isEmpty
-                            ? String(localized: "None", comment: "Excluded albums: none selected")
-                            : "\(excluded.count)")
+                        LabeledContent("Excluded albums", value: excludedValue)
                     }
+                } header: {
+                    Text("Exclude from source")
+                } footer: {
+                    Text("Screenshots and photos in these albums won't appear while you pick.")
                 }
 
                 Section {
                     NavigationLink {
                         AlbumPickerView(selection: targetSelection, allowsMultiple: false)
                     } label: {
-                        LabeledContent("Save to", value: draft.targetAlbumID == nil
+                        LabeledContent("Photos album", value: draft.targetAlbumID == nil
                             ? String(localized: "New Photos album",
                                      comment: "Destination: a new album created in Photos on finish")
                             : String(localized: "Existing Photos album",
@@ -119,6 +124,17 @@ struct NewAlbumSetupView: View {
     /// A non-empty name and a non-inverted interval are required to create.
     private var isValid: Bool {
         !draft.title.trimmingCharacters(in: .whitespaces).isEmpty && draft.rangeEnd > draft.rangeStart
+    }
+
+    /// The excluded-albums count as a label — matches Settings' `excludedValue` form ("None" / "1 album" /
+    /// "N albums") so Setup and Settings read identically (#190, item 3), not a bare "3" vs "3 albums".
+    private var excludedValue: String {
+        switch draft.excludedAlbumIDs.count {
+        case 0: return String(localized: "None", comment: "Excluded albums: none selected")
+        case 1: return String(localized: "1 album", comment: "Excluded albums count, singular")
+        default: return String(localized: "\(draft.excludedAlbumIDs.count) albums",
+                               comment: "Excluded albums count, 2 or more")
+        }
     }
 
     /// The inclusive end day as a value — the upper bound for the "From" picker (see above).
