@@ -66,9 +66,14 @@ struct AlbumOverviewView: View {
                     .accessibilityLabel("Album settings")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Export") { coordinator.openExport(project.id) }
-                        .disabled(selection.progress.picked == 0)
-                        .accessibilityIdentifier("exportButton")   // moved here from the grid (design 4AB)
+                    // Photos-qualified label (#185): "Save to Photos" first time, "Update in Photos" on a
+                    // re-export — names the boundary to the Photos app, not the in-app album. Identifier
+                    // stays "exportButton" (the XCUITest contract, #43) even though the visible label changed.
+                    Button(finishActionLabel(isReExport: project.targetAlbumID != nil)) {
+                        coordinator.openExport(project.id)
+                    }
+                    .disabled(selection.progress.picked == 0)
+                    .accessibilityIdentifier("exportButton")   // moved here from the grid (design 4AB)
                 }
             }
             // Done-state here is display-only — the Overview doesn't reconcile (the grid does, on entry),

@@ -219,3 +219,15 @@ struct ExportStoreTests {
         #expect(project.targetAlbumID == nil)
     }
 }
+
+@Suite("Finish action label (#185)")
+struct FinishActionLabelTests {
+    // The Overview's finish button is Photos-qualified and re-export-aware (#185). Pinned so the
+    // first-vs-re-export wording can't silently drift, and so it stays distinct from the setup
+    // "Create" button (the collision #185 avoided by NOT reusing "Create album" here).
+    @Test("first export vs re-export wording")
+    func label() {
+        #expect(finishActionLabel(isReExport: false) == "Save to Photos")
+        #expect(finishActionLabel(isReExport: true) == "Update in Photos")
+    }
+}
