@@ -315,3 +315,16 @@ struct ViewerAutoDoneTests {
         #expect(clusterToAutoMarkDone(from: "b1", to: "a2", clusters: clusters, isDone: { _ in false }) == nil)
     }
 }
+
+@Suite("Pick verb unification (#190)")
+struct PickVerbTests {
+    // One canonical verb pair for the whole app. Both the grid rotor (ReviewGridCell) and the viewer's
+    // Pick control (PhotoViewerView) call this single `pickVerb` for their VoiceOver label, so "grid and
+    // viewer agree" is guaranteed by construction — this pins the words so they can't silently drift back
+    // to the old "Select"/"Deselect" split.
+    @Test("pick / un-pick words")
+    func verb() {
+        #expect(pickVerb(isPicked: false) == "Pick")
+        #expect(pickVerb(isPicked: true) == "Remove pick")
+    }
+}

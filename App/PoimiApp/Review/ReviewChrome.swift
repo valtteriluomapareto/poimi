@@ -158,6 +158,18 @@ func pacingTint(_ progress: TargetProgress) -> Color {
     return .accentColor
 }
 
+/// The one canonical **pick / un-pick verb** for the whole app (#190). The grid rotor and the viewer's
+/// Pick control both derive their VoiceOver action label from this single function, so the two surfaces
+/// can never drift to different words (the app is named *Pick*, yet the grid used to say "Select"). Media
+/// nuance ("Pick photo/video") is deliberately dropped: the photo's media type is conveyed by the page's
+/// own label, so the *action* verb stays uniform and unit-testable. Returns a resolved `String`, so call
+/// sites use the verbatim `accessibilityAction(named:)` / `accessibilityLabel` overload (no double-localize).
+func pickVerb(isPicked: Bool) -> String {
+    isPicked
+        ? String(localized: "Remove pick", comment: "Pick control: un-pick the current photo")
+        : String(localized: "Pick", comment: "Pick control: pick the current photo")
+}
+
 /// The running tally — "147 / 200" + a full-width progress bar + "N left" (Paper design). At
 /// accessibility text sizes it drops the bar to numerals only (the dense bar-on-chrome is the most
 /// likely Dynamic-Type contrast failure, styleguide §2/§8). `monospacedDigit` so it doesn't jitter.

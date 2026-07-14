@@ -103,7 +103,7 @@ struct ReviewGridCell: View {
         .accessibilityLabel(videoBadge.map { "Video, \(dayLabel), \($0)" } ?? "Photo, \(dayLabel)")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { onOpen() }
-        .accessibilityAction(named: isSelected ? "Deselect" : "Select") { selection.toggle(id) }
+        .accessibilityAction(named: pickVerb(isPicked: isSelected)) { selection.toggle(id) }
         // Instant light haptic on this cell's own select/deselect (design language).
         .sensoryFeedback(.selection, trigger: isSelected)
         // Reloads when the cell recycles onto a new asset and cancels the previous in-flight request.

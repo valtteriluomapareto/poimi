@@ -376,18 +376,14 @@ struct PhotoViewerView: View {
         .buttonStyle(.plain)
         // Haptic fires from the ROOT `pickHaptic` (one intent-driven source); no `trigger: isPicked` here —
         // that would double-buzz on un-pick and buzz spuriously on plain navigation between picked/unpicked.
-        .accessibilityLabel(pickActionLabel(isPicked: isPicked))
+        // Shared with the grid rotor via the one `pickVerb` source (#190), so both surfaces speak the
+        // same verb. The photo's media type is carried by the page's own a11y label, not this action verb.
+        .accessibilityLabel(pickVerb(isPicked: isPicked))
         .accessibilityValue(isPicked ? "Picked" : "Not picked")
         // State-aware: adding advances; removing stays put (so don't promise "moves to the next photo").
         .accessibilityHint(isPicked ? "Removes it from the album."
                                     : "Adds it to the album and moves to the next photo.")
         .accessibilityAddTraits(.isToggle)
-    }
-
-    /// The Pick control's VoiceOver label, reflecting what a tap does: add (media-aware) vs remove (#180).
-    private func pickActionLabel(isPicked: Bool) -> String {
-        if isPicked { return String(localized: "Remove pick", comment: "Viewer: un-pick the current photo") }
-        return isVideo(currentID) ? "Pick video" : "Pick photo"
     }
 
     /// A pure-navigation chevron (‹ / ›). Icon-only but each carries a VoiceOver label; disabled (dimmed)

@@ -473,12 +473,12 @@ private struct SelectAllIconChip: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("selectAllButton")
+        .accessibilityIdentifier("selectAllButton")   // identifier stays; only the label's verb changes (#190)
         .accessibilityLabel(allSelected
-            ? String(localized: "Deselect all in \(title)", comment: "Select-all toggle: deselect state")
-            : String(localized: "Select all in \(title)", comment: "Select-all toggle: select state"))
-        .accessibilityHint(String(localized: "Selects or deselects every photo in this cluster",
-                                  comment: "Select-all toggle hint"))
+            ? String(localized: "Remove all in \(title)", comment: "Pick-all toggle: un-pick state")
+            : String(localized: "Pick all in \(title)", comment: "Pick-all toggle: pick state"))
+        .accessibilityHint(String(localized: "Picks or removes every photo in this cluster",
+                                  comment: "Pick-all toggle hint"))
     }
 }
 
