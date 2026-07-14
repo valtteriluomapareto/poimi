@@ -77,11 +77,12 @@ struct HappyPathSmokeTests {
         for group in groups where !done.isDone(group) { done.toggle(group) }
         #expect(isReviewComplete(clusters: groups, isDone: { done.isDone($0) }))
 
-        // 5c — the forward path: the fully-reviewed grid / end-of-set card routes to export through the
-        // ONE coordinator transition the UI uses. Assert the route is reachable (this is what the
-        // affordances fire) before running the export below.
+        // 5c — the forward path: from the review grid (where the fully-reviewed affordance lives), the ONE
+        // coordinator transition the UI fires routes to export. Assert the whole path — review is no longer
+        // a dead-end — before running the export below.
+        coordinator.openReview(project.id)
         coordinator.finishToExport()
-        #expect(coordinator.path.last == .export(project.id))
+        #expect(coordinator.path == [.albumOverview(project.id), .review(project.id, nil), .export(project.id)])
 
         // 6 — export: create-or-find the Photos album and copy the picks in (one-way, D31).
         selection.flushNow()

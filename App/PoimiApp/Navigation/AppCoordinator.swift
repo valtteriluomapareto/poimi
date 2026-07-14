@@ -211,8 +211,13 @@ final class AppCoordinator {
     /// export for the active album. One transition, so the two affordances share it (and it's testable
     /// as a single call). No-op if there's no active album.
     func finishToExport() {
-        guard let id = activeAlbumID else { return }
-        presentedPhotoID = nil          // drop the sheet before the push (no dangling viewer over export)
+        // Re-entrancy guard: a fast double-tap must not push `.export` twice.
+        guard let id = activeAlbumID, path.last != .export(id) else { return }
+        // Nil the sheet, then push. SwiftUI coalesces these two @Observable writes into one update, so the
+        // order is intent, not a teardown guarantee (device-verified not to flicker). We clear the sheet
+        // directly rather than via `dismissPhoto()` because this goes FORWARD to export — the grid-restore
+        // return-tick / Perf span (for the dismiss→grid round-trip) deliberately don't apply here.
+        presentedPhotoID = nil
         path.append(.export(id))
     }
 

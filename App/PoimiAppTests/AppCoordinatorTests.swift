@@ -270,11 +270,21 @@ struct AppCoordinatorTests {
         coord.reviewDayByID = ["a": .day(year: 2025, month: 7, day: 5)]
         coord.reviewAssetsByID = ["a": AssetRef(id: "a", captureDate: Date(timeIntervalSince1970: 0),
                                                 pixelSize: PixelSize(width: 4032, height: 3024))]
+        coord.reviewIsReExport = true   // a previously-exported album published "Update in Photos" (#187)
         #expect(coord.reviewAssetsByID["a"]?.pixelSize.width == 4032)
         // Switching albums must clear ALL of it — no stale metadata / labels bleed into the next album.
         coord.openProject(UUID())
         #expect(coord.reviewAssetsByID.isEmpty)
         #expect(coord.reviewDayByID.isEmpty)
         #expect(coord.reviewOrderedIDs.isEmpty)
+        #expect(!coord.reviewIsReExport)   // else a fresh album's finish would read the stale "Update in Photos"
+    }
+
+    @Test("finishToExport is a no-op with no active album (#187)")
+    func finishToExportNoActiveAlbum() {
+        let coord = coordinator(.authorized)
+        coord.finishToExport()
+        #expect(coord.path.isEmpty)
+        #expect(coord.presentedPhotoID == nil)
     }
 }

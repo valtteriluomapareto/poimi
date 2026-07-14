@@ -64,6 +64,13 @@ struct ReviewGridView: View {
     /// `viewerReturnTick`; the matching `ClusterPage` scrolls to it, then clears it.
     @State private var pendingScrollID: String?
 
+    /// Whether every cluster is marked done (#187) + the album's total candidate photos — held off the
+    /// `body` (per the issue) so the O(clusters) `allSatisfy`/`reduce` don't re-run on every `visibleIDs`
+    /// churn during a scroll. Refreshed by `refreshCompletion()` on the events that can change them:
+    /// first appear, album switch, and any done-state change.
+    @State private var reviewComplete = false
+    @State private var totalCandidatePhotos = 0
+
     @State private var columnCount = 3
     @State private var visibleIDs: Set<String> = []
     @State private var window = PrefetchWindow(orderedIDs: [])
@@ -168,19 +175,17 @@ struct ReviewGridView: View {
         }
     }
 
-    /// Whether every cluster is marked done — the album is fully reviewed, so the grid shows the forward
-    /// path to export (#187) instead of `advance()` silently holding. Pure `isReviewComplete` (guards an
-    /// empty slice). Reads `done` (already observed); O(clusters), not heavy work in a body.
-    private var reviewComplete: Bool {
-        isReviewComplete(clusters: clusters, isDone: { done.isDone($0) })
+    /// Recompute the completion state + album total OFF the `body` (#187 spec). Called on first appear,
+    /// album switch (`groupIdentity`), and any done-state change (`done.doneDays`) — the only inputs that
+    /// move them — so a scroll's `visibleIDs` churn never re-runs the `allSatisfy`/`reduce`.
+    private func refreshCompletion() {
+        reviewComplete = isReviewComplete(clusters: clusters, isDone: { done.isDone($0) })
+        totalCandidatePhotos = clusters.reduce(0) { $0 + $1.count }
     }
 
-    /// Total candidate photos across the album — the review-complete bar's "N photos" summary.
-    private var totalCandidatePhotos: Int {
-        clusters.reduce(0) { $0 + $1.count }
-    }
-
-    var body: some View {
+    /// `pager` + the fixed top-bar chrome + decoration, split out of `body` so each modifier chain stays
+    /// short enough for the Swift type-checker (the same reason `pager`/`topBar` are extracted).
+    private var decoratedPager: some View {
         pager
         // The top bar (current cluster's identity + album progress ring) is the ONE fixed chrome. The
         // per-cluster page indicator + Select-all glass pills live INSIDE each page (pinned over the
@@ -194,15 +199,23 @@ struct ReviewGridView: View {
         // Success haptic when a day is marked done (count up), a light tap on undo.
         .sensoryFeedback(trigger: done.doneDays.count) { old, new in new > old ? .success : .impact(weight: .light) }
         .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.width } action: { applyIdealColumns(width: $0) }
+    }
+
+    var body: some View {
+        decoratedPager
         .onAppear {
             Perf.event("grid.onAppear (paged)")
             if !didInitialOpen {
                 didInitialOpen = true
                 currentPageID = entryPageID()
             }
+            refreshCompletion()
             rebuildWindow()
             scheduleRecomputeWindow()
         }
+        // Recompute the forward-path state off-body (#187): a done toggle (mark/un-mark) is the only
+        // in-place input that moves it while the grid is up — mirror-flips the pinned bar ↔ pills.
+        .onChange(of: done.doneDays) { refreshCompletion() }
         .onChange(of: currentPageID) {
             // Drop the previous page's ids up front. Otherwise they linger in `visibleIDs` — foreign to
             // the new cluster's window universe — so the slice computes EMPTY and the cache is *cleared*
@@ -220,6 +233,7 @@ struct ReviewGridView: View {
             visibleIDs = []
             lastAppliedSlice = []      // new album → re-cache from scratch, don't skip on a stale match
             currentPageID = entryPageID()
+            refreshCompletion()        // new clusters → recompute completion + total off-body (#187)
             rebuildWindow()
             scheduleRecomputeWindow()
         }
@@ -475,6 +489,7 @@ private struct ReviewCompleteBar: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
+            .accessibilityElement(children: .combine)   // one VO utterance, not two fragments
             Spacer(minLength: 8)
             Button { coordinator.finishToExport() } label: {
                 Text(finishActionLabel(isReExport: coordinator.reviewIsReExport))
