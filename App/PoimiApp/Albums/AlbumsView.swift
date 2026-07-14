@@ -27,7 +27,7 @@ struct AlbumsView: View {
                 ContentUnavailableView {
                     Label("No albums yet", systemImage: "photo.stack")
                 } description: {
-                    Text("Create an album to hand-pick a year of photos into.")
+                    Text("Create an album to hand-pick photos into.")
                 } actions: {
                     Button("New album", systemImage: "plus") { showingSetup = true }
                         .buttonStyle(.borderedProminent)

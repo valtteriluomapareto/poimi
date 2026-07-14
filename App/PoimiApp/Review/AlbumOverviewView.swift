@@ -149,7 +149,7 @@ struct AlbumOverviewView: View {
             if indicatorVisible {
                 VStack(spacing: 16) {
                     ProgressView().controlSize(.large)
-                    Text("Looking over your year…").font(.headline).foregroundStyle(.secondary)
+                    Text("Scanning your photos…").font(.headline).foregroundStyle(.secondary)
                 }
             }
         }

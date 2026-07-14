@@ -57,7 +57,7 @@ struct AlbumPickerView: View {
             }
         }
         .overlay { if !loaded { ProgressView() } }
-        .navigationTitle(allowsMultiple ? "Exclude albums" : "Save to album")
+        .navigationTitle(allowsMultiple ? "Exclude albums" : "Save to Photos album")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             // Sorted A→Z (localized, case-insensitive, natural-numeric) so a specific album is easy to
