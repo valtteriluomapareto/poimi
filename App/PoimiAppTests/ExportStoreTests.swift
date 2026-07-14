@@ -49,6 +49,7 @@ struct ExportStoreTests {
         #expect(wasReExport == false)
         #expect(result.added == 3)
         #expect(result.total == 3)
+        #expect(result.title == "Best of 2025")   // #193: create path returns the requested name
         #expect(await fake.exportedAssetIDs(inAlbum: result.albumID) == picks)   // ACTUAL membership, not just counts
         #expect(project.targetAlbumID == result.albumID)   // the created album id is persisted
         #expect(project.markedDoneAt != nil)               // finalized → status .done
@@ -135,6 +136,10 @@ struct ExportStoreTests {
         #expect(result.total == 5)                         // 2 existing + 3 added
         #expect(await fake.exportedAssetIDs(inAlbum: "album/whatsapp")
             == picks.union(["fake/busy/0", "fake/busy/1"]))
+        // #193: the completion names the DESTINATION album ("WhatsApp"), not the project ("Best of 2025").
+        // The second assertion guards against a regression that re-sources the title from the requested name.
+        #expect(result.title == "WhatsApp")
+        #expect(result.title != project.title)
     }
 
     @Test("partial resolve: deleted picks drop out, only the live ones are added (not a total failure)")

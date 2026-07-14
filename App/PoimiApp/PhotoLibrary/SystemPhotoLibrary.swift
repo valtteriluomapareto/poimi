@@ -110,6 +110,10 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
                 withLocalIdentifiers: [existingAlbumID], options: nil).firstObject else {
                 throw ExportError.albumMissing
             }
+            // The existing album's OWN title — may differ from `name` (the project title). Captured from
+            // the preflight fetch so the completion screen names the real destination (#193); available
+            // for both returns below (the added case AND the "already up to date" no-op).
+            let albumTitle = collection.localizedTitle ?? name
             let existingIDs = Self.assetIDs(in: collection)
             let toAdd = Array(liveIDs.subtracting(existingIDs))     // dupe guard
             if !toAdd.isEmpty {
@@ -135,7 +139,8 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
                 }
             }
             Log.photoLibrary.notice("export updated album: +\(toAdd.count), now \(existingIDs.count + toAdd.count)")
-            return ExportResult(albumID: existingAlbumID, added: toAdd.count, total: existingIDs.count + toAdd.count)
+            return ExportResult(albumID: existingAlbumID, added: toAdd.count,
+                                total: existingIDs.count + toAdd.count, title: albumTitle)
         }
 
         // First export: create the album AND add every resolved pick in one change.
@@ -155,7 +160,8 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
         }
         guard let albumID = placeholderID else { throw ExportError.writeFailed }
         Log.photoLibrary.notice("export created album with \(addIDs.count) photos")
-        return ExportResult(albumID: albumID, added: addIDs.count, total: addIDs.count)
+        // Create path: the album is created with exactly `name`, so that IS its title (#193).
+        return ExportResult(albumID: albumID, added: addIDs.count, total: addIDs.count, title: name)
     }
 
     /// The subset of `ids` that still resolve to a live `PHAsset` (their local identifiers).

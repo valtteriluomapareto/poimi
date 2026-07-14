@@ -44,11 +44,16 @@ public struct ExportResult: Sendable, Equatable {
     public let added: Int
     /// Assets the album holds after this run.
     public let total: Int
+    /// The destination album's **actual** title. For a first export this is the requested name; for a
+    /// re-export to an existing album it's that album's own title, which may differ from the project's
+    /// title — so the completion screen names where the photos really landed, not what we asked for (#193).
+    public let title: String
 
-    public init(albumID: String, added: Int, total: Int) {
+    public init(albumID: String, added: Int, total: Int, title: String) {
         self.albumID = albumID
         self.added = added
         self.total = total
+        self.title = title
     }
 }
 
