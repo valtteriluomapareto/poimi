@@ -444,28 +444,6 @@
         }
       }
     },
-    "^[%lld photo](inflect: true) couldn't be added — no longer in your library.": {
-      "localizations": {
-        "fi": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld kuvaa ei voitu lisätä — sitä ei enää ole kirjastossasi."
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld kuvaa ei voitu lisätä — niitä ei enää ole kirjastossasi."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "1 album": {
       "comment": "Excluded albums count, singular",
       "localizations": {
@@ -694,73 +672,12 @@
         }
       }
     },
-    "Clear %lld picked": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tyhjennä %lld poimittua"
-          }
-        }
-      }
-    },
-    "Clear all picks?": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tyhjennetäänkö kaikki poiminnat?"
-          }
-        }
-      }
-    },
-    "Clears all picks and marked-done days. The album's settings are kept, and your Photos library isn't touched.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tyhjentää kaikki poiminnat ja valmiiksi merkityt päivät. Albumin asetukset säilytetään, eikä Kuvat-kirjastoosi kosketa."
-          }
-        }
-      }
-    },
-    "Clears all picks and progress. The album's settings are kept.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tyhjentää kaikki poiminnat ja edistymisen. Albumin asetukset säilytetään."
-          }
-        }
-      }
-    },
-    "Collapsed": {
-      "extractionState": "stale",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kutistettu"
-          }
-        }
-      }
-    },
     "Couldn’t create the album": {
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
             "value": "Albumia ei voitu luoda"
-          }
-        }
-      }
-    },
-    "Couldn't load your photos": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kuvia ei voitu ladata"
           }
         }
       }
@@ -791,16 +708,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Luo sen sijaan uusi albumi"
-          }
-        }
-      }
-    },
-    "Create an album to hand-pick a year of photos into.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Luo albumi, johon poimit kuvasi käsin."
           }
         }
       }
@@ -865,48 +772,6 @@
         }
       }
     },
-    "Deselect": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poista valinta"
-          }
-        }
-      }
-    },
-    "Deselect all": {
-      "extractionState": "stale",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poista kaikki valinnat"
-          }
-        }
-      }
-    },
-    "Deselect all in %@": {
-      "extractionState": "stale",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poista valinnat päivältä %@"
-          }
-        }
-      }
-    },
-    "Deselects all photos in this album.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poistaa kaikkien tämän albumin kuvien valinnan."
-          }
-        }
-      }
-    },
     "Destination": {
       "localizations": {
         "fi": {
@@ -928,17 +793,6 @@
         }
       }
     },
-    "Double tap to %@ this day": {
-      "extractionState": "stale",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kaksoisnapauta: %@ tämä päivä"
-          }
-        }
-      }
-    },
     "Duplicate": {
       "localizations": {
         "fi": {
@@ -956,17 +810,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kaikki kuvat aikavälillä %@ ovat kuvakaappauksia tai poissuljetuissa albumeissa. Kokeile vähentää poissulkemisia."
-          }
-        }
-      }
-    },
-    "Everything's filtered out": {
-      "comment": "Empty scan title: all candidates excluded",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kaikki on suodatettu pois"
           }
         }
       }
@@ -1007,28 +850,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Poissuljetut albumit"
-          }
-        }
-      }
-    },
-    "Existing album": {
-      "comment": "Destination: an existing Photos album",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Olemassa oleva albumi"
-          }
-        }
-      }
-    },
-    "Expanded": {
-      "extractionState": "stale",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Laajennettu"
           }
         }
       }
@@ -1181,16 +1002,6 @@
         }
       }
     },
-    "Leave as a new album (created on export), or add picks to an existing album.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jätä uudeksi albumiksi (luodaan viennissä) tai lisää poiminnat olemassa olevaan albumiin."
-          }
-        }
-      }
-    },
     "License": {
       "localizations": {
         "fi": {
@@ -1208,38 +1019,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rajattu"
-          }
-        }
-      }
-    },
-    "Limited access only shows the photos you specifically picked. Poimi needs your whole library to curate a full year by date.": {
-      "comment": "Recovery message: Limited access",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rajattu käyttöoikeus näyttää vain erikseen valitsemasi kuvat. Poimi tarvitsee koko kirjastosi, jotta voit koota albumin päivämäärän mukaan."
-          }
-        }
-      }
-    },
-    "Looking over your year…": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Käydään kuviasi läpi…"
-          }
-        }
-      }
-    },
-    "Mark as done": {
-      "extractionState": "stale",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Merkitse valmiiksi"
           }
         }
       }
@@ -1584,27 +1363,6 @@
         }
       }
     },
-    "Picks are copied to this Photos album — your library and originals aren't changed.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poiminnat kopioidaan tähän Kuvat-albumiin — kirjastoosi ja alkuperäisiin kuviin ei kosketa."
-          }
-        }
-      }
-    },
-    "Poimi can't see your library. Turn on photo access to browse and curate your year.": {
-      "comment": "Recovery message: denied/restricted",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poimi ei näe kirjastoasi. Ota kuvien käyttöoikeus käyttöön, jotta voit selata kuviasi ja koota albumisi."
-          }
-        }
-      }
-    },
     "Poimi needs access to your photo library.": {
       "comment": "Recovery message: neutral fallback",
       "localizations": {
@@ -1690,16 +1448,6 @@
         }
       }
     },
-    "Reset clears your picks and progress but keeps the album's settings. Delete removes this album from Poimi — the Photos album it created and your originals are never touched.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nollaus tyhjentää poiminnat ja edistymisen mutta säilyttää albumin asetukset. Poisto poistaa tämän albumin Poimista — sen luomaan Kuvat-albumiin ja alkuperäisiin kuviisi ei koskaan kosketa."
-          }
-        }
-      }
-    },
     "Reset picks": {
       "localizations": {
         "fi": {
@@ -1740,36 +1488,6 @@
         }
       }
     },
-    "Save to": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tallennuskohde"
-          }
-        }
-      }
-    },
-    "Save to album": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tallenna albumiin"
-          }
-        }
-      }
-    },
-    "Saves to": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tallennetaan albumiin"
-          }
-        }
-      }
-    },
     "Scanning your photos…": {
       "localizations": {
         "fi": {
@@ -1780,65 +1498,12 @@
         }
       }
     },
-    "Screenshots and photos in these albums won't appear while you pick.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kuvakaappaukset ja näiden albumien kuvat eivät näy poiminnan aikana."
-          }
-        }
-      }
-    },
-    "Select": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Valitse"
-          }
-        }
-      }
-    },
-    "Select all": {
-      "extractionState": "stale",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Valitse kaikki"
-          }
-        }
-      }
-    },
-    "Select all in %@": {
-      "extractionState": "stale",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Valitse kaikki päivältä %@"
-          }
-        }
-      }
-    },
     "Select an album": {
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
             "value": "Valitse albumi"
-          }
-        }
-      }
-    },
-    "Set Poimi's Photos access to full access in Settings, then come back.": {
-      "comment": "Recovery footnote: how to restore full access",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Anna Poimille täysi kuvien käyttöoikeus Asetuksissa ja palaa sitten takaisin."
           }
         }
       }
@@ -1927,16 +1592,6 @@
         }
       }
     },
-    "This album is no longer in your library.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tätä albumia ei enää ole kirjastossasi."
-          }
-        }
-      }
-    },
     "This deselects all %lld photos. Your photos aren't deleted — but you'd pick this album again from scratch.": {
       "localizations": {
         "fi": {
@@ -2015,17 +1670,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Versio"
-          }
-        }
-      }
-    },
-    "We'll ask iOS for permission next.": {
-      "comment": "Onboarding permission footnote",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kysymme seuraavaksi lupaa iOS:lta."
           }
         }
       }
@@ -2315,16 +1959,6 @@
         }
       }
     },
-    "Selects or deselects every photo in this cluster": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Valitsee tai poistaa valinnan kaikista tämän ryhmän kuvista"
-          }
-        }
-      }
-    },
     "Target photo count": {
       "localizations": {
         "fi": {
@@ -2351,16 +1985,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sisällytä videot"
-          }
-        }
-      }
-    },
-    "Off by default. Turn on to pick from videos too — they're copied to the album like photos.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pois päältä oletuksena. Ota käyttöön poimiaksesi myös videoita — ne kopioidaan albumiin kuvien tavoin."
           }
         }
       }
@@ -2425,16 +2049,6 @@
         }
       }
     },
-    "You've reached the end": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Olet päässyt loppuun"
-          }
-        }
-      }
-    },
     "Back to grid": {
       "localizations": {
         "fi": {
@@ -2491,6 +2105,276 @@
           "stringUnit": {
             "state": "translated",
             "value": "Videon kesto %1$@. %2$@"
+          }
+        }
+      }
+    },
+    "A goal, not a limit — you can pick past it.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tavoite, ei raja — voit poimia senkin yli."
+          }
+        }
+      }
+    },
+    "Clears all picks and marked-done days. The album’s settings are kept, and your Photos library isn’t touched.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tyhjentää kaikki poiminnat ja valmiiksi merkityt päivät. Albumin asetukset säilytetään, eikä Kuvat-kirjastoosi kosketa."
+          }
+        }
+      }
+    },
+    "Clears all picks and progress. The album’s settings are kept.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tyhjentää kaikki poiminnat ja edistymisen. Albumin asetukset säilytetään."
+          }
+        }
+      }
+    },
+    "Couldn’t load your photos": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuvia ei voitu ladata"
+          }
+        }
+      }
+    },
+    "Create an album to hand-pick photos into.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luo albumi, johon poimit kuvasi käsin."
+          }
+        }
+      }
+    },
+    "Everything’s filtered out": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaikki on suodatettu pois"
+          }
+        }
+      }
+    },
+    "Existing Photos album": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Olemassa oleva Kuvat-albumi"
+          }
+        }
+      }
+    },
+    "Limited access only shows the photos you specifically picked. Poimi needs your whole library to curate by date.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rajattu käyttöoikeus näyttää vain erikseen valitsemasi kuvat. Poimi tarvitsee koko kirjastosi, jotta voit koota albumin päivämäärän mukaan."
+          }
+        }
+      }
+    },
+    "New Photos album": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uusi Kuvat-albumi"
+          }
+        }
+      }
+    },
+    "Off by default. Turn on to pick from videos too — they’re copied to the album like photos.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pois päältä oletuksena. Ota käyttöön poimiaksesi myös videoita — ne kopioidaan albumiin kuvien tavoin."
+          }
+        }
+      }
+    },
+    "Pick all in %@": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimi kaikki päivältä %@"
+          }
+        }
+      }
+    },
+    "Picks are copied to this Photos album — your library and originals aren’t changed.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poiminnat kopioidaan tähän Kuvat-albumiin — kirjastoosi ja alkuperäisiin kuviin ei kosketa."
+          }
+        }
+      }
+    },
+    "Picks or removes every photo in this cluster": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimii tai poistaa poiminnan kaikista tämän ryhmän kuvista"
+          }
+        }
+      }
+    },
+    "Poimi can’t see your library. Turn on photo access to browse and curate your photos.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimi ei näe kirjastoasi. Ota kuvien käyttöoikeus käyttöön, jotta voit selata kuviasi ja koota albumisi."
+          }
+        }
+      }
+    },
+    "Remove all in %@": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poista poiminnat päivältä %@"
+          }
+        }
+      }
+    },
+    "Removes the album and its ^[%lld pick](inflect: true). Your Photos library isn’t touched.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poistaa albumin ja sen %lld poimintaa. Kuvat-kirjastoosi ei kosketa."
+          }
+        }
+      }
+    },
+    "Reset clears your picks and progress but keeps the album’s settings. Delete removes this album from Poimi — the Photos album it created and your originals are never touched.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nollaus tyhjentää poiminnat ja edistymisen mutta säilyttää albumin asetukset. Poisto poistaa tämän albumin Poimista — sen luomaan Kuvat-albumiin ja alkuperäisiin kuviisi ei koskaan kosketa."
+          }
+        }
+      }
+    },
+    "Save to Photos": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tallenna Kuviin"
+          }
+        }
+      }
+    },
+    "Save to Photos album": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tallenna Kuvat-albumiin"
+          }
+        }
+      }
+    },
+    "Screenshots and photos in these albums won’t appear while you pick.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuvakaappaukset ja näiden albumien kuvat eivät näy poiminnan aikana."
+          }
+        }
+      }
+    },
+    "Set Poimi’s Photos access to full access in Settings, then come back.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anna Poimille täysi kuvien käyttöoikeus Asetuksissa ja palaa sitten takaisin."
+          }
+        }
+      }
+    },
+    "This album is no longer available.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tämä albumi ei ole enää käytettävissä."
+          }
+        }
+      }
+    },
+    "Update in Photos": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Päivitä Kuvissa"
+          }
+        }
+      }
+    },
+    "We’ll ask iOS for permission next.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kysymme seuraavaksi lupaa iOS:lta."
+          }
+        }
+      }
+    },
+    "Your picks become an album in the Photos app when you finish — a new album, created then, or an existing Photos album you add to.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimintasi muuttuvat albumiksi Kuvat-appiin, kun lopetat — joko uudeksi albumiksi, joka luodaan silloin, tai olemassa olevaksi Kuvat-albumiksi, johon lisäät ne."
+          }
+        }
+      }
+    },
+    "You’ve reached the end": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Olet päässyt loppuun"
+          }
+        }
+      }
+    },
+    "^[%lld photo](inflect: true) couldn’t be added — no longer in your library.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld kuvaa ei voitu lisätä — ei enää kirjastossasi."
           }
         }
       }

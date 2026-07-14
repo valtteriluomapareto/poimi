@@ -97,13 +97,13 @@ struct AlbumSettingsView: View {
             } header: {
                 Text("Destination")
             } footer: {
-                Text("Picks are copied to this Photos album — your library and originals aren't changed.")
+                Text("Picks are copied to this Photos album — your library and originals aren’t changed.")
             }
 
             Section {
                 Toggle("Include videos", isOn: $project.includeVideos)
             } footer: {
-                Text("Off by default. Turn on to pick from videos too — they're copied to the album like photos.")
+                Text("Off by default. Turn on to pick from videos too — they’re copied to the album like photos.")
             }
 
             // Source exclusions grouped together (matching setup) — both levers the "all excluded"
@@ -118,7 +118,7 @@ struct AlbumSettingsView: View {
             } header: {
                 Text("Exclude from source")
             } footer: {
-                Text("Screenshots and photos in these albums won't appear while you pick.")
+                Text("Screenshots and photos in these albums won’t appear while you pick.")
             }
 
             Section {
@@ -135,7 +135,7 @@ struct AlbumSettingsView: View {
                 Button("Delete album", role: .destructive) { confirmingDelete = true }
             } footer: {
                 Text("""
-                    Reset clears your picks and progress but keeps the album's settings. Delete removes \
+                    Reset clears your picks and progress but keeps the album’s settings. Delete removes \
                     this album from Poimi — the Photos album it created and your originals are never touched.
                     """)
             }
@@ -187,8 +187,8 @@ struct AlbumSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("""
-                Clears all picks and marked-done days. The album's settings are kept, \
-                and your Photos library isn't touched.
+                Clears all picks and marked-done days. The album’s settings are kept, \
+                and your Photos library isn’t touched.
                 """)
         }
         .confirmationDialog("Delete this album?", isPresented: $confirmingDelete, titleVisibility: .visible) {

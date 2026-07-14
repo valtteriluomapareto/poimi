@@ -45,7 +45,7 @@ struct OnboardingView: View {
                     """, comment: "Onboarding permission body"),
                 primaryTitle: String(localized: "Allow access", comment: "Onboarding permission primary button"),
                 primaryAction: { Task { await coordinator.requestAuthorization() } },
-                footnote: String(localized: "We'll ask iOS for permission next.",
+                footnote: String(localized: "We’ll ask iOS for permission next.",
                                  comment: "Onboarding permission footnote"))
         }
     }

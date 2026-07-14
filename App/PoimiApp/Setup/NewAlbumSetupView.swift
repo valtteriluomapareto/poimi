@@ -60,7 +60,7 @@ struct NewAlbumSetupView: View {
                 Section {
                     Toggle("Include videos", isOn: $draft.includeVideos)
                 } footer: {
-                    Text("Off by default. Turn on to pick from videos too — they're copied to the album like photos.")
+                    Text("Off by default. Turn on to pick from videos too — they’re copied to the album like photos.")
                 }
 
                 Section {
@@ -73,7 +73,7 @@ struct NewAlbumSetupView: View {
                 } header: {
                     Text("Exclude from source")
                 } footer: {
-                    Text("Screenshots and photos in these albums won't appear while you pick.")
+                    Text("Screenshots and photos in these albums won’t appear while you pick.")
                 }
 
                 Section {

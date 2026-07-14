@@ -92,7 +92,7 @@ struct AlbumsView: View {
         } message: { project in
             Text("""
                 Removes the album and its ^[\(project.persistedPickedCount) pick](inflect: true). \
-                Your Photos library isn't touched.
+                Your Photos library isn’t touched.
                 """)
         }
         .confirmationDialog("Reset picks?", isPresented: resetConfirmation,
@@ -103,7 +103,7 @@ struct AlbumsView: View {
             }
             Button("Cancel", role: .cancel) { albumToReset = nil }
         } message: { _ in
-            Text("Clears all picks and progress. The album's settings are kept.")
+            Text("Clears all picks and progress. The album’s settings are kept.")
         }
     }
 

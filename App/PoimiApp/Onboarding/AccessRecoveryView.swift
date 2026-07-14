@@ -32,7 +32,7 @@ struct RecoveryGuidance: Equatable {
             RecoveryGuidance(
                 title: String(localized: "Photo access is off", comment: "Recovery title: denied/restricted"),
                 message: String(localized: """
-                    Poimi can't see your library. Turn on photo access to browse and curate your photos.
+                    Poimi can’t see your library. Turn on photo access to browse and curate your photos.
                     """, comment: "Recovery message: denied/restricted"))
         case .authorized, .notDetermined:
             // Not a recovery state — the coordinator never routes here; a neutral fallback only.
@@ -56,7 +56,7 @@ struct AccessRecoveryView: View {
             symbolTint: .brandGreen,   // same first-run identity accent as onboarding (§1)
             title: guidance.title,
             headline: guidance.message,
-            message: String(localized: "Set Poimi's Photos access to full access in Settings, then come back.",
+            message: String(localized: "Set Poimi’s Photos access to full access in Settings, then come back.",
                             comment: "Recovery footnote: how to restore full access"),
             primaryTitle: String(localized: "Open Settings", comment: "Recovery primary button: deep-link to Settings"),
             primaryAction: openSettings)

@@ -584,7 +584,7 @@ struct ReviewEmptyCopyTests {
 
         // Distinct titles per reason — the two empty states read as genuinely different, not one screen.
         #expect(noPhotos.title == "No photos in this range")
-        #expect(allExcluded.title == "Everything's filtered out")
+        #expect(allExcluded.title == "Everything’s filtered out")
         #expect(noPhotos.title != allExcluded.title)
         // Assert the distinguishing phrase, not the formatted date (which varies by locale).
         #expect(noPhotos.message.contains("wider date range"))
