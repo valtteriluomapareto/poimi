@@ -88,8 +88,10 @@ struct AlbumSettingsView: View {
                     AlbumPickerView(selection: targetSelection, allowsMultiple: false)
                 } label: {
                     LabeledContent("Photos album", value: project.targetAlbumID == nil
-                        ? String(localized: "New album", comment: "Destination: a new album created on export")
-                        : String(localized: "Existing album", comment: "Destination: an existing Photos album"))
+                        ? String(localized: "New Photos album",
+                                 comment: "Destination: a new album created in Photos on finish")
+                        : String(localized: "Existing Photos album",
+                                 comment: "Destination: an existing album in the Photos app"))
                 }
                 TargetCountField(count: $project.targetCount)
             } header: {

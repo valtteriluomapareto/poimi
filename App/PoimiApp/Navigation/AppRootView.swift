@@ -91,7 +91,7 @@ struct AppRootView: View {
                 AlbumOverviewView(project: project)
             } else {
                 RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
-                                 detail: "This album is no longer in your library.")
+                                 detail: "This album is no longer available.")
             }
         case .review(let id, let day):
             if let project = project(id) {
@@ -99,21 +99,21 @@ struct AppRootView: View {
 
             } else {
                 RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
-                                 detail: "This album is no longer in your library.")
+                                 detail: "This album is no longer available.")
             }
         case .export(let id):
             if let project = project(id) {
                 ExportView(project: project)   // export + completion (#39)
             } else {
                 RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
-                                 detail: "This album is no longer in your library.")
+                                 detail: "This album is no longer available.")
             }
         case .settings(let id):
             if let project = project(id) {
                 AlbumSettingsView(project: project)   // edit / reset / delete (#41)
             } else {
                 RoutePlaceholder(symbol: "questionmark.folder", title: "Album not found",
-                                 detail: "This album is no longer in your library.")
+                                 detail: "This album is no longer available.")
             }
         case .appSettings:
             AppSettingsView()   // app-level: Photos access + About

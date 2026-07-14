@@ -76,13 +76,21 @@ struct NewAlbumSetupView: View {
                         AlbumPickerView(selection: targetSelection, allowsMultiple: false)
                     } label: {
                         LabeledContent("Save to", value: draft.targetAlbumID == nil
-                            ? String(localized: "New album", comment: "Destination: a new album created on export")
-                            : String(localized: "Existing album", comment: "Destination: an existing Photos album"))
+                            ? String(localized: "New Photos album",
+                                     comment: "Destination: a new album created in Photos on finish")
+                            : String(localized: "Existing Photos album",
+                                     comment: "Destination: an existing album in the Photos app"))
                     }
                 } header: {
                     Text("Destination")
                 } footer: {
-                    Text("Leave as a new album (created on export), or add picks to an existing album.")
+                    // The up-front expectation (#185): a newcomer expects the album they're naming to appear
+                    // in Photos now — say plainly it's created when they finish, and that "album" here means
+                    // a Photos-app album. Also carries the new-vs-existing choice this section controls.
+                    Text("""
+                        Your picks become an album in the Photos app when you finish — a new album, \
+                        created then, or an existing Photos album you add to.
+                        """)
                 }
             }
             // Reliable number-pad dismissal (it has no return key): swipe the form to dismiss (#123).

@@ -18,6 +18,20 @@ import SwiftUI
 import UIKit
 import Curation
 
+/// The finish/export action's label. **Photos-qualified** so it reads as the boundary to the Photos
+/// app — the in-app "album" the user has been building becomes a Photos album here (#185). First export
+/// creates it ("Save to Photos"); a re-export updates the album already created ("Update in Photos").
+/// A pure function (derived from `project.targetAlbumID != nil`) so the choice is unit-tested, not
+/// eyeballed. Returns a resolved `String`, so the call site uses `Button(_:action:)`'s verbatim overload
+/// (no double-localization).
+func finishActionLabel(isReExport: Bool) -> String {
+    isReExport
+        ? String(localized: "Update in Photos",
+                 comment: "Finish action: re-export to the album already created in Photos")
+        : String(localized: "Save to Photos",
+                 comment: "Finish action: first export creates the album in Photos")
+}
+
 /// Drives the export: one `run` per attempt, publishing the phase the screen renders.
 @MainActor
 @Observable
