@@ -491,21 +491,27 @@ private struct ReviewCompleteBar: View {
             }
             .accessibilityElement(children: .combine)   // one VO utterance, not two fragments
             Spacer(minLength: 8)
-            // A SOLID gold pill (not glass): this bar floats over bright photos, where a translucent
-            // glass-tinted button washes out (device-caught) — the signed-off mock is a solid capsule.
-            // A solid fill is not a material, so it's fine under the pure-Liquid-Glass guard.
-            Button { coordinator.finishToExport() } label: {
-                Text(finishActionLabel(isReExport: coordinator.reviewIsReExport))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.onAccent)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 9)
-                    .background(Capsule().fill(Color.accentColor))
+            if picked > 0 {
+                // A SOLID gold pill (not glass): this bar floats over bright photos, where a translucent
+                // glass-tinted button washes out (device-caught) — the signed-off mock is a solid capsule.
+                // A solid fill is not a material, so it's fine under the pure-Liquid-Glass guard.
+                Button { coordinator.finishToExport() } label: {
+                    Text(finishActionLabel(isReExport: coordinator.reviewIsReExport))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.onAccent)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
+                        .background(Capsule().fill(Color.accentColor))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("reviewCompleteFinishButton")
+            } else {
+                // Reviewed everything but picked nothing → there's nothing to save yet. Guide, rather than
+                // show a dead greyed button (which device testing showed reads as "is this broken?").
+                Text("Pick photos to save")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
-            .opacity(picked == 0 ? 0.5 : 1)   // dim when there's nothing to save
-            .disabled(picked == 0)
-            .accessibilityIdentifier("reviewCompleteFinishButton")
         }
         .padding(.vertical, 8)
         .padding(.leading, 14)
