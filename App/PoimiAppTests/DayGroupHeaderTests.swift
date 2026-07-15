@@ -71,6 +71,76 @@ struct DayGroupHeaderTests {
     }
 }
 
+/// The characterful cluster caption (day-cluster personality). Pins the phrasing layer over the pure,
+/// string-free `ClusterCharacter`: the time-span lead (single day only), media highlights, the leading
+/// glyph, the spoken (punctuation-free) VoiceOver variant, and the nil-when-empty contract. Media counts
+/// are asserted by `contains` (count + stem), not the exact plural — the "s" is Foundation's automatic
+/// inflection, exercised for real on the sim; the deterministic parts (span, glyph, separators) are exact.
+@Suite("ClusterCaption — day-cluster personality")
+struct ClusterCaptionTests {
+
+    private func character(video: Int = 0, favorite: Int = 0,
+                           earliest: ClusterCharacter.PartOfDay? = nil,
+                           latest: ClusterCharacter.PartOfDay? = nil,
+                           count: Int = 10) -> ClusterCharacter {
+        ClusterCharacter(assetCount: count, videoCount: video, favoriteCount: favorite,
+                         earliest: earliest, latest: latest)
+    }
+
+    @Test("nothing worth saying → nil (the row stays clean)")
+    func empty() {
+        #expect(ClusterCaption.content(for: character(), dayCount: 1) == nil)
+        // Multi-day with no media → nil: the range title already carries the span, so no "N days" echo.
+        #expect(ClusterCaption.content(for: character(), dayCount: 3) == nil)
+    }
+
+    @Test("a single day's time span leads with a clock glyph")
+    func span() {
+        let c = ClusterCaption.content(for: character(earliest: .morning, latest: .evening), dayCount: 1)
+        #expect(c?.symbol == "clock")
+        #expect(c?.text == "Morning – Evening")
+        #expect(c?.spoken == "Morning to Evening")   // en-dash → "to" for VoiceOver
+    }
+
+    @Test("a single part of day reads as one word, no range")
+    func singlePart() {
+        let c = ClusterCaption.content(for: character(earliest: .afternoon, latest: .afternoon), dayCount: 1)
+        #expect(c?.text == "Afternoon")
+        #expect(c?.spoken == "Afternoon")
+    }
+
+    @Test("multi-day clusters drop the span lead and rely on media (glyph = the media type)")
+    func multiDayMediaOnly() {
+        // earliest/latest are set, but dayCount > 1 → no span lead; the video highlight leads instead.
+        let c = ClusterCaption.content(for: character(video: 2, earliest: .morning, latest: .night), dayCount: 3)
+        #expect(c?.symbol == "video.fill")
+        #expect(c?.text.contains("2") == true)
+        #expect(c?.text.contains("video") == true)
+        #expect(c?.text.contains("–") == false)   // no time-of-day span on a multi-day cluster
+    }
+
+    @Test("the span keeps the clock; media highlights append after a middot")
+    func spanPlusMedia() {
+        let c = ClusterCaption.content(for: character(video: 2, favorite: 3,
+                                                      earliest: .morning, latest: .evening), dayCount: 1)
+        #expect(c?.symbol == "clock")
+        #expect(c?.text.hasPrefix("Morning – Evening") == true)
+        #expect(c?.text.contains(" · ") == true)             // display uses a middot separator
+        #expect(c?.text.contains("video") == true)
+        #expect(c?.text.contains("favorite") == true)        // US spelling, matches `isFavorite` / Photos
+        #expect(c?.spoken.hasPrefix("Morning to Evening") == true)
+        #expect(c?.spoken.contains(", ") == true)            // spoken uses commas, not middots
+        #expect(c?.spoken.contains("·") == false)
+    }
+
+    @Test("favorites-only leads with a heart glyph")
+    func favoritesGlyph() {
+        let c = ClusterCaption.content(for: character(favorite: 2), dayCount: 3)
+        #expect(c?.symbol == "heart.fill")
+        #expect(c?.text.contains("favorite") == true)
+    }
+}
+
 /// Locks the collapsed-peek "foreground the keeps" ordering (#89 product blocker) so it can't
 /// regress to raw chronology.
 @Suite("Collapsed peek ordering (#89)")

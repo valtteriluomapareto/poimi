@@ -164,9 +164,11 @@ struct ReviewGridView: View {
                          count: cluster.count,
                          isTrip: cluster.tripCluster != nil,
                          isDone: done.isDone(cluster),
-                         orderedIDs: orderedIDs)
+                         orderedIDs: orderedIDs,
+                         showsProjection: clusters.count > 1)
         } else {
-            ReviewTopBar(clusterTitle: title, count: 0, orderedIDs: orderedIDs)
+            ReviewTopBar(clusterTitle: title, count: 0, orderedIDs: orderedIDs,
+                         showsProjection: clusters.count > 1)
         }
     }
 

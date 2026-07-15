@@ -156,12 +156,15 @@ is **"album", never "yearbook"**; there is no print/export-to-print anywhere.
   buttons labelled with the date + caption + progress; the chart is decorative (`.accessibilityHidden`),
   the list carries the data.
   - **Cluster caption (day-cluster personality).** A plain (non-trip) date cluster read as a bare
-    "Sat, Jul 5 · 47 photos" — flagged as soulless. It now carries a one-line caption distilled from its
-    own photos: a single day's **time-of-day shape** ("Morning – Evening"), a multi-day quiet run's
-    length ("3 days"), plus notable **media highlights** ("· 2 videos" / "· 3 favourites"). Trips keep
-    their location sentence ("Week in Salo") instead. The facts are the pure, string-free
-    `Curation.ClusterCharacter` (unit-tested); the phrasing is `ClusterCaption` (String Catalog). Built
-    once with the index (off `body`).
+    "Sat, Jul 5 · 47 photos" — flagged as soulless. It now carries a one-line caption (with a **leading
+    glyph** so it reads as character, not a second grey status line) distilled from its own photos: a
+    single day's **time-of-day shape** ("🕐 Morning – Evening") plus notable **media highlights** ("· 2
+    videos" / "· 3 favorites"). A **multi-day** run has no length lead — its title is already a date
+    range, so "3 days" would just echo it — it shows media highlights alone (or nothing). The **undated**
+    bucket and **trips** get no caption (trips carry their location sentence, "Week in Salo"). The facts
+    are the pure, string-free `Curation.ClusterCharacter` (unit-tested); the phrasing + glyph + a
+    punctuation-free VoiceOver variant are `ClusterCaption` (String Catalog). Built once with the index
+    (off `body`).
   - **Pinned recap bar (persistent pace).** The tally + `~N est.` projection follow you down the list —
     see [pacing.md](pacing.md) "Follow-up".
 - **Photo viewer (#36, Now-Playing card — `2ZC`).** A **`.sheet`**, not a path push — rises from the

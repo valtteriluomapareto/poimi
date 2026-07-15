@@ -219,7 +219,7 @@ struct AlbumOverviewView: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
             Spacer(minLength: 8)
-            AlbumPaceReadout(orderedIDs: index.orderedIDs)
+            AlbumPaceReadout(orderedIDs: index.orderedIDs, showsProjection: index.totalClusters > 1)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 8)
@@ -272,11 +272,12 @@ struct ClusterRow: Identifiable {
     let title: String
     /// A trip's date-range subline ("Jul 16 – Jul 18"); `nil` for a plain date cluster.
     let dateSubtitle: String?
-    /// A characterful one-liner for a plain DATE cluster — its time-of-day shape + media highlights
-    /// ("Morning – Evening · 2 videos"), so the everyday clusters read with some personality instead of
-    /// a bare date (issue: "day clusters feel soulless"). `nil` for a trip (its location sentence is the
-    /// personality) or when there's nothing worth saying. Formatted once here, never in a `body`.
-    let caption: String?
+    /// A characterful one-liner for a plain DATE cluster — a leading glyph + its time-of-day shape +
+    /// media highlights ("Morning – Evening · 2 videos"), so the everyday clusters read with some
+    /// personality instead of a bare date (issue: "day clusters feel soulless"). `nil` for a trip (its
+    /// location sentence is the personality), the undated bucket, or when there's nothing worth saying.
+    /// Formatted once here, never in a `body`.
+    let caption: ClusterCaption.Content?
     let count: Int
     /// The representative thumbnail — the cluster's first asset.
     let thumbID: String?
@@ -350,7 +351,7 @@ enum ClusterIndexBuilder {
             let dateSubtitle: String?
             // A plain date cluster earns a characterful caption from its own photos; a trip's location
             // sentence already carries its personality, so it gets none. Computed once here (off `body`).
-            let caption: String?
+            let caption: ClusterCaption.Content?
             if let trip = cluster.tripCluster {
                 title = tripNames[trip.clusterID].map { TripLabel.sentence(for: trip.shape, place: $0) } ?? dateTitle
                 dateSubtitle = dateTitle
@@ -358,11 +359,15 @@ enum ClusterIndexBuilder {
             } else {
                 title = dateTitle
                 dateSubtitle = nil
-                let clusterAssets = cluster.assetIDs.compactMap { assets[$0] }
-                let character = ClusterCharacter.of(assets: clusterAssets, calendar: calendar)
-                // `days` for a dated cluster is its dated days; the undated bucket has no real day.
-                let datedDayCount = cluster.isUndated ? 0 : cluster.days.count
-                caption = ClusterCaption.text(for: character, dayCount: datedDayCount)
+                if cluster.isUndated {
+                    // The undated bucket has no real day to characterise (no capture dates), so a caption
+                    // would degrade to a bare media count under "Undated" — skip it.
+                    caption = nil
+                } else {
+                    let clusterAssets = cluster.assetIDs.compactMap { assets[$0] }
+                    let character = ClusterCharacter.of(assets: clusterAssets, calendar: calendar)
+                    caption = ClusterCaption.content(for: character, dayCount: cluster.days.count)
+                }
             }
             let row = ClusterRow(id: cluster.id,
                                  cluster: cluster,
@@ -456,14 +461,20 @@ struct ClusterListRow: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
-                        // A date cluster's characterful line ("Morning – Evening · 2 videos") — the
-                        // personality that a bare date lacks. Trips carry `caption == nil` (their
-                        // sentence is the character).
+                        // A date cluster's characterful line ("🕐 Morning – Evening · 2 videos") — the
+                        // personality a bare date lacks. The leading glyph sets it apart from the grey
+                        // pick-status line below. Trips carry `caption == nil` (their sentence is it).
                         if let caption = row.caption {
-                            Text(caption)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                            HStack(spacing: 5) {
+                                Image(systemName: caption.symbol)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityHidden(true)
+                                Text(caption.text)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
                         subtitle(state: state, picked: picked)
                     }
@@ -535,10 +546,10 @@ struct ClusterListRow: View {
             base = String(localized: "\(row.title). Not reviewed. \(row.count) photos.",
                           comment: "Cluster row a11y: %@ day, not reviewed, M photos")
         }
-        // Fold the characterful caption in so VoiceOver hears the personality too ("Morning to evening,
-        // 2 videos"), not just the date + counts. Appended as a plain sentence — the base keys stay put.
+        // Fold the caption's SPOKEN form in so VoiceOver hears the personality too ("Morning to Evening,
+        // 2 videos") — punctuation-free, unlike the display text's en-dash / middot. Base keys stay put.
         guard let caption = row.caption else { return base }
-        return "\(base) \(caption)"
+        return "\(base) \(caption.spoken)"
     }
 }
 
@@ -569,14 +580,11 @@ private struct PacingCard: View {
         }
     }
 
-    /// Build the projection off the live selection (kept out of `body`'s ViewBuilder so the invariant
-    /// assert is legal). The numerator (all picks) + denominator (`orderedIDs`) must span the same universe.
+    /// Build the projection off the live selection via the shared `resolvePacing` (the one place the
+    /// frontier→projection coupling + same-universe assert live, so this can't drift from the grid/recap
+    /// `AlbumPaceReadout`). Kept out of `body`'s ViewBuilder so the invariant assert is legal.
     private func resolve() -> Pacing {
-        let progress = selection.progress
-        let frontier = pickFrontierFraction(orderedIDs: orderedIDs, selected: selection.selected)
-        assert(orderedIDs.isEmpty || selection.selected.isSubset(of: Set(orderedIDs)),
-               "pacing: every pick must be within orderedIDs (same candidate universe)")
-        return Pacing(picked: progress.picked, frontier: frontier, target: progress.target)
+        resolvePacing(orderedIDs: orderedIDs, selection: selection)
     }
 
     private func card(projected: Int, pace: Pace, frontier: Double, target: Int) -> some View {

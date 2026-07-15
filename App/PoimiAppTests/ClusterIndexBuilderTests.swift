@@ -29,6 +29,13 @@ struct ClusterIndexBuilderTests {
         .day(DayGroup(id: "undated", assetIDs: (0..<count).map { "u\($0)" }, days: [.undated], isBusyDay: false))
     }
 
+    /// A dated asset at a given day + hour (UTC), optionally a video / favorite — for the caption path.
+    private func asset(_ id: String, _ y: Int, _ mo: Int, _ d: Int, hour: Int,
+                       video: Bool = false, favorite: Bool = false) -> AssetRef {
+        let date = cal.date(from: DateComponents(year: y, month: mo, day: d, hour: hour))!
+        return AssetRef(id: id, captureDate: date, isFavorite: favorite, isVideo: video)
+    }
+
     @Test("clusters group into month sections in chronological order, with the header/chart totals")
     func sectionsByMonth() {
         let groups = [
@@ -167,6 +174,56 @@ struct ClusterIndexBuilderTests {
         let unnamedRow = try #require(unnamed.sections.first?.rows.first)
         #expect(unnamedRow.title == dateRange)
         #expect(unnamedRow.dateSubtitle == dateRange)
+        // A trip carries no characterful caption — its location sentence IS the personality.
+        #expect(namedRow.caption == nil)
+        #expect(unnamedRow.caption == nil)
+    }
+
+    // MARK: Cluster caption (day-cluster personality)
+
+    @Test("a single-day date cluster gets a caption from its assets: time span leads, media appended")
+    func dateClusterCaption() throws {
+        let group = group("a", 2025, 2, 1, count: 3)   // asset ids a-0, a-1, a-2
+        let assets = [
+            "a-0": asset("a-0", 2025, 2, 1, hour: 9),                 // morning
+            "a-1": asset("a-1", 2025, 2, 1, hour: 18, video: true),  // evening + a video
+            "a-2": asset("a-2", 2025, 2, 1, hour: 20)                // evening
+        ]
+        let index = ClusterIndexBuilder.build(from: [group], assets: assets, calendar: cal, locale: locale)
+        let caption = try #require(index.sections.first?.rows.first?.caption)
+        #expect(caption.symbol == "clock")                       // single day → the span leads
+        #expect(caption.text.hasPrefix("Morning – Evening"))     // 09:00 → 20:00
+        #expect(caption.text.contains("video"))                  // the one video is a highlight
+    }
+
+    @Test("no assets supplied → no caption (the default empty map keeps the row clean)")
+    func captionNilWithoutAssets() {
+        let index = ClusterIndexBuilder.build(from: [group("a", 2025, 2, 1, count: 3)], calendar: cal, locale: locale)
+        #expect(index.sections.first?.rows.first?.caption == nil)
+    }
+
+    @Test("the undated bucket never gets a caption, even when its assets carry media")
+    func undatedNoCaption() {
+        let assets = ["u0": AssetRef(id: "u0", captureDate: nil, isVideo: true),
+                      "u1": AssetRef(id: "u1", captureDate: nil, isVideo: true)]
+        let index = ClusterIndexBuilder.build(from: [group("a", 2025, 2, 1, count: 1), undatedGroup(count: 2)],
+                                              assets: assets, calendar: cal, locale: locale)
+        #expect(index.sections.last?.title == "Undated")
+        #expect(index.sections.last?.rows.first?.caption == nil)
+    }
+
+    @Test("a multi-day run drops the time-span lead; the media highlight leads instead")
+    func multiDayRunCaption() throws {
+        let run = ReviewCluster.day(DayGroup(id: "run", assetIDs: ["run-0", "run-1"],
+                           days: [.day(year: 2025, month: 1, day: 30), .day(year: 2025, month: 2, day: 2)],
+                           isBusyDay: false))
+        let assets = ["run-0": asset("run-0", 2025, 1, 30, hour: 9, video: true),
+                      "run-1": asset("run-1", 2025, 2, 2, hour: 20)]
+        let index = ClusterIndexBuilder.build(from: [run], assets: assets, calendar: cal, locale: locale)
+        let caption = try #require(index.sections.first?.rows.first?.caption)
+        #expect(caption.symbol == "video.fill")          // no span lead on a multi-day run
+        #expect(caption.text.contains("–") == false)     // …so no time-of-day range either
+        #expect(caption.text.contains("video"))
     }
 }
 

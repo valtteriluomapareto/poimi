@@ -61,43 +61,77 @@ enum DayGroupHeader {
 /// The characterful, one-line subtitle that gives a plain date cluster some personality (issue:
 /// "day clusters feel soulless"). The text layer over the string-free `ClusterCharacter` (D14/D21):
 /// the domain distils the facts, this phrases + localizes them (String Catalog, #95). A single day
-/// leads with its time-of-day "shape" ("Morning – Evening"); a multi-day quiet run leads with its
-/// length ("3 days"); both then append notable media highlights ("· 2 videos" / "· 3 favourites").
+/// leads with its time-of-day "shape" ("Morning – Evening"); it then appends notable media highlights
+/// ("· 2 videos" / "· 3 favorites"). A multi-day run has NO length lead — its title is already a date
+/// RANGE ("Jul 16 – Jul 18"), so "3 days" would only echo it — it relies on media highlights alone.
 /// Returns `nil` when there's nothing worth saying, so the row stays clean rather than padded.
+///
+/// The caption carries a **leading SF Symbol** (a clock for a time span, else the media type) so it
+/// reads as character rather than a second grey status line, plus a punctuation-free **`spoken`**
+/// variant for VoiceOver (the display en-dash / middot read literally otherwise).
 ///
 /// Trips carry their location sentence instead ("Week in Salo"), so callers build this only for the
 /// non-trip date clusters — the everyday ones that read as a bare date otherwise.
 enum ClusterCaption {
+    /// The rendered caption: a leading SF Symbol + display text, plus a spoken (punctuation-free) form.
+    struct Content: Equatable {
+        let symbol: String
+        let text: String
+        let spoken: String
+    }
+
     /// - Parameters:
     ///   - character: the cluster's distilled facts.
-    ///   - dayCount: distinct DATED days the cluster covers (single day → time-of-day span; more → "N days").
-    static func text(for character: ClusterCharacter, dayCount: Int) -> String? {
-        var parts: [String] = []
-        // Lead: a single day's time-of-day shape, else the multi-day run's length.
-        if dayCount <= 1 {
-            if let span = spanText(character) { parts.append(span) }
+    ///   - dayCount: distinct DATED days the cluster covers (single day → time-of-day span lead; more →
+    ///     media-only, since the range title already conveys the span).
+    static func content(for character: ClusterCharacter, dayCount: Int) -> Content? {
+        var display: [String] = []
+        var spoken: [String] = []
+        // Lead: a single day's time-of-day shape only (multi-day runs skip it — see the type doc).
+        let hasSpan: Bool
+        if dayCount <= 1, let span = spanText(character) {
+            display.append(span.display)
+            spoken.append(span.spoken)
+            hasSpan = true
         } else {
-            parts.append(String(localized: "^[\(dayCount) day](inflect: true)",
-                                 comment: "Cluster caption: a multi-day run's length in days"))
+            hasSpan = false
         }
         // Media highlights — automatic grammar agreement ("1 video" / "2 videos").
         if character.videoCount > 0 {
-            parts.append(String(localized: "^[\(character.videoCount) video](inflect: true)",
-                                 comment: "Cluster caption: number of videos in the cluster"))
+            let text = String(localized: "^[\(character.videoCount) video](inflect: true)",
+                              comment: "Cluster caption: number of videos in the cluster")
+            display.append(text)
+            spoken.append(text)
         }
         if character.favoriteCount > 0 {
-            parts.append(String(localized: "^[\(character.favoriteCount) favourite](inflect: true)",
-                                 comment: "Cluster caption: number of favourite photos in the cluster"))
+            let text = String(localized: "^[\(character.favoriteCount) favorite](inflect: true)",
+                              comment: "Cluster caption: number of favorite photos in the cluster")
+            display.append(text)
+            spoken.append(text)
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        guard !display.isEmpty else { return nil }
+        return Content(symbol: symbol(hasSpan: hasSpan, character: character),
+                       text: display.joined(separator: " · "),
+                       spoken: spoken.joined(separator: ", "))
     }
 
-    /// A single day's time-of-day span: "Morning" when it all happened in one part of the day, else a
-    /// range "Morning – Evening" (the spaced en-dash the app already uses for date ranges). `nil` when
-    /// no asset carries a capture date.
-    private static func spanText(_ character: ClusterCharacter) -> String? {
+    /// A single day's time-of-day span: "Morning" (one part) or "Morning – Evening" (a range, the spaced
+    /// en-dash the app already uses for date ranges). The spoken form swaps the en-dash for "to". `nil`
+    /// when no asset carries a capture date.
+    private static func spanText(_ character: ClusterCharacter) -> (display: String, spoken: String)? {
         guard let earliest = character.earliest, let latest = character.latest else { return nil }
-        return earliest == latest ? name(earliest) : "\(name(earliest)) – \(name(latest))"
+        if earliest == latest { return (name(earliest), name(earliest)) }
+        return ("\(name(earliest)) – \(name(latest))",
+                String(localized: "\(name(earliest)) to \(name(latest))",
+                       comment: "Cluster caption (spoken): a day's time-of-day span, earliest to latest"))
+    }
+
+    /// The leading glyph: a clock for a time-of-day span, else the media type that leads the caption.
+    /// Only called when the caption is non-empty, so the `heart.fill` fallback always has a favorite.
+    private static func symbol(hasSpan: Bool, character: ClusterCharacter) -> String {
+        if hasSpan { return "clock" }
+        if character.videoCount > 0 { return "video.fill" }
+        return "heart.fill"
     }
 
     private static func name(_ part: ClusterCharacter.PartOfDay) -> String {

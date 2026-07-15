@@ -35,6 +35,24 @@ struct ClusterCharacterTests {
         #expect(ClusterCharacter.PartOfDay(hour: 3) == .night)   // early hours wrap to night
     }
 
+    // Pin EVERY band edge (5/11/14/17/21 + the night wrap) — this is exactly where an off-by-one
+    // would hide, and the mid-band cases above wouldn't catch it. Bands: 5–10 morning, 11–13 midday,
+    // 14–16 afternoon, 17–20 evening, else (21–4) night.
+    @Test("part-of-day boundary hours land in the right band")
+    func boundaries() {
+        #expect(ClusterCharacter.PartOfDay(hour: 0) == .night)
+        #expect(ClusterCharacter.PartOfDay(hour: 4) == .night)      // last night hour before morning
+        #expect(ClusterCharacter.PartOfDay(hour: 5) == .morning)    // morning opens
+        #expect(ClusterCharacter.PartOfDay(hour: 10) == .morning)   // last morning hour
+        #expect(ClusterCharacter.PartOfDay(hour: 11) == .midday)    // midday opens
+        #expect(ClusterCharacter.PartOfDay(hour: 13) == .midday)    // last midday hour
+        #expect(ClusterCharacter.PartOfDay(hour: 14) == .afternoon) // afternoon opens
+        #expect(ClusterCharacter.PartOfDay(hour: 16) == .afternoon) // last afternoon hour
+        #expect(ClusterCharacter.PartOfDay(hour: 17) == .evening)   // evening opens
+        #expect(ClusterCharacter.PartOfDay(hour: 20) == .evening)   // last evening hour
+        #expect(ClusterCharacter.PartOfDay(hour: 21) == .night)     // night resumes
+    }
+
     @Test("earliest / latest span the dated assets' parts of day")
     func span() {
         let character = ClusterCharacter.of(
