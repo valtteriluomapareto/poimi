@@ -37,6 +37,10 @@ struct AlbumOverviewView: View {
     @State private var index: ClusterIndex?
     /// Gate the scanning indicator behind a short grace delay so an instant scan never flashes it.
     @State private var indicatorVisible = false
+    /// Reveal the pinned recap bar (tally + estimate) once the rich hero header scrolls off, so the
+    /// count + projection follow you down the cluster list (the "dynamic header" the issue asks for).
+    @State private var showRecap = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         content
@@ -99,14 +103,15 @@ struct AlbumOverviewView: View {
                 if store.phase == .idle {
                     await scan()
                 } else if case .ready(let clusters) = store.phase {
-                    index = ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames)
+                    index = ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames,
+                                                      assets: store.assetsByID)
                 }
             }
             // Trip place names resolve asynchronously after `.ready` (§7); rebuild the (cheap) index so
             // the trip titles swap from their date fallback to "Week in …" as the names land.
             .onChange(of: store?.tripNames ?? [:]) { _, names in
                 guard let store, case .ready(let clusters) = store.phase else { return }
-                index = ClusterIndexBuilder.build(from: clusters, tripNames: names)
+                index = ClusterIndexBuilder.build(from: clusters, tripNames: names, assets: store.assetsByID)
             }
     }
 
@@ -117,7 +122,8 @@ struct AlbumOverviewView: View {
         index = nil
         await store.load(project)
         if case .ready(let clusters) = store.phase {
-            index = ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames)
+            index = ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames,
+                                              assets: store.assetsByID)
         }
     }
 
@@ -183,6 +189,42 @@ struct AlbumOverviewView: View {
             }
             .padding(.bottom, 24)
         }
+        // Reveal the recap bar once the hero header (title + full tally + pacing card) has scrolled past.
+        // The threshold is deliberately generous — a fade near where the tally leaves the top reads as
+        // intentional, and it's stable regardless of whether the pacing card / chart are present (they
+        // sit below the tally). `onScrollGeometryChange` only fires the action when the Bool flips.
+        // HYSTERESIS (reveal at 150, hide at 90): the recap is a top `safeAreaInset`, so its appearing
+        // shifts layout — a single threshold could let that shift flip it straight back and flicker. The
+        // 60pt dead-band (wider than the bar) breaks that loop.
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            showRecap ? geometry.contentOffset.y > 90 : geometry.contentOffset.y > 150
+        } action: { _, revealed in
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { showRecap = revealed }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if showRecap {
+                recapBar(index)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+    }
+
+    /// The pinned recap: album name · the compact tally + "~N est." projection + ring (`AlbumPaceReadout`).
+    /// A glass bar under the (opaque) nav bar so the count + estimate stay in view while you scan the
+    /// cluster list — the same readout the grid top bar carries, so the estimate is consistent everywhere.
+    private func recapBar(_ index: ClusterIndex) -> some View {
+        HStack(spacing: 12) {
+            Text(project.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            AlbumPaceReadout(orderedIDs: index.orderedIDs)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .glassBarBackground()
     }
 
     private func header(_ index: ClusterIndex) -> some View {
@@ -230,6 +272,11 @@ struct ClusterRow: Identifiable {
     let title: String
     /// A trip's date-range subline ("Jul 16 – Jul 18"); `nil` for a plain date cluster.
     let dateSubtitle: String?
+    /// A characterful one-liner for a plain DATE cluster — its time-of-day shape + media highlights
+    /// ("Morning – Evening · 2 videos"), so the everyday clusters read with some personality instead of
+    /// a bare date (issue: "day clusters feel soulless"). `nil` for a trip (its location sentence is the
+    /// personality) or when there's nothing worth saying. Formatted once here, never in a `body`.
+    let caption: String?
     let count: Int
     /// The representative thumbnail — the cluster's first asset.
     let thumbID: String?
@@ -276,6 +323,7 @@ struct ClusterIndex {
 enum ClusterIndexBuilder {
     static func build(from clusters: [ReviewCluster],
                       tripNames: [String: String] = [:],
+                      assets: [String: AssetRef] = [:],
                       calendar: Calendar = .current,
                       locale: Locale = .current) -> ClusterIndex {
         // When the album's dated clusters span more than one calendar year, a bare month header is
@@ -300,17 +348,27 @@ enum ClusterIndexBuilder {
             // until then; a plain date cluster is always the date title.
             let title: String
             let dateSubtitle: String?
+            // A plain date cluster earns a characterful caption from its own photos; a trip's location
+            // sentence already carries its personality, so it gets none. Computed once here (off `body`).
+            let caption: String?
             if let trip = cluster.tripCluster {
                 title = tripNames[trip.clusterID].map { TripLabel.sentence(for: trip.shape, place: $0) } ?? dateTitle
                 dateSubtitle = dateTitle
+                caption = nil
             } else {
                 title = dateTitle
                 dateSubtitle = nil
+                let clusterAssets = cluster.assetIDs.compactMap { assets[$0] }
+                let character = ClusterCharacter.of(assets: clusterAssets, calendar: calendar)
+                // `days` for a dated cluster is its dated days; the undated bucket has no real day.
+                let datedDayCount = cluster.isUndated ? 0 : cluster.days.count
+                caption = ClusterCaption.text(for: character, dayCount: datedDayCount)
             }
             let row = ClusterRow(id: cluster.id,
                                  cluster: cluster,
                                  title: title,
                                  dateSubtitle: dateSubtitle,
+                                 caption: caption,
                                  count: cluster.count,
                                  thumbID: cluster.assetIDs.first,
                                  firstDay: cluster.firstDay)
@@ -398,6 +456,15 @@ struct ClusterListRow: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
+                        // A date cluster's characterful line ("Morning – Evening · 2 videos") — the
+                        // personality that a bare date lacks. Trips carry `caption == nil` (their
+                        // sentence is the character).
+                        if let caption = row.caption {
+                            Text(caption)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                         subtitle(state: state, picked: picked)
                     }
                     Spacer(minLength: 8)
@@ -456,17 +523,22 @@ struct ClusterListRow: View {
     }
 
     private func a11yLabel(state: ClusterState, picked: Int) -> String {
+        let base: String
         switch state {
         case .done:
-            return String(localized: "\(row.title). Done. \(picked) of \(row.count) picked.",
+            base = String(localized: "\(row.title). Done. \(picked) of \(row.count) picked.",
                           comment: "Cluster row a11y: %@ day, done, N of M picked")
         case .inProgress:
-            return String(localized: "\(row.title). \(picked) of \(row.count) picked.",
+            base = String(localized: "\(row.title). \(picked) of \(row.count) picked.",
                           comment: "Cluster row a11y: %@ day, N of M picked")
         case .untouched:
-            return String(localized: "\(row.title). Not reviewed. \(row.count) photos.",
+            base = String(localized: "\(row.title). Not reviewed. \(row.count) photos.",
                           comment: "Cluster row a11y: %@ day, not reviewed, M photos")
         }
+        // Fold the characterful caption in so VoiceOver hears the personality too ("Morning to evening,
+        // 2 videos"), not just the date + counts. Appended as a plain sentence — the base keys stay put.
+        guard let caption = row.caption else { return base }
+        return "\(base) \(caption)"
     }
 }
 

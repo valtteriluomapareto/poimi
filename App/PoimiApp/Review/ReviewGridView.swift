@@ -65,6 +65,9 @@ struct ReviewGridView: View {
     @State private var pendingScrollID: String?
 
     @State private var columnCount = 3
+    /// Every candidate id oldest → newest — the pick-frontier denominator for the top bar's "~N est."
+    /// projection. Built ONCE (onAppear / album switch), never in a `body`, so a pick just re-scans it.
+    @State private var orderedIDs: [String] = []
     @State private var visibleIDs: Set<String> = []
     @State private var window = PrefetchWindow(orderedIDs: [])
     // Generation-guarded prefetch: a single in-flight updater loops until it has applied the latest
@@ -160,9 +163,10 @@ struct ReviewGridView: View {
             ReviewTopBar(clusterTitle: headerTitle(for: cluster),
                          count: cluster.count,
                          isTrip: cluster.tripCluster != nil,
-                         isDone: done.isDone(cluster))
+                         isDone: done.isDone(cluster),
+                         orderedIDs: orderedIDs)
         } else {
-            ReviewTopBar(clusterTitle: title, count: 0)
+            ReviewTopBar(clusterTitle: title, count: 0, orderedIDs: orderedIDs)
         }
     }
 
@@ -186,6 +190,7 @@ struct ReviewGridView: View {
                 didInitialOpen = true
                 currentPageID = entryPageID()
             }
+            if orderedIDs.isEmpty { orderedIDs = clusters.flatMap(\.assetIDs) }   // pace-projection denominator, once
             rebuildWindow()
             scheduleRecomputeWindow()
         }
@@ -205,6 +210,7 @@ struct ReviewGridView: View {
         .onChange(of: groupIdentity) {
             visibleIDs = []
             lastAppliedSlice = []      // new album → re-cache from scratch, don't skip on a stale match
+            orderedIDs = clusters.flatMap(\.assetIDs)   // new album → refresh the pace denominator
             currentPageID = entryPageID()
             rebuildWindow()
             scheduleRecomputeWindow()

@@ -57,3 +57,56 @@ enum DayGroupHeader {
         return date.formatted(style)
     }
 }
+
+/// The characterful, one-line subtitle that gives a plain date cluster some personality (issue:
+/// "day clusters feel soulless"). The text layer over the string-free `ClusterCharacter` (D14/D21):
+/// the domain distils the facts, this phrases + localizes them (String Catalog, #95). A single day
+/// leads with its time-of-day "shape" ("Morning – Evening"); a multi-day quiet run leads with its
+/// length ("3 days"); both then append notable media highlights ("· 2 videos" / "· 3 favourites").
+/// Returns `nil` when there's nothing worth saying, so the row stays clean rather than padded.
+///
+/// Trips carry their location sentence instead ("Week in Salo"), so callers build this only for the
+/// non-trip date clusters — the everyday ones that read as a bare date otherwise.
+enum ClusterCaption {
+    /// - Parameters:
+    ///   - character: the cluster's distilled facts.
+    ///   - dayCount: distinct DATED days the cluster covers (single day → time-of-day span; more → "N days").
+    static func text(for character: ClusterCharacter, dayCount: Int) -> String? {
+        var parts: [String] = []
+        // Lead: a single day's time-of-day shape, else the multi-day run's length.
+        if dayCount <= 1 {
+            if let span = spanText(character) { parts.append(span) }
+        } else {
+            parts.append(String(localized: "^[\(dayCount) day](inflect: true)",
+                                 comment: "Cluster caption: a multi-day run's length in days"))
+        }
+        // Media highlights — automatic grammar agreement ("1 video" / "2 videos").
+        if character.videoCount > 0 {
+            parts.append(String(localized: "^[\(character.videoCount) video](inflect: true)",
+                                 comment: "Cluster caption: number of videos in the cluster"))
+        }
+        if character.favoriteCount > 0 {
+            parts.append(String(localized: "^[\(character.favoriteCount) favourite](inflect: true)",
+                                 comment: "Cluster caption: number of favourite photos in the cluster"))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// A single day's time-of-day span: "Morning" when it all happened in one part of the day, else a
+    /// range "Morning – Evening" (the spaced en-dash the app already uses for date ranges). `nil` when
+    /// no asset carries a capture date.
+    private static func spanText(_ character: ClusterCharacter) -> String? {
+        guard let earliest = character.earliest, let latest = character.latest else { return nil }
+        return earliest == latest ? name(earliest) : "\(name(earliest)) – \(name(latest))"
+    }
+
+    private static func name(_ part: ClusterCharacter.PartOfDay) -> String {
+        switch part {
+        case .morning: return String(localized: "Morning", comment: "Part of day")
+        case .midday: return String(localized: "Midday", comment: "Part of day")
+        case .afternoon: return String(localized: "Afternoon", comment: "Part of day")
+        case .evening: return String(localized: "Evening", comment: "Part of day")
+        case .night: return String(localized: "Night", comment: "Part of day")
+        }
+    }
+}

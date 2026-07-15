@@ -150,10 +150,20 @@ is **"album", never "yearbook"**; there is no print/export-to-print anywhere.
 
 - **Album overview (#37, cluster index — `3BL`).** The album's landing screen: a **coverage chart**
   (adaptive day/week/month buckets shaded gold by density) over a **month-sectioned list of day-cluster
-  rows** (each: cover swatch · date · picked/total · done seal). Tapping a row **drills into the review
-  grid** at that day. Nav trailing: a **sliders "adjustments" icon** (→ album settings) + **Export**.
-  Chart/index built once in the store (never in `body`). a11y: rows are buttons labelled with the
-  date + progress; the chart is decorative (`.accessibilityHidden`), the list carries the data.
+  rows** (each: date · a **characterful caption** · picked/total · done seal · preview strip). Tapping a
+  row **drills into the review grid** at that day. Nav trailing: a **sliders "adjustments" icon** (→
+  album settings) + **Export**. Chart/index built once in the store (never in `body`). a11y: rows are
+  buttons labelled with the date + caption + progress; the chart is decorative (`.accessibilityHidden`),
+  the list carries the data.
+  - **Cluster caption (day-cluster personality).** A plain (non-trip) date cluster read as a bare
+    "Sat, Jul 5 · 47 photos" — flagged as soulless. It now carries a one-line caption distilled from its
+    own photos: a single day's **time-of-day shape** ("Morning – Evening"), a multi-day quiet run's
+    length ("3 days"), plus notable **media highlights** ("· 2 videos" / "· 3 favourites"). Trips keep
+    their location sentence ("Week in Salo") instead. The facts are the pure, string-free
+    `Curation.ClusterCharacter` (unit-tested); the phrasing is `ClusterCaption` (String Catalog). Built
+    once with the index (off `body`).
+  - **Pinned recap bar (persistent pace).** The tally + `~N est.` projection follow you down the list —
+    see [pacing.md](pacing.md) "Follow-up".
 - **Photo viewer (#36, Now-Playing card — `2ZC`).** A **`.sheet`**, not a path push — rises from the
   bottom, pull-down to dismiss (the grid stays mounted beneath, D10). A paged `TabView` over the
   review's ordered ids; per-photo day label; an in-place **select** control (gold check) + the running

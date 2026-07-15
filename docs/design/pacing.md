@@ -44,6 +44,26 @@ more safely. Revisit only if the Overview projection proves too coarse in use.
 | **Overview projection card** (new) | A gauge icon + **"At this pace: ~N"**, a mini target-vs-projected bar (gold to the target tick, amber past = the overshoot), and a subline **"Picks reach X% of the album · picking ahead."** Gated (below). |
 | **Overview coverage chart** (`CoverageChart`) | The span up to your **pick frontier** is drawn full-strength; the rest dims — a "Picks reach here" marker ties the projection's *X%* to the timeline. |
 
+### Follow-up — the estimate follows you (persistent projection)
+
+The original "grid stays clean, projection Overview-only" split above left the **estimated final count
+visible only at the top of the Overview**, where it scrolls away — so a curator loses the "heading to
+overshoot" read exactly while picking (the grid) and while scanning the cluster list (the Overview
+lower down). On the product owner's steer we now surface a **compact** projection everywhere pacing
+matters, without bringing the full card's weight:
+
+- A shared **`AlbumPaceReadout`** (`ReviewChrome`) draws the tally `147 / 200` (+ amber `+N over`), a
+  small **`~N est.`** projection line (amber when ahead), and the `ProgressRing`. It reuses the exact
+  `pickFrontierFraction` → `Pacing` math, so its estimate always agrees with the Overview card, and it
+  is gated by the same confidence floor (nothing shown until the frontier is trustworthy).
+- **Grid top bar** now carries `AlbumPaceReadout` on its trailing lane — the `~N est.` appears under
+  the count as you pick. (Supersedes "No projection here" above; kept deliberately compact so picking
+  stays uncluttered — one small line, not the card.)
+- **Overview** gains a **pinned recap bar** (`AlbumOverviewView.recapBar`) that fades in once the hero
+  header scrolls off (a `onScrollGeometryChange` reveal with hysteresis), keeping the tally + estimate
+  in view down the whole cluster index. The full **projection card** + coverage chart stay in the hero
+  header as the detailed "step back and assess" read.
+
 ## Visual language
 
 - **Gold** (`--color-accent`, tan `#E8B05A`) — climbing, under target (unchanged).
