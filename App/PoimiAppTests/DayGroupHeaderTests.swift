@@ -116,7 +116,11 @@ struct ClusterCaptionTests {
         #expect(c?.symbol == "video.fill")
         #expect(c?.text.contains("2") == true)
         #expect(c?.text.contains("video") == true)
-        #expect(c?.text.contains("–") == false)   // no time-of-day span on a multi-day cluster
+        #expect(c?.text.contains("–") == false)          // no time-of-day span on a multi-day cluster
+        // Regression guard: the inflection markup MUST resolve (it once leaked "^[2 video](inflect: true)"
+        // literally because the key wasn't in the String Catalog). If this fails, the catalog entry is missing.
+        #expect(c?.text.contains("inflect") == false)
+        #expect(c?.text.contains("^[") == false)
     }
 
     @Test("the span keeps the clock; media highlights append after a middot")
@@ -128,6 +132,7 @@ struct ClusterCaptionTests {
         #expect(c?.text.contains(" · ") == true)             // display uses a middot separator
         #expect(c?.text.contains("video") == true)
         #expect(c?.text.contains("favorite") == true)        // US spelling, matches `isFavorite` / Photos
+        #expect(c?.text.contains("inflect") == false)        // markup resolved, not leaked (catalog entry present)
         #expect(c?.spoken.hasPrefix("Morning to Evening") == true)
         #expect(c?.spoken.contains(", ") == true)            // spoken uses commas, not middots
         #expect(c?.spoken.contains("·") == false)

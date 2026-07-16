@@ -40,6 +40,9 @@ struct AlbumOverviewView: View {
     /// Reveal the pinned recap bar (tally + estimate) once the rich hero header scrolls off, so the
     /// count + projection follow you down the cluster list (the "dynamic header" the issue asks for).
     @State private var showRecap = false
+    /// The hero header's measured height — drives the recap reveal so it's a clean handoff as the hero
+    /// leaves, not a fixed guess that fired while the hero was still on screen.
+    @State private var headerHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -173,6 +176,10 @@ struct AlbumOverviewView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 header(index)
+                    // Measure the hero's real height so the recap reveals exactly as the hero scrolls
+                    // off — not at a fixed guess that fired while the hero (and its own tally) was still
+                    // on screen, which read as a jumpy double-tally.
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
                 ForEach(index.sections) { section in
                     Section {
                         ForEach(section.rows) { row in
@@ -189,29 +196,35 @@ struct AlbumOverviewView: View {
             }
             .padding(.bottom, 24)
         }
-        // Reveal the recap bar once the hero header (title + full tally + pacing card) has scrolled past.
-        // The threshold is deliberately generous — a fade near where the tally leaves the top reads as
-        // intentional, and it's stable regardless of whether the pacing card / chart are present (they
-        // sit below the tally). `onScrollGeometryChange` only fires the action when the Bool flips.
-        // HYSTERESIS (reveal at 150, hide at 90): the recap is a top `safeAreaInset`, so its appearing
-        // shifts layout — a single threshold could let that shift flip it straight back and flicker. The
-        // 60pt dead-band (wider than the bar) breaks that loop.
+        // Reveal the recap only once the WHOLE hero (title + tally + pacing card + chart) has scrolled
+        // off, so the compact tally/estimate takes over from the hero's rather than briefly showing
+        // alongside it. Thresholds derive from the measured `headerHeight` (robust whether or not the
+        // pacing card / chart are present). HYSTERESIS via a 60pt dead-band: the recap is a top
+        // `safeAreaInset`, so its appearing shifts layout — a single threshold could let that shift flip
+        // it straight back and flicker. If the album is too short to scroll past the hero, it never shows
+        // (nothing to recap — the hero is still in view).
         .onScrollGeometryChange(for: Bool.self) { geometry in
-            showRecap ? geometry.contentOffset.y > 90 : geometry.contentOffset.y > 150
+            let revealAt = max(headerHeight - 44, 80)   // just as the hero's bottom clears the top
+            let y = geometry.contentOffset.y
+            return showRecap ? y > revealAt - 60 : y > revealAt
         } action: { _, revealed in
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { showRecap = revealed }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if showRecap {
+                // A cross-fade (not a slide) so revealing it doesn't fight the content reflow the inset
+                // causes — the earlier move-from-top read as a double-motion jump.
                 recapBar(index)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(.opacity)
             }
         }
     }
 
     /// The pinned recap: album name · the compact tally + "~N est." projection + ring (`AlbumPaceReadout`).
-    /// A glass bar under the (opaque) nav bar so the count + estimate stay in view while you scan the
-    /// cluster list — the same readout the grid top bar carries, so the estimate is consistent everywhere.
+    /// Sits under the (opaque) nav bar so the count + estimate stay in view while you scan the cluster
+    /// list — the same readout the grid top bar carries. Backed by an OPAQUE `systemBackground` to match
+    /// the sticky month headers (`ClusterMonthHeader`) — a glass/translucent bar read as out-of-place
+    /// against them; a hairline separates it from the scrolling clusters passing beneath.
     private func recapBar(_ index: ClusterIndex) -> some View {
         HStack(spacing: 12) {
             Text(project.title)
@@ -224,7 +237,10 @@ struct AlbumOverviewView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
-        .glassBarBackground()
+        .background(Color(.systemBackground))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color(.separator)).frame(height: 0.5)
+        }
     }
 
     private func header(_ index: ClusterIndex) -> some View {
