@@ -31,19 +31,27 @@ enum DayGroupHeader {
         guard let firstKey = days.first, let firstDate = firstKey.anchorDate(in: calendar) else {
             return ""
         }
-        // Single day → weekday + month + day ("Sat, Jul 5"). `timeZone` is a settable property of
-        // the style (the `.timeZone(_:)` builder configures a *display symbol*, not the zone used).
-        var singleDay = Date.FormatStyle.dateTime.weekday(.abbreviated).month(.abbreviated).day().locale(locale)
-        singleDay.timeZone = calendar.timeZone
+        // Full weekday + date, on a single day AND on each end of a range: "Friday, Feb 14" /
+        // "Perjantai 14.2." · "Saturday, Feb 15 – Wednesday, Feb 20" / "Lauantai 15.2. – Keskiviikko 20.2.".
+        // The locale decides the weekday/date wording + separator; `timeZone` is a settable property of the
+        // style (the `.timeZone(_:)` builder configures a *display symbol*, not the zone used).
+        var style = Date.FormatStyle.dateTime.weekday(.wide).month(.abbreviated).day().locale(locale)
+        style.timeZone = calendar.timeZone
+        let first = capitalizingFirstLetter(firstDate.formatted(style))
         guard days.count > 1, let lastKey = days.last,
               let lastDate = lastKey.anchorDate(in: calendar) else {
-            return firstDate.formatted(singleDay)
+            return first
         }
+        let last = capitalizingFirstLetter(lastDate.formatted(style))
+        return "\(first) – \(last)"
+    }
 
-        // Merged quiet run / multi-day trip → "Jul 16 – Jul 18" (weekday dropped to keep it scannable).
-        var monthDay = Date.FormatStyle.dateTime.month(.abbreviated).day().locale(locale)
-        monthDay.timeZone = calendar.timeZone
-        return "\(firstDate.formatted(monthDay)) – \(lastDate.formatted(monthDay))"
+    /// Capitalize just the first character. Locales like Finnish lower-case weekday names ("perjantai");
+    /// a standalone title wants the leading weekday capitalized ("Perjantai"). A no-op where the locale
+    /// already capitalizes (English "Friday"). The rest of the string (the numeric date) is untouched.
+    private static func capitalizingFirstLetter(_ string: String) -> String {
+        guard let first = string.first else { return string }
+        return first.uppercased() + string.dropFirst()
     }
 
     /// The per-photo day label for the viewer (#36): one calendar day, "Sat, Jul 5", or "Undated".

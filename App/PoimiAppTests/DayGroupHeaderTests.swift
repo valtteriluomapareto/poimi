@@ -27,25 +27,38 @@ struct DayGroupHeaderTests {
         return DayGroupHeader.title(for: groups[0], calendar: utcCalendar(), locale: Self.enUS)
     }
 
-    @Test("a single-day group reads weekday, month, day")
+    @Test("a single-day group reads the FULL weekday, month, day")
     func singleDay() {
         // 2025-07-05 is a Saturday; a handful of photos on one day stays a single-day group.
         let assets = (0..<3).map { AssetRef(id: "a\($0)", captureDate: date(2025, 7, 5)) }
         let header = title(assets)
         #expect(header.contains("Jul"))
         #expect(header.contains("5"))
-        #expect(header.contains("Sat"))
+        #expect(header.contains("Saturday"))   // full weekday now, not abbreviated "Sat"
     }
 
-    @Test("a merged quiet run reads a month–day span")
+    @Test("a merged quiet run reads a full-weekday span on BOTH ends")
     func multiDayRun() {
-        // One photo each on 2025-03-16/17/18 → a merged quiet run of 3 days.
+        // One photo each on 2025-03-16/17/18 → a merged quiet run of 3 days (Sun 16 → Tue 18).
         let assets = (16...18).map { AssetRef(id: "q\($0)", captureDate: date(2025, 3, $0)) }
         let header = title(assets)
         #expect(header.contains("Mar"))
         #expect(header.contains("16"))
         #expect(header.contains("18"))
-        #expect(header.contains("–"))      // an en-dash span, not a single day
+        #expect(header.contains("Sunday"))     // weekday on the start end
+        #expect(header.contains("Tuesday"))    // …and the end end
+        #expect(header.contains("–"))          // an en-dash span, not a single day
+    }
+
+    @Test("the weekday is full + first-letter-capitalized for locales that lower-case it (Finnish)")
+    func fullWeekdayCapitalizedFinnish() {
+        // 2025-02-15 is a Saturday → Finnish "lauantai", shown capitalized as a title ("Lauantai 15.2.").
+        let groups = DayGrouping.groups(for: [AssetRef(id: "x", captureDate: date(2025, 2, 15))],
+                                        calendar: utcCalendar())
+        let fi = DayGroupHeader.title(for: groups[0], calendar: utcCalendar(), locale: Locale(identifier: "fi_FI"))
+        #expect(fi.contains("Lauantai"))       // full weekday, capitalized (locale gives lowercase)
+        #expect(fi.contains("15"))
+        #expect(!fi.contains("lauantai"))       // …the lowercase form must NOT remain
     }
 
     @Test("the undated group reads \"Undated\"")

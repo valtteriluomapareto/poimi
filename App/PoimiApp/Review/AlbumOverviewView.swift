@@ -173,52 +173,65 @@ struct AlbumOverviewView: View {
     // MARK: Cluster index
 
     private func clusterIndex(_ index: ClusterIndex) -> some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                header(index)
-                    // Measure the hero's real height so the recap reveals exactly as the hero scrolls
-                    // off — not at a fixed guess that fired while the hero (and its own tally) was still
-                    // on screen, which read as a jumpy double-tally.
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
-                ForEach(index.sections) { section in
-                    Section {
-                        ForEach(section.rows) { row in
-                            ClusterListRow(row: row) {
-                                coordinator.openReview(project.id, day: row.firstDay)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    header(index)
+                        .id(Self.topAnchorID)   // the target for the recap's tap-to-top
+                        // Measure the hero's real height so the recap reveals exactly as the hero scrolls
+                        // off — not at a fixed guess that fired while the hero (and its own tally) was
+                        // still on screen, which read as a jumpy double-tally.
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
+                    ForEach(index.sections) { section in
+                        Section {
+                            ForEach(section.rows) { row in
+                                ClusterListRow(row: row) {
+                                    coordinator.openReview(project.id, day: row.firstDay)
+                                }
+                                // No horizontal padding here — ClusterListRow insets its own text but
+                                // lets the preview strip bleed to the right screen edge.
                             }
-                            // No horizontal padding here — ClusterListRow insets its own text but lets the
-                            // preview strip bleed to the right screen edge.
+                        } header: {
+                            ClusterMonthHeader(title: section.title)
                         }
-                    } header: {
-                        ClusterMonthHeader(title: section.title)
                     }
                 }
+                .padding(.bottom, 24)
             }
-            .padding(.bottom, 24)
-        }
-        // Reveal the recap only once the WHOLE hero (title + tally + pacing card + chart) has scrolled
-        // off, so the compact tally/estimate takes over from the hero's rather than briefly showing
-        // alongside it. Thresholds derive from the measured `headerHeight` (robust whether or not the
-        // pacing card / chart are present). HYSTERESIS via a 60pt dead-band: the recap is a top
-        // `safeAreaInset`, so its appearing shifts layout — a single threshold could let that shift flip
-        // it straight back and flicker. If the album is too short to scroll past the hero, it never shows
-        // (nothing to recap — the hero is still in view).
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            let revealAt = max(headerHeight - 44, 80)   // just as the hero's bottom clears the top
-            let y = geometry.contentOffset.y
-            return showRecap ? y > revealAt - 60 : y > revealAt
-        } action: { _, revealed in
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { showRecap = revealed }
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if showRecap {
-                // A cross-fade (not a slide) so revealing it doesn't fight the content reflow the inset
-                // causes — the earlier move-from-top read as a double-motion jump.
-                recapBar(index)
-                    .transition(.opacity)
+            // Reveal the recap only once the WHOLE hero (title + tally + pacing card + chart) has scrolled
+            // off, so the compact tally/estimate takes over from the hero's rather than briefly showing
+            // alongside it. Thresholds derive from the measured `headerHeight` (robust whether or not the
+            // pacing card / chart are present). HYSTERESIS via a 60pt dead-band: the recap is a top
+            // `safeAreaInset`, so its appearing shifts layout — a single threshold could let that shift
+            // flip it straight back and flicker. If the album is too short to scroll past the hero, it
+            // never shows (nothing to recap — the hero is still in view).
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                let revealAt = max(headerHeight - 44, 80)   // just as the hero's bottom clears the top
+                let y = geometry.contentOffset.y
+                return showRecap ? y > revealAt - 60 : y > revealAt
+            } action: { _, revealed in
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { showRecap = revealed }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if showRecap {
+                    // A cross-fade (not a slide) so revealing it doesn't fight the content reflow the
+                    // inset causes — the earlier move-from-top read as a double-motion jump. Tapping it
+                    // scrolls back to the top (mirrors tapping a nav bar / status bar).
+                    recapBar(index)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+                                proxy.scrollTo(Self.topAnchorID, anchor: .top)
+                            }
+                        }
+                        .transition(.opacity)
+                }
             }
         }
     }
+
+    /// The scroll id of the hero header — the recap bar's tap-to-top target.
+    private static let topAnchorID = "overviewTop"
 
     /// The pinned recap: album name · the compact tally + "~N est." projection + ring (`AlbumPaceReadout`).
     /// Sits under the (opaque) nav bar so the count + estimate stay in view while you scan the cluster
@@ -469,6 +482,7 @@ struct ClusterListRow: View {
                                 .font(.title3.weight(.semibold))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
+                                .minimumScaleFactor(0.7)   // a long weekday range scales before truncating
                         }
                         // A trip's date range sits under its sentence ("Jul 16 – Jul 18"); a date
                         // cluster has none (its title already IS the date).
