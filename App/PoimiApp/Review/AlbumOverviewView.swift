@@ -394,8 +394,8 @@ enum ClusterIndexBuilder {
                     caption = nil
                 } else {
                     let clusterAssets = cluster.assetIDs.compactMap { assets[$0] }
-                    let character = ClusterCharacter.of(assets: clusterAssets, calendar: calendar)
-                    caption = ClusterCaption.content(for: character, dayCount: cluster.days.count)
+                    let character = ClusterCharacter.of(assets: clusterAssets)
+                    caption = ClusterCaption.content(for: character)
                 }
             }
             let row = ClusterRow(id: cluster.id,

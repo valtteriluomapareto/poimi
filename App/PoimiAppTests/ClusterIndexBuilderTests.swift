@@ -204,19 +204,19 @@ struct ClusterIndexBuilderTests {
 
     // MARK: Cluster caption (day-cluster personality)
 
-    @Test("a single-day date cluster gets a caption from its assets: time span leads, media appended")
+    @Test("a date cluster gets a media-highlight caption from its assets (time-of-day span removed, #200)")
     func dateClusterCaption() throws {
         let group = group("a", 2025, 2, 1, count: 3)   // asset ids a-0, a-1, a-2
         let assets = [
-            "a-0": asset("a-0", 2025, 2, 1, hour: 9),                 // morning
-            "a-1": asset("a-1", 2025, 2, 1, hour: 18, video: true),  // evening + a video
-            "a-2": asset("a-2", 2025, 2, 1, hour: 20)                // evening
+            "a-0": asset("a-0", 2025, 2, 1, hour: 9),
+            "a-1": asset("a-1", 2025, 2, 1, hour: 18, video: true),  // a video → the highlight
+            "a-2": asset("a-2", 2025, 2, 1, hour: 20)
         ]
         let index = ClusterIndexBuilder.build(from: [group], assets: assets, calendar: cal, locale: locale)
         let caption = try #require(index.sections.first?.rows.first?.caption)
-        #expect(caption.symbol == "clock")                       // single day → the span leads
-        #expect(caption.text.hasPrefix("Morning – Evening"))     // 09:00 → 20:00
-        #expect(caption.text.contains("video"))                  // the one video is a highlight
+        #expect(caption.symbol == "video.fill")                  // media-led (no time-of-day span)
+        #expect(caption.text.contains("video"))
+        #expect(caption.text.contains("–") == false)             // no time-of-day range
     }
 
     @Test("no assets supplied → no caption (the default empty map keeps the row clean)")
@@ -235,7 +235,7 @@ struct ClusterIndexBuilderTests {
         #expect(index.sections.last?.rows.first?.caption == nil)
     }
 
-    @Test("a multi-day run drops the time-span lead; the media highlight leads instead")
+    @Test("a multi-day run's caption is media-led (no time-of-day range echoing the date-range title)")
     func multiDayRunCaption() throws {
         let run = ReviewCluster.day(DayGroup(id: "run", assetIDs: ["run-0", "run-1"],
                            days: [.day(year: 2025, month: 1, day: 30), .day(year: 2025, month: 2, day: 2)],
