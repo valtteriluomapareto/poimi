@@ -491,8 +491,8 @@ struct ClusterListRow: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
-                        // A date cluster's characterful line ("🕐 Morning – Evening · 2 videos") — the
-                        // personality a bare date lacks. The leading glyph sets it apart from the grey
+                        // A date cluster's characterful line (a clock SF Symbol + "Morning – Evening · 2
+                        // videos") — the personality a bare date lacks. The leading glyph sets it apart from the grey
                         // pick-status line below. Trips carry `caption == nil` (their sentence is it).
                         if let caption = row.caption {
                             HStack(spacing: 5) {

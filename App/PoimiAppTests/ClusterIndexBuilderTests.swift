@@ -50,6 +50,29 @@ struct ClusterIndexBuilderTests {
         #expect(index.totalClusters == 3)
     }
 
+    @Test("orderedIDs + totalClusters mirror the clusters exactly — the pacing-denominator contract (#200)")
+    func pacingDenominatorContract() {
+        // The grid builds its "~N est." denominator as `clusters.flatMap(\.assetIDs)` + gates on
+        // `clusters.count`; the Overview feeds `index.orderedIDs` + `index.totalClusters`. If these ever
+        // diverge, the two projections silently disagree — the whole point of the shared readout. Lock it,
+        // including the undated tail (whose ids must still land in the frontier universe).
+        let groups = [
+            group("a", 2025, 2, 1, count: 6),
+            group("b", 2025, 5, 10, count: 3),
+            undatedGroup(count: 2)
+        ]
+        let index = ClusterIndexBuilder.build(from: groups, calendar: cal, locale: locale)
+        #expect(index.orderedIDs == groups.flatMap(\.assetIDs))
+        #expect(index.totalClusters == groups.count)
+    }
+
+    @Test("a single-cluster album reports totalClusters == 1 (the >1 projection-gate boundary)")
+    func singleClusterGate() {
+        let index = ClusterIndexBuilder.build(
+            from: [group("solo", 2025, 3, 3, count: 4)], calendar: cal, locale: locale)
+        #expect(index.totalClusters == 1)
+    }
+
     @Test("each row carries its formatted title, representative thumb, and drill target")
     func rowContents() throws {
         let groups = [group("a", 2025, 2, 1, count: 6)]

@@ -174,11 +174,19 @@ struct ReviewGridView: View {
                          isTrip: cluster.tripCluster != nil,
                          isDone: done.isDone(cluster),
                          orderedIDs: orderedIDs,
-                         showsProjection: clusters.count > 1)
+                         showsProjection: showsPaceProjection)
         } else {
             ReviewTopBar(clusterTitle: title, count: 0, orderedIDs: orderedIDs,
-                         showsProjection: clusters.count > 1)
+                         showsProjection: showsPaceProjection)
         }
+    }
+
+    /// The "~N est." projection shows only on a multi-cluster album AND while review is unfinished. Once
+    /// every cluster is done, #187's `ReviewCompleteBar` states the final counts in the pinned header just
+    /// below — a projection there would double the pick count and over-project (frontier < 1 if the last
+    /// cluster was marked done with few picks), reading as broken. O(1); reads the `reviewComplete` @State.
+    private var showsPaceProjection: Bool {
+        clusters.count > 1 && !reviewComplete
     }
 
     /// Recompute the completion state + album total OFF the `body` (#187 spec). Called on first appear,
