@@ -31,19 +31,27 @@ enum DayGroupHeader {
         guard let firstKey = days.first, let firstDate = firstKey.anchorDate(in: calendar) else {
             return ""
         }
-        // Single day → weekday + month + day ("Sat, Jul 5"). `timeZone` is a settable property of
-        // the style (the `.timeZone(_:)` builder configures a *display symbol*, not the zone used).
-        var singleDay = Date.FormatStyle.dateTime.weekday(.abbreviated).month(.abbreviated).day().locale(locale)
-        singleDay.timeZone = calendar.timeZone
+        // Full weekday + date, on a single day AND on each end of a range: "Friday, Feb 14" /
+        // "Perjantai 14.2." · "Saturday, Feb 15 – Wednesday, Feb 20" / "Lauantai 15.2. – Keskiviikko 20.2.".
+        // The locale decides the weekday/date wording + separator; `timeZone` is a settable property of the
+        // style (the `.timeZone(_:)` builder configures a *display symbol*, not the zone used).
+        var style = Date.FormatStyle.dateTime.weekday(.wide).month(.abbreviated).day().locale(locale)
+        style.timeZone = calendar.timeZone
+        let first = capitalizingFirstLetter(firstDate.formatted(style))
         guard days.count > 1, let lastKey = days.last,
               let lastDate = lastKey.anchorDate(in: calendar) else {
-            return firstDate.formatted(singleDay)
+            return first
         }
+        let last = capitalizingFirstLetter(lastDate.formatted(style))
+        return "\(first) – \(last)"
+    }
 
-        // Merged quiet run / multi-day trip → "Jul 16 – Jul 18" (weekday dropped to keep it scannable).
-        var monthDay = Date.FormatStyle.dateTime.month(.abbreviated).day().locale(locale)
-        monthDay.timeZone = calendar.timeZone
-        return "\(firstDate.formatted(monthDay)) – \(lastDate.formatted(monthDay))"
+    /// Capitalize just the first character. Locales like Finnish lower-case weekday names ("perjantai");
+    /// a standalone title wants the leading weekday capitalized ("Perjantai"). A no-op where the locale
+    /// already capitalizes (English "Friday"). The rest of the string (the numeric date) is untouched.
+    private static func capitalizingFirstLetter(_ string: String) -> String {
+        guard let first = string.first else { return string }
+        return first.uppercased() + string.dropFirst()
     }
 
     /// The per-photo day label for the viewer (#36): one calendar day, "Sat, Jul 5", or "Undated".
@@ -55,5 +63,50 @@ enum DayGroupHeader {
         var style = Date.FormatStyle.dateTime.weekday(.abbreviated).month(.abbreviated).day().locale(locale)
         style.timeZone = calendar.timeZone
         return date.formatted(style)
+    }
+}
+
+/// The characterful, one-line subtitle that gives a plain date cluster some personality (issue:
+/// "day clusters feel soulless"). The text layer over the string-free `ClusterCharacter` (D14/D21):
+/// the domain distils the facts, this phrases + localizes them (String Catalog, #95). It surfaces notable
+/// **media highlights** ("2 videos · 3 favorites") with a **leading SF Symbol** (video / heart) so it reads
+/// as character rather than a second grey status line, plus a punctuation-free **`spoken`** variant for
+/// VoiceOver. Returns `nil` when there's nothing worth saying, so the row stays a clean bare date.
+///
+/// (A meaningful everyday-cluster descriptor — a locality "shape" like "Mostly at home" — is #201. An
+/// earlier time-of-day span "Morning – Evening" was dropped as low-signal.)
+///
+/// Trips carry their location sentence instead ("Week in Salo"), so callers build this only for the
+/// non-trip date clusters — the everyday ones that read as a bare date otherwise.
+enum ClusterCaption {
+    /// The rendered caption: a leading SF Symbol + display text, plus a spoken (punctuation-free) form.
+    struct Content: Equatable {
+        let symbol: String
+        let text: String
+        let spoken: String
+    }
+
+    /// - Parameter character: the cluster's distilled facts.
+    static func content(for character: ClusterCharacter) -> Content? {
+        var display: [String] = []
+        var spoken: [String] = []
+        // Media highlights — automatic grammar agreement ("1 video" / "2 videos").
+        if character.videoCount > 0 {
+            let text = String(localized: "^[\(character.videoCount) video](inflect: true)",
+                              comment: "Cluster caption: number of videos in the cluster")
+            display.append(text)
+            spoken.append(text)
+        }
+        if character.favoriteCount > 0 {
+            let text = String(localized: "^[\(character.favoriteCount) favorite](inflect: true)",
+                              comment: "Cluster caption: number of favorite photos in the cluster")
+            display.append(text)
+            spoken.append(text)
+        }
+        guard !display.isEmpty else { return nil }
+        // Media-led glyph — there's always a video or a favorite when the caption is non-empty.
+        return Content(symbol: character.videoCount > 0 ? "video.fill" : "heart.fill",
+                       text: display.joined(separator: " · "),
+                       spoken: spoken.joined(separator: ", "))
     }
 }

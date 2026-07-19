@@ -150,10 +150,23 @@ is **"album", never "yearbook"**; there is no print/export-to-print anywhere.
 
 - **Album overview (#37, cluster index — `3BL`).** The album's landing screen: a **coverage chart**
   (adaptive day/week/month buckets shaded gold by density) over a **month-sectioned list of day-cluster
-  rows** (each: cover swatch · date · picked/total · done seal). Tapping a row **drills into the review
-  grid** at that day. Nav trailing: a **sliders "adjustments" icon** (→ album settings) + **Export**.
-  Chart/index built once in the store (never in `body`). a11y: rows are buttons labelled with the
-  date + progress; the chart is decorative (`.accessibilityHidden`), the list carries the data.
+  rows** (each: date · a **characterful caption** · picked/total · done seal · preview strip). Tapping a
+  row **drills into the review grid** at that day. Nav trailing: a **sliders "adjustments" icon** (→
+  album settings) + **Export**. Chart/index built once in the store (never in `body`). a11y: rows are
+  buttons labelled with the date + caption + progress; the chart is decorative (`.accessibilityHidden`),
+  the list carries the data.
+  - **Cluster caption (day-cluster personality).** A plain (non-trip) date cluster read as a bare
+    "Sat, Jul 5 · 47 photos" — flagged as soulless. It now carries a one-line caption (with a **leading
+    glyph** so it reads as character, not a second grey status line) of notable **media highlights** from
+    its own photos ("2 videos · 3 favorites", led by a video / heart SF Symbol), or **nothing** when there's
+    nothing worth saying (a clean bare date). The **undated** bucket and **trips** get no caption (trips
+    carry their location sentence, "Week in Salo"). The facts are the pure, string-free
+    `Curation.ClusterCharacter` (unit-tested); the phrasing + glyph + a punctuation-free VoiceOver variant
+    are `ClusterCaption` (String Catalog). Built once with the index (off `body`).
+    - A more meaningful everyday-cluster descriptor — a **locality "shape"** ("Mostly at home" / a place)
+      — is tracked in **#201**; an earlier time-of-day span ("Morning – Evening") was dropped as low-signal.
+  - **Pinned recap bar (persistent pace).** The tally + `~N est.` projection follow you down the list —
+    see [pacing.md](pacing.md) "Follow-up".
 - **Photo viewer (#36, Now-Playing card — `2ZC`).** A **`.sheet`**, not a path push — rises from the
   bottom, pull-down to dismiss (the grid stays mounted beneath, D10). A paged `TabView` over the
   review's ordered ids; per-photo day label; an in-place **select** control (gold check) + the running

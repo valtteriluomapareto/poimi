@@ -20,9 +20,10 @@ import Curation
 /// once it's done) and the album's running progress on the trailing lane (a compact `ProgressRing` +
 /// "picked / target"). This replaces the old album-title + metadata + full-width tally header — the
 /// album's own identity now lives on the Overview you came from, so the grid top is PER-CLUSTER and
-/// updates as you swipe pages. It reads the `SelectionStore` itself (like the old header) so a pick
-/// toggle re-renders only this bar, never the grid body. Liquid Glass, bled to the top edge under the
-/// (backdrop-hidden) nav bar; Reduce Transparency falls back to a solid surface.
+/// updates as you swipe pages. The trailing progress + projection live in `AlbumPaceReadout`, which
+/// reads the `SelectionStore` itself, so a pick toggle re-renders only that readout, never the grid
+/// body. Liquid Glass, bled to the top edge under the (backdrop-hidden) nav bar; Reduce Transparency
+/// falls back to a solid surface.
 struct ReviewTopBar: View {
     /// The current cluster's title — a trip's location sentence ("Week in Salo") or a date title.
     let clusterTitle: String
@@ -32,14 +33,18 @@ struct ReviewTopBar: View {
     var isTrip = false
     /// The cluster is marked done → show the green seal by the name.
     var isDone = false
-    @Environment(SelectionStore.self) private var selection
+    /// The album's candidate ids oldest → newest — passed through to the pace readout so the grid's
+    /// trailing lane can show the "~N est." projection while you pick (built once off-body by the grid).
+    var orderedIDs: [String] = []
+    /// Whether the pace readout shows the projection — the grid passes `clusters.count > 1`, matching
+    /// the Overview card's multi-cluster gate.
+    var showsProjection = true
 
     var body: some View {
-        let progress = selection.progress
         HStack(alignment: .center, spacing: 12) {
             identity
             Spacer(minLength: 8)
-            progressView(progress)
+            AlbumPaceReadout(orderedIDs: orderedIDs, showsProjection: showsProjection)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -79,46 +84,6 @@ struct ReviewTopBar: View {
         }
         .accessibilityElement(children: .combine)
     }
-
-    /// Trailing lane: album progress toward the target — "picked / target" (+ "+N over" once past it) + a
-    /// compact ring. The count turns amber and the ring's arc goes amber when over (unclamped honesty,
-    /// #170). The ring is decorative (a11y-hidden); the count text carries the spoken value.
-    private func progressView(_ progress: TargetProgress) -> some View {
-        HStack(spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                (Text("\(progress.picked)").fontWeight(.semibold)
-                    .foregroundStyle(progress.isOver ? Color.brandWarning : Color.primary)
-                    + Text(" / \(progress.target)").foregroundStyle(.secondary))
-                    .font(.subheadline)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                if progress.isOver {
-                    Text("+\(progress.overage) over")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Color.brandWarning)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                }
-            }
-            ProgressRing(fraction: progress.fraction, tint: pacingTint(progress))
-                .frame(width: 30, height: 30)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(progressA11y(progress))
-    }
-
-    private func progressA11y(_ progress: TargetProgress) -> String {
-        if progress.isOver {
-            return String(localized: "\(progress.picked) of \(progress.target) picked, \(progress.overage) over target",
-                          comment: "Grid top-bar progress a11y when over target")
-        }
-        if progress.isComplete {
-            return String(localized: "\(progress.picked) of \(progress.target) picked, target reached",
-                          comment: "Grid top-bar progress a11y when the target is reached")
-        }
-        return String(localized: "\(progress.picked) of \(progress.target) picked, \(progress.remaining) left",
-                      comment: "Grid top-bar progress a11y: picked of target, remaining left")
-    }
 }
 
 /// A compact circular progress indicator — an arc over a faint track — showing how far the album's pick
@@ -156,6 +121,108 @@ func pacingTint(_ progress: TargetProgress) -> Color {
     if progress.isOver { return .brandWarning }
     if progress.isComplete { return .brandGreen }
     return .accentColor
+}
+
+/// The one place the pacing projection is resolved (#170) — the `pickFrontierFraction → Pacing`
+/// coupling over a set of ordered candidate ids. Shared by the grid/recap `AlbumPaceReadout` and the
+/// Overview's `PacingCard` so the projected count can't drift between the surfaces (they must feed the
+/// SAME `orderedIDs` universe as the picks). Keeps the same-universe invariant assert both rely on.
+@MainActor
+func resolvePacing(orderedIDs: [String], selection: SelectionStore) -> Pacing {
+    let progress = selection.progress
+    let frontier = pickFrontierFraction(orderedIDs: orderedIDs, selected: selection.selected)
+    assert(orderedIDs.isEmpty || selection.selected.isSubset(of: Set(orderedIDs)),
+           "pacing: every pick must be within orderedIDs (same candidate universe)")
+    return Pacing(picked: progress.picked, frontier: frontier, target: progress.target)
+}
+
+/// The album's compact running progress + projection: the tally "147 / 200" ("+N over" in amber past
+/// the target), a small pace projection "~320 est." once the pick frontier clears the confidence floor,
+/// and a `ProgressRing`. It reads the `SelectionStore` itself (so it updates per pick without the
+/// caller depending on `selected`) and scans the pre-built `orderedIDs` for the frontier — an O(n) walk,
+/// the same per-pick cost the Overview's `PacingCard` already pays; `orderedIDs` is built ONCE off-body
+/// by the caller, never re-derived here.
+///
+/// Shared so the estimate follows you everywhere you're pacing: the grid top bar carries it while you
+/// pick (previously the projection lived ONLY on the Overview's top, and scrolled away) and the
+/// Overview's scroll recap bar keeps it in view while you scan the cluster index.
+struct AlbumPaceReadout: View {
+    /// Every candidate id oldest → newest — the pick-frontier denominator, built once by the caller.
+    /// Empty (the default) simply means no projection: the tally + ring still render.
+    var orderedIDs: [String] = []
+    /// Whether to show the "~N est." projection at all. The Overview's `PacingCard` gates itself to
+    /// multi-cluster albums (a one-cluster album has no timeline to project across); callers pass the
+    /// same `totalClusters > 1` so the grid + recap never show a projection the hero card hides.
+    var showsProjection = true
+    @Environment(SelectionStore.self) private var selection
+
+    var body: some View {
+        let progress = selection.progress
+        let projection = showsProjection ? pacingProjection() : nil
+        HStack(spacing: 8) {
+            VStack(alignment: .trailing, spacing: 1) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    (Text("\(progress.picked)").fontWeight(.semibold)
+                        .foregroundStyle(progress.isOver ? Color.brandWarning : Color.primary)
+                        + Text(" / \(progress.target)").foregroundStyle(.secondary))
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                    if progress.isOver {
+                        Text("+\(progress.overage) over")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.brandWarning)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                    }
+                }
+                // "At this pace" projection — amber when heading past the target (the January-overspend
+                // heads-up), secondary otherwise. Hidden below the confidence floor (thin coverage = noise).
+                if let projection {
+                    Text("~\(projection.total) est.", comment: "Compact pace projection: estimated final count")
+                        .font(.caption2)
+                        .foregroundStyle(projection.ahead ? Color.brandWarning : .secondary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+            }
+            ProgressRing(fraction: progress.fraction, tint: pacingTint(progress))
+                .frame(width: 30, height: 30)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(paceA11yLabel(progress: progress, projection: projection))
+    }
+
+    /// The projected final count + whether it's ahead of pace, or `nil` below the confidence floor.
+    /// Uses the shared `resolvePacing`, so it can't drift from the Overview's `PacingCard`.
+    private func pacingProjection() -> (total: Int, ahead: Bool)? {
+        let pacing = resolvePacing(orderedIDs: orderedIDs, selection: selection)
+        guard let total = pacing.projectedTotal, let pace = pacing.pace else { return nil }
+        return (total, pace == .ahead)
+    }
+
+    private func paceA11yLabel(progress: TargetProgress, projection: (total: Int, ahead: Bool)?) -> String {
+        // Reuse the shipped tally phrasing (same catalog keys as the grid top bar / Overview tally), then
+        // append the projection as a separate localized fragment when present — so the base keys stay put.
+        let base: String
+        if progress.isOver {
+            base = String(localized: "\(progress.picked) of \(progress.target) picked, \(progress.overage) over target",
+                          comment: "Album progress a11y when over target")
+        } else if progress.isComplete {
+            base = String(localized: "\(progress.picked) of \(progress.target) picked, target reached",
+                          comment: "Album progress a11y when the target is reached")
+        } else {
+            base = String(localized: "\(progress.picked) of \(progress.target) picked, \(progress.remaining) left",
+                          comment: "Album progress a11y: picked of target, remaining left")
+        }
+        guard let projection else { return base }
+        let pace = projection.ahead
+            ? String(localized: "At this pace, about \(projection.total), ahead of pace",
+                     comment: "Album progress a11y: pace projection, ahead of pace")
+            : String(localized: "At this pace, about \(projection.total)",
+                     comment: "Album progress a11y: pace projection")
+        return "\(base). \(pace)"
+    }
 }
 
 /// The one canonical **pick / un-pick verb** for the whole app (#190). The grid rotor and the viewer's

@@ -72,6 +72,9 @@ struct ReviewGridView: View {
     @State private var totalCandidatePhotos = 0
 
     @State private var columnCount = 3
+    /// Every candidate id oldest → newest — the pick-frontier denominator for the top bar's "~N est."
+    /// projection. Built ONCE (onAppear / album switch), never in a `body`, so a pick just re-scans it.
+    @State private var orderedIDs: [String] = []
     @State private var visibleIDs: Set<String> = []
     @State private var window = PrefetchWindow(orderedIDs: [])
     // Generation-guarded prefetch: a single in-flight updater loops until it has applied the latest
@@ -169,10 +172,21 @@ struct ReviewGridView: View {
             ReviewTopBar(clusterTitle: headerTitle(for: cluster),
                          count: cluster.count,
                          isTrip: cluster.tripCluster != nil,
-                         isDone: done.isDone(cluster))
+                         isDone: done.isDone(cluster),
+                         orderedIDs: orderedIDs,
+                         showsProjection: showsPaceProjection)
         } else {
-            ReviewTopBar(clusterTitle: title, count: 0)
+            ReviewTopBar(clusterTitle: title, count: 0, orderedIDs: orderedIDs,
+                         showsProjection: showsPaceProjection)
         }
+    }
+
+    /// The "~N est." projection shows only on a multi-cluster album AND while review is unfinished. Once
+    /// every cluster is done, #187's `ReviewCompleteBar` states the final counts in the pinned header just
+    /// below — a projection there would double the pick count and over-project (frontier < 1 if the last
+    /// cluster was marked done with few picks), reading as broken. O(1); reads the `reviewComplete` @State.
+    private var showsPaceProjection: Bool {
+        clusters.count > 1 && !reviewComplete
     }
 
     /// Recompute the completion state + album total OFF the `body` (#187 spec). Called on first appear,
@@ -209,7 +223,8 @@ struct ReviewGridView: View {
                 didInitialOpen = true
                 currentPageID = entryPageID()
             }
-            refreshCompletion()
+            if orderedIDs.isEmpty { orderedIDs = clusters.flatMap(\.assetIDs) }   // pace-projection denominator, once
+            refreshCompletion()   // #187 forward-path state, off-body
             rebuildWindow()
             scheduleRecomputeWindow()
         }
@@ -232,6 +247,7 @@ struct ReviewGridView: View {
         .onChange(of: groupIdentity) {
             visibleIDs = []
             lastAppliedSlice = []      // new album → re-cache from scratch, don't skip on a stale match
+            orderedIDs = clusters.flatMap(\.assetIDs)   // new album → refresh the pace denominator
             currentPageID = entryPageID()
             refreshCompletion()        // new clusters → recompute completion + total off-body (#187)
             rebuildWindow()

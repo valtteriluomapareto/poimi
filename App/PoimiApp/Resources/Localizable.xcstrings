@@ -2378,6 +2378,99 @@
           }
         }
       }
+    },
+    "^[%lld video](inflect: true)": {
+      "comment": "Cluster caption: number of videos in the cluster",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld video"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld videos"
+                }
+              }
+            }
+          }
+        },
+        "fi": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld video"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld videota"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "^[%lld favorite](inflect: true)": {
+      "comment": "Cluster caption: number of favorite photos in the cluster",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld favorite"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld favorites"
+                }
+              }
+            }
+          }
+        },
+        "fi": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld suosikki"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld suosikkia"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "~%lld est.": {
+      "comment": "Compact pace projection: estimated final count",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~%lld arvio"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
