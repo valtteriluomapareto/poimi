@@ -93,3 +93,27 @@ struct NextUnreviewedPageTests {
         #expect(nextUnreviewedPage(after: 0, count: 0, isDone: { _ in false }) == 0)
     }
 }
+
+@Suite("isReviewComplete (review-grid forward path, #187)")
+struct ReviewCompleteTests {
+    private func group(_ id: String) -> DayGroup {
+        DayGroup(id: id, assetIDs: [id], days: [DayKey.day(year: 2025, month: 7, day: 5)], isBusyDay: false)
+    }
+
+    @Test("every cluster done → review complete")
+    func allDone() {
+        let clusters = [group("a"), group("b")].map(ReviewCluster.day)
+        #expect(isReviewComplete(clusters: clusters, isDone: { _ in true }))
+    }
+
+    @Test("any cluster still open → not complete")
+    func oneOutstanding() {
+        let clusters = [group("a"), group("b")].map(ReviewCluster.day)
+        #expect(!isReviewComplete(clusters: clusters, isDone: { $0.id == "a" }))
+    }
+
+    @Test("empty clusters → NOT complete (guards the vacuous allSatisfy that would offer to create from nothing)")
+    func emptyIsNotComplete() {
+        #expect(!isReviewComplete(clusters: [], isDone: { _ in true }))
+    }
+}

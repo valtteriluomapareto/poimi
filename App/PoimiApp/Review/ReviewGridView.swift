@@ -64,6 +64,13 @@ struct ReviewGridView: View {
     /// `viewerReturnTick`; the matching `ClusterPage` scrolls to it, then clears it.
     @State private var pendingScrollID: String?
 
+    /// Whether every cluster is marked done (#187) + the album's total candidate photos — held off the
+    /// `body` (per the issue) so the O(clusters) `allSatisfy`/`reduce` don't re-run on every `visibleIDs`
+    /// churn during a scroll. Refreshed by `refreshCompletion()` on the events that can change them:
+    /// first appear, album switch, and any done-state change.
+    @State private var reviewComplete = false
+    @State private var totalCandidatePhotos = 0
+
     @State private var columnCount = 3
     @State private var visibleIDs: Set<String> = []
     @State private var window = PrefetchWindow(orderedIDs: [])
@@ -145,7 +152,9 @@ struct ReviewGridView: View {
                     // Restore scroll to the photo you ended on in the viewer (#126); each page acts only
                     // if it holds the id, then clears it (one-shot).
                     scrollToID: pendingScrollID,
-                    onScrolledToTarget: { pendingScrollID = nil })
+                    onScrolledToTarget: { pendingScrollID = nil },
+                    reviewComplete: reviewComplete,
+                    totalPhotos: totalCandidatePhotos)
                     .tag(cluster.id as String?)
             }
         }
@@ -166,7 +175,17 @@ struct ReviewGridView: View {
         }
     }
 
-    var body: some View {
+    /// Recompute the completion state + album total OFF the `body` (#187 spec). Called on first appear,
+    /// album switch (`groupIdentity`), and any done-state change (`done.doneDays`) — the only inputs that
+    /// move them — so a scroll's `visibleIDs` churn never re-runs the `allSatisfy`/`reduce`.
+    private func refreshCompletion() {
+        reviewComplete = isReviewComplete(clusters: clusters, isDone: { done.isDone($0) })
+        totalCandidatePhotos = clusters.reduce(0) { $0 + $1.count }
+    }
+
+    /// `pager` + the fixed top-bar chrome + decoration, split out of `body` so each modifier chain stays
+    /// short enough for the Swift type-checker (the same reason `pager`/`topBar` are extracted).
+    private var decoratedPager: some View {
         pager
         // The top bar (current cluster's identity + album progress ring) is the ONE fixed chrome. The
         // per-cluster page indicator + Select-all glass pills live INSIDE each page (pinned over the
@@ -180,15 +199,23 @@ struct ReviewGridView: View {
         // Success haptic when a day is marked done (count up), a light tap on undo.
         .sensoryFeedback(trigger: done.doneDays.count) { old, new in new > old ? .success : .impact(weight: .light) }
         .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.width } action: { applyIdealColumns(width: $0) }
+    }
+
+    var body: some View {
+        decoratedPager
         .onAppear {
             Perf.event("grid.onAppear (paged)")
             if !didInitialOpen {
                 didInitialOpen = true
                 currentPageID = entryPageID()
             }
+            refreshCompletion()
             rebuildWindow()
             scheduleRecomputeWindow()
         }
+        // Recompute the forward-path state off-body (#187): a done toggle (mark/un-mark) is the only
+        // in-place input that moves it while the grid is up — mirror-flips the pinned bar ↔ pills.
+        .onChange(of: done.doneDays) { refreshCompletion() }
         .onChange(of: currentPageID) {
             // Drop the previous page's ids up front. Otherwise they linger in `visibleIDs` — foreign to
             // the new cluster's window universe — so the slice computes EMPTY and the cache is *cleared*
@@ -206,6 +233,7 @@ struct ReviewGridView: View {
             visibleIDs = []
             lastAppliedSlice = []      // new album → re-cache from scratch, don't skip on a stale match
             currentPageID = entryPageID()
+            refreshCompletion()        // new clusters → recompute completion + total off-body (#187)
             rebuildWindow()
             scheduleRecomputeWindow()
         }
@@ -333,6 +361,11 @@ private struct ClusterPage: View {
     let scrollToID: String?
     /// Called after this page consumed `scrollToID`, so the parent clears it (one-shot).
     let onScrolledToTarget: () -> Void
+    /// When every cluster is done, the pinned header shows the review-complete forward bar (#187) in
+    /// place of the per-page pills. Album-level, rendered on the current page (all pages are done).
+    let reviewComplete: Bool
+    /// Total candidate photos across the album — the review-complete bar's "N photos" summary.
+    let totalPhotos: Int
     @Environment(DoneStore.self) private var done
 
     var body: some View {
@@ -382,14 +415,21 @@ private struct ClusterPage: View {
     /// Select-all icon on the trailing lane. The cluster's identity, count, and done-state now live in
     /// the fixed top bar, not here — so this row is just the per-page controls, one height, aligned.
     @ViewBuilder private func clusterHeader() -> some View {
-        HStack(spacing: 8) {
-            if total > 1 { PageIndicatorPill(position: position, total: total) }
-            Spacer(minLength: 0)
-            SelectAllIconChip(cluster: cluster, title: headerTitle)
+        if reviewComplete {
+            // Every cluster done → the forward path replaces the per-page pills (paging/select-all are
+            // moot once you're finished). Pinned like the pills, so it stays reachable as you scroll.
+            ReviewCompleteBar(totalPhotos: totalPhotos)
+                .frame(maxWidth: .infinity)
+        } else {
+            HStack(spacing: 8) {
+                if total > 1 { PageIndicatorPill(position: position, total: total) }
+                Spacer(minLength: 0)
+                SelectAllIconChip(cluster: cluster, title: headerTitle)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity)
     }
 
     /// End-of-cluster CTA: "Mark trip done" for a trip (it spans several days) / "Mark day done" for a
@@ -422,6 +462,66 @@ private struct ClusterPage: View {
 /// always-visible position across the album plus the cue you can swipe between clusters. A stacked-page
 /// glyph reinforces "cluster N of M"; the position is numeric (dots were dropped — a windowed
 /// "10 of 349 dots" tells you nothing, and for a small album the number reads just as clearly, design 4AB).
+/// The review-complete forward affordance (#187): once EVERY cluster is marked done, this replaces the
+/// per-page pills in the pinned header — a green check + "All photos reviewed · N photos · M picks" + the
+/// Photos-qualified finish action (#185's re-export-aware label). Reads the shared `SelectionStore` ITSELF
+/// (like the cells + top bar) so the grid parent stays independent of `selected`; adaptive `.primary`/
+/// `.secondary` over glass (never hardcoded white — matches the pills, sidesteps the RT-legibility trap).
+/// Its action is the one coordinator transition that dismisses any viewer then pushes export.
+private struct ReviewCompleteBar: View {
+    let totalPhotos: Int
+    @Environment(SelectionStore.self) private var selection
+    @Environment(AppCoordinator.self) private var coordinator
+
+    var body: some View {
+        let picked = selection.progress.picked
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(Color.brandGreen)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("All photos reviewed")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("\(totalPhotos) photos · \(picked) picks")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .accessibilityElement(children: .combine)   // one VO utterance, not two fragments
+            Spacer(minLength: 8)
+            if picked > 0 {
+                // A SOLID gold pill (not glass): this bar floats over bright photos, where a translucent
+                // glass-tinted button washes out (device-caught) — the signed-off mock is a solid capsule.
+                // A solid fill is not a material, so it's fine under the pure-Liquid-Glass guard.
+                Button { coordinator.finishToExport() } label: {
+                    Text(finishActionLabel(isReExport: coordinator.reviewIsReExport))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.onAccent)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
+                        .background(Capsule().fill(Color.accentColor))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("reviewCompleteFinishButton")
+            } else {
+                // Reviewed everything but picked nothing → there's nothing to save yet. Guide, rather than
+                // show a dead greyed button (which device testing showed reads as "is this broken?").
+                Text("Pick photos to save")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .glassSurface(in: Capsule())
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+}
+
 private struct PageIndicatorPill: View {
     let position: Int   // 1-based
     let total: Int
@@ -503,4 +603,12 @@ func nextUnreviewedPage(after current: Int, count: Int, isDone: (Int) -> Bool) -
     guard count > 0 else { return 0 }
     if let next = (current + 1..<count).first(where: { !isDone($0) }) { return next }
     return current + 1 < count ? current + 1 : current
+}
+
+/// True when EVERY cluster is marked done — the whole album is reviewed, so the grid offers the forward
+/// path to export instead of `advance()` silently holding (#187). Pure, unit-tested. Guarded on a
+/// NON-EMPTY slice: `allSatisfy` is vacuously true for an empty list, which would falsely report
+/// "review complete" (and offer to create an album) for an empty-range album — so guard it explicitly.
+func isReviewComplete(clusters: [ReviewCluster], isDone: (ReviewCluster) -> Bool) -> Bool {
+    !clusters.isEmpty && clusters.allSatisfy(isDone)
 }

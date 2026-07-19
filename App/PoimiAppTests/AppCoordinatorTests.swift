@@ -165,6 +165,30 @@ struct AppCoordinatorTests {
         #expect(coord.path == [.albumOverview(id), .review(id, nil)])   // … grid stays exactly where it was
     }
 
+    @Test("finishToExport dismisses the viewer sheet AND pushes export in one transition (#187)")
+    func finishToExportFromViewer() {
+        let coord = coordinator(.authorized)
+        let id = UUID()
+        coord.openProject(id)
+        coord.openReview(id)
+        coord.openPhoto("asset/7")     // the end-of-set card fires from the viewer sheet, over the grid
+        coord.finishToExport()
+        #expect(coord.presentedPhotoID == nil)     // sheet dropped BEFORE the push (no viewer left over export)
+        #expect(coord.path.last == .export(id))    // export pushed for the active album, in one call
+        #expect(coord.path == [.albumOverview(id), .review(id, nil), .export(id)])
+    }
+
+    @Test("finishToExport from the fully-reviewed grid (no viewer open) still pushes export (#187)")
+    func finishToExportFromGrid() {
+        let coord = coordinator(.authorized)
+        let id = UUID()
+        coord.openProject(id)
+        coord.openReview(id)
+        coord.finishToExport()
+        #expect(coord.presentedPhotoID == nil)
+        #expect(coord.path.last == .export(id))
+    }
+
     @Test("pop leaves an open viewer alone; popToRoot dismisses it (#36)")
     func popVsPopToRootWithOpenViewer() {
         let coord = coordinator(.authorized)
@@ -246,11 +270,21 @@ struct AppCoordinatorTests {
         coord.reviewDayByID = ["a": .day(year: 2025, month: 7, day: 5)]
         coord.reviewAssetsByID = ["a": AssetRef(id: "a", captureDate: Date(timeIntervalSince1970: 0),
                                                 pixelSize: PixelSize(width: 4032, height: 3024))]
+        coord.reviewIsReExport = true   // a previously-exported album published "Update in Photos" (#187)
         #expect(coord.reviewAssetsByID["a"]?.pixelSize.width == 4032)
         // Switching albums must clear ALL of it — no stale metadata / labels bleed into the next album.
         coord.openProject(UUID())
         #expect(coord.reviewAssetsByID.isEmpty)
         #expect(coord.reviewDayByID.isEmpty)
         #expect(coord.reviewOrderedIDs.isEmpty)
+        #expect(!coord.reviewIsReExport)   // else a fresh album's finish would read the stale "Update in Photos"
+    }
+
+    @Test("finishToExport is a no-op with no active album (#187)")
+    func finishToExportNoActiveAlbum() {
+        let coord = coordinator(.authorized)
+        coord.finishToExport()
+        #expect(coord.path.isEmpty)
+        #expect(coord.presentedPhotoID == nil)
     }
 }
