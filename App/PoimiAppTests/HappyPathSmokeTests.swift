@@ -71,6 +71,19 @@ struct HappyPathSmokeTests {
         done.flushNow()
         #expect(firstGroup.days.allSatisfy { project.doneDays.contains($0.description) })
 
+        // 5b — mark EVERY cluster done and prove the album now reads as fully reviewed (#187). This is the
+        // state the forward-path affordances key on; without it the smoke bypassed the navigation, so a
+        // regressed dead-end (advance() silently holding, no route out of review) would stay green.
+        for group in groups where !done.isDone(group) { done.toggle(group) }
+        #expect(isReviewComplete(clusters: groups, isDone: { done.isDone($0) }))
+
+        // 5c — the forward path: from the review grid (where the fully-reviewed affordance lives), the ONE
+        // coordinator transition the UI fires routes to export. Assert the whole path — review is no longer
+        // a dead-end — before running the export below.
+        coordinator.openReview(project.id)
+        coordinator.finishToExport()
+        #expect(coordinator.path == [.albumOverview(project.id), .review(project.id, nil), .export(project.id)])
+
         // 6 — export: create-or-find the Photos album and copy the picks in (one-way, D31).
         selection.flushNow()
         await export.run(project: project, picks: selection.selected)

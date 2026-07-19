@@ -186,15 +186,18 @@ struct PhotoViewerView: View {
     }
 
     /// The end-of-set card (#180): shown after Pick/Next past the LAST photo, instead of a dead tap. Names
-    /// the finish, shows the tally, and offers "Back to grid" (where Export/finalize live) — the richer
-    /// "mark album done" affordance is #179's. A full-screen scrim blocks the controls behind it.
+    /// the finish, shows the tally, and offers the **forward path** out of review (#187): a primary
+    /// "Save to Photos" / "Update in Photos" (re-export-aware via #185's label), then Keep reviewing / Back
+    /// to grid. A full-screen scrim blocks the controls behind it; the card is a11y-modal.
     @ViewBuilder
     private var endOfSetCard: some View {
         if endReached {
             VStack(spacing: 14) {
-                Image(systemName: "flag.checkered")
-                    .font(.system(size: 40))
-                    .foregroundStyle(Color.accentColor)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundStyle(Color.onAccent)
+                    .frame(width: 72, height: 72)
+                    .background(Circle().fill(Color.accentColor))   // gold "reviewed everything" mark
                 Text("You’ve reached the end")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.white)
@@ -203,12 +206,18 @@ struct PhotoViewerView: View {
                     .foregroundStyle(.white.opacity(0.7))
                     .monospacedDigit()
                 VStack(spacing: 10) {
-                    Button { coordinator.dismissPhoto() } label: {
-                        Text("Back to grid").frame(maxWidth: .infinity)
+                    Button { coordinator.finishToExport() } label: {
+                        Text(finishActionLabel(isReExport: coordinator.reviewIsReExport)).frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glassProminent).tint(Color.accentColor).foregroundStyle(Color.onAccent)
+                    .disabled(selection.progress.picked == 0)   // nothing to save with zero picks
+                    .accessibilityIdentifier("endOfSetFinishButton")
                     Button("Keep reviewing") { endReached = false }
                         .buttonStyle(.glass).foregroundStyle(.white)
+                    Button("Back to grid") { coordinator.dismissPhoto() }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .padding(.top, 2)
                 }
                 .padding(.top, 6)
             }
