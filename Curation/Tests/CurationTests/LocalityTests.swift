@@ -51,4 +51,32 @@ struct LocalityTests {
                             noLocationIDs: ["a0", "a1"]) == .unknown)
         #expect(Locality.of(clusterAssetIDs: [], homeAssetIDs: [], noLocationIDs: []) == .unknown)
     }
+
+    @Test("exactly at the coverage floor still asserts (the >= boundary, not .unknown)")
+    func coverageFloorBoundary() {
+        let ids20 = (0..<20).map { "a\($0)" }
+        // 7 of 20 located = 0.35 exactly; all 7 at home → .mostlyHome (not gated out)
+        #expect(Locality.of(clusterAssetIDs: ids20,
+                            homeAssetIDs: Set(ids20.prefix(7)),
+                            noLocationIDs: Set(ids20.suffix(13))) == .mostlyHome)
+    }
+
+    @Test("homeFraction exactly at each threshold is inclusive (0.6 → home, 0.4 → away)")
+    func thresholdBoundaries() {
+        let five = (0..<5).map { "a\($0)" }   // all located
+        // 3/5 == 0.6 → .mostlyHome (>= boundary)
+        #expect(Locality.of(clusterAssetIDs: five, homeAssetIDs: ["a0", "a1", "a2"],
+                            noLocationIDs: []) == .mostlyHome)
+        // 2/5 == 0.4 == 1 - 0.6 → .mostlyAway (<= boundary, incl. the float subtraction)
+        #expect(Locality.of(clusterAssetIDs: five, homeAssetIDs: ["a0", "a1"],
+                            noLocationIDs: []) == .mostlyAway)
+    }
+
+    @Test("away = located-and-not-home, regardless of how many away places; all-home is .mostlyHome")
+    func awaySemanticsAndExtremes() {
+        // All located, none at home (they may span several away places — irrelevant) → .mostlyAway.
+        #expect(Locality.of(clusterAssetIDs: ids, homeAssetIDs: [], noLocationIDs: []) == .mostlyAway)
+        // The all-home extreme (fraction 1.0).
+        #expect(Locality.of(clusterAssetIDs: ids, homeAssetIDs: Set(ids), noLocationIDs: []) == .mostlyHome)
+    }
 }

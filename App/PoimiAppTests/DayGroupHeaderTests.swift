@@ -166,6 +166,14 @@ struct ClusterCaptionTests {
         #expect(c?.text == "Mostly at home")
     }
 
+    @Test("a home-led caption's spoken form is comma-joined, locality-first, middot-free; display order pinned")
+    func homeSpoken() {
+        let c = ClusterCaption.content(for: character(video: 2, favorite: 1), locality: .mostlyHome)
+        #expect(c?.spoken.hasPrefix("Mostly at home, ") == true)
+        #expect(c?.spoken.contains("·") == false)                       // spoken uses commas, never middots
+        #expect(c?.text == "Mostly at home · 2 videos · 1 favorite")    // display: locality, then media
+    }
+
     @Test("mixed / unknown locality adds no line — the caption is media-only, as before")
     func mixedAndUnknownFallBackToMedia() {
         // mixed with media → media-led (no locality)

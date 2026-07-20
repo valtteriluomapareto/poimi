@@ -30,9 +30,11 @@ public enum Locality: String, Sendable, Equatable, Codable {
     /// (both from `PlaceClustering`). Pure; deterministic; no distance math (membership only).
     ///
     /// - `homeAssetIDs`: the home place cluster's members (`PlaceClustering.homeCluster`).
-    /// - `noLocationIDs`: assets with no usable GPS (missing / null-island / DBSCAN noise).
-    /// - `coverageFloor`: minimum fraction of the cluster that must be LOCATED to assert anything (else
-    ///   `.unknown`) — the patchy-GPS guard.
+    /// - `noLocationIDs`: assets with no PLACE — missing/null-island GPS **and** DBSCAN noise (a real
+    ///   coordinate that didn't join any cluster). So "located" here means *in a place cluster*.
+    /// - `coverageFloor`: minimum fraction of the cluster that must be located (clustered) to assert
+    ///   anything, else `.unknown`. This gates not only missing-EXIF days but also a day of scattered
+    ///   single-GPS errands (each shot its own noise point) — conservative by design ("don't guess").
     /// - `homeThreshold`: located-at-home fraction at/above which the day reads `.mostlyHome`; at/below
     ///   `1 - homeThreshold` it reads `.mostlyAway`; between, `.mixed`.
     public static func of(

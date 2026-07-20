@@ -98,6 +98,19 @@ struct TimelineCacheTests {
         #expect(await cache.lookup(projectID: id, fingerprint: "fp-1") == nil)   // removed
     }
 
+    @Test("a real pre-#201 (v1) file — no localityByCluster key — misses gracefully, never crash-decodes")
+    func v1FileMisses() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let cache = TimelineCache(directory: dir)
+        let id = UUID()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // The exact old on-disk envelope after an app update: fingerprint + clusters, no locality map.
+        let v1 = #"{"fingerprint":"fp","clusters":[]}"#
+        try Data(v1.utf8).write(to: dir.appendingPathComponent("\(id.uuidString).json"))
+        #expect(await cache.lookup(projectID: id, fingerprint: "fp") == nil)   // decode fails → benign miss
+    }
+
     @Test("a corrupt or wrong-shape cache file misses gracefully — recompute, never a crash")
     func corruptFileMisses() async throws {
         // The file doc-comment promises a decode failure is a benign miss. A future refactor that
