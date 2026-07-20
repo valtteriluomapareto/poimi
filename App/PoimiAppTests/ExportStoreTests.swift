@@ -52,7 +52,11 @@ struct ExportStoreTests {
         #expect(result.title == "Best of 2025")   // #193: create path returns the requested name
         #expect(await fake.exportedAssetIDs(inAlbum: result.albumID) == picks)   // ACTUAL membership, not just counts
         #expect(project.targetAlbumID == result.albumID)   // the created album id is persisted
-        #expect(project.markedDoneAt != nil)               // finalized → status .done
+        #expect(project.markedDoneAt != nil)               // finalized → status .exported
+        #expect(project.exportedSelectionSnapshot != nil)  // #191: the drift baseline is stamped
+        #expect(project.lastExportedAt != nil)
+        #expect(project.exportedPicks == picks)            // the baseline is the exported PICKS
+        #expect(project.status == .exported)               // exported + in sync
     }
 
     @Test("a video pick exports into the album like a photo (mixed selection, #125)")
@@ -85,6 +89,8 @@ struct ExportStoreTests {
             .fetch(FetchDescriptor<CurationProject>(predicate: #Predicate { $0.id == id })).first
         #expect(refetched?.targetAlbumID != nil)
         #expect(refetched?.markedDoneAt != nil)
+        #expect(refetched?.exportedSelectionSnapshot != nil)   // #191 baseline durable across a fresh context
+        #expect(refetched?.lastExportedAt != nil)
     }
 
     @Test("re-export dupe-guards (counts + membership); a new pick adds only the delta; finalize isn't re-stamped")
@@ -107,8 +113,13 @@ struct ExportStoreTests {
         #expect(project.targetAlbumID == albumID)          // same album, not a new one
         #expect(project.markedDoneAt == finalizedAt)       // finalize records the FIRST export only
 
-        // One more pick → adds exactly the delta; the album holds all four.
+        // Edit picks after export (#191): a NEW pick in the live selection → drift shows "1 to add".
         let grownPicks = picks.union(["fake/quiet/17"])
+        project.selectionSnapshot = try SelectionSnapshot(assetIDs: grownPicks).encoded()
+        #expect(project.status == .editedSinceExport(toAdd: 1))
+
+        // One more pick → adds exactly the delta; the album holds all four; and the re-export catches the
+        // drift baseline up so the album is back in sync.
         await store.run(project: project, picks: grownPicks)
         guard case .done(let grown, _) = store.phase else {
             Issue.record("expected .done, got \(store.phase)"); return
@@ -116,6 +127,9 @@ struct ExportStoreTests {
         #expect(grown.added == 1)
         #expect(grown.total == 4)
         #expect(await fake.exportedAssetIDs(inAlbum: albumID) == grownPicks)
+        #expect(project.markedDoneAt == finalizedAt)       // still the FIRST-export stamp
+        #expect(project.exportedPicks == grownPicks)       // baseline advanced to the re-exported picks
+        #expect(project.status == .exported)               // drift cleared — back in sync
     }
 
     @Test("export to a PRE-EXISTING album (chosen at setup) adds to it, dupe-guarding its current members")

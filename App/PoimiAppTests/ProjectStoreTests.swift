@@ -164,7 +164,7 @@ struct ProjectStoreTests {
         #expect(copy.locationEnabled == false)
     }
 
-    @Test("status derives from persisted state: empty → inProgress → done")
+    @Test("status derives from persisted state: empty → inProgress → exported")
     func statusDerivation() throws {
         let store = try makeStore()
         let project = makeProject(store, title: "A")
@@ -174,13 +174,65 @@ struct ProjectStoreTests {
         project.doneDays = ["2025-07-05"]
         #expect(project.status == .inProgress)
 
-        // Picks (with no done days) also count as in progress.
+        // Picks (with no done days) also count as in progress — reviewed-but-not-exported ≠ exported (#191).
         project.doneDays = []
         project.selectionSnapshot = try SelectionSnapshot(assetIDs: ["x"]).encoded()
         #expect(project.status == .inProgress)
 
-        // Finalized wins regardless.
+        // Exported (finalized, baseline stamped) → exported, in sync.
         project.markedDoneAt = Date(timeIntervalSince1970: 1_750_000_000)
-        #expect(project.status == .done)
+        project.exportedSelectionSnapshot = try SelectionSnapshot(assetIDs: ["x"]).encoded()
+        #expect(project.status == .exported)
+    }
+
+    @Test("post-export drift (#191): add → editedSinceExport; remove alone stays exported; re-export clears")
+    func postExportDrift() throws {
+        let store = try makeStore()
+        let project = makeProject(store, title: "A")
+        // Export baseline: picks {a,b}, finalized.
+        project.selectionSnapshot = try SelectionSnapshot(assetIDs: ["a", "b"]).encoded()
+        project.markedDoneAt = Date(timeIntervalSince1970: 1_750_000_000)
+        project.exportedSelectionSnapshot = try SelectionSnapshot(assetIDs: ["a", "b"]).encoded()
+        #expect(project.status == .exported)
+
+        // Add a pick → edited since export, 1 to add.
+        project.selectionSnapshot = try SelectionSnapshot(assetIDs: ["a", "b", "c"]).encoded()
+        #expect(project.status == .editedSinceExport(toAdd: 1))
+
+        // Remove a pick only (add-only framing) → nothing new to add → still exported.
+        project.selectionSnapshot = try SelectionSnapshot(assetIDs: ["a"]).encoded()
+        #expect(project.status == .exported)
+
+        // Re-export catches the baseline up → back in sync.
+        project.selectionSnapshot = try SelectionSnapshot(assetIDs: ["a", "b", "c"]).encoded()
+        project.exportedSelectionSnapshot = try SelectionSnapshot(assetIDs: ["a", "b", "c"]).encoded()
+        #expect(project.status == .exported)
+    }
+
+    @Test("a pre-#191 exported album (no baseline snapshot) reads as exported, never drifted")
+    func exportedWithoutBaseline() throws {
+        let store = try makeStore()
+        let project = makeProject(store, title: "A")
+        project.selectionSnapshot = try SelectionSnapshot(assetIDs: ["a", "b"]).encoded()
+        project.markedDoneAt = Date(timeIntervalSince1970: 1_750_000_000)
+        // exportedSelectionSnapshot stays nil (exported before the feature) → no baseline ⇒ no drift.
+        #expect(project.status == .exported)
+    }
+
+    @Test("reset clears the export drift baseline + finalize stamps → back to empty (#191)")
+    func resetClearsDriftBaseline() throws {
+        let store = try makeStore()
+        let project = makeProject(store, title: "A")
+        project.selectionSnapshot = try SelectionSnapshot(assetIDs: ["a", "b"]).encoded()
+        project.markedDoneAt = Date(timeIntervalSince1970: 1_750_000_000)
+        project.exportedSelectionSnapshot = try SelectionSnapshot(assetIDs: ["a", "b"]).encoded()
+        project.lastExportedAt = Date(timeIntervalSince1970: 1_750_000_000)
+        #expect(project.status == .exported)
+
+        store.reset(project)
+        #expect(project.status == .empty)
+        #expect(project.markedDoneAt == nil)
+        #expect(project.exportedSelectionSnapshot == nil)
+        #expect(project.lastExportedAt == nil)
     }
 }
