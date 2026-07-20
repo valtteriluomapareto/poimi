@@ -70,18 +70,15 @@ struct TimelineCacheTests {
 
     // MARK: store / lookup
 
-    @Test("store then lookup with the matching fingerprint returns the clusters + locality verbatim")
+    @Test("store then lookup with the matching fingerprint returns the clusters verbatim")
     func storeThenLookupHit() async {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let cache = TimelineCache(directory: dir)
         let id = UUID()
         let clusters = sampleClusters()
-        let locality: [String: Locality] = [clusters[0].id: .mostlyHome]
-        await cache.store(projectID: id, fingerprint: "fp-1", clusters: clusters, localityByCluster: locality)
-        let hit = await cache.lookup(projectID: id, fingerprint: "fp-1")
-        #expect(hit?.clusters == clusters)
-        #expect(hit?.localityByCluster == locality)   // #201: the locality map round-trips too
+        await cache.store(projectID: id, fingerprint: "fp-1", clusters: clusters)
+        #expect(await cache.lookup(projectID: id, fingerprint: "fp-1") == clusters)
     }
 
     @Test("a stale fingerprint, a missing file, and a removed entry all miss (→ recompute)")
@@ -91,24 +88,11 @@ struct TimelineCacheTests {
         let cache = TimelineCache(directory: dir)
         let id = UUID()
         #expect(await cache.lookup(projectID: id, fingerprint: "fp-1") == nil)   // nothing stored yet
-        await cache.store(projectID: id, fingerprint: "fp-1", clusters: sampleClusters(), localityByCluster: [:])
+        await cache.store(projectID: id, fingerprint: "fp-1", clusters: sampleClusters())
         #expect(await cache.lookup(projectID: id, fingerprint: "fp-2") == nil)   // fingerprint changed
         #expect(await cache.lookup(projectID: UUID(), fingerprint: "fp-1") == nil) // different album
         await cache.remove(projectID: id)
         #expect(await cache.lookup(projectID: id, fingerprint: "fp-1") == nil)   // removed
-    }
-
-    @Test("a real pre-#201 (v1) file — no localityByCluster key — misses gracefully, never crash-decodes")
-    func v1FileMisses() async throws {
-        let dir = tempDir()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let cache = TimelineCache(directory: dir)
-        let id = UUID()
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        // The exact old on-disk envelope after an app update: fingerprint + clusters, no locality map.
-        let v1 = #"{"fingerprint":"fp","clusters":[]}"#
-        try Data(v1.utf8).write(to: dir.appendingPathComponent("\(id.uuidString).json"))
-        #expect(await cache.lookup(projectID: id, fingerprint: "fp") == nil)   // decode fails → benign miss
     }
 
     @Test("a corrupt or wrong-shape cache file misses gracefully — recompute, never a crash")
