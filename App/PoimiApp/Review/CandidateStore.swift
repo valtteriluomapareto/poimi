@@ -82,6 +82,12 @@ final class CandidateStore {
     /// the label refresh with no live-recompute of the timeline.
     private(set) var tripNames: [String: String] = [:]
 
+    /// Per-date-cluster locality (#201) — `cluster.id → .mostlyHome / .mostlyAway` for the everyday days
+    /// confident enough to label (absent ⇒ `.unknown`; the caption falls back to media). Trips excluded
+    /// (their place sentence is the personality). Computed with the clusters + cached alongside them, so
+    /// the Overview reads it off-`body`. Empty until a pass settles to `.ready` (and with location off).
+    private(set) var localityByCluster: [String: Locality] = [:]
+
     private let library: any PhotoLibraryProviding
     /// The calendar the timeline buckets by. Injected (default `.current`) so the timezone policy is
     /// explicit and a test can pin it — and so a locale/timezone change is a property of this store.
@@ -168,6 +174,7 @@ final class CandidateStore {
         dayByID = [:]   // clear any prior pass's map (e.g. a retry after .failed)
         assetsByID = [:]
         tripNames = [:]
+        localityByCluster = [:]
         nameTask?.cancel()        // supersede any in-flight name pass from a prior load
         loadGeneration += 1
         let generation = loadGeneration
@@ -194,7 +201,8 @@ final class CandidateStore {
             // Assemble the timeline once, here — the grid renders it directly and never recomputes it
             // (Finding 1). Reuses the cached result for an unchanged photo set, else clusters off-main.
             let clusterStart = Date()
-            let (clusters, fromCache) = await assembleTimeline(for: candidates, project: project)
+            let (clusters, locality, fromCache) = await assembleTimeline(for: candidates, project: project)
+            localityByCluster = locality   // published with the clusters, before `.ready` (#201)
             let clusterMillis = Date().timeIntervalSince(clusterStart) * 1000
             // Per-photo day map for the viewer's label (#36), built from the same candidates +
             // calendar so it agrees with the grouping (a busy day and the viewer read the same day).
@@ -250,19 +258,20 @@ final class CandidateStore {
     ///   produced `candidates` (~1 s) is the remaining per-open floor — the cache doesn't touch it.
     private func assembleTimeline(
         for candidates: [AssetRef], project: CurationProject
-    ) async -> (clusters: [ReviewCluster], fromCache: Bool) {
+    ) async -> (clusters: [ReviewCluster], localityByCluster: [String: Locality], fromCache: Bool) {
         let locationOn = locationEnabled
         let cal = calendar
         let fingerprint = TimelineCache.fingerprint(
             candidates: candidates, locationEnabled: locationOn, calendar: cal)
         if let cached = await timelineCache?.lookup(projectID: project.id, fingerprint: fingerprint) {
-            return (cached, true)
+            return (cached.clusters, cached.localityByCluster, true)
         }
-        let clusters = await Task.detached(priority: .userInitiated) {
-            ReviewTimeline.clusters(for: candidates, calendar: cal, locationEnabled: locationOn)
+        let result = await Task.detached(priority: .userInitiated) {
+            ReviewTimeline.timeline(for: candidates, calendar: cal, locationEnabled: locationOn)
         }.value
-        await timelineCache?.store(projectID: project.id, fingerprint: fingerprint, clusters: clusters)
-        return (clusters, false)
+        await timelineCache?.store(projectID: project.id, fingerprint: fingerprint,
+                                   clusters: result.clusters, localityByCluster: result.localityByCluster)
+        return (result.clusters, result.localityByCluster, false)
     }
 
     /// Reverse-geocode the trip places (§7) and publish `tripNames`. No-ops without naming deps

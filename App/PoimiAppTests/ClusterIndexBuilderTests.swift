@@ -102,6 +102,21 @@ struct ClusterIndexBuilderTests {
         #expect(row.count == 6)
     }
 
+    @Test("a cluster's locality leads its caption when present (#201 wiring)")
+    func localityCaption() throws {
+        let groups = [group("home", 2025, 7, 5, count: 4), group("plain", 2025, 7, 6, count: 4)]
+        let index = ClusterIndexBuilder.build(
+            from: groups, locality: ["home": .mostlyHome], calendar: cal, locale: locale)
+        let rows = index.sections.flatMap(\.rows)
+        // The home day leads with the locality glyph + text.
+        let home = try #require(rows.first { $0.id == "home" })
+        #expect(home.caption?.symbol == "house")
+        #expect(home.caption?.text.hasPrefix("Mostly at home") == true)
+        // A day with no locality entry (and no media) keeps a bare caption-less row.
+        let plain = try #require(rows.first { $0.id == "plain" })
+        #expect(plain.caption == nil)
+    }
+
     @Test("same month in DIFFERENT years are distinct sections, and the header shows the year (#119)")
     func yearBoundarySplitsSections() {
         // Two Februaries a year apart must NOT collapse into one section (keyed on "yyyy-MM"). And since

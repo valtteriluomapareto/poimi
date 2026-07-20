@@ -86,27 +86,47 @@ enum ClusterCaption {
         let spoken: String
     }
 
-    /// - Parameter character: the cluster's distilled facts.
-    static func content(for character: ClusterCharacter) -> Content? {
-        var display: [String] = []
-        var spoken: [String] = []
+    /// - Parameters:
+    ///   - character: the cluster's distilled media facts.
+    ///   - locality: the day's home/away shape (#201). A confident `.mostlyHome` / `.mostlyAway` **leads**
+    ///     the caption (with its own glyph), then the media follows; `.mixed` / `.unknown` (patchy GPS)
+    ///     adds no locality and the caption is media-only, as before.
+    static func content(for character: ClusterCharacter, locality: Locality = .unknown) -> Content? {
+        // Locality lead (#201) — the everyday-day personality a bare date lacks.
+        let localityLead: (symbol: String, text: String)?
+        switch locality {
+        case .mostlyHome:
+            localityLead = ("house", String(localized: "Mostly at home",
+                                             comment: "Cluster caption: a day spent mostly at home"))
+        case .mostlyAway:
+            localityLead = ("figure.walk", String(localized: "Out and about",
+                                                   comment: "Cluster caption: a day spent mostly away from home"))
+        case .mixed, .unknown:
+            localityLead = nil
+        }
+
         // Media highlights — automatic grammar agreement ("1 video" / "2 videos").
+        var media: [String] = []
         if character.videoCount > 0 {
-            let text = String(localized: "^[\(character.videoCount) video](inflect: true)",
-                              comment: "Cluster caption: number of videos in the cluster")
-            display.append(text)
-            spoken.append(text)
+            media.append(String(localized: "^[\(character.videoCount) video](inflect: true)",
+                                comment: "Cluster caption: number of videos in the cluster"))
         }
         if character.favoriteCount > 0 {
-            let text = String(localized: "^[\(character.favoriteCount) favorite](inflect: true)",
-                              comment: "Cluster caption: number of favorite photos in the cluster")
-            display.append(text)
-            spoken.append(text)
+            media.append(String(localized: "^[\(character.favoriteCount) favorite](inflect: true)",
+                                comment: "Cluster caption: number of favorite photos in the cluster"))
         }
-        guard !display.isEmpty else { return nil }
-        // Media-led glyph — there's always a video or a favorite when the caption is non-empty.
+
+        if let lead = localityLead {
+            // Locality leads (its glyph), media follows if present.
+            let parts = [lead.text] + media
+            return Content(symbol: lead.symbol,
+                           text: parts.joined(separator: " · "),
+                           spoken: parts.joined(separator: ", "))
+        }
+        // No confident locality → media-only (unchanged): a video/heart-led line, or nothing.
+        guard !media.isEmpty else { return nil }
         return Content(symbol: character.videoCount > 0 ? "video.fill" : "heart.fill",
-                       text: display.joined(separator: " · "),
-                       spoken: spoken.joined(separator: ", "))
+                       text: media.joined(separator: " · "),
+                       spoken: media.joined(separator: ", "))
     }
 }

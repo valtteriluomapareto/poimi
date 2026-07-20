@@ -58,6 +58,36 @@ struct ReviewTimelineTests {
         #expect(timeline == DayGrouping.groups(adaptiveFor: assets, calendar: cal).map(ReviewCluster.day))
     }
 
+    // MARK: — locality map (#201)
+
+    @Test("clusters(for:) is byte-identical to timeline(for:).clusters (the convenience contract)",
+          arguments: 0..<50)
+    func convenienceMatchesTimeline(seed: Int) {
+        var rng = SeededRNG(seed: UInt64(seed))
+        let assets = field(&rng)
+        #expect(ReviewTimeline.clusters(for: assets, calendar: cal)
+                == ReviewTimeline.timeline(for: assets, calendar: cal).clusters)
+    }
+
+    @Test("timeline() labels home-heavy date clusters .mostlyHome, excludes trips, empty when location off")
+    func timelineLocality() {
+        // Home at Helsinki on most days; a 2-day Rome run becomes a trip (away).
+        let home = place("home", Self.helsinki.lat, Self.helsinki.lon,
+                         offsets: Array(0..<40).filter { $0 != 10 && $0 != 11 }, perDay: 3)
+        let trip = place("rome", Self.rome.lat, Self.rome.lon, offsets: [10, 11], perDay: 20)
+        let result = ReviewTimeline.timeline(for: home + trip, minPts: 3, calendar: cal)
+
+        let dateClusters = result.clusters.filter { $0.tripCluster == nil }
+        #expect(!dateClusters.isEmpty)
+        #expect(dateClusters.allSatisfy { result.localityByCluster[$0.id] == .mostlyHome })   // home → labelled
+        let tripIDs = result.clusters.filter { $0.tripCluster != nil }.map(\.id)
+        #expect(!tripIDs.isEmpty)
+        #expect(tripIDs.allSatisfy { result.localityByCluster[$0] == nil })                   // trips excluded
+        // Location off ⇒ no place clustering ⇒ empty map.
+        #expect(ReviewTimeline.timeline(for: home + trip, calendar: cal, locationEnabled: false)
+            .localityByCluster.isEmpty)
+    }
+
     // MARK: — partition (no loss, no dup) of both assets AND day-groups
 
     @Test("every asset + every day-group lands in exactly one cluster; undated never in a trip",
