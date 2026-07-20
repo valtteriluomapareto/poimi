@@ -127,18 +127,18 @@
         }
       }
     },
-    "%@ · %lld of %lld days reviewed": {
+    "%@ · %lld of %lld reviewed": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "new",
-            "value": "%1$@ · %2$lld of %3$lld days reviewed"
+            "value": "%1$@ · %2$lld of %3$lld reviewed"
           }
         },
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ · %lld/%lld päivää tarkistettu"
+            "value": "%@ · %lld/%lld läpikäytynä"
           }
         }
       }
@@ -925,24 +925,24 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jatka tarkistamista"
+            "value": "Jatka läpikäyntiä"
           }
         }
       }
     },
-    "Continue reviewing. %@. %lld of %lld days reviewed.": {
-      "comment": "Continue card a11y: resume day + days reviewed",
+    "Continue reviewing. %@. %lld of %lld reviewed.": {
+      "comment": "Continue card a11y: resume day + clusters reviewed",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "new",
-            "value": "Continue reviewing. %1$@. %2$lld of %3$lld days reviewed."
+            "value": "Continue reviewing. %1$@. %2$lld of %3$lld reviewed."
           }
         },
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jatka tarkistamista. %@. %lld/%lld päivää tarkistettu."
+            "value": "Jatka läpikäyntiä. %@. %lld/%lld läpikäytynä."
           }
         }
       }
