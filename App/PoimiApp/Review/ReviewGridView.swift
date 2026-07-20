@@ -272,20 +272,27 @@ struct ReviewGridView: View {
     private func markDoneAndAdvance(_ cluster: ReviewCluster) {
         let wasDone = done.isDone(cluster)
         done.toggle(cluster)
-        if !wasDone {
-            AccessibilityNotification.Announcement("Marked done").post()
-            advance()
-        }
+        announceDone(wasDone: wasDone)   // announce BOTH directions (mark + un-mark), like the top-bar seal
+        if !wasDone { advance() }
     }
 
     /// Toggle the CURRENT cluster's done-state from the top-bar seal (#202) — a status toggle that stays
-    /// put (unlike `markDoneAndAdvance`, which is the end-cap's "done → next day" flow). Posts a VoiceOver
-    /// announcement; the sensory feedback fires off the done-count change (`decoratedPager`), same as the
+    /// put (unlike `markDoneAndAdvance`, which is the end-cap's "done → next day" flow). Announces for
+    /// VoiceOver; the sensory feedback fires off the done-count change (`decoratedPager`), same as the
     /// end-cap's mark.
     private func toggleDone(_ cluster: ReviewCluster) {
         let wasDone = done.isDone(cluster)
         done.toggle(cluster)
-        AccessibilityNotification.Announcement(wasDone ? "Marked not done" : "Marked done").post()
+        announceDone(wasDone: wasDone)
+    }
+
+    /// The VoiceOver announcement for a done toggle — shared by the end-cap + the top-bar seal so both
+    /// paths (mark AND un-mark) speak, and through the String Catalog (localizable-by-default).
+    private func announceDone(wasDone: Bool) {
+        let phrase = wasDone
+            ? String(localized: "Marked not done", comment: "VoiceOver announcement: a cluster was reopened")
+            : String(localized: "Marked done", comment: "VoiceOver announcement: a cluster was marked reviewed")
+        AccessibilityNotification.Announcement(phrase).post()
     }
 
     /// Advance to the next UNREVIEWED cluster after the current page; else the literal next; else stay
@@ -488,11 +495,12 @@ private struct ClusterEndCap: View {
     @Environment(SelectionStore.self) private var selection
 
     var body: some View {
-        let picked = selection.selected.intersection(cluster.assetIDs).count
+        // Alloc-free pick count (mirrors ClusterListRow.pickedCount) — no throwaway Set per pick.
+        let picked = cluster.assetIDs.reduce(into: 0) { if selection.selected.contains($1) { $0 += 1 } }
         VStack(spacing: 14) {
             seal
             VStack(spacing: 5) {
-                Text(isDone ? "This day is done" : "You've reached the end")
+                Text(doneHeadline)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text("^[\(cluster.count) photo](inflect: true) · \(picked) picked")
@@ -508,6 +516,14 @@ private struct ClusterEndCap: View {
         .frame(maxWidth: .infinity)
         .multilineTextAlignment(.center)
         .padding(.horizontal, 24)
+    }
+
+    /// The headline names the cluster kind honestly: a multi-day trip is "This trip is done", not "This
+    /// day is done" (the mark button + a11y already branch on `isTrip`). The open state is kind-neutral —
+    /// you've reached the end of this cluster's photos either way.
+    private var doneHeadline: LocalizedStringKey {
+        guard isDone else { return "You've reached the end" }
+        return isTrip ? "This trip is done" : "This day is done"
     }
 
     /// The seal echoes the top-bar toggle glyph so "done" reads consistently: an outline seal (open) or a
@@ -552,7 +568,7 @@ private struct ClusterEndCap: View {
         .padding(.top, 2)
         .accessibilityIdentifier("markDoneButton")   // stable id though the label + form change (#43)
         .accessibilityLabel(isDone
-            ? String(localized: "Mark as not done", comment: "End-cap: reopen a done cluster")
+            ? String(localized: "Mark not done", comment: "End-cap: reopen a done cluster")  // matches the visible text
             : (isTrip ? String(localized: "Mark trip done", comment: "End-cap: mark a trip reviewed")
                       : String(localized: "Mark day done", comment: "End-cap: mark a day reviewed")))
         .accessibilityHint(isDone

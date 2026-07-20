@@ -66,6 +66,23 @@ struct ClusterIndexBuilderTests {
         #expect(index.totalClusters == groups.count)
     }
 
+    @Test("orderedRows + orderedClusters stay index-aligned — the #202 resume-bookmark contract")
+    func resumeBookmarkAlignment() {
+        // `ReviewProgress.firstUnreviewedIndex` is computed over `orderedClusters`, but the Overview
+        // subscripts `orderedRows` with that index (`resumeRow = orderedRows[idx]`). They must stay
+        // equal-length + same order, or the bookmark points at the wrong day (or crashes).
+        let groups = [
+            group("a", 2025, 2, 1, count: 3),
+            group("b", 2025, 5, 10, count: 2),
+            undatedGroup(count: 1)
+        ]
+        let index = ClusterIndexBuilder.build(from: groups, calendar: cal, locale: locale)
+        #expect(index.orderedRows.count == index.totalClusters)
+        #expect(index.orderedRows.count == index.orderedClusters.count)
+        #expect(index.orderedRows.map(\.id) == index.orderedClusters.map(\.id))
+        #expect(index.orderedClusters.map(\.id) == groups.map(\.id))
+    }
+
     @Test("a single-cluster album reports totalClusters == 1 (the >1 projection-gate boundary)")
     func singleClusterGate() {
         let index = ClusterIndexBuilder.build(
@@ -378,5 +395,21 @@ struct ChartBucketingTests {
         let ticks = bars.compactMap(\.tick)
         #expect(ticks.count >= 2)
         #expect(ticks.allSatisfy { $0.count == 1 })       // month initials, not numeric dates
+    }
+}
+
+@Suite("ReviewFilter — cluster-list lens predicate (#202)")
+struct ReviewFilterTests {
+    @Test("each lens includes/excludes rows by their done-state")
+    func includesByDoneState() {
+        // .all shows everything
+        #expect(ReviewFilter.all.includes(isDone: true))
+        #expect(ReviewFilter.all.includes(isDone: false))
+        // .toReview keeps only the unreviewed
+        #expect(ReviewFilter.toReview.includes(isDone: false))
+        #expect(!ReviewFilter.toReview.includes(isDone: true))
+        // .done keeps only the finished
+        #expect(ReviewFilter.done.includes(isDone: true))
+        #expect(!ReviewFilter.done.includes(isDone: false))
     }
 }

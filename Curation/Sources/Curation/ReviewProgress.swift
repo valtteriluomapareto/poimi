@@ -24,13 +24,19 @@ public enum ReviewProgress {
         }
     }
 
-    /// The index of the first cluster not yet fully done — the resume/bookmark target, the earliest day
-    /// still needing review. `nil` when every cluster is done (or the album is empty): there's nowhere
-    /// left to resume, so the caller hides the "Continue" affordance. Cluster granularity (a cluster is
-    /// done iff every day it spans is done), matching the grid's `initialPage` resume choice.
+    /// The index of the first DATED cluster not yet fully done — the resume/bookmark target, the earliest
+    /// day still needing review. `nil` when every dated cluster is done (or the album is empty): there's
+    /// nowhere left to resume, so the caller hides the "Continue" affordance. Cluster granularity (a
+    /// cluster is done iff every day it spans is done), matching the grid's `initialPage` resume choice.
+    ///
+    /// The undated bucket is deliberately NOT a resume target: it isn't a real calendar day, so it's also
+    /// excluded from `reviewedDayCount` and the album's total-days denominator. Were it eligible, once
+    /// every dated day was done the card would read "Undated · N of N days reviewed" — claiming
+    /// completion while still inviting you to continue. (The undated bucket stays reachable via the list
+    /// + the "To review" filter; it's just not the bookmark.)
     public static func firstUnreviewedIndex(clusters: [ReviewCluster], doneDays: Set<DayKey>) -> Int? {
         clusters.firstIndex { cluster in
-            !cluster.dayGroups.allSatisfy { Completion.isDone($0, doneDays: doneDays) }
+            !cluster.isUndated && !cluster.dayGroups.allSatisfy { Completion.isDone($0, doneDays: doneDays) }
         }
     }
 }

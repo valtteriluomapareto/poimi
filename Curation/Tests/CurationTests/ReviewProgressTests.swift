@@ -61,6 +61,26 @@ struct ReviewProgressTests {
         #expect(ReviewProgress.firstUnreviewedIndex(clusters: clusters, doneDays: [jul6]) == 0)
     }
 
+    @Test("a partially-done multi-day cluster is still the resume target; fully done → advances past it")
+    func partialMultiDay() {
+        let clusters = [group("trip", days: [jul5, jul6], assets: ["x", "y"]), group("c", days: [jul7])]
+            .map(ReviewCluster.day)
+        // only jul5 done → the multi-day cluster isn't fully done → it's still the resume target (index 0)
+        #expect(ReviewProgress.firstUnreviewedIndex(clusters: clusters, doneDays: [jul5]) == 0)
+        // both its days done → advance past it to c (index 1)
+        #expect(ReviewProgress.firstUnreviewedIndex(clusters: clusters, doneDays: [jul5, jul6]) == 1)
+    }
+
+    @Test("the undated bucket is never a resume target — once every dated day is done, it's nil")
+    func undatedNotAResumeTarget() {
+        let clusters = [group("a", days: [jul5]), group("b", days: [jul6]),
+                        group("u", days: [.undated], assets: ["u"])].map(ReviewCluster.day)
+        // both dated days done, undated still open → nil (no contradiction with "N of N days reviewed")
+        #expect(ReviewProgress.firstUnreviewedIndex(clusters: clusters, doneDays: [jul5, jul6]) == nil)
+        // a dated day still open → that dated day, never the undated bucket
+        #expect(ReviewProgress.firstUnreviewedIndex(clusters: clusters, doneDays: [jul5]) == 1)
+    }
+
     @Test("every cluster done → nil (nowhere to resume)")
     func allDone() {
         let clusters = [group("a", days: [jul5]), group("b", days: [jul6])].map(ReviewCluster.day)
@@ -70,5 +90,15 @@ struct ReviewProgressTests {
     @Test("an empty album → nil")
     func empty() {
         #expect(ReviewProgress.firstUnreviewedIndex(clusters: [], doneDays: []) == nil)
+    }
+
+    @Test("reviewedDayCount never exceeds the album's dated-day total, for any done set")
+    func countNeverExceedsTotal() {
+        let clusters = [group("a", days: [jul5]), group("trip", days: [jul6, jul7], assets: ["x", "y"]),
+                        group("u", days: [.undated], assets: ["u"])].map(ReviewCluster.day)
+        let totalDatedDays = 3   // jul5, jul6, jul7 (undated excluded)
+        for done in [Set<DayKey>(), [jul5], [jul6, jul7], [jul5, jul6, jul7], [jul5, jul6, jul7, .undated]] {
+            #expect(ReviewProgress.reviewedDayCount(clusters: clusters, doneDays: done) <= totalDatedDays)
+        }
     }
 }
