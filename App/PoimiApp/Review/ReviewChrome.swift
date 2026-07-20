@@ -50,7 +50,7 @@ struct ReviewTopBar: View {
             identity
             Spacer(minLength: 8)
             if let onToggleDone {
-                DoneSealToggle(isDone: isDone, isTrip: isTrip, action: onToggleDone)
+                DoneSealToggle(isDone: isDone, action: onToggleDone)
             }
             AlbumPaceReadout(orderedIDs: orderedIDs, showsProjection: showsProjection)
         }
@@ -95,7 +95,6 @@ struct ReviewTopBar: View {
 /// colour alone (styleguide §1 / HIG). A 44pt hit target around the 20pt glyph.
 private struct DoneSealToggle: View {
     let isDone: Bool
-    var isTrip = false
     let action: () -> Void
 
     var body: some View {
@@ -108,13 +107,13 @@ private struct DoneSealToggle: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("topBarDoneSeal")
+        // Kind-neutral (#202): drops the day/trip noun (a cluster may be a run of days).
         .accessibilityLabel(isDone
             ? String(localized: "Marked done", comment: "Top-bar done seal: done state")
-            : (isTrip ? String(localized: "Mark trip done", comment: "Top-bar done seal: mark a trip done")
-                      : String(localized: "Mark day done", comment: "Top-bar done seal: mark a day done")))
+            : String(localized: "Mark done", comment: "Top-bar done seal: mark a cluster reviewed"))
         .accessibilityHint(isDone
-            ? String(localized: "Reopens this cluster for editing", comment: "Top-bar done seal hint when done")
-            : String(localized: "Marks this cluster reviewed", comment: "Top-bar done seal hint when open"))
+            ? String(localized: "Reopens it for editing", comment: "Top-bar done seal hint when done")
+            : String(localized: "Marks it reviewed", comment: "Top-bar done seal hint when open"))
         .accessibilityAddTraits(isDone ? [.isButton, .isSelected] : .isButton)
     }
 }

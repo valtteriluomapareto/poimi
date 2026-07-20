@@ -137,7 +137,6 @@ struct ReviewGridView: View {
                 ClusterPage(
                     cluster: cluster,
                     headerTitle: headerTitle(for: cluster),
-                    isTrip: cluster.tripCluster != nil,
                     columns: columns,
                     spacing: spacing,
                     load: load,
@@ -373,8 +372,6 @@ private struct ClusterPage: View {
     /// The pinned header title — a trip's location sentence (or its date range until the name lands), or
     /// a plain date cluster's date title. Computed by the parent from the resolved trip names.
     let headerTitle: String
-    /// A trip/visit cluster → the done CTA reads "Mark trip done"; a date cluster → "Mark day done".
-    let isTrip: Bool
     let columns: [GridItem]
     let spacing: CGFloat
     let load: (String) async -> UIImage?
@@ -469,7 +466,7 @@ private struct ClusterPage: View {
     /// End-of-cluster affordance (#202): the lighter "end-cap" that reaches you at the END of the
     /// cluster's scroll — reached by scrolling, not a permanent bottom bar (#38). See `ClusterEndCap`.
     @ViewBuilder private func footer(isDone: Bool) -> some View {
-        ClusterEndCap(cluster: cluster, isTrip: isTrip, isDone: isDone, onMarkDone: onMarkDone)
+        ClusterEndCap(cluster: cluster, isDone: isDone, onMarkDone: onMarkDone)
             .padding(.top, 24)
             .padding(.bottom, 28)
     }
@@ -489,7 +486,6 @@ private struct ClusterPage: View {
 /// `markDoneButton` identifier (the #43 XCUITest contract) though the label + form change.
 private struct ClusterEndCap: View {
     let cluster: ReviewCluster
-    let isTrip: Bool
     let isDone: Bool
     let onMarkDone: () -> Void
     @Environment(SelectionStore.self) private var selection
@@ -503,13 +499,16 @@ private struct ClusterEndCap: View {
                 Text(doneHeadline)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
-                Text("^[\(cluster.count) photo](inflect: true) · \(picked) picked")
+                // Two pieces: the count reuses the already-translated inflected "N photo(s)" key; " · N
+                // picked" is count-invariant ("picked" / "poimittu" don't pluralise), so no dual-number
+                // plural to hand-author.
+                (Text("^[\(cluster.count) photo](inflect: true)") + Text(" · \(picked) picked"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
             markButton
-            Text(isDone ? "You can change your picks any time" : "Opens your next day to review")
+            Text(isDone ? "You can change your picks any time" : "Opens the next to review")
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
         }
@@ -518,12 +517,10 @@ private struct ClusterEndCap: View {
         .padding(.horizontal, 24)
     }
 
-    /// The headline names the cluster kind honestly: a multi-day trip is "This trip is done", not "This
-    /// day is done" (the mark button + a11y already branch on `isTrip`). The open state is kind-neutral —
-    /// you've reached the end of this cluster's photos either way.
+    /// Kind-neutral copy (#202): a cluster may be a single day, a folded multi-day run, or a trip, so the
+    /// headline drops the noun rather than mis-calling a run "a day".
     private var doneHeadline: LocalizedStringKey {
-        guard isDone else { return "You've reached the end" }
-        return isTrip ? "This trip is done" : "This day is done"
+        isDone ? "This is done" : "You've reached the end"
     }
 
     /// The seal echoes the top-bar toggle glyph so "done" reads consistently: an outline seal (open) or a
@@ -556,7 +553,7 @@ private struct ClusterEndCap: View {
                     .padding(.vertical, 11)
                     .overlay { Capsule().strokeBorder(Color.secondary.opacity(0.4), lineWidth: 1) }
             } else {
-                Text(isTrip ? "Mark trip done" : "Mark day done")
+                Text("Mark done")
                     .font(.headline)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 26)
@@ -569,11 +566,10 @@ private struct ClusterEndCap: View {
         .accessibilityIdentifier("markDoneButton")   // stable id though the label + form change (#43)
         .accessibilityLabel(isDone
             ? String(localized: "Mark not done", comment: "End-cap: reopen a done cluster")  // matches the visible text
-            : (isTrip ? String(localized: "Mark trip done", comment: "End-cap: mark a trip reviewed")
-                      : String(localized: "Mark day done", comment: "End-cap: mark a day reviewed")))
+            : String(localized: "Mark done", comment: "End-cap: mark a cluster reviewed"))
         .accessibilityHint(isDone
-            ? String(localized: "Reopens this cluster for editing", comment: "End-cap hint when done")
-            : String(localized: "Marks this cluster reviewed and opens the next", comment: "End-cap hint when open"))
+            ? String(localized: "Reopens it for editing", comment: "End-cap hint when done")
+            : String(localized: "Marks it reviewed and opens the next", comment: "End-cap hint when open"))
     }
 }
 

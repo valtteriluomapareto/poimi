@@ -367,7 +367,7 @@ struct AlbumOverviewView: View {
         let allCount = index.totalClusters
         let toReviewCount = allCount - doneClusterCount
         return Menu {
-            Picker("Filter days", selection: $filter) {
+            Picker("Filter", selection: $filter) {
                 Text("To review · \(toReviewCount)").tag(ReviewFilter.toReview)
                 Text("Done · \(doneClusterCount)").tag(ReviewFilter.done)
                 Text("All · \(allCount)").tag(ReviewFilter.all)
@@ -381,7 +381,7 @@ struct AlbumOverviewView: View {
                 .glassChip()
                 .contentShape(Circle())
         }
-        .accessibilityLabel("Filter days")
+        .accessibilityLabel("Filter")
         .accessibilityValue(filter.label)
     }
 
@@ -391,7 +391,7 @@ struct AlbumOverviewView: View {
             Image(systemName: filter == .done ? "tray" : "checkmark.circle")
                 .font(.title)
                 .foregroundStyle(.secondary)
-            Text(filter == .done ? "No days marked done yet" : "Every day is reviewed")
+            Text(filter == .done ? "Nothing marked done yet" : "Everything is reviewed")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -647,7 +647,7 @@ private struct ContinueCard: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(a11yLabel)
-        .accessibilityHint("Opens the next day still needing review")
+        .accessibilityHint("Opens the next still needing review")
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("continueReviewingCard")
     }
