@@ -61,9 +61,31 @@ final class CurationProject {
     var resumeDayKey: String?
     /// Scroll anchor only — not the done-state authority (§13).
     var lastViewedAssetID: String?
-    /// Set at the FIRST export (finalize) → status `.done`. A later re-export leaves it unchanged — it
-    /// records *when finalized*, not the last export time.
+    /// Set at the FIRST export (finalize) → status `.exported`. A later re-export leaves it unchanged — it
+    /// records *when finalized*, not the last export time (that's `lastExportedAt`). Kept named
+    /// `markedDoneAt` deliberately: renaming a stored property would be the first non-additive schema
+    /// change (a staged migration) — only the derived status was renamed `.done` → `.exported` (#191).
     var markedDoneAt: Date?
+
+    /// The picked-asset id set captured at the LAST export — the additions-only drift baseline (#191).
+    /// A versioned `SelectionSnapshot` blob (same shape as `selectionSnapshot`) of the user's PICKS at
+    /// export time (not the live-resolved subset export writes, so an unresolvable pick never shows
+    /// permanent drift). `nil` until the first export; stamped on EVERY export (unlike `markedDoneAt`,
+    /// first-only) so drift clears after a re-export. Additive optional → SwiftData AUTOMATIC lightweight
+    /// migration (the `locationEnabled` pattern).
+    var exportedSelectionSnapshot: Data?
+
+    /// How many photos the LAST export left in the Photos album (`ExportResult.total`) — the HONEST
+    /// "N in Photos" count. Resolved assets only, so a pick that couldn't be added (deleted/offline)
+    /// isn't counted (unlike the pick-set baseline `exportedSelectionSnapshot`) — the album row can't
+    /// overstate what's actually in Photos (#191 review). Additive optional → lightweight migration.
+    /// Stamped every export, cleared on reset. `nil` for a pre-#191 export (falls back to the pick count).
+    var exportedPhotoCount: Int?
+
+    /// When the album was LAST exported — distinct from `markedDoneAt` (first finalized). Additive
+    /// optional → lightweight migration. Stamped every export, cleared on reset. Staged for the deferred
+    /// Overview drift hint (#191 follow-up); **not yet displayed**.
+    var lastExportedAt: Date?
 
     var createdAt: Date
     var lastOpenedAt: Date
@@ -85,6 +107,9 @@ final class CurationProject {
         resumeDayKey: String? = nil,
         lastViewedAssetID: String? = nil,
         markedDoneAt: Date? = nil,
+        exportedSelectionSnapshot: Data? = nil,
+        exportedPhotoCount: Int? = nil,
+        lastExportedAt: Date? = nil,
         createdAt: Date,
         lastOpenedAt: Date
     ) {
@@ -104,6 +129,9 @@ final class CurationProject {
         self.resumeDayKey = resumeDayKey
         self.lastViewedAssetID = lastViewedAssetID
         self.markedDoneAt = markedDoneAt
+        self.exportedSelectionSnapshot = exportedSelectionSnapshot
+        self.exportedPhotoCount = exportedPhotoCount
+        self.lastExportedAt = lastExportedAt
         self.createdAt = createdAt
         self.lastOpenedAt = lastOpenedAt
     }
@@ -113,29 +141,50 @@ final class CurationProject {
 /// of truth). `ProjectStore` and the album-library UI render from this.
 enum ProjectStatus: Sendable, Equatable {
     case empty          // no picks, no days marked done
-    case inProgress     // has picks and/or marked days, not finalized
-    case done           // user finalized (markedDoneAt set)
+    case inProgress     // has picks and/or marked days, not yet exported
+    case exported       // exported ≥1× and in sync with that export (#191; add-only → removals stay in sync)
+    case editedSinceExport(toAdd: Int)   // exported, then N new picks added, not yet in Photos (#191)
 }
 
 extension CurationProject {
-    /// The picked-asset count from the *persisted* snapshot. For the active project the live
-    /// count lives in `SelectionStore`; this is the durable value the library list reads.
-    /// Decodes the blob on each access — the album row calls it once per render (deriving status via
-    /// `status(forPickedCount:)`), so it's a single decode per row; fine at v1 scale. If snapshots
-    /// grow large, store a cheap `pickedCount: Int` column alongside the blob.
-    var persistedPickedCount: Int {
-        SelectionSnapshot.decode(selectionSnapshot).assetIDs.count
+    /// The picked-asset id SET from the *persisted* snapshot. For the active project the live set lives
+    /// in `SelectionStore`; this is the durable value the library list reads. Decodes the blob on each
+    /// access — the album row calls it once per render (deriving status), so it's a single decode per row;
+    /// fine at v1 scale.
+    var persistedPicks: Set<String> {
+        SelectionSnapshot.decode(selectionSnapshot).assetIDs
     }
 
-    /// Derived lifecycle status from an **already-decoded** picked count — lets a caller that
-    /// already has the count (the album row decodes the snapshot once per render) avoid decoding
-    /// the blob a second time. `markedDoneAt` wins; otherwise any picks or done-days mean in-progress.
-    func status(forPickedCount picked: Int) -> ProjectStatus {
-        if markedDoneAt != nil { return .done }
-        if picked > 0 || !doneDays.isEmpty { return .inProgress }
+    /// The picked count from the persisted snapshot (`persistedPicks.count`).
+    var persistedPickedCount: Int { persistedPicks.count }
+
+    /// The picks captured at the last export — the additions-only drift baseline (#191); `nil` if never
+    /// exported, or a pre-#191 export that predates the baseline.
+    var exportedPicks: Set<String>? {
+        exportedSelectionSnapshot.map { SelectionSnapshot.decode($0).assetIDs }
+    }
+
+    /// Derived lifecycle status (§12). Decodes the snapshot once via `persistedPicks`.
+    var status: ProjectStatus { status(currentPicks: persistedPicks) }
+
+    /// Derived lifecycle status from the current picks (decodes the export baseline itself).
+    func status(currentPicks: Set<String>) -> ProjectStatus {
+        status(currentPicks: currentPicks, exported: exportedPicks)
+    }
+
+    /// Derived lifecycle status (§12) from the current picks + an ALREADY-DECODED export baseline — so
+    /// the album row decodes each blob once per render (the no-heavy-work-in-body convention). `markedDoneAt`
+    /// is the "exported at least once" truth (kept for its stored name); the additions-only drift (#191)
+    /// then splits exported into in-sync vs edited-since-export. No USABLE baseline — a pre-#191 export
+    /// (`nil`) or a corrupt blob that decoded empty — reads as plain `.exported`: no baseline ⇒ don't cry
+    /// drift (mirrors the DoneStore reconcile's "no baseline reopens nothing").
+    func status(currentPicks: Set<String>, exported: Set<String>?) -> ProjectStatus {
+        if markedDoneAt != nil {
+            guard let exported, !exported.isEmpty else { return .exported }
+            let toAdd = ExportSync.pendingAdditions(picks: currentPicks, exported: exported)
+            return toAdd > 0 ? .editedSinceExport(toAdd: toAdd) : .exported
+        }
+        if !currentPicks.isEmpty || !doneDays.isEmpty { return .inProgress }
         return .empty
     }
-
-    /// Derived lifecycle status (§12). Decodes the snapshot once via `persistedPickedCount`.
-    var status: ProjectStatus { status(forPickedCount: persistedPickedCount) }
 }

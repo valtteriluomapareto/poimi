@@ -14,30 +14,52 @@ import Curation
 @Suite("AlbumSummary (#32)")
 struct AlbumSummaryTests {
 
-    @Test("status text maps from ProjectStatus")
+    @Test("status text maps from ProjectStatus, including the #191 exported / edited states")
     func statusText() {
-        #expect(AlbumSummary(status: .empty, picked: 0, target: 100).statusText == "Not started")
-        #expect(AlbumSummary(status: .inProgress, picked: 47, target: 100).statusText == "In progress")
-        #expect(AlbumSummary(status: .done, picked: 187, target: 200).statusText == "Done")
+        #expect(AlbumSummary(status: .empty, picked: 0, target: 100, exportedCount: 0).statusText == "Not started")
+        #expect(AlbumSummary(status: .inProgress, picked: 47, target: 100, exportedCount: 0).statusText == "In progress")
+        // Past-tense "Exported", never "Done" (#191).
+        #expect(AlbumSummary(status: .exported, picked: 187, target: 200, exportedCount: 187).statusText == "Exported")
+        #expect(AlbumSummary(status: .editedSinceExport(toAdd: 3), picked: 190, target: 200, exportedCount: 187)
+            .statusText == "Edited since export")
     }
 
-    @Test("progress text is picked / target")
+    @Test("progress text is state-dependent: picked/target, in-Photos count, or to-add count (#191)")
     func progressText() {
-        #expect(AlbumSummary(status: .inProgress, picked: 47, target: 100).progressText == "47 / 100")
-        #expect(AlbumSummary(status: .empty, picked: 0, target: 0).progressText == "0 / 0")
-        #expect(AlbumSummary(status: .done, picked: 200, target: 200).progressText == "200 / 200")
+        #expect(AlbumSummary(status: .inProgress, picked: 47, target: 100, exportedCount: 0).progressText == "47 / 100")
+        #expect(AlbumSummary(status: .empty, picked: 0, target: 0, exportedCount: 0).progressText == "0 / 0")
         // Large numbers are NOT locale-grouped (deliberate — plain Int interpolation).
-        #expect(AlbumSummary(status: .inProgress, picked: 1000, target: 5000).progressText == "1000 / 5000")
+        #expect(AlbumSummary(status: .inProgress, picked: 1000, target: 5000, exportedCount: 0)
+            .progressText == "1000 / 5000")
+        // Exported → "N in Photos" (the exported count); edited → "N to add" (the additions-only delta).
+        #expect(AlbumSummary(status: .exported, picked: 200, target: 200, exportedCount: 200)
+            .progressText == "200 in Photos")
+        #expect(AlbumSummary(status: .editedSinceExport(toAdd: 3), picked: 190, target: 200, exportedCount: 187)
+            .progressText == "3 to add")
     }
 
-    @Test("the project convenience init reads status + counts off the project")
-    func fromProject() throws {
+    @Test("an in-progress project derives In progress + picked/target")
+    func fromProjectInProgress() throws {
         let project = CurationProject(
             title: "x", rangeStart: Date(timeIntervalSince1970: 0), rangeEnd: Date(timeIntervalSince1970: 1),
             targetCount: 150, selectionSnapshot: try SelectionSnapshot(assetIDs: ["a", "b", "c"]).encoded(),
             createdAt: Date(timeIntervalSince1970: 0), lastOpenedAt: Date(timeIntervalSince1970: 0))
-        let summary = AlbumSummary(project: project)
-        #expect(summary.statusText == "In progress")   // has picks, not finalized
-        #expect(summary.progressText == "3 / 150")
+        #expect(project.status == .inProgress)   // has picks, not finalized
+        let summary = AlbumSummary(status: project.status, picked: project.persistedPickedCount,
+                                   target: 150, exportedCount: project.exportedPhotoCount)
+        #expect(summary.detailLine == "In progress · 3 / 150")
+    }
+
+    @Test("exported shows the RECORDED membership; a pre-#191 export shows no count, never live picks (#191)")
+    func exportedInPhotosCount() {
+        // Recorded count (198 landed, 2 didn't resolve) → "198 in Photos", NOT the 3-pick count.
+        let recorded = AlbumSummary(status: .exported, picked: 3, target: 200, exportedCount: 198)
+        #expect(recorded.progressText == "198 in Photos")
+        #expect(recorded.detailLine == "Exported · 198 in Photos")
+        // Pre-#191 export (no recorded count) → just "Exported", never the live pick count (the device bug):
+        // we don't guess what's in Photos from the current picks.
+        let legacy = AlbumSummary(status: .exported, picked: 3, target: 200, exportedCount: nil)
+        #expect(legacy.progressText == "")
+        #expect(legacy.detailLine == "Exported")
     }
 }

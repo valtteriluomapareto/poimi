@@ -65,7 +65,13 @@ final class ExportStore {
             // contents — D31). Save explicitly at the seam (like ProjectStore/DoneStore) so this — the
             // album's only durable "exported" record — can't be lost to a deferred autosave.
             project.targetAlbumID = result.albumID
-            if project.markedDoneAt == nil { project.markedDoneAt = Date.now }
+            if project.markedDoneAt == nil { project.markedDoneAt = Date.now }   // FIRST export only
+            // Stamp the additions-only drift baseline (#191) on EVERY export (incl. the "already up to
+            // date" path — same `.done` phase), so editing picks after this shows "edited since export"
+            // and a re-export clears it. Fingerprint the user's PICKS (`picks`), not the resolved subset.
+            project.exportedSelectionSnapshot = try? SelectionSnapshot(assetIDs: picks).encoded()
+            project.exportedPhotoCount = result.total   // the TRUE album membership — honest "N in Photos"
+            project.lastExportedAt = Date.now
             do {
                 try project.modelContext?.save()
             } catch {

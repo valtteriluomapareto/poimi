@@ -96,11 +96,21 @@ struct HappyPathSmokeTests {
         #expect(result.title == "Best of 2025")       // #193: create path returns the requested name
         #expect(project.targetAlbumID != nil)         // finalized …
         #expect(project.markedDoneAt != nil)          // … and stamped done
-        #expect(project.status == .done)
+        #expect(project.exportedSelectionSnapshot != nil)   // … with the #191 drift baseline
+        #expect(project.status == .exported)          // exported + in sync
 
         // 7 — the album really holds exactly the picks (peek the fake's exported album).
         let inAlbum = await library.exportedAssetIDs(inAlbum: result.albumID)
         #expect(inAlbum == selection.selected)
+
+        // 8 — additions-only drift (#191): de-selecting a pick does NOT count as drift (add-only export
+        // never removes it from the Photos album), so the album stays "Exported" end-to-end. (The
+        // add → editedSinceExport case is covered in ProjectStoreTests.postExportDrift.)
+        if let anyPick = selection.selected.first {
+            selection.toggle(anyPick)
+            selection.flushNow()
+            #expect(project.status == .exported)
+        }
 
         selection.deactivate()
         done.deactivate()

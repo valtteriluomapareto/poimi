@@ -153,17 +153,29 @@ struct DebugShellView: View {
         }
     }
 
-    /// Seed three albums spanning the derived statuses so the `shell` screenshot is a meaningful,
-    /// deterministic library (not an empty state).
+    /// Seed four albums spanning the derived statuses so the `shell` screenshot is a meaningful,
+    /// deterministic library (not an empty state): exported (in sync), edited-since-export (#191),
+    /// in-progress, and not-started.
     private static func seedSampleAlbums(into store: ProjectStore) {
         let start = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01Z
         let end = Date(timeIntervalSince1970: 1_767_225_600)     // 2026-01-01Z
+        let exportedAt = Date(timeIntervalSince1970: 1_750_000_000)
         func snapshot(_ count: Int) -> Data {
             (try? SelectionSnapshot(assetIDs: Set((0..<count).map { "id\($0)" })).encoded()) ?? Data()
         }
-        let done = store.create(title: "Best of 2024", rangeStart: start, rangeEnd: end, targetCount: 200)
-        done.selectionSnapshot = snapshot(187)
-        done.markedDoneAt = Date(timeIntervalSince1970: 1_750_000_000)
+        // Exported + in sync → "Exported · 200 in Photos".
+        let exported = store.create(title: "Best of 2024", rangeStart: start, rangeEnd: end, targetCount: 200)
+        exported.selectionSnapshot = snapshot(200)
+        exported.markedDoneAt = exportedAt
+        exported.exportedSelectionSnapshot = snapshot(200)
+        exported.exportedPhotoCount = 200
+        exported.lastExportedAt = exportedAt
+        // Exported, then 3 more picks (snapshot(203) ⊃ snapshot(200)) → "Edited since export · 3 to add".
+        let edited = store.create(title: "Italy 2024", rangeStart: start, rangeEnd: end, targetCount: 200)
+        edited.selectionSnapshot = snapshot(203)
+        edited.markedDoneAt = exportedAt
+        edited.exportedSelectionSnapshot = snapshot(200)
+        edited.lastExportedAt = exportedAt
         let inProgress = store.create(title: "Summer trip", rangeStart: start, rangeEnd: end, targetCount: 80)
         inProgress.selectionSnapshot = snapshot(34)
         _ = store.create(title: "Best of 2025", rangeStart: start, rangeEnd: end, targetCount: 150)  // not started

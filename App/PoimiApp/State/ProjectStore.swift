@@ -127,14 +127,18 @@ final class ProjectStore {
         return copy
     }
 
-    /// Clear all progress on a project — selection, done-days, resume pointer, finalized flag —
-    /// while keeping its configuration. (Does not delete or alter any Photos album.)
+    /// Clear all progress on a project — selection, done-days, resume pointer, finalized flag, and the
+    /// export drift baseline (#191) — while keeping its configuration. (Does not delete or alter any
+    /// Photos album.)
     func reset(_ project: CurationProject) {
         project.selectionSnapshot = Self.emptySnapshot
         project.doneDays = []
         project.resumeDayKey = nil
         project.lastViewedAssetID = nil
         project.markedDoneAt = nil
+        project.exportedSelectionSnapshot = nil   // drop the drift baseline so status returns to .empty
+        project.exportedPhotoCount = nil
+        project.lastExportedAt = nil
         save("reset")
         refresh()
     }

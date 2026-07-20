@@ -349,6 +349,17 @@
         }
       }
     },
+    "%lld in Photos": {
+      "comment": "Album progress: N photos in the Photos album",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Kuvissa"
+          }
+        }
+      }
+    },
     "%lld left": {
       "localizations": {
         "fi": {
@@ -508,6 +519,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld poimittu"
+          }
+        }
+      }
+    },
+    "%lld to add": {
+      "comment": "Album progress: N new picks not yet in Photos",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld lisättävää"
           }
         }
       }
@@ -1086,6 +1108,17 @@
         }
       }
     },
+    "Edited since export": {
+      "comment": "Album status: picks changed after the last export",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muokattu viennin jälkeen"
+          }
+        }
+      }
+    },
     "Every photo between %@ is a screenshot or in an excluded album. Try fewer exclusions.": {
       "comment": "Empty scan message: %@ is the date range",
       "localizations": {
@@ -1176,6 +1209,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vie"
+          }
+        }
+      }
+    },
+    "Exported": {
+      "comment": "Album status: exported to Photos at least once",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viety"
           }
         }
       }

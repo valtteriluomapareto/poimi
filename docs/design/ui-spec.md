@@ -163,6 +163,15 @@ The review grid is the make-or-break, so it gets the depth above. The rest of th
 resolved + built this phase — is transcribed here concisely (anatomy · key interaction · a11y). Copy
 is **"album", never "yearbook"**; there is no print/export-to-print anywhere.
 
+- **Albums library — post-export status (#191, `4O8`).** Each album row's derived status: **Not started**
+  (grey dashed), **In progress · P / target** (gold half-circle), **Exported · N in Photos** (green check
+  — past-tense fact, *not* a present-tense "in Photos" sync claim), and **Edited since export · N to add**
+  (amber up-arrow — a distinct heads-up tone, distinct from green-done + gold-in-progress). Drift is
+  **additions-only** (v1): "N to add" = current picks not in the set captured at the last export; export
+  is add-only, so a de-selection isn't drift (the photo stays in Photos). Pure derivation off the
+  persisted snapshots (`ExportSync.pendingAdditions`), no clock; the stored `markedDoneAt` keeps its name
+  (only the derived status was renamed `.done` → `.exported`). Deferred: an Overview drift hint near
+  "Update in Photos".
 - **Album overview (#37, cluster index — `3BL`).** The album's landing screen: a **coverage chart**
   (adaptive day/week/month buckets shaded gold by density) over a **month-sectioned list of day-cluster
   rows** (each: date · a **characterful caption** · picked/total · done seal · preview strip). Tapping a
