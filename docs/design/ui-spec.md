@@ -187,14 +187,8 @@ is **"album", never "yearbook"**; there is no print/export-to-print anywhere.
     carry their location sentence, "Week in Salo"). The facts are the pure, string-free
     `Curation.ClusterCharacter` (unit-tested); the phrasing + glyph + a punctuation-free VoiceOver variant
     are `ClusterCaption` (String Catalog). Built once with the index (off `body`).
-    - **Locality lead (#201 level A, built).** A confident everyday day now **leads** its caption with a
-      home/away shape — **"Mostly at home"** (house glyph) / **"Out and about"** (walk glyph) — then the
-      media follows ("Kotona · 3 videos"). It's pure home/away set-math (`Curation.Locality`) over the home
-      cluster + no-location bucket the location subsystem already computes each scan — **no geocoding, no
-      new permission** (D7) — **coverage-gated**: a patchy-GPS day (home photos often lack EXIF GPS) is
-      `.unknown` and falls back to the media caption, never mislabels. Surfaced per date cluster from
-      `ReviewTimeline.timeline(...)` (cached alongside the clusters). **Level B** (named dominant place,
-      "Mostly in Tampere") is a filed follow-up. An earlier time-of-day span was dropped as low-signal.
+    - A more meaningful everyday-cluster descriptor — a **locality "shape"** ("Mostly at home" / a place)
+      — is tracked in **#201**; an earlier time-of-day span ("Morning – Evening") was dropped as low-signal.
   - **Pinned recap bar (persistent pace).** The tally + `~N est.` projection follow you down the list —
     see [pacing.md](pacing.md) "Follow-up".
 - **Photo viewer (#36, Now-Playing card — `2ZC`).** A **`.sheet`**, not a path push — rises from the

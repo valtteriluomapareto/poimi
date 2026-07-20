@@ -24,20 +24,16 @@ actor TimelineCache {
     /// Bump when the stored shape changes (a `ReviewCluster` field add/rename) so stale files miss and
     /// recompute rather than decode into the wrong thing. Folded into the fingerprint, so a bump
     /// invalidates every entry. (Clustering-parameter changes are covered directly — see `fingerprint`.)
-    /// Bumped to 2 for #201: the envelope now also stores the per-date-cluster locality map, so v1 files
-    /// (fingerprinted without it) miss and recompute.
-    static let formatVersion = 2
+    static let formatVersion = 1
 
     private let directory: URL
     private let fileManager: FileManager
 
-    /// The on-disk envelope: the fingerprint the timeline was computed for, the clusters, and the
-    /// per-date-cluster locality map (#201). A stored fingerprint that no longer matches the current
-    /// input ⇒ the photos changed ⇒ recompute.
+    /// The on-disk envelope: the fingerprint the clusters were computed for, and the clusters. A stored
+    /// fingerprint that no longer matches the current input ⇒ the photos changed ⇒ recompute.
     private struct Entry: Codable {
         let fingerprint: String
         let clusters: [ReviewCluster]
-        let localityByCluster: [String: Locality]
     }
 
     /// - Parameter directory: overridable for tests (a temp dir); production uses `Caches/TimelineCache`.
@@ -57,25 +53,22 @@ actor TimelineCache {
         directory.appendingPathComponent("\(projectID.uuidString).json", isDirectory: false)
     }
 
-    /// The cached timeline (clusters + locality map) IFF a file exists for `projectID` AND its stored
-    /// fingerprint matches the current one — otherwise `nil` (a miss: no file, a stale fingerprint, or an
-    /// unreadable/old-format file, all of which just mean "recompute").
-    func lookup(projectID: UUID, fingerprint: String)
-        -> (clusters: [ReviewCluster], localityByCluster: [String: Locality])? {
+    /// The cached clusters IFF a file exists for `projectID` AND its stored fingerprint matches the
+    /// current one — otherwise `nil` (a miss: no file, a stale fingerprint, or an unreadable/old-format
+    /// file, all of which just mean "recompute").
+    func lookup(projectID: UUID, fingerprint: String) -> [ReviewCluster]? {
         guard let data = try? Data(contentsOf: fileURL(for: projectID)),
               let entry = try? JSONDecoder().decode(Entry.self, from: data),
               entry.fingerprint == fingerprint else { return nil }
-        return (entry.clusters, entry.localityByCluster)
+        return entry.clusters
     }
 
-    /// Persist a timeline for `projectID` under `fingerprint` (one file per album, overwritten atomically).
+    /// Persist `clusters` for `projectID` under `fingerprint` (one file per album, overwritten atomically).
     /// Best-effort: a write failure is logged, never fatal — the next open just recomputes.
-    func store(projectID: UUID, fingerprint: String,
-               clusters: [ReviewCluster], localityByCluster: [String: Locality]) {
+    func store(projectID: UUID, fingerprint: String, clusters: [ReviewCluster]) {
         do {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            let data = try JSONEncoder().encode(
-                Entry(fingerprint: fingerprint, clusters: clusters, localityByCluster: localityByCluster))
+            let data = try JSONEncoder().encode(Entry(fingerprint: fingerprint, clusters: clusters))
             try data.write(to: fileURL(for: projectID), options: .atomic)
         } catch {
             Log.location.error("Timeline-cache write failed: \(String(describing: error))")
