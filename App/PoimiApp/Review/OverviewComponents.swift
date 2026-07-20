@@ -44,25 +44,23 @@ struct OverviewThumb: View {
 }
 
 /// A horizontal, scrollable preview of a cluster's photos for the Overview (#35 paged-clusters): a
-/// handful of thumbnails **sampled evenly across the whole cluster** (via `ReviewCluster.evenlySampledIDs`
-/// — a trip samples across its merged days), so a glance conveys the cluster's shape without opening it.
-/// Thumbs are sized so **`visibleThumbs` (6.5)** fill the strip's width — the half-thumb runs off the
-/// right screen edge, an unmistakable "keep scrolling" cue. `LazyHStack` so only on-screen thumbs load;
-/// the rest of the sample load on horizontal scroll, not up front.
+/// handful of thumbnails, **the ones you PICKED first** backfilled with a spread of the rest (#203), so a
+/// glance shows "what I kept from this day" (an untouched day falls back to an even sample). The ids are
+/// **precomputed off `body`** by the parent (`AlbumOverviewView.refreshStrips`) and passed in — a pick
+/// never re-samples here. Thumbs are sized so **`visibleThumbs` (6.5)** fill the strip's width — the
+/// half-thumb runs off the right screen edge, an unmistakable "keep scrolling" cue. `LazyHStack` so only
+/// on-screen thumbs load; the rest reveal on horizontal scroll, not up front.
 struct ClusterStrip: View {
-    let cluster: ReviewCluster
+    /// The preview ids to show, in order (picked-first, precomputed by the parent).
+    let ids: [String]
     var spacing: CGFloat = 6
     /// How many thumbs fill the strip width — the fractional `.5` makes the next one run off the edge.
     var visibleThumbs: CGFloat = 6.5
-    /// Sample up to this many across the cluster; ~6.5 show, the rest reveal on scroll. Bounded so a
-    /// 500-photo busy day previews with a handful of thumbs, not five hundred.
-    var sampleCount: Int = 14
     /// Thumb edge — derived from the measured strip width so `visibleThumbs` fit. A sensible default
     /// until the first geometry read, so the row never lays out at zero height.
     @State private var thumbSize: CGFloat = 52
 
     var body: some View {
-        let ids = cluster.evenlySampledIDs(sampleCount)
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: spacing) {
                 ForEach(ids, id: \.self) { id in

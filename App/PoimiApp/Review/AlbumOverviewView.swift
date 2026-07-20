@@ -54,6 +54,10 @@ struct AlbumOverviewView: View {
     /// O(clusters) `isDone` walks on each pick.
     @State private var resumeRow: ClusterRow?
     @State private var doneClusterCount = 0
+    /// Per-cluster preview-strip ids (#203): the PICKED photos first, backfilled with an even spread of
+    /// unpicked. Computed OFF `body` (`refreshStrips`) on index (re)build + selection change, so a pick
+    /// never re-samples here — the rows just read finished ids.
+    @State private var stripIDsByCluster: [String: [String]] = [:]
     /// The cluster sections after the active lens is applied (empty sections dropped). For `.all` this is
     /// just `index.sections`; the filtered lenses recompute it when the filter or done-state changes.
     @State private var visibleSections: [MonthSection] = []
@@ -134,7 +138,14 @@ struct AlbumOverviewView: View {
             // back from the grid) and on a filter switch. Refresh them off-body then (not per-pick).
             .onChange(of: doneStore.doneDays) { refreshReviewFacts() }
             .onChange(of: filter) { refreshReviewFacts() }
+            // Picks change in the grid; on the pop back the preview strips should show what you kept (#203).
+            // Recomputed OFF `body` here (cheap set-math, once per change), never per row in a `body`.
+            .onChange(of: selection.selected) { refreshStrips() }
     }
+
+    /// The preview-strip length (#203) — how many thumbs a cluster's strip samples (~6.5 show; the rest
+    /// reveal on horizontal scroll).
+    private static let stripCount = 14
 
     /// Set the cluster index and refresh the done-derived facts in the same step, so `body` always reads
     /// consistent `@State` (the index + its filtered sections + the resume/count facts) without doing the
@@ -142,6 +153,21 @@ struct AlbumOverviewView: View {
     private func setIndex(_ newIndex: ClusterIndex?) {
         index = newIndex
         refreshReviewFacts()
+        refreshStrips()
+    }
+
+    /// Recompute each cluster's picked-first preview strip (#203) from the live selection — off `body`,
+    /// so the rows read finished ids and a pick never re-samples the whole list. Called on index (re)build
+    /// and on selection change.
+    private func refreshStrips() {
+        guard let index else { stripIDsByCluster = [:]; return }
+        let selected = selection.selected
+        var strips: [String: [String]] = [:]
+        strips.reserveCapacity(index.orderedClusters.count)
+        for cluster in index.orderedClusters {
+            strips[cluster.id] = cluster.previewStripIDs(selected: selected, count: Self.stripCount)
+        }
+        stripIDsByCluster = strips
     }
 
     /// Recompute the review-progress facts (days reviewed · resume row · done count · filtered sections)
@@ -240,6 +266,7 @@ struct AlbumOverviewView: View {
                         Section {
                             ForEach(section.rows) { row in
                                 ClusterListRow(row: row,
+                                               stripIDs: stripIDsByCluster[row.id] ?? [],
                                                isBookmark: row.id == resumeRow?.id,
                                                // Recede done days only in the mixed timeline; in the
                                                // "Done" lens every row is done, so dimming all of it would
@@ -686,6 +713,8 @@ struct ClusterMonthHeader: View {
 /// of selection. Tapping drills into the review grid at this cluster.
 struct ClusterListRow: View {
     let row: ClusterRow
+    /// The preview-strip ids for this row (#203), precomputed off `body` by the parent (picked-first).
+    let stripIDs: [String]
     /// This row is the resume target — the first day still needing review (#202). Marks it with a gold
     /// bookmark + a faint tint, so your place is visible in the table of contents.
     var isBookmark = false
@@ -771,10 +800,11 @@ struct ClusterListRow: View {
                         .accessibilityHidden(true)
                 }
                 .padding(.horizontal, 20)   // the text row stays inset both sides
-                // The evenly-sampled preview strip — replaces the single cover thumb, so a glance shows
-                // the whole cluster, not one photo (#35 paged-clusters). Leading inset only, so it runs
-                // off the right screen edge (the shelf "keep scrolling" read) instead of stopping short.
-                ClusterStrip(cluster: row.cluster)
+                // The preview strip: the photos you KEPT from this day first, backfilled with a spread of
+                // the rest (#203), falling back to an even sample for an untouched day. Ids are precomputed
+                // off `body` (parent's `refreshStrips`). Leading inset only, so it runs off the right
+                // screen edge (the shelf "keep scrolling" read) instead of stopping short.
+                ClusterStrip(ids: stripIDs)
                     .padding(.leading, 20)
             }
             .padding(.vertical, 10)
