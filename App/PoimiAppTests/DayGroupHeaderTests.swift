@@ -139,6 +139,43 @@ struct ClusterCaptionTests {
         #expect(c?.text.contains("1 video") == true)
         #expect(c?.text.contains("1 videos") == false)
     }
+
+    // MARK: Locality lead (#201)
+
+    @Test("a mostly-home day leads with a house glyph + 'Mostly at home', media following")
+    func homeLeads() {
+        let c = ClusterCaption.content(for: character(video: 2), locality: .mostlyHome)
+        #expect(c?.symbol == "house")
+        #expect(c?.text.hasPrefix("Mostly at home") == true)
+        #expect(c?.text.contains(" · ") == true)          // media follows
+        #expect(c?.text.contains("video") == true)
+    }
+
+    @Test("a mostly-away day leads with a walk glyph + 'Out and about'")
+    func awayLeads() {
+        let c = ClusterCaption.content(for: character(favorite: 1), locality: .mostlyAway)
+        #expect(c?.symbol == "figure.walk")
+        #expect(c?.text.hasPrefix("Out and about") == true)
+        #expect(c?.text.contains("favorite") == true)
+    }
+
+    @Test("a home day with NO media is just the locality (no trailing separator)")
+    func homeOnlyNoMedia() {
+        let c = ClusterCaption.content(for: character(), locality: .mostlyHome)
+        #expect(c?.symbol == "house")
+        #expect(c?.text == "Mostly at home")
+    }
+
+    @Test("mixed / unknown locality adds no line — the caption is media-only, as before")
+    func mixedAndUnknownFallBackToMedia() {
+        // mixed with media → media-led (no locality)
+        let mixed = ClusterCaption.content(for: character(video: 2), locality: .mixed)
+        #expect(mixed?.symbol == "video.fill")
+        #expect(mixed?.text.contains("home") == false)
+        #expect(mixed?.text.contains("about") == false)
+        // unknown with NO media → nil (a bare date), unchanged
+        #expect(ClusterCaption.content(for: character(), locality: .unknown) == nil)
+    }
 }
 
 /// Locks the collapsed-peek "foreground the keeps" ordering (#89 product blocker) so it can't

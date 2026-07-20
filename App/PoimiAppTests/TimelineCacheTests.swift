@@ -70,15 +70,18 @@ struct TimelineCacheTests {
 
     // MARK: store / lookup
 
-    @Test("store then lookup with the matching fingerprint returns the clusters verbatim")
+    @Test("store then lookup with the matching fingerprint returns the clusters + locality verbatim")
     func storeThenLookupHit() async {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let cache = TimelineCache(directory: dir)
         let id = UUID()
         let clusters = sampleClusters()
-        await cache.store(projectID: id, fingerprint: "fp-1", clusters: clusters)
-        #expect(await cache.lookup(projectID: id, fingerprint: "fp-1") == clusters)
+        let locality: [String: Locality] = [clusters[0].id: .mostlyHome]
+        await cache.store(projectID: id, fingerprint: "fp-1", clusters: clusters, localityByCluster: locality)
+        let hit = await cache.lookup(projectID: id, fingerprint: "fp-1")
+        #expect(hit?.clusters == clusters)
+        #expect(hit?.localityByCluster == locality)   // #201: the locality map round-trips too
     }
 
     @Test("a stale fingerprint, a missing file, and a removed entry all miss (→ recompute)")
@@ -88,7 +91,7 @@ struct TimelineCacheTests {
         let cache = TimelineCache(directory: dir)
         let id = UUID()
         #expect(await cache.lookup(projectID: id, fingerprint: "fp-1") == nil)   // nothing stored yet
-        await cache.store(projectID: id, fingerprint: "fp-1", clusters: sampleClusters())
+        await cache.store(projectID: id, fingerprint: "fp-1", clusters: sampleClusters(), localityByCluster: [:])
         #expect(await cache.lookup(projectID: id, fingerprint: "fp-2") == nil)   // fingerprint changed
         #expect(await cache.lookup(projectID: UUID(), fingerprint: "fp-1") == nil) // different album
         await cache.remove(projectID: id)

@@ -194,8 +194,26 @@ public enum ReviewTimeline {
         calendar: Calendar = .current,
         locationEnabled: Bool = true
     ) -> [ReviewCluster] {
+        timeline(for: assets, eps: eps, minPts: minPts, tripGapToleranceDays: tripGapToleranceDays,
+                 calendar: calendar, locationEnabled: locationEnabled).clusters
+    }
+
+    /// The full review timeline: the `clusters` PLUS a per-DATE-cluster **locality** map (#201 level A) —
+    /// `cluster.id → .mostlyHome / .mostlyAway` for the everyday days confident enough to label (only
+    /// those two are stored; a `.mixed`/`.unknown` day is absent, so the caller defaults to `.unknown`
+    /// and falls back to its media caption). Trips are excluded (their place sentence is the personality).
+    /// Locality is cheap set-math over the home cluster + no-location bucket ALREADY computed in this
+    /// pass — no extra clustering. `clusters(for:)` is the thin convenience over this.
+    public static func timeline(
+        for assets: [AssetRef],
+        eps: Double = PlaceClustering.defaultEps,
+        minPts: Int? = nil,
+        tripGapToleranceDays: Int = defaultTripGapToleranceDays,
+        calendar: Calendar = .current,
+        locationEnabled: Bool = true
+    ) -> (clusters: [ReviewCluster], localityByCluster: [String: Locality]) {
         let dayGroups = DayGrouping.groups(adaptiveFor: assets, calendar: calendar)
-        guard locationEnabled else { return dayGroups.map(ReviewCluster.day) }
+        guard locationEnabled else { return (dayGroups.map(ReviewCluster.day), [:]) }
 
         let placeClusters = PlaceClustering.clusters(for: assets, eps: eps, minPts: minPts, calendar: calendar)
         let home = PlaceClustering.homeCluster(placeClusters.clusters, assets: assets, calendar: calendar)
@@ -207,8 +225,22 @@ public enum ReviewTimeline {
         // pass geocodes without re-clustering to recover it (the double-clustering fix).
         let medoidByCluster = Dictionary(placeClusters.clusters.map { ($0.id, $0.medoid) },
                                          uniquingKeysWith: { first, _ in first })
-        return assemble(dayGroups: dayGroups, trips: trips,
-                        medoidByCluster: medoidByCluster, calendar: calendar)
+        let clusters = assemble(dayGroups: dayGroups, trips: trips,
+                                medoidByCluster: medoidByCluster, calendar: calendar)
+
+        // Per-date-cluster locality (#201): home membership vs the no-location bucket, coverage-gated.
+        let homeIDs = Set(home?.assetIDs ?? [])
+        let noLocationIDs = Set(placeClusters.noLocationIDs)
+        var localityByCluster: [String: Locality] = [:]
+        for cluster in clusters where cluster.tripCluster == nil {
+            let locality = Locality.of(clusterAssetIDs: cluster.assetIDs,
+                                       homeAssetIDs: homeIDs, noLocationIDs: noLocationIDs)
+            // Store only the confident, labelable states (keeps the map + cache small).
+            if locality == .mostlyHome || locality == .mostlyAway {
+                localityByCluster[cluster.id] = locality
+            }
+        }
+        return (clusters, localityByCluster)
     }
 
     /// The pure merge: fold whole day-groups into trip clusters, leaving the rest as date clusters.

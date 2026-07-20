@@ -122,14 +122,15 @@ struct AlbumOverviewView: View {
                     await scan()
                 } else if case .ready(let clusters) = store.phase {
                     setIndex(ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames,
-                                                       assets: store.assetsByID))
+                                                       assets: store.assetsByID, locality: store.localityByCluster))
                 }
             }
             // Trip place names resolve asynchronously after `.ready` (§7); rebuild the (cheap) index so
             // the trip titles swap from their date fallback to "Week in …" as the names land.
             .onChange(of: store?.tripNames ?? [:]) { _, names in
                 guard let store, case .ready(let clusters) = store.phase else { return }
-                setIndex(ClusterIndexBuilder.build(from: clusters, tripNames: names, assets: store.assetsByID))
+                setIndex(ClusterIndexBuilder.build(from: clusters, tripNames: names,
+                                                   assets: store.assetsByID, locality: store.localityByCluster))
             }
             // The done-derived facts change on a done toggle (rare on the Overview — mostly on the pop
             // back from the grid) and on a filter switch. Refresh them off-body then (not per-pick).
@@ -179,7 +180,7 @@ struct AlbumOverviewView: View {
         await store.load(project)
         if case .ready(let clusters) = store.phase {
             setIndex(ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames,
-                                               assets: store.assetsByID))
+                                               assets: store.assetsByID, locality: store.localityByCluster))
         }
     }
 
@@ -483,6 +484,7 @@ enum ClusterIndexBuilder {
     static func build(from clusters: [ReviewCluster],
                       tripNames: [String: String] = [:],
                       assets: [String: AssetRef] = [:],
+                      locality: [String: Locality] = [:],
                       calendar: Calendar = .current,
                       locale: Locale = .current) -> ClusterIndex {
         // When the album's dated clusters span more than one calendar year, a bare month header is
@@ -524,7 +526,7 @@ enum ClusterIndexBuilder {
                 } else {
                     let clusterAssets = cluster.assetIDs.compactMap { assets[$0] }
                     let character = ClusterCharacter.of(assets: clusterAssets)
-                    caption = ClusterCaption.content(for: character)
+                    caption = ClusterCaption.content(for: character, locality: locality[cluster.id] ?? .unknown)
                 }
             }
             let row = ClusterRow(id: cluster.id,
