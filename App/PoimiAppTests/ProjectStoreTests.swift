@@ -203,6 +203,11 @@ struct ProjectStoreTests {
         project.selectionSnapshot = try SelectionSnapshot(assetIDs: ["a"]).encoded()
         #expect(project.status == .exported)
 
+        // De-select EVERYTHING after export → still exported (the photos are honestly still in Photos —
+        // add-only), never regressing to .empty (markedDoneAt wins over the empty check).
+        project.selectionSnapshot = try SelectionSnapshot(assetIDs: []).encoded()
+        #expect(project.status == .exported)
+
         // Re-export catches the baseline up → back in sync.
         project.selectionSnapshot = try SelectionSnapshot(assetIDs: ["a", "b", "c"]).encoded()
         project.exportedSelectionSnapshot = try SelectionSnapshot(assetIDs: ["a", "b", "c"]).encoded()

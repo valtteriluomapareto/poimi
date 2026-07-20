@@ -38,14 +38,39 @@ struct AlbumSummaryTests {
             .progressText == "3 to add")
     }
 
-    @Test("the project convenience init reads status + counts off the project")
-    func fromProject() throws {
+    @Test("an in-progress project derives In progress + picked/target")
+    func fromProjectInProgress() throws {
         let project = CurationProject(
             title: "x", rangeStart: Date(timeIntervalSince1970: 0), rangeEnd: Date(timeIntervalSince1970: 1),
             targetCount: 150, selectionSnapshot: try SelectionSnapshot(assetIDs: ["a", "b", "c"]).encoded(),
             createdAt: Date(timeIntervalSince1970: 0), lastOpenedAt: Date(timeIntervalSince1970: 0))
-        let summary = AlbumSummary(project: project)
-        #expect(summary.statusText == "In progress")   // has picks, not finalized
+        #expect(project.status == .inProgress)   // has picks, not finalized
+        let summary = AlbumSummary(status: project.status, picked: project.persistedPickedCount,
+                                   target: 150, exportedCount: project.exportedPhotoCountForDisplay)
+        #expect(summary.statusText == "In progress")
         #expect(summary.progressText == "3 / 150")
+    }
+
+    @Test("the exported in-Photos count is the honest album membership, with a pre-#191 fallback (#191)")
+    func exportedInPhotosCount() throws {
+        // Exported: picks {a,b,c}, but only 198 landed (2 didn't resolve) → exportedPhotoCount reads 198,
+        // NOT the pick count — the row can't overstate what's in Photos.
+        let project = CurationProject(
+            title: "x", rangeStart: Date(timeIntervalSince1970: 0), rangeEnd: Date(timeIntervalSince1970: 1),
+            targetCount: 200, selectionSnapshot: try SelectionSnapshot(assetIDs: ["a", "b", "c"]).encoded(),
+            markedDoneAt: Date(timeIntervalSince1970: 1),
+            exportedSelectionSnapshot: try SelectionSnapshot(assetIDs: ["a", "b", "c"]).encoded(),
+            exportedPhotoCount: 198,
+            createdAt: Date(timeIntervalSince1970: 0), lastOpenedAt: Date(timeIntervalSince1970: 0))
+        #expect(project.status == .exported)
+        #expect(project.exportedPhotoCountForDisplay == 198)
+        let summary = AlbumSummary(status: project.status, picked: project.persistedPickedCount,
+                                   target: 200, exportedCount: project.exportedPhotoCountForDisplay)
+        #expect(summary.statusText == "Exported")
+        #expect(summary.progressText == "198 in Photos")
+
+        // A pre-#191 export (no recorded count) falls back to the current pick count.
+        project.exportedPhotoCount = nil
+        #expect(project.exportedPhotoCountForDisplay == 3)
     }
 }

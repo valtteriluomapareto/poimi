@@ -158,14 +158,15 @@ struct AlbumRow: View {
     let project: CurationProject
 
     var body: some View {
-        // Decode the selection snapshot ONCE per render and derive status + summary from that set,
-        // rather than re-decoding via `project.status` / `AlbumSummary(project:)` (the "no heavy work
-        // in a body" convention; the snapshot is a JSON blob). `exportedPicks` decodes a second (small)
-        // blob only for an exported album — the drift baseline for the "N to add" / "N in Photos" copy.
+        // Decode each JSON blob ONCE per render (the "no heavy work in a body" convention): the current
+        // picks, and — only for an exported album — the drift baseline. Both feed the status via the
+        // pre-decoded overload so it doesn't re-decode. "N in Photos" reads the stored `exportedPhotoCount`
+        // (no decode; only a pre-#191 album with no record re-reads the pick count).
         let picks = project.persistedPicks
-        let status = project.status(currentPicks: picks)
+        let exported = project.exportedPicks
+        let status = project.status(currentPicks: picks, exported: exported)
         let summary = AlbumSummary(status: status, picked: picks.count, target: project.targetCount,
-                                   exportedCount: project.exportedPicks?.count ?? picks.count)
+                                   exportedCount: project.exportedPhotoCountForDisplay)
         return HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color(.systemGray6))
@@ -243,10 +244,5 @@ struct AlbumSummary: Equatable {
             progressText = String(localized: "\(toAdd) to add",
                                   comment: "Album progress: N new picks not yet in Photos")
         }
-    }
-
-    init(project: CurationProject) {
-        self.init(status: project.status, picked: project.persistedPickedCount, target: project.targetCount,
-                  exportedCount: project.exportedPicks?.count ?? project.persistedPickedCount)
     }
 }

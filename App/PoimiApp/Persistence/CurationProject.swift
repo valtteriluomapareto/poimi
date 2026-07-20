@@ -75,8 +75,16 @@ final class CurationProject {
     /// migration (the `locationEnabled` pattern).
     var exportedSelectionSnapshot: Data?
 
-    /// When the album was LAST exported — display-only ("last exported …"), distinct from `markedDoneAt`
-    /// (first finalized). Additive optional → lightweight migration. Stamped every export, cleared on reset.
+    /// How many photos the LAST export left in the Photos album (`ExportResult.total`) — the HONEST
+    /// "N in Photos" count. Resolved assets only, so a pick that couldn't be added (deleted/offline)
+    /// isn't counted (unlike the pick-set baseline `exportedSelectionSnapshot`) — the album row can't
+    /// overstate what's actually in Photos (#191 review). Additive optional → lightweight migration.
+    /// Stamped every export, cleared on reset. `nil` for a pre-#191 export (falls back to the pick count).
+    var exportedPhotoCount: Int?
+
+    /// When the album was LAST exported — distinct from `markedDoneAt` (first finalized). Additive
+    /// optional → lightweight migration. Stamped every export, cleared on reset. Staged for the deferred
+    /// Overview drift hint (#191 follow-up); **not yet displayed**.
     var lastExportedAt: Date?
 
     var createdAt: Date
@@ -100,6 +108,7 @@ final class CurationProject {
         lastViewedAssetID: String? = nil,
         markedDoneAt: Date? = nil,
         exportedSelectionSnapshot: Data? = nil,
+        exportedPhotoCount: Int? = nil,
         lastExportedAt: Date? = nil,
         createdAt: Date,
         lastOpenedAt: Date
@@ -121,6 +130,7 @@ final class CurationProject {
         self.lastViewedAssetID = lastViewedAssetID
         self.markedDoneAt = markedDoneAt
         self.exportedSelectionSnapshot = exportedSelectionSnapshot
+        self.exportedPhotoCount = exportedPhotoCount
         self.lastExportedAt = lastExportedAt
         self.createdAt = createdAt
         self.lastOpenedAt = lastOpenedAt
@@ -154,21 +164,31 @@ extension CurationProject {
         exportedSelectionSnapshot.map { SelectionSnapshot.decode($0).assetIDs }
     }
 
-    /// Derived lifecycle status (§12) from the current picks + the export baseline. `markedDoneAt` is the
-    /// "exported at least once" truth (kept for its stored name); the additions-only drift (#191) then
-    /// splits exported into in-sync vs edited-since-export. A pre-#191 exported album (no baseline
-    /// snapshot) reads as plain `.exported` — no baseline ⇒ don't cry drift (mirrors the DoneStore
-    /// reconcile's "no baseline reopens nothing").
+    /// The count to show for "N in Photos" on an exported album — the true post-export album membership
+    /// (`exportedPhotoCount`), falling back to the current pick count for a pre-#191 export with no record.
+    var exportedPhotoCountForDisplay: Int { exportedPhotoCount ?? persistedPickedCount }
+
+    /// Derived lifecycle status (§12). Decodes the snapshot once via `persistedPicks`.
+    var status: ProjectStatus { status(currentPicks: persistedPicks) }
+
+    /// Derived lifecycle status from the current picks (decodes the export baseline itself).
     func status(currentPicks: Set<String>) -> ProjectStatus {
+        status(currentPicks: currentPicks, exported: exportedPicks)
+    }
+
+    /// Derived lifecycle status (§12) from the current picks + an ALREADY-DECODED export baseline — so
+    /// the album row decodes each blob once per render (the no-heavy-work-in-body convention). `markedDoneAt`
+    /// is the "exported at least once" truth (kept for its stored name); the additions-only drift (#191)
+    /// then splits exported into in-sync vs edited-since-export. No USABLE baseline — a pre-#191 export
+    /// (`nil`) or a corrupt blob that decoded empty — reads as plain `.exported`: no baseline ⇒ don't cry
+    /// drift (mirrors the DoneStore reconcile's "no baseline reopens nothing").
+    func status(currentPicks: Set<String>, exported: Set<String>?) -> ProjectStatus {
         if markedDoneAt != nil {
-            guard let exported = exportedPicks else { return .exported }
+            guard let exported, !exported.isEmpty else { return .exported }
             let toAdd = ExportSync.pendingAdditions(picks: currentPicks, exported: exported)
             return toAdd > 0 ? .editedSinceExport(toAdd: toAdd) : .exported
         }
         if !currentPicks.isEmpty || !doneDays.isEmpty { return .inProgress }
         return .empty
     }
-
-    /// Derived lifecycle status (§12). Decodes the snapshot once via `persistedPicks`.
-    var status: ProjectStatus { status(currentPicks: persistedPicks) }
 }

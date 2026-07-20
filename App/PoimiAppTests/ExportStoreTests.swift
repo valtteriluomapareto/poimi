@@ -56,6 +56,7 @@ struct ExportStoreTests {
         #expect(project.exportedSelectionSnapshot != nil)  // #191: the drift baseline is stamped
         #expect(project.lastExportedAt != nil)
         #expect(project.exportedPicks == picks)            // the baseline is the exported PICKS
+        #expect(project.exportedPhotoCount == result.total)   // honest "in Photos" count = true membership
         #expect(project.status == .exported)               // exported + in sync
     }
 
@@ -89,8 +90,12 @@ struct ExportStoreTests {
             .fetch(FetchDescriptor<CurationProject>(predicate: #Predicate { $0.id == id })).first
         #expect(refetched?.targetAlbumID != nil)
         #expect(refetched?.markedDoneAt != nil)
-        #expect(refetched?.exportedSelectionSnapshot != nil)   // #191 baseline durable across a fresh context
         #expect(refetched?.lastExportedAt != nil)
+        // Durable AND correct across a fresh context: the baseline blob decodes back to the exact picks,
+        // so the refetched project reads in-sync (a corrupt/wrong-shape persist would fail here).
+        #expect(refetched?.exportedPicks == picks)
+        #expect(refetched?.exportedPhotoCount != nil)
+        #expect(refetched?.status(currentPicks: picks) == .exported)
     }
 
     @Test("re-export dupe-guards (counts + membership); a new pick adds only the delta; finalize isn't re-stamped")
@@ -118,6 +123,12 @@ struct ExportStoreTests {
         project.selectionSnapshot = try SelectionSnapshot(assetIDs: grownPicks).encoded()
         #expect(project.status == .editedSinceExport(toAdd: 1))
 
+        // Sentinel to prove `lastExportedAt` is RE-stamped on the next export (vs first-only like
+        // `markedDoneAt`) — deterministic, no wall-clock ordering (the store stamps a non-injectable
+        // `Date.now`, so a strict `>` would be flaky).
+        let sentinel = Date(timeIntervalSince1970: 0)
+        project.lastExportedAt = sentinel
+
         // One more pick → adds exactly the delta; the album holds all four; and the re-export catches the
         // drift baseline up so the album is back in sync.
         await store.run(project: project, picks: grownPicks)
@@ -128,7 +139,10 @@ struct ExportStoreTests {
         #expect(grown.total == 4)
         #expect(await fake.exportedAssetIDs(inAlbum: albumID) == grownPicks)
         #expect(project.markedDoneAt == finalizedAt)       // still the FIRST-export stamp
+        #expect(project.lastExportedAt != finalizedAt)     // …but lastExportedAt IS re-stamped every export
+        #expect(project.lastExportedAt != sentinel)        // (moved off the sentinel)
         #expect(project.exportedPicks == grownPicks)       // baseline advanced to the re-exported picks
+        #expect(project.exportedPhotoCount == grown.total) // in-Photos count advanced too
         #expect(project.status == .exported)               // drift cleared — back in sync
     }
 
@@ -168,6 +182,14 @@ struct ExportStoreTests {
         }
         #expect(result.added == 1)
         #expect(await fake.exportedAssetIDs(inAlbum: result.albumID) == ["fake/busy/2"])
+        // #191 (load-bearing): the drift baseline fingerprints the user's PICKS (BOTH ids), not the
+        // resolved subset — so an unresolvable pick never shows permanent phantom drift. With the live
+        // selection equal to those picks, the album reads in-sync (.exported), never editedSinceExport.
+        let picked: Set<String> = ["fake/busy/2", "not/a/real/id"]
+        #expect(project.exportedPicks == picked)
+        #expect(project.status(currentPicks: picked) == .exported)
+        // …while "N in Photos" is the HONEST resolved count (1), not the 2 picks.
+        #expect(project.exportedPhotoCount == 1)
     }
 
     @Test("a since-deleted target album fails with .albumMissing + offers create-new; recovery succeeds")

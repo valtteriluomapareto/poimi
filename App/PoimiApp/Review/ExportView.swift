@@ -70,6 +70,7 @@ final class ExportStore {
             // date" path — same `.done` phase), so editing picks after this shows "edited since export"
             // and a re-export clears it. Fingerprint the user's PICKS (`picks`), not the resolved subset.
             project.exportedSelectionSnapshot = try? SelectionSnapshot(assetIDs: picks).encoded()
+            project.exportedPhotoCount = result.total   // the TRUE album membership — honest "N in Photos"
             project.lastExportedAt = Date.now
             do {
                 try project.modelContext?.save()

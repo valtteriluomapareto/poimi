@@ -168,6 +168,7 @@ struct DebugShellView: View {
         exported.selectionSnapshot = snapshot(200)
         exported.markedDoneAt = exportedAt
         exported.exportedSelectionSnapshot = snapshot(200)
+        exported.exportedPhotoCount = 200
         exported.lastExportedAt = exportedAt
         // Exported, then 3 more picks (snapshot(203) ⊃ snapshot(200)) → "Edited since export · 3 to add".
         let edited = store.create(title: "Italy 2024", rangeStart: start, rangeEnd: end, targetCount: 200)

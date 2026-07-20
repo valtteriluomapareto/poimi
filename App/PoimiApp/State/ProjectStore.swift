@@ -137,6 +137,7 @@ final class ProjectStore {
         project.lastViewedAssetID = nil
         project.markedDoneAt = nil
         project.exportedSelectionSnapshot = nil   // drop the drift baseline so status returns to .empty
+        project.exportedPhotoCount = nil
         project.lastExportedAt = nil
         save("reset")
         refresh()
