@@ -1565,6 +1565,16 @@
         }
       }
     },
+    "Mostly at home": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kotona"
+          }
+        }
+      }
+    },
     "Name": {
       "localizations": {
         "fi": {
@@ -1771,6 +1781,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avaa tämän päivän läpikäyntiin"
+          }
+        }
+      }
+    },
+    "Out and about": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menossa"
           }
         }
       }
