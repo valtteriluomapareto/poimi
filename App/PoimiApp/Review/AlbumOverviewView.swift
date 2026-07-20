@@ -739,6 +739,10 @@ struct ClusterListRow: View {
                         }
                         subtitle(state: state, picked: picked)
                     }
+                    // Recede a DONE row via its TEXT only (#202) — the photos + the green seal stay fully
+                    // vivid, so a finished day reads as "handled" without the whole row looking disabled
+                    // (dimming the thumbnails greyed them out — device feedback).
+                    .opacity(done && deEmphasizeDone ? 0.6 : 1)
                     Spacer(minLength: 8)
                     // The resume bookmark (#202): the day you'll continue at, visible in the list.
                     if isBookmark {
@@ -771,9 +775,6 @@ struct ClusterListRow: View {
             .padding(.vertical, 10)
             // A faint gold band marks the resume row — the bookmark visible in the table of contents.
             .background(isBookmark ? Color.accentColor.opacity(0.08) : Color.clear)
-            // Done days recede in place (#202): dimmed but never hidden, so revisiting to tweak a pick
-            // still works. Only in the mixed timeline — see `deEmphasizeDone`. Above the contrast floor.
-            .opacity(done && deEmphasizeDone ? 0.6 : 1)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
