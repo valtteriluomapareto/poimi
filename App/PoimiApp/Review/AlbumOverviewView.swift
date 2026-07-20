@@ -52,7 +52,6 @@ struct AlbumOverviewView: View {
     /// toolbar reads `selection.progress`), so these done-derived scans are refreshed event-driven
     /// (`refreshReviewFacts` on a done toggle / filter change / index rebuild) instead of re-running the
     /// O(clusters) `isDone` walks on each pick.
-    @State private var reviewedDays = 0
     @State private var resumeRow: ClusterRow?
     @State private var doneClusterCount = 0
     /// The cluster sections after the active lens is applied (empty sections dropped). For `.all` this is
@@ -150,11 +149,10 @@ struct AlbumOverviewView: View {
     /// change — never per `body` pass (see the `@State` note). Cheap (O(clusters)); no grouping.
     private func refreshReviewFacts() {
         guard let index else {
-            reviewedDays = 0; resumeRow = nil; doneClusterCount = 0; visibleSections = []
+            resumeRow = nil; doneClusterCount = 0; visibleSections = []
             return
         }
         let doneDays = doneStore.doneDays
-        reviewedDays = ReviewProgress.reviewedDayCount(clusters: index.orderedClusters, doneDays: doneDays)
         resumeRow = ReviewProgress.firstUnreviewedIndex(clusters: index.orderedClusters, doneDays: doneDays)
             .map { index.orderedRows[$0] }
         doneClusterCount = index.orderedClusters.reduce(0) { doneStore.isDone($1) ? $0 + 1 : $0 }
@@ -226,13 +224,13 @@ struct AlbumOverviewView: View {
     // MARK: Cluster index
 
     private func clusterIndex(_ index: ClusterIndex) -> some View {
-        // Everything done-derived (the filtered `visibleSections`, `reviewedDays`, `resumeRow`) is read
+        // Everything done-derived (the filtered `visibleSections`, `doneClusterCount`, `resumeRow`) is read
         // from `@State`, refreshed event-driven by `refreshReviewFacts` — so this `body`, which re-runs
         // on every pick (the toolbar reads `selection.progress`), does NO O(clusters) done-scans (#202).
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    header(index, reviewedDays: reviewedDays, resumeRow: resumeRow)
+                    header(index, resumeRow: resumeRow)
                         .id(Self.topAnchorID)   // the target for the recap's tap-to-top
                         // Measure the hero's real height so the recap reveals exactly as the hero scrolls
                         // off — not at a fixed guess that fired while the hero (and its own tally) was
@@ -260,7 +258,18 @@ struct AlbumOverviewView: View {
                     // a bare blank, so the filtered-empty state never reads as a broken list.
                     if visibleSections.isEmpty { filterEmptyNote }
                 }
-                .padding(.bottom, 24)
+                // Extra bottom clearance so the last row/chart isn't hidden behind the floating filter.
+                .padding(.bottom, index.totalClusters > 1 ? 76 : 24)
+            }
+            // The Photos-style Liquid Glass filter (#202) floats at the bottom-left, over the list, with its
+            // lens choices pulling down behind it — moved off the hero so the title spans full width. Only
+            // earns its place with more than one cluster to filter.
+            .overlay(alignment: .bottomLeading) {
+                if index.totalClusters > 1 {
+                    filterMenu(index)
+                        .padding(.leading, 20)
+                        .padding(.bottom, 16)
+                }
             }
             // Reveal the recap only once the WHOLE hero (title + tally + pacing card + chart) has scrolled
             // off, so the compact tally/estimate takes over from the hero's rather than briefly showing
@@ -320,28 +329,23 @@ struct AlbumOverviewView: View {
         }
     }
 
-    private func header(_ index: ClusterIndex, reviewedDays: Int, resumeRow: ClusterRow?) -> some View {
+    private func header(_ index: ClusterIndex, resumeRow: ClusterRow?) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(project.title)
-                        .font(.largeTitle.bold())
-                        .lineLimit(2)
-                    Text("\(index.totalDays) day\(index.totalDays == 1 ? "" : "s") · \(periodLabel)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8)
-                // The Photos-style Liquid Glass filter (#202): the lens choices tuck behind one glass
-                // button, keeping the hero clean. Only earns its place with more than one cluster to filter.
-                if index.totalClusters > 1 { filterMenu(index) }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(project.title)
+                    .font(.largeTitle.bold())
+                    .lineLimit(2)
+                Text("\(index.totalDays) day\(index.totalDays == 1 ? "" : "s") · \(periodLabel)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)   // title spans full width (filter floats now)
             ReviewTally()   // "147 / 200" + bar + "N left" — reads the SelectionStore
-            // The "Continue reviewing" bookmark (#202): resumes at the first day still needing review and
-            // carries the days-reviewed count the pick tally can't. Multi-cluster albums only (a one-day
+            // The "Continue reviewing" bookmark (#202): resumes at the first cluster still needing review and
+            // carries the clusters-reviewed count the pick tally can't. Multi-cluster albums only (a one-day
             // album has nowhere to "continue" to), and only while something is still unreviewed.
             if index.totalClusters > 1, let resume = resumeRow {
-                ContinueCard(resumeTitle: resume.title, reviewedDays: reviewedDays, totalDays: index.totalDays,
+                ContinueCard(resumeTitle: resume.title, reviewed: doneClusterCount, total: index.totalClusters,
                              onContinue: { coordinator.openReview(project.id, day: resume.firstDay) })
             }
             // The projection card + chart earn their place only with more than one cluster to pace/distribute
@@ -594,14 +598,15 @@ enum ReviewFilter: Hashable {
 
 // MARK: - Continue reviewing card (#202)
 
-/// The Overview's resume bookmark: one tap back to the first day still needing review, carrying the
-/// days-reviewed count the pick tally can't ("Fri 14 Feb · 12 of 47 days reviewed"). A bookmark leads it;
+/// The Overview's resume bookmark: one tap back to the first cluster still needing review, carrying the
+/// clusters-reviewed count the pick tally can't ("Fri 14 Feb · 12 of 47 reviewed"). The count is CLUSTERS
+/// (the review unit — one per row, matching the filter's counts), not calendar days. A bookmark leads it;
 /// a gold edge tab + border give it the "your place" read. Pure presentation — the parent supplies the
 /// resolved title + counts + the drill action (which resumes the grid at that day).
 private struct ContinueCard: View {
     let resumeTitle: String
-    let reviewedDays: Int
-    let totalDays: Int
+    let reviewed: Int
+    let total: Int
     let onContinue: () -> Void
 
     var body: some View {
@@ -617,7 +622,7 @@ private struct ContinueCard: View {
                     Text("Continue reviewing")
                         .font(.headline)
                         .foregroundStyle(.primary)
-                    Text("\(resumeTitle) · \(reviewedDays) of \(totalDays) days reviewed")
+                    Text("\(resumeTitle) · \(reviewed) of \(total) reviewed")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)   // a full weekday title ("Wednesday, Jan 15") needs the second line
@@ -653,8 +658,8 @@ private struct ContinueCard: View {
     }
 
     private var a11yLabel: String {
-        String(localized: "Continue reviewing. \(resumeTitle). \(reviewedDays) of \(totalDays) days reviewed.",
-               comment: "Continue card a11y: resume day + days reviewed")
+        String(localized: "Continue reviewing. \(resumeTitle). \(reviewed) of \(total) reviewed.",
+               comment: "Continue card a11y: resume day + clusters reviewed")
     }
 }
 
