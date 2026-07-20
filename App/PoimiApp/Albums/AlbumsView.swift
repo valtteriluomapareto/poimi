@@ -161,12 +161,13 @@ struct AlbumRow: View {
         // Decode each JSON blob ONCE per render (the "no heavy work in a body" convention): the current
         // picks, and — only for an exported album — the drift baseline. Both feed the status via the
         // pre-decoded overload so it doesn't re-decode. "N in Photos" reads the stored `exportedPhotoCount`
-        // (no decode; only a pre-#191 album with no record re-reads the pick count).
+        // (the true membership); it's `nil` for a pre-#191 export → the row shows just "Exported", never
+        // the live pick count (that overstated what's actually in Photos — bug #191).
         let picks = project.persistedPicks
         let exported = project.exportedPicks
         let status = project.status(currentPicks: picks, exported: exported)
         let summary = AlbumSummary(status: status, picked: picks.count, target: project.targetCount,
-                                   exportedCount: project.exportedPhotoCountForDisplay)
+                                   exportedCount: project.exportedPhotoCount)
         return HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color(.systemGray6))
@@ -182,7 +183,7 @@ struct AlbumRow: View {
                         .foregroundStyle(statusTint(status))
                         .font(.subheadline)        // scales with Dynamic Type alongside the text
                         .imageScale(.small)
-                    Text("\(summary.statusText) · \(summary.progressText)")
+                    Text(summary.detailLine)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -192,7 +193,7 @@ struct AlbumRow: View {
         .padding(.vertical, 4)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(project.title), \(summary.statusText), \(summary.progressText)")
+        .accessibilityLabel("\(project.title), \(summary.detailLine)")
     }
 
     // Status colour roles (styleguide §1): exported = green (the "finish"), in-progress = gold
@@ -217,13 +218,18 @@ struct AlbumRow: View {
     }
 }
 
-/// Pure, testable display copy for an album row — the status label + the picked/target progress.
+/// Pure, testable display copy for an album row — the status label + the progress detail.
 /// Kept out of the view so the derivation is unit-tested without rendering.
 struct AlbumSummary: Equatable {
     let statusText: String
+    /// The trailing detail ("47 / 100", "200 in Photos", "3 to add"); **empty** for an exported album
+    /// whose true membership we never recorded (a pre-#191 export) — we don't guess "in Photos" from the
+    /// live pick count (that overstated what's actually in Photos — device bug #191).
     let progressText: String
 
-    init(status: ProjectStatus, picked: Int, target: Int, exportedCount: Int) {
+    /// `exportedCount` is the TRUE post-export album membership when known (`ExportResult.total`), or `nil`
+    /// for a pre-#191 export with no record — in which case an exported row shows just "Exported", no count.
+    init(status: ProjectStatus, picked: Int, target: Int, exportedCount: Int?) {
         switch status {
         case .empty:
             statusText = String(localized: "Not started", comment: "Album status: no picks")
@@ -232,11 +238,12 @@ struct AlbumSummary: Equatable {
             statusText = String(localized: "In progress", comment: "Album status: in progress")
             progressText = "\(picked) / \(target)"
         case .exported:
-            // Past-tense fact, not a present-tense "in Photos" sync claim that goes false on the next
-            // edit (#191). The count is what we exported (best estimate of what's in the Photos album).
+            // Past-tense fact, not a present-tense "in Photos" sync claim that goes false on the next edit
+            // (#191). The count is the true membership recorded at export — never the live pick count.
             statusText = String(localized: "Exported", comment: "Album status: exported to Photos at least once")
-            progressText = String(localized: "\(exportedCount) in Photos",
-                                  comment: "Album progress: N photos in the Photos album")
+            progressText = exportedCount.map {
+                String(localized: "\($0) in Photos", comment: "Album progress: N photos in the Photos album")
+            } ?? ""
         case .editedSinceExport(let toAdd):
             // Additions-only framing (#191(a)): N new picks a re-export would add. Distinct amber tone.
             statusText = String(localized: "Edited since export",
@@ -245,4 +252,7 @@ struct AlbumSummary: Equatable {
                                   comment: "Album progress: N new picks not yet in Photos")
         }
     }
+
+    /// The row's single line: "<status> · <detail>", or just "<status>" when there's no detail.
+    var detailLine: String { progressText.isEmpty ? statusText : "\(statusText) · \(progressText)" }
 }

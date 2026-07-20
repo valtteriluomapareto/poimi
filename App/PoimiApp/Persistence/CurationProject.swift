@@ -164,10 +164,6 @@ extension CurationProject {
         exportedSelectionSnapshot.map { SelectionSnapshot.decode($0).assetIDs }
     }
 
-    /// The count to show for "N in Photos" on an exported album — the true post-export album membership
-    /// (`exportedPhotoCount`), falling back to the current pick count for a pre-#191 export with no record.
-    var exportedPhotoCountForDisplay: Int { exportedPhotoCount ?? persistedPickedCount }
-
     /// Derived lifecycle status (§12). Decodes the snapshot once via `persistedPicks`.
     var status: ProjectStatus { status(currentPicks: persistedPicks) }
 
