@@ -1,16 +1,6 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    " · %lld": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": " · %lld"
-          }
-        }
-      }
-    },
     " / %lld": {
       "localizations": {
         "fi": {
@@ -21,28 +11,22 @@
         }
       }
     },
-    "· %lld": {
+    " · %lld": {
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "· %lld"
+            "value": " · %lld"
           }
         }
       }
     },
-    "%@ · %@": {
+    " · %lld picked": {
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$@ · %2$@"
-          }
-        },
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ · %2$@"
+            "value": " · %lld poimittu"
           }
         }
       }
@@ -83,6 +67,7 @@
     },
     "%@ photos · %@": {
       "comment": "Review header subtitle: photo count (grouped) · date-range period",
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -94,17 +79,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ kuvaa · %2$@"
-          }
-        }
-      }
-    },
-    "%@ photos, hand-picked — one tap at a time.": {
-      "comment": "Completion subtitle: N picked, no days marked done",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ kuvaa, käsin poimittu — yksi napautus kerrallaan."
           }
         }
       }
@@ -126,6 +100,49 @@
         }
       }
     },
+    "%@ photos, hand-picked — one tap at a time.": {
+      "comment": "Completion subtitle: N picked, no days marked done",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kuvaa, käsin poimittu — yksi napautus kerrallaan."
+          }
+        }
+      }
+    },
+    "%@ · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ · %2$@"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ · %lld of %lld days reviewed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ · %2$lld of %3$lld days reviewed"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %lld/%lld päivää tarkistettu"
+          }
+        }
+      }
+    },
     "%@, %@, %@": {
       "localizations": {
         "en": {
@@ -143,6 +160,7 @@
       }
     },
     "%@, photo %lld of %lld": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -176,6 +194,7 @@
       }
     },
     "%@. %lld of %lld photos kept. Open.": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -319,6 +338,17 @@
         }
       }
     },
+    "%lld days in %@": {
+      "comment": "Trip label for a long trip of N days",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld päivää kohteessa %2$@"
+          }
+        }
+      }
+    },
     "%lld left": {
       "localizations": {
         "fi": {
@@ -396,6 +426,17 @@
         }
       }
     },
+    "%lld of %lld photos picked, %lld over target": {
+      "comment": "Tally a11y label when over target",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld / %2$lld kuvaa poimittu, %3$lld yli tavoitteen"
+          }
+        }
+      }
+    },
     "%lld of %lld picked": {
       "localizations": {
         "en": {
@@ -412,6 +453,55 @@
         }
       }
     },
+    "%lld of %lld picked, %lld left": {
+      "comment": "Album progress a11y: picked of target, remaining left",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld / %2$lld poimittu, %3$lld jäljellä"
+          }
+        }
+      }
+    },
+    "%lld of %lld picked, %lld over target": {
+      "comment": "Album progress a11y when over target",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld / %2$lld poimittu, %3$lld yli tavoitteen"
+          }
+        }
+      }
+    },
+    "%lld of %lld picked, target reached": {
+      "comment": "Album progress a11y when the target is reached",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld / %2$lld poimittu, tavoite saavutettu"
+          }
+        }
+      }
+    },
+    "%lld photos · %lld picks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$lld photos · %2$lld picks"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld kuvaa · %lld poimintaa"
+          }
+        }
+      }
+    },
     "%lld picked": {
       "localizations": {
         "fi": {
@@ -422,24 +512,12 @@
         }
       }
     },
-    "^[%lld photo](inflect: true)": {
+    "+%lld over": {
       "localizations": {
         "fi": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld kuva"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld kuvaa"
-                }
-              }
-            }
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%lld yli"
           }
         }
       }
@@ -451,6 +529,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 albumi"
+          }
+        }
+      }
+    },
+    "A goal, not a limit — you can pick past it.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tavoite, ei raja — voit poimia senkin yli."
           }
         }
       }
@@ -508,7 +596,18 @@
         }
       }
     },
+    "Adds it to the album and moves to the next photo.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lisää sen albumiin ja siirtyy seuraavaan kuvaan."
+          }
+        }
+      }
+    },
     "Aim for ^[%lld photo](inflect: true)": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "variations": {
@@ -580,6 +679,36 @@
         }
       }
     },
+    "All": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaikki"
+          }
+        }
+      }
+    },
+    "All photos reviewed": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaikki kuvat tarkistettu"
+          }
+        }
+      }
+    },
+    "All · %lld": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaikki · %lld"
+          }
+        }
+      }
+    },
     "Allow access": {
       "comment": "Onboarding permission primary button",
       "localizations": {
@@ -591,12 +720,77 @@
         }
       }
     },
+    "At this pace, about %lld": {
+      "comment": "Album progress a11y: pace projection",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tällä tahdilla noin %lld"
+          }
+        }
+      }
+    },
+    "At this pace, about %lld photos. Picks reach %lld percent of the album, picking ahead of pace.": {
+      "comment": "Pacing card a11y, ahead of pace",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tällä tahdilla noin %1$lld kuvaa. Poiminnat kattavat %2$lld prosenttia albumista, poimit tahtia edellä."
+          }
+        }
+      }
+    },
+    "At this pace, about %lld photos. Picks reach %lld percent of the album.": {
+      "comment": "Pacing card a11y",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tällä tahdilla noin %1$lld kuvaa. Poiminnat kattavat %2$lld prosenttia albumista."
+          }
+        }
+      }
+    },
+    "At this pace, about %lld, ahead of pace": {
+      "comment": "Album progress a11y: pace projection, ahead of pace",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tällä tahdilla noin %lld, tahtia edellä"
+          }
+        }
+      }
+    },
+    "At this pace: ": {
+      "comment": "Pacing projection label",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tällä tahdilla: "
+          }
+        }
+      }
+    },
     "Back to albums": {
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
             "value": "Takaisin albumeihin"
+          }
+        }
+      }
+    },
+    "Back to grid": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Takaisin ruudukkoon"
           }
         }
       }
@@ -663,11 +857,70 @@
       }
     },
     "Clear": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
             "value": "Tyhjennä"
+          }
+        }
+      }
+    },
+    "Clears all picks and marked-done days. The album’s settings are kept, and your Photos library isn’t touched.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tyhjentää kaikki poiminnat ja valmiiksi merkityt päivät. Albumin asetukset säilytetään, eikä Kuvat-kirjastoosi kosketa."
+          }
+        }
+      }
+    },
+    "Clears all picks and progress. The album’s settings are kept.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tyhjentää kaikki poiminnat ja edistymisen. Albumin asetukset säilytetään."
+          }
+        }
+      }
+    },
+    "Cluster %lld of %lld": {
+      "comment": "Page-indicator a11y: current cluster of total",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ryhmä %1$lld / %2$lld"
+          }
+        }
+      }
+    },
+    "Continue reviewing": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jatka tarkistamista"
+          }
+        }
+      }
+    },
+    "Continue reviewing. %@. %lld of %lld days reviewed.": {
+      "comment": "Continue card a11y: resume day + days reviewed",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Continue reviewing. %1$@. %2$lld of %3$lld days reviewed."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jatka tarkistamista. %@. %lld/%lld päivää tarkistettu."
           }
         }
       }
@@ -678,6 +931,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Albumia ei voitu luoda"
+          }
+        }
+      }
+    },
+    "Couldn’t load your photos": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuvia ei voitu ladata"
           }
         }
       }
@@ -712,6 +975,16 @@
         }
       }
     },
+    "Create an album to hand-pick photos into.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luo albumi, johon poimit kuvasi käsin."
+          }
+        }
+      }
+    },
     "Creating your album…": {
       "localizations": {
         "fi": {
@@ -742,16 +1015,6 @@
         }
       }
     },
-    "Delete “%@”": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poista ”%@”"
-          }
-        }
-      }
-    },
     "Delete album": {
       "localizations": {
         "fi": {
@@ -768,6 +1031,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Poistetaanko tämä albumi?"
+          }
+        }
+      }
+    },
+    "Delete “%@”": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poista ”%@”"
           }
         }
       }
@@ -793,6 +1066,16 @@
         }
       }
     },
+    "Done · %lld": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valmiit · %lld"
+          }
+        }
+      }
+    },
     "Duplicate": {
       "localizations": {
         "fi": {
@@ -810,6 +1093,27 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kaikki kuvat aikavälillä %@ ovat kuvakaappauksia tai poissuljetuissa albumeissa. Kokeile vähentää poissulkemisia."
+          }
+        }
+      }
+    },
+    "Everything is reviewed": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaikki on tarkistettu"
+          }
+        }
+      }
+    },
+    "Everything’s filtered out": {
+      "comment": "Empty scan title: all candidates excluded",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaikki on suodatettu pois"
           }
         }
       }
@@ -854,12 +1158,34 @@
         }
       }
     },
+    "Existing Photos album": {
+      "comment": "Destination: an existing album in the Photos app",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Olemassa oleva Kuvat-albumi"
+          }
+        }
+      }
+    },
     "Export": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
             "value": "Vie"
+          }
+        }
+      }
+    },
+    "Filter": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suodata"
           }
         }
       }
@@ -949,6 +1275,26 @@
         }
       }
     },
+    "Group by trips & places": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ryhmittele matkojen ja paikkojen mukaan"
+          }
+        }
+      }
+    },
+    "Groups a stretch away from home into one trip (“Week in Salo”) with its place name. Turn off to review strictly by date.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yhdistää kotoa poissaolon yhdeksi matkaksi (”Viikko Salossa”) ja nimeää sen paikan mukaan. Poista käytöstä käydäksesi läpi vain päivämäärän mukaan."
+          }
+        }
+      }
+    },
     "Hand-pick your year.": {
       "comment": "Onboarding intro headline",
       "localizations": {
@@ -971,6 +1317,16 @@
         }
       }
     },
+    "Include videos": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sisällytä videot"
+          }
+        }
+      }
+    },
     "It needs full access to browse a date range, show your photos, and save the album you build. Your photos never leave your device — Poimi stores only references, nothing in the cloud, nothing shared.": {
       "comment": "Onboarding permission body",
       "localizations": {
@@ -988,6 +1344,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Siirry kuvaan"
+          }
+        }
+      }
+    },
+    "Keep reviewing": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jatka läpikäyntiä"
           }
         }
       }
@@ -1023,7 +1389,19 @@
         }
       }
     },
+    "Limited access only shows the photos you specifically picked. Poimi needs your whole library to curate by date.": {
+      "comment": "Recovery message: Limited access",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rajattu käyttöoikeus näyttää vain erikseen valitsemasi kuvat. Poimi tarvitsee koko kirjastosi, jotta voit koota albumin päivämäärän mukaan."
+          }
+        }
+      }
+    },
     "Mark as not done": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -1034,6 +1412,7 @@
       }
     },
     "Mark day done": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -1043,7 +1422,96 @@
         }
       }
     },
+    "Mark done": {
+      "comment": "End-cap: mark a cluster reviewed\nTop-bar done seal: mark a cluster reviewed",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitse valmiiksi"
+          }
+        }
+      }
+    },
+    "Mark not done": {
+      "comment": "End-cap: reopen a done cluster",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitse keskeneräiseksi"
+          }
+        }
+      }
+    },
+    "Marked %@ done": {
+      "comment": "Viewer auto-done toast: which single day was marked",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ merkitty valmiiksi"
+          }
+        }
+      }
+    },
+    "Marked done": {
+      "comment": "Top-bar done seal: done state\nViewer auto-done toast (trip / multi-day / undated)\nVoiceOver announcement: a cluster was marked reviewed",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitty valmiiksi"
+          }
+        }
+      }
+    },
+    "Marked not done": {
+      "comment": "VoiceOver announcement: a cluster was reopened",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitty keskeneräiseksi"
+          }
+        }
+      }
+    },
+    "Marks it reviewed": {
+      "comment": "Top-bar done seal hint when open",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitsee sen tarkistetuksi"
+          }
+        }
+      }
+    },
+    "Marks it reviewed and opens the next": {
+      "comment": "End-cap hint when open",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitsee sen tarkistetuksi ja avaa seuraavan"
+          }
+        }
+      }
+    },
+    "Marks this cluster reviewed and opens the next": {
+      "extractionState": "stale",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitsee tämän ryhmän käsitellyksi ja avaa seuraavan"
+          }
+        }
+      }
+    },
     "Marks this day reviewed and opens the next": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -1063,6 +1531,17 @@
         }
       }
     },
+    "New Photos album": {
+      "comment": "Destination: a new album created in Photos on finish",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uusi Kuvat-albumi"
+          }
+        }
+      }
+    },
     "New album": {
       "comment": "Destination: a new album created on export",
       "localizations": {
@@ -1070,6 +1549,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Uusi albumi"
+          }
+        }
+      }
+    },
+    "Next photo": {
+      "extractionState": "stale",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seuraava kuva"
           }
         }
       }
@@ -1169,6 +1659,16 @@
         }
       }
     },
+    "Nothing marked done yet": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitään ei ole vielä merkitty valmiiksi"
+          }
+        }
+      }
+    },
     "Off": {
       "comment": "Photo access status: denied or restricted",
       "localizations": {
@@ -1180,6 +1680,16 @@
         }
       }
     },
+    "Off by default. Turn on to pick from videos too — they’re copied to the album like photos.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pois päältä oletuksena. Ota käyttöön poimiaksesi myös videoita — ne kopioidaan albumiin kuvien tavoin."
+          }
+        }
+      }
+    },
     "Open Settings": {
       "comment": "Recovery primary button: deep-link to Settings",
       "localizations": {
@@ -1187,6 +1697,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avaa Asetukset"
+          }
+        }
+      }
+    },
+    "Opens the next still needing review": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avaa seuraavan tarkistettavan"
+          }
+        }
+      }
+    },
+    "Opens the next to review": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avaa seuraavan tarkistettavan"
           }
         }
       }
@@ -1334,6 +1864,7 @@
       }
     },
     "Pick": {
+      "comment": "Pick control: pick the current photo",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -1343,12 +1874,45 @@
         }
       }
     },
+    "Pick all in %@": {
+      "comment": "Pick-all toggle: pick state",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimi kaikki päivältä %@"
+          }
+        }
+      }
+    },
     "Pick photo": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
             "value": "Poimi kuva"
+          }
+        }
+      }
+    },
+    "Pick photos to save": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimi kuvia tallennettavaksi"
+          }
+        }
+      }
+    },
+    "Pick video": {
+      "extractionState": "stale",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimi video"
           }
         }
       }
@@ -1359,6 +1923,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "Poimittu"
+          }
+        }
+      }
+    },
+    "Picks are copied to this Photos album — your library and originals aren’t changed.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poiminnat kopioidaan tähän Kuvat-albumiin — kirjastoosi ja alkuperäisiin kuviin ei kosketa."
+          }
+        }
+      }
+    },
+    "Picks or removes every photo in this cluster": {
+      "comment": "Pick-all toggle hint",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimii tai poistaa poiminnan kaikista tämän ryhmän kuvista"
+          }
+        }
+      }
+    },
+    "Picks reach %lld%% of the album": {
+      "comment": "Pacing frontier",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poiminnat kattavat %lld %% albumista"
+          }
+        }
+      }
+    },
+    "Picks reach %lld%% of the album · ": {
+      "comment": "Pacing frontier",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poiminnat kattavat %lld %% albumista · "
+          }
+        }
+      }
+    },
+    "Play video": {
+      "comment": "Viewer: play an inline video",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toista video"
+          }
+        }
+      }
+    },
+    "Poimi can’t see your library. Turn on photo access to browse and curate your photos.": {
+      "comment": "Recovery message: denied/restricted",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimi ei näe kirjastoasi. Ota kuvien käyttöoikeus käyttöön, jotta voit selata kuviasi ja koota albumisi."
           }
         }
       }
@@ -1396,7 +2025,51 @@
         }
       }
     },
+    "Previous photo": {
+      "extractionState": "stale",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edellinen kuva"
+          }
+        }
+      }
+    },
+    "Remove all in %@": {
+      "comment": "Pick-all toggle: un-pick state",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poista poiminnat päivältä %@"
+          }
+        }
+      }
+    },
+    "Remove pick": {
+      "comment": "Pick control: un-pick the current photo",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poista poiminta"
+          }
+        }
+      }
+    },
+    "Removes it from the album.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poistaa sen albumista."
+          }
+        }
+      }
+    },
     "Removes the album and its ^[%lld pick](inflect: true). Your Photos library isn't touched.": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "variations": {
@@ -1418,6 +2091,16 @@
         }
       }
     },
+    "Removes the album and its ^[%lld pick](inflect: true). Your Photos library isn’t touched.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poistaa albumin ja sen %lld poimintaa. Kuvat-kirjastoosi ei kosketa."
+          }
+        }
+      }
+    },
     "Removes the album from Poimi. The Photos album it created and your originals are never touched.": {
       "localizations": {
         "fi": {
@@ -1428,7 +2111,30 @@
         }
       }
     },
+    "Reopens it for editing": {
+      "comment": "End-cap hint when done\nTop-bar done seal hint when done",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avaa sen uudelleen muokattavaksi"
+          }
+        }
+      }
+    },
+    "Reopens this cluster for editing": {
+      "extractionState": "stale",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avaa tämän ryhmän uudelleen muokkausta varten"
+          }
+        }
+      }
+    },
     "Reopens this day for editing": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
@@ -1438,12 +2144,12 @@
         }
       }
     },
-    "Reset “%@”": {
+    "Reset clears your picks and progress but keeps the album’s settings. Delete removes this album from Poimi — the Photos album it created and your originals are never touched.": {
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nollaa ”%@”"
+            "value": "Nollaus tyhjentää poiminnat ja edistymisen mutta säilyttää albumin asetukset. Poisto poistaa tämän albumin Poimista — sen luomaan Kuvat-albumiin ja alkuperäisiin kuviisi ei koskaan kosketa."
           }
         }
       }
@@ -1468,6 +2174,61 @@
         }
       }
     },
+    "Reset “%@”": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nollaa ”%@”"
+          }
+        }
+      }
+    },
+    "Resolution unavailable": {
+      "comment": "Viewer info a11y: no resolution",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarkkuus ei saatavilla"
+          }
+        }
+      }
+    },
+    "Resolution, %lld by %lld": {
+      "comment": "Viewer info a11y: resolution",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Resolution, %1$lld by %2$lld"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarkkuus, %lld × %lld"
+          }
+        }
+      }
+    },
+    "Resolution, %lld by %lld, %lld megapixels": {
+      "comment": "Viewer info a11y: resolution + megapixels",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Resolution, %1$lld by %2$lld, %3$lld megapixels"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarkkuus, %lld × %lld, %lld megapikseliä"
+          }
+        }
+      }
+    },
     "Review exclusions": {
       "localizations": {
         "fi": {
@@ -1488,12 +2249,43 @@
         }
       }
     },
+    "Save to Photos": {
+      "comment": "Finish action: first export creates the album in Photos",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tallenna Kuviin"
+          }
+        }
+      }
+    },
+    "Save to Photos album": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tallenna Kuvat-albumiin"
+          }
+        }
+      }
+    },
     "Scanning your photos…": {
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
             "value": "Kartoitetaan kuviasi…"
+          }
+        }
+      }
+    },
+    "Screenshots and photos in these albums won’t appear while you pick.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuvakaappaukset ja näiden albumien kuvat eivät näy poiminnan aikana."
           }
         }
       }
@@ -1508,12 +2300,34 @@
         }
       }
     },
+    "Set Poimi’s Photos access to full access in Settings, then come back.": {
+      "comment": "Recovery footnote: how to restore full access",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anna Poimille täysi kuvien käyttöoikeus Asetuksissa ja palaa sitten takaisin."
+          }
+        }
+      }
+    },
     "Settings": {
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
             "value": "Asetukset"
+          }
+        }
+      }
+    },
+    "Short trip to %@": {
+      "comment": "Trip label for a short (few-day) trip",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lyhyt reissu kohteeseen %@"
           }
         }
       }
@@ -1559,7 +2373,29 @@
         }
       }
     },
+    "Target %lld": {
+      "comment": "Pacing mini-bar: target label",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tavoite %lld"
+          }
+        }
+      }
+    },
+    "Target photo count": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuvien tavoitemäärä"
+          }
+        }
+      }
+    },
     "Target: ^[%lld photo](inflect: true)": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "variations": {
@@ -1592,12 +2428,33 @@
         }
       }
     },
+    "This album is no longer available.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tämä albumi ei ole enää käytettävissä."
+          }
+        }
+      }
+    },
     "This deselects all %lld photos. Your photos aren't deleted — but you'd pick this album again from scratch.": {
+      "extractionState": "stale",
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
             "value": "Tämä poistaa kaikkien %lld kuvan valinnan. Kuviasi ei poisteta — mutta poimisit tämän albumin alusta uudelleen."
+          }
+        }
+      }
+    },
+    "This is done": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tämä on valmis"
           }
         }
       }
@@ -1623,6 +2480,26 @@
         }
       }
     },
+    "To review": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarkistettavat"
+          }
+        }
+      }
+    },
+    "To review · %lld": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarkistettavat · %lld"
+          }
+        }
+      }
+    },
     "Try again": {
       "localizations": {
         "fi": {
@@ -1643,6 +2520,16 @@
         }
       }
     },
+    "Undo": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kumoa"
+          }
+        }
+      }
+    },
     "Untitled album": {
       "comment": "Fallback album name when the user clears the name field",
       "localizations": {
@@ -1650,6 +2537,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nimetön albumi"
+          }
+        }
+      }
+    },
+    "Update in Photos": {
+      "comment": "Finish action: re-export to the album already created in Photos",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Päivitä Kuvissa"
           }
         }
       }
@@ -1674,22 +2572,51 @@
         }
       }
     },
-    "You have no albums to choose from.": {
+    "Video length %@. %@": {
+      "comment": "Viewer info a11y: a video's running time then its resolution",
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sinulla ei ole albumeja valittavaksi."
+            "value": "Videon kesto %1$@. %2$@"
           }
         }
       }
     },
-    "Your album is ready": {
+    "Video, %@, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Video, %1$@, %2$@"
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video, %@, %@"
+          }
+        }
+      }
+    },
+    "Video, %@, %lld of %lld": {
+      "comment": "Viewer a11y: video day, position",
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Albumisi on valmis"
+            "value": "Video, %1$@, %2$lld / %3$lld"
+          }
+        }
+      }
+    },
+    "Video, %lld of %lld": {
+      "comment": "Viewer a11y: video position, no day",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video, %1$lld / %2$lld"
           }
         }
       }
@@ -1705,28 +2632,6 @@
         }
       }
     },
-    "Weekend in %@": {
-      "comment": "Trip label for a 2–3 day trip over a weekend",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Viikonloppu kohteessa %@"
-          }
-        }
-      }
-    },
-    "Short trip to %@": {
-      "comment": "Trip label for a short (few-day) trip",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lyhyt reissu kohteeseen %@"
-          }
-        }
-      }
-    },
     "Week in %@": {
       "comment": "Trip label for a roughly week-long trip",
       "localizations": {
@@ -1738,613 +2643,64 @@
         }
       }
     },
-    "%lld days in %@": {
-      "comment": "Trip label for a long trip of N days",
+    "Weekend in %@": {
+      "comment": "Trip label for a 2–3 day trip over a weekend",
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld päivää kohteessa %2$@"
-          }
-        }
-      }
-    },
-    "+%lld over": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+%lld yli"
-          }
-        }
-      }
-    },
-    "%lld of %lld photos picked, %lld over target": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld / %2$lld kuvaa poimittu, %3$lld yli tavoitteen"
-          }
-        }
-      }
-    },
-    "%lld of %lld picked, %lld left": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld / %2$lld poimittu, %3$lld jäljellä"
-          }
-        }
-      }
-    },
-    "%lld of %lld picked, %lld over target": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld / %2$lld poimittu, %3$lld yli tavoitteen"
-          }
-        }
-      }
-    },
-    "%lld of %lld picked, target reached": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld / %2$lld poimittu, tavoite saavutettu"
-          }
-        }
-      }
-    },
-    "At this pace, about %lld photos. Picks reach %lld percent of the album, picking ahead of pace.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tällä tahdilla noin %1$lld kuvaa. Poiminnat kattavat %2$lld prosenttia albumista, poimit tahtia edellä."
-          }
-        }
-      }
-    },
-    "At this pace, about %lld photos. Picks reach %lld percent of the album.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tällä tahdilla noin %1$lld kuvaa. Poiminnat kattavat %2$lld prosenttia albumista."
-          }
-        }
-      }
-    },
-    "At this pace: ": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tällä tahdilla: "
-          }
-        }
-      }
-    },
-    "Picks reach %lld%% of the album": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poiminnat kattavat %lld %% albumista"
-          }
-        }
-      }
-    },
-    "Picks reach %lld%% of the album · ": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poiminnat kattavat %lld %% albumista · "
-          }
-        }
-      }
-    },
-    "Target %lld": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tavoite %lld"
-          }
-        }
-      }
-    },
-    "picking ahead of pace": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "poimit tahtia edellä"
-          }
-        }
-      }
-    },
-    "projected ~%lld": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "arvio ~%lld"
-          }
-        }
-      }
-    },
-    "~%lld photos": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "~%lld kuvaa"
-          }
-        }
-      }
-    },
-    "Cluster %lld of %lld": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ryhmä %1$lld / %2$lld"
-          }
-        }
-      }
-    },
-    "Group by trips & places": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ryhmittele matkojen ja paikkojen mukaan"
-          }
-        }
-      }
-    },
-    "Groups a stretch away from home into one trip (“Week in Salo”) with its place name. Turn off to review strictly by date.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yhdistää kotoa poissaolon yhdeksi matkaksi (”Viikko Salossa”) ja nimeää sen paikan mukaan. Poista käytöstä käydäksesi läpi vain päivämäärän mukaan."
-          }
-        }
-      }
-    },
-    "Marked %@ done": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ merkitty valmiiksi"
-          }
-        }
-      }
-    },
-    "Marked done": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Merkitty valmiiksi"
-          }
-        }
-      }
-    },
-    "Marks this cluster reviewed and opens the next": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Merkitsee tämän ryhmän käsitellyksi ja avaa seuraavan"
-          }
-        }
-      }
-    },
-    "Reopens this cluster for editing": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Avaa tämän ryhmän uudelleen muokkausta varten"
-          }
-        }
-      }
-    },
-    "Target photo count": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kuvien tavoitemäärä"
-          }
-        }
-      }
-    },
-    "Undo": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kumoa"
-          }
-        }
-      }
-    },
-    "Include videos": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sisällytä videot"
-          }
-        }
-      }
-    },
-    "Play video": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Toista video"
-          }
-        }
-      }
-    },
-    "Pick video": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poimi video"
-          }
-        }
-      }
-    },
-    "Video, %lld of %lld": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Video, %1$lld / %2$lld"
-          }
-        }
-      }
-    },
-    "Video, %@, %lld of %lld": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Video, %1$@, %2$lld / %3$lld"
-          }
-        }
-      }
-    },
-    "Previous photo": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Edellinen kuva"
-          }
-        }
-      }
-    },
-    "Next photo": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Seuraava kuva"
-          }
-        }
-      }
-    },
-    "Back to grid": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Takaisin ruudukkoon"
-          }
-        }
-      }
-    },
-    "Keep reviewing": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jatka läpikäyntiä"
-          }
-        }
-      }
-    },
-    "Adds it to the album and moves to the next photo.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lisää sen albumiin ja siirtyy seuraavaan kuvaan."
-          }
-        }
-      }
-    },
-    "Removes it from the album.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poistaa sen albumista."
-          }
-        }
-      }
-    },
-    "Remove pick": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poista poiminta"
-          }
-        }
-      }
-    },
-    "Video length %@. %@": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Videon kesto %1$@. %2$@"
-          }
-        }
-      }
-    },
-    "A goal, not a limit — you can pick past it.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tavoite, ei raja — voit poimia senkin yli."
-          }
-        }
-      }
-    },
-    "Clears all picks and marked-done days. The album’s settings are kept, and your Photos library isn’t touched.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tyhjentää kaikki poiminnat ja valmiiksi merkityt päivät. Albumin asetukset säilytetään, eikä Kuvat-kirjastoosi kosketa."
-          }
-        }
-      }
-    },
-    "Clears all picks and progress. The album’s settings are kept.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tyhjentää kaikki poiminnat ja edistymisen. Albumin asetukset säilytetään."
-          }
-        }
-      }
-    },
-    "Couldn’t load your photos": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kuvia ei voitu ladata"
-          }
-        }
-      }
-    },
-    "Create an album to hand-pick photos into.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Luo albumi, johon poimit kuvasi käsin."
-          }
-        }
-      }
-    },
-    "Everything’s filtered out": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kaikki on suodatettu pois"
-          }
-        }
-      }
-    },
-    "Existing Photos album": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Olemassa oleva Kuvat-albumi"
-          }
-        }
-      }
-    },
-    "Limited access only shows the photos you specifically picked. Poimi needs your whole library to curate by date.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rajattu käyttöoikeus näyttää vain erikseen valitsemasi kuvat. Poimi tarvitsee koko kirjastosi, jotta voit koota albumin päivämäärän mukaan."
-          }
-        }
-      }
-    },
-    "New Photos album": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Uusi Kuvat-albumi"
-          }
-        }
-      }
-    },
-    "Off by default. Turn on to pick from videos too — they’re copied to the album like photos.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pois päältä oletuksena. Ota käyttöön poimiaksesi myös videoita — ne kopioidaan albumiin kuvien tavoin."
-          }
-        }
-      }
-    },
-    "Pick all in %@": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poimi kaikki päivältä %@"
-          }
-        }
-      }
-    },
-    "Picks are copied to this Photos album — your library and originals aren’t changed.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poiminnat kopioidaan tähän Kuvat-albumiin — kirjastoosi ja alkuperäisiin kuviin ei kosketa."
-          }
-        }
-      }
-    },
-    "Picks or removes every photo in this cluster": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poimii tai poistaa poiminnan kaikista tämän ryhmän kuvista"
-          }
-        }
-      }
-    },
-    "Poimi can’t see your library. Turn on photo access to browse and curate your photos.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poimi ei näe kirjastoasi. Ota kuvien käyttöoikeus käyttöön, jotta voit selata kuviasi ja koota albumisi."
-          }
-        }
-      }
-    },
-    "Remove all in %@": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poista poiminnat päivältä %@"
-          }
-        }
-      }
-    },
-    "Removes the album and its ^[%lld pick](inflect: true). Your Photos library isn’t touched.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poistaa albumin ja sen %lld poimintaa. Kuvat-kirjastoosi ei kosketa."
-          }
-        }
-      }
-    },
-    "Reset clears your picks and progress but keeps the album’s settings. Delete removes this album from Poimi — the Photos album it created and your originals are never touched.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nollaus tyhjentää poiminnat ja edistymisen mutta säilyttää albumin asetukset. Poisto poistaa tämän albumin Poimista — sen luomaan Kuvat-albumiin ja alkuperäisiin kuviisi ei koskaan kosketa."
-          }
-        }
-      }
-    },
-    "Save to Photos": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tallenna Kuviin"
-          }
-        }
-      }
-    },
-    "Save to Photos album": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tallenna Kuvat-albumiin"
-          }
-        }
-      }
-    },
-    "Screenshots and photos in these albums won’t appear while you pick.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kuvakaappaukset ja näiden albumien kuvat eivät näy poiminnan aikana."
-          }
-        }
-      }
-    },
-    "Set Poimi’s Photos access to full access in Settings, then come back.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Anna Poimille täysi kuvien käyttöoikeus Asetuksissa ja palaa sitten takaisin."
-          }
-        }
-      }
-    },
-    "This album is no longer available.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tämä albumi ei ole enää käytettävissä."
-          }
-        }
-      }
-    },
-    "Update in Photos": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Päivitä Kuvissa"
+            "value": "Viikonloppu kohteessa %@"
           }
         }
       }
     },
     "We’ll ask iOS for permission next.": {
+      "comment": "Onboarding permission footnote",
       "localizations": {
         "fi": {
           "stringUnit": {
             "state": "translated",
             "value": "Kysymme seuraavaksi lupaa iOS:lta."
+          }
+        }
+      }
+    },
+    "You can change your picks any time": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voit muuttaa poimintojasi milloin tahansa"
+          }
+        }
+      }
+    },
+    "You have no albums to choose from.": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sinulla ei ole albumeja valittavaksi."
+          }
+        }
+      }
+    },
+    "You've reached the end": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pääsit loppuun"
+          }
+        }
+      }
+    },
+    "Your album is ready": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Albumisi on valmis"
           }
         }
       }
@@ -2365,6 +2721,69 @@
           "stringUnit": {
             "state": "translated",
             "value": "Olet päässyt loppuun"
+          }
+        }
+      }
+    },
+    "^[%lld favorite](inflect: true)": {
+      "comment": "Cluster caption: number of favorite photos in the cluster",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld favorite"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld favorites"
+                }
+              }
+            }
+          }
+        },
+        "fi": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld suosikki"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld suosikkia"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "^[%lld photo](inflect: true)": {
+      "localizations": {
+        "fi": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld kuva"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld kuvaa"
+                }
+              }
+            }
           }
         }
       }
@@ -2420,43 +2839,24 @@
         }
       }
     },
-    "^[%lld favorite](inflect: true)": {
-      "comment": "Cluster caption: number of favorite photos in the cluster",
+    "picking ahead of pace": {
+      "comment": "Pacing: ahead state",
       "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld favorite"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld favorites"
-                }
-              }
-            }
-          }
-        },
         "fi": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld suosikki"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld suosikkia"
-                }
-              }
-            }
+          "stringUnit": {
+            "state": "translated",
+            "value": "poimit tahtia edellä"
+          }
+        }
+      }
+    },
+    "projected ~%lld": {
+      "comment": "Pacing mini-bar: projected label",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "arvio ~%lld"
           }
         }
       }
@@ -2468,6 +2868,27 @@
           "stringUnit": {
             "state": "translated",
             "value": "~%lld arvio"
+          }
+        }
+      }
+    },
+    "~%lld photos": {
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~%lld kuvaa"
+          }
+        }
+      }
+    },
+    "· %lld": {
+      "extractionState": "stale",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "· %lld"
           }
         }
       }

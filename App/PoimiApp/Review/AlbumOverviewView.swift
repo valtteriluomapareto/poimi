@@ -43,6 +43,21 @@ struct AlbumOverviewView: View {
     /// The hero header's measured height — drives the recap reveal so it's a clean handoff as the hero
     /// leaves, not a fixed guess that fired while the hero was still on screen.
     @State private var headerHeight: CGFloat = 0
+    /// The cluster-list lens (#202): everything, only days still needing review, or only finished days —
+    /// how you hunt a straggler left behind. Defaults to `.all` (like Photos' filter), so the Overview
+    /// still opens showing the whole timeline; done days de-emphasize in place rather than vanish.
+    @State private var filter: ReviewFilter = .all
+    /// Review-progress facts derived from the done-state, computed OFF the `body` (#202, mirroring the
+    /// grid's `refreshCompletion` — #187): `AlbumOverviewView.body` re-evaluates on every *pick* (the
+    /// toolbar reads `selection.progress`), so these done-derived scans are refreshed event-driven
+    /// (`refreshReviewFacts` on a done toggle / filter change / index rebuild) instead of re-running the
+    /// O(clusters) `isDone` walks on each pick.
+    @State private var reviewedDays = 0
+    @State private var resumeRow: ClusterRow?
+    @State private var doneClusterCount = 0
+    /// The cluster sections after the active lens is applied (empty sections dropped). For `.all` this is
+    /// just `index.sections`; the filtered lenses recompute it when the filter or done-state changes.
+    @State private var visibleSections: [MonthSection] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -106,27 +121,65 @@ struct AlbumOverviewView: View {
                 if store.phase == .idle {
                     await scan()
                 } else if case .ready(let clusters) = store.phase {
-                    index = ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames,
-                                                      assets: store.assetsByID)
+                    setIndex(ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames,
+                                                       assets: store.assetsByID))
                 }
             }
             // Trip place names resolve asynchronously after `.ready` (§7); rebuild the (cheap) index so
             // the trip titles swap from their date fallback to "Week in …" as the names land.
             .onChange(of: store?.tripNames ?? [:]) { _, names in
                 guard let store, case .ready(let clusters) = store.phase else { return }
-                index = ClusterIndexBuilder.build(from: clusters, tripNames: names, assets: store.assetsByID)
+                setIndex(ClusterIndexBuilder.build(from: clusters, tripNames: names, assets: store.assetsByID))
             }
+            // The done-derived facts change on a done toggle (rare on the Overview — mostly on the pop
+            // back from the grid) and on a filter switch. Refresh them off-body then (not per-pick).
+            .onChange(of: doneStore.doneDays) { refreshReviewFacts() }
+            .onChange(of: filter) { refreshReviewFacts() }
+    }
+
+    /// Set the cluster index and refresh the done-derived facts in the same step, so `body` always reads
+    /// consistent `@State` (the index + its filtered sections + the resume/count facts) without doing the
+    /// O(clusters) done-scans itself.
+    private func setIndex(_ newIndex: ClusterIndex?) {
+        index = newIndex
+        refreshReviewFacts()
+    }
+
+    /// Recompute the review-progress facts (days reviewed · resume row · done count · filtered sections)
+    /// from the current index + live done-state. Called on index (re)build, done toggle, and filter
+    /// change — never per `body` pass (see the `@State` note). Cheap (O(clusters)); no grouping.
+    private func refreshReviewFacts() {
+        guard let index else {
+            reviewedDays = 0; resumeRow = nil; doneClusterCount = 0; visibleSections = []
+            return
+        }
+        let doneDays = doneStore.doneDays
+        reviewedDays = ReviewProgress.reviewedDayCount(clusters: index.orderedClusters, doneDays: doneDays)
+        resumeRow = ReviewProgress.firstUnreviewedIndex(clusters: index.orderedClusters, doneDays: doneDays)
+            .map { index.orderedRows[$0] }
+        doneClusterCount = index.orderedClusters.reduce(0) { doneStore.isDone($1) ? $0 + 1 : $0 }
+        visibleSections = filteredSections(index)
+    }
+
+    /// The index's sections after the active lens. `.all` passes them through untouched; a filtered lens
+    /// keeps only matching rows and drops any section left empty (so no orphan month header lingers).
+    private func filteredSections(_ index: ClusterIndex) -> [MonthSection] {
+        guard filter != .all else { return index.sections }
+        return index.sections.compactMap { section in
+            let rows = section.rows.filter { filter.includes(isDone: doneStore.isDone($0.cluster)) }
+            return rows.isEmpty ? nil : MonthSection(id: section.id, title: section.title, rows: rows)
+        }
     }
 
     /// Run (or re-run, e.g. a "Try again") the fetch pass and rebuild the cluster index from the result.
     /// Reuses the current `store` so a retry re-scans the same album.
     private func scan() async {
         guard let store else { return }
-        index = nil
+        setIndex(nil)
         await store.load(project)
         if case .ready(let clusters) = store.phase {
-            index = ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames,
-                                              assets: store.assetsByID)
+            setIndex(ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames,
+                                               assets: store.assetsByID))
         }
     }
 
@@ -173,19 +226,27 @@ struct AlbumOverviewView: View {
     // MARK: Cluster index
 
     private func clusterIndex(_ index: ClusterIndex) -> some View {
+        // Everything done-derived (the filtered `visibleSections`, `reviewedDays`, `resumeRow`) is read
+        // from `@State`, refreshed event-driven by `refreshReviewFacts` — so this `body`, which re-runs
+        // on every pick (the toolbar reads `selection.progress`), does NO O(clusters) done-scans (#202).
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    header(index)
+                    header(index, reviewedDays: reviewedDays, resumeRow: resumeRow)
                         .id(Self.topAnchorID)   // the target for the recap's tap-to-top
                         // Measure the hero's real height so the recap reveals exactly as the hero scrolls
                         // off — not at a fixed guess that fired while the hero (and its own tally) was
                         // still on screen, which read as a jumpy double-tally.
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
-                    ForEach(index.sections) { section in
+                    ForEach(visibleSections) { section in
                         Section {
                             ForEach(section.rows) { row in
-                                ClusterListRow(row: row) {
+                                ClusterListRow(row: row,
+                                               isBookmark: row.id == resumeRow?.id,
+                                               // Recede done days only in the mixed timeline; in the
+                                               // "Done" lens every row is done, so dimming all of it would
+                                               // read as disabled (review finding).
+                                               deEmphasizeDone: filter == .all) {
                                     coordinator.openReview(project.id, day: row.firstDay)
                                 }
                                 // No horizontal padding here — ClusterListRow insets its own text but
@@ -195,6 +256,9 @@ struct AlbumOverviewView: View {
                             ClusterMonthHeader(title: section.title)
                         }
                     }
+                    // Nothing matches the lens (e.g. "To review" with everything done) — a short note, not
+                    // a bare blank, so the filtered-empty state never reads as a broken list.
+                    if visibleSections.isEmpty { filterEmptyNote }
                 }
                 .padding(.bottom, 24)
             }
@@ -256,16 +320,30 @@ struct AlbumOverviewView: View {
         }
     }
 
-    private func header(_ index: ClusterIndex) -> some View {
+    private func header(_ index: ClusterIndex, reviewedDays: Int, resumeRow: ClusterRow?) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(project.title)
-                    .font(.largeTitle.bold())
-                Text("\(index.totalDays) day\(index.totalDays == 1 ? "" : "s") · \(periodLabel)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(project.title)
+                        .font(.largeTitle.bold())
+                        .lineLimit(2)
+                    Text("\(index.totalDays) day\(index.totalDays == 1 ? "" : "s") · \(periodLabel)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                // The Photos-style Liquid Glass filter (#202): the lens choices tuck behind one glass
+                // button, keeping the hero clean. Only earns its place with more than one cluster to filter.
+                if index.totalClusters > 1 { filterMenu(index) }
             }
             ReviewTally()   // "147 / 200" + bar + "N left" — reads the SelectionStore
+            // The "Continue reviewing" bookmark (#202): resumes at the first day still needing review and
+            // carries the days-reviewed count the pick tally can't. Multi-cluster albums only (a one-day
+            // album has nowhere to "continue" to), and only while something is still unreviewed.
+            if index.totalClusters > 1, let resume = resumeRow {
+                ContinueCard(resumeTitle: resume.title, reviewedDays: reviewedDays, totalDays: index.totalDays,
+                             onContinue: { coordinator.openReview(project.id, day: resume.firstDay) })
+            }
             // The projection card + chart earn their place only with more than one cluster to pace/distribute
             // across (a one-cluster album has no timeline). The card self-hides until there's a projection.
             if index.totalClusters > 1 {
@@ -276,6 +354,50 @@ struct AlbumOverviewView: View {
         .padding(.horizontal, 20)
         .padding(.top, 8)
         .padding(.bottom, 12)
+    }
+
+    /// The cluster-list filter menu — a Liquid Glass button whose choices pull down behind it (design
+    /// #202, mirroring Apple Photos). A `Picker` gives the selected lens its checkmark for free; each row
+    /// carries its live count. Tinted gold + filled once a non-`all` lens is active, so a filtered list
+    /// reads as filtered at a glance.
+    private func filterMenu(_ index: ClusterIndex) -> some View {
+        // Counts are cluster-granular (they gate whole ROWS), off the hoisted `doneClusterCount`. This is
+        // deliberately a different metric from the Continue card's day-granular "N of M days reviewed";
+        // they coincide except across multi-day folded runs / trips.
+        let allCount = index.totalClusters
+        let toReviewCount = allCount - doneClusterCount
+        return Menu {
+            Picker("Filter", selection: $filter) {
+                Text("To review · \(toReviewCount)").tag(ReviewFilter.toReview)
+                Text("Done · \(doneClusterCount)").tag(ReviewFilter.done)
+                Text("All · \(allCount)").tag(ReviewFilter.all)
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Image(systemName: filter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(filter == .all ? Color.primary : Color.accentColor)
+                .frame(width: 40, height: 40)
+                .glassChip()
+                .contentShape(Circle())
+        }
+        .accessibilityLabel("Filter")
+        .accessibilityValue(filter.label)
+    }
+
+    /// The filtered-empty note (e.g. "To review" once every day is done) — never a bare blank list.
+    private var filterEmptyNote: some View {
+        VStack(spacing: 6) {
+            Image(systemName: filter == .done ? "tray" : "checkmark.circle")
+                .font(.title)
+                .foregroundStyle(.secondary)
+            Text(filter == .done ? "Nothing marked done yet" : "Everything is reviewed")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 48)
+        .accessibilityElement(children: .combine)
     }
 
     /// "Jan 2025 – Dec 2025" (or a single month for a one-month album). `rangeEnd` is exclusive, so
@@ -345,6 +467,13 @@ struct ClusterIndex {
     /// denominator for the pacing projection (#170). Built once here, off `body`, so `PacingCard` only
     /// scans it (never re-derives the timeline) as picks change.
     let orderedIDs: [String]
+    /// The flat, chronological rows (the same order the list draws) — so the "Continue reviewing" card
+    /// (#202) can map a first-unreviewed INDEX straight to its row (title + drill day) without
+    /// re-scanning the sections. Built once here, off `body`.
+    let orderedRows: [ClusterRow]
+    /// The flat clusters behind `orderedRows` — the substrate for `ReviewProgress` (days-reviewed count
+    /// + resume target). Kept as its own array so a `body` pass doesn't `map(\.cluster)` each time.
+    let orderedClusters: [ReviewCluster]
 }
 
 /// Builds the overview view-model from the store's already-grouped `[DayGroup]`. Pure, and called once
@@ -430,7 +559,102 @@ enum ClusterIndexBuilder {
                             chartBuckets: ChartBucketing.buckets(for: rows, calendar: calendar, locale: locale),
                             totalClusters: clusters.count,
                             totalDays: totalDays,
-                            orderedIDs: clusters.flatMap(\.assetIDs))
+                            orderedIDs: clusters.flatMap(\.assetIDs),
+                            orderedRows: rows,
+                            orderedClusters: clusters)
+    }
+}
+
+// MARK: - The cluster-list filter (#202)
+
+/// The Overview's cluster-list lens: everything, only days still needing review, or only finished days.
+/// "To review" is how you hunt a straggler left behind you; done days de-emphasize in place (they never
+/// vanish, so revisiting to adjust a pick still works — the panel's line against the old accordion).
+enum ReviewFilter: Hashable {
+    case toReview, done, all
+
+    var label: LocalizedStringKey {
+        switch self {
+        case .toReview: return "To review"
+        case .done: return "Done"
+        case .all: return "All"
+        }
+    }
+
+    /// Whether a cluster with the given done-state passes this lens. Pure, so the filter predicate is
+    /// unit-tested off the View (the row/menu just feed it `doneStore.isDone`).
+    func includes(isDone: Bool) -> Bool {
+        switch self {
+        case .all: return true
+        case .toReview: return !isDone
+        case .done: return isDone
+        }
+    }
+}
+
+// MARK: - Continue reviewing card (#202)
+
+/// The Overview's resume bookmark: one tap back to the first day still needing review, carrying the
+/// days-reviewed count the pick tally can't ("Fri 14 Feb · 12 of 47 days reviewed"). A bookmark leads it;
+/// a gold edge tab + border give it the "your place" read. Pure presentation — the parent supplies the
+/// resolved title + counts + the drill action (which resumes the grid at that day).
+private struct ContinueCard: View {
+    let resumeTitle: String
+    let reviewedDays: Int
+    let totalDays: Int
+    let onContinue: () -> Void
+
+    var body: some View {
+        Button(action: onContinue) {
+            HStack(spacing: 12) {
+                Image(systemName: "bookmark.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 36, height: 36)
+                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Continue reviewing")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text("\(resumeTitle) · \(reviewedDays) of \(totalDays) days reviewed")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)   // a full weekday title ("Wednesday, Jan 15") needs the second line
+                        .monospacedDigit()
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.accentColor)
+                    .frame(width: 4)
+                    .padding(.vertical, 12)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(a11yLabel)
+        .accessibilityHint("Opens the next still needing review")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("continueReviewingCard")
+    }
+
+    private var a11yLabel: String {
+        String(localized: "Continue reviewing. \(resumeTitle). \(reviewedDays) of \(totalDays) days reviewed.",
+               comment: "Continue card a11y: resume day + days reviewed")
     }
 }
 
@@ -457,6 +681,13 @@ struct ClusterMonthHeader: View {
 /// of selection. Tapping drills into the review grid at this cluster.
 struct ClusterListRow: View {
     let row: ClusterRow
+    /// This row is the resume target — the first day still needing review (#202). Marks it with a gold
+    /// bookmark + a faint tint, so your place is visible in the table of contents.
+    var isBookmark = false
+    /// Whether a DONE row should recede (dim). True in the mixed timeline (`.all`) so done days fall back
+    /// and unreviewed ones pop; false in the "Done"-only lens, where dimming the whole list reads as
+    /// disabled (#202 review).
+    var deEmphasizeDone = true
     let onOpen: () -> Void
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
@@ -508,7 +739,18 @@ struct ClusterListRow: View {
                         }
                         subtitle(state: state, picked: picked)
                     }
+                    // Recede a DONE row via its TEXT only (#202) — the photos + the green seal stay fully
+                    // vivid, so a finished day reads as "handled" without the whole row looking disabled
+                    // (dimming the thumbnails greyed them out — device feedback).
+                    .opacity(done && deEmphasizeDone ? 0.6 : 1)
                     Spacer(minLength: 8)
+                    // The resume bookmark (#202): the day you'll continue at, visible in the list.
+                    if isBookmark {
+                        Image(systemName: "bookmark.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.accentColor)
+                            .accessibilityHidden(true)
+                    }
                     // The done-seal is a graphical mark (gold's contrast caveat, styleguide §1) — green,
                     // shown only when the whole cluster is done.
                     if done {
@@ -531,6 +773,8 @@ struct ClusterListRow: View {
                     .padding(.leading, 20)
             }
             .padding(.vertical, 10)
+            // A faint gold band marks the resume row — the bookmark visible in the table of contents.
+            .background(isBookmark ? Color.accentColor.opacity(0.08) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

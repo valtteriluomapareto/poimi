@@ -39,11 +39,19 @@ struct ReviewTopBar: View {
     /// Whether the pace readout shows the projection — the grid passes `clusters.count > 1`, matching
     /// the Overview card's multi-cluster gate.
     var showsProjection = true
+    /// Toggle the current cluster's done-state from the top bar (#202) — mark/un-mark from ANYWHERE
+    /// without scrolling to the end-cap, and the accessible (VoiceOver / keyboard / Switch) mark path.
+    /// A pure status toggle: it does NOT advance (the end-cap is the "done → next day" flow). `nil` (e.g.
+    /// the pre-cluster fallback bar) hides the seal.
+    var onToggleDone: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             identity
             Spacer(minLength: 8)
+            if let onToggleDone {
+                DoneSealToggle(isDone: isDone, action: onToggleDone)
+            }
             AlbumPaceReadout(orderedIDs: orderedIDs, showsProjection: showsProjection)
         }
         .padding(.horizontal, 16)
@@ -54,8 +62,9 @@ struct ReviewTopBar: View {
         .glassBarBackground(extendTop: true)
     }
 
-    /// Leading lane: pin (trips) · cluster name · photo count · a done seal. Combined into one VoiceOver
-    /// element so it reads as a single "Nokia, 47 photos, done" phrase.
+    /// Leading lane: pin (trips) · cluster name · photo count. The done state now lives in the tappable
+    /// `DoneSealToggle` on the trailing lane, so it's not repeated here. Combined into one VoiceOver
+    /// element so it reads as a single "Nokia, 47 photos" phrase.
     private var identity: some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 6) {
@@ -69,12 +78,6 @@ struct ReviewTopBar: View {
                     .font(.headline)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)   // a long trip sentence scales before truncating at AX sizes
-                if isDone {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.brandGreen)
-                        .accessibilityLabel(Text("Done"))
-                }
             }
             // Automatic grammar agreement: "1 photo" / "47 photos" from a single catalog entry.
             Text("^[\(count) photo](inflect: true)")
@@ -83,6 +86,35 @@ struct ReviewTopBar: View {
                 .monospacedDigit()
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The top bar's tappable done seal (#202): a distinct SEAL glyph (not a plain check — that reads as
+/// "selected") that toggles the current cluster's done-state from anywhere. Outline + secondary when
+/// open, filled + green when done; state is carried by fill + the `.isSelected` trait + the label, never
+/// colour alone (styleguide §1 / HIG). A 44pt hit target around the 20pt glyph.
+private struct DoneSealToggle: View {
+    let isDone: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: isDone ? "checkmark.seal.fill" : "checkmark.seal")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(isDone ? Color.brandGreen : Color.secondary)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("topBarDoneSeal")
+        // Kind-neutral (#202): drops the day/trip noun (a cluster may be a run of days).
+        .accessibilityLabel(isDone
+            ? String(localized: "Marked done", comment: "Top-bar done seal: done state")
+            : String(localized: "Mark done", comment: "Top-bar done seal: mark a cluster reviewed"))
+        .accessibilityHint(isDone
+            ? String(localized: "Reopens it for editing", comment: "Top-bar done seal hint when done")
+            : String(localized: "Marks it reviewed", comment: "Top-bar done seal hint when open"))
+        .accessibilityAddTraits(isDone ? [.isButton, .isSelected] : .isButton)
     }
 }
 

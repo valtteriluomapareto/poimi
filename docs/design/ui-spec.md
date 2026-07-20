@@ -85,6 +85,21 @@ every other cluster is a collapsed peek. "Done" is its own state (a green seal b
 - **Scroll**: iOS-18 `ScrollPosition`, one-shot `scrollTo` only — no maintained target, so a
   select-all / mark-done re-layout never snaps the grid (D36).
 
+> **#202 update (built) — supersedes the footer button above (paged model, #167/D35).** The lone
+> `.borderedProminent` "Mark day done" footer is redesigned into an **end-of-cluster end-cap**: a green
+> seal + "You've reached the end · N photos · M picked" + an explicit **green "Mark day done"** pill
+> (green = done; **never gold** — gold is the album-level Save-to-Photos CTA) + "Opens your next day to
+> review" (it marks + advances to the next unreviewed cluster). A **tappable done seal** joins the top
+> bar (outline→filled-green) to mark/un-mark from anywhere — the accessible path; a *status* toggle that
+> does NOT advance (the end-cap keeps the mark-and-advance heartbeat). Done state (revisiting a sealed
+> day): a filled seal + a reversible **"Mark not done"** — no confirmation dialog, no time-boxed toast
+> (HIG). The `markDoneButton` a11y id is preserved. Grid **swipe stays pure browse** (Q1). On the
+> **Overview**, #202 adds a **"Continue reviewing"** bookmark (resumes at the first unreviewed day +
+> "N of M days reviewed"), a Photos-style **To review / Done / All** Liquid-Glass filter, and
+> **de-emphasis of done rows in place** — TEXT-only recede so the thumbnails + green seal stay vivid
+> (dimming the whole row greyed the photos out, reading as disabled — device feedback). Done rows are
+> never hidden (revisiting to adjust a pick still works).
+
 ## Selection (D9)
 
 - **Badge-select** (resolved): tap the **cell** opens it full-screen; tap the **≥44pt badge**

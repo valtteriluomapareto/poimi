@@ -137,7 +137,6 @@ struct ReviewGridView: View {
                 ClusterPage(
                     cluster: cluster,
                     headerTitle: headerTitle(for: cluster),
-                    isTrip: cluster.tripCluster != nil,
                     columns: columns,
                     spacing: spacing,
                     load: load,
@@ -174,7 +173,8 @@ struct ReviewGridView: View {
                          isTrip: cluster.tripCluster != nil,
                          isDone: done.isDone(cluster),
                          orderedIDs: orderedIDs,
-                         showsProjection: showsPaceProjection)
+                         showsProjection: showsPaceProjection,
+                         onToggleDone: { toggleDone(cluster) })   // mark/un-mark from anywhere (#202)
         } else {
             ReviewTopBar(clusterTitle: title, count: 0, orderedIDs: orderedIDs,
                          showsProjection: showsPaceProjection)
@@ -271,10 +271,27 @@ struct ReviewGridView: View {
     private func markDoneAndAdvance(_ cluster: ReviewCluster) {
         let wasDone = done.isDone(cluster)
         done.toggle(cluster)
-        if !wasDone {
-            AccessibilityNotification.Announcement("Marked done").post()
-            advance()
-        }
+        announceDone(wasDone: wasDone)   // announce BOTH directions (mark + un-mark), like the top-bar seal
+        if !wasDone { advance() }
+    }
+
+    /// Toggle the CURRENT cluster's done-state from the top-bar seal (#202) — a status toggle that stays
+    /// put (unlike `markDoneAndAdvance`, which is the end-cap's "done → next day" flow). Announces for
+    /// VoiceOver; the sensory feedback fires off the done-count change (`decoratedPager`), same as the
+    /// end-cap's mark.
+    private func toggleDone(_ cluster: ReviewCluster) {
+        let wasDone = done.isDone(cluster)
+        done.toggle(cluster)
+        announceDone(wasDone: wasDone)
+    }
+
+    /// The VoiceOver announcement for a done toggle — shared by the end-cap + the top-bar seal so both
+    /// paths (mark AND un-mark) speak, and through the String Catalog (localizable-by-default).
+    private func announceDone(wasDone: Bool) {
+        let phrase = wasDone
+            ? String(localized: "Marked not done", comment: "VoiceOver announcement: a cluster was reopened")
+            : String(localized: "Marked done", comment: "VoiceOver announcement: a cluster was marked reviewed")
+        AccessibilityNotification.Announcement(phrase).post()
     }
 
     /// Advance to the next UNREVIEWED cluster after the current page; else the literal next; else stay
@@ -355,8 +372,6 @@ private struct ClusterPage: View {
     /// The pinned header title — a trip's location sentence (or its date range until the name lands), or
     /// a plain date cluster's date title. Computed by the parent from the resolved trip names.
     let headerTitle: String
-    /// A trip/visit cluster → the done CTA reads "Mark trip done"; a date cluster → "Mark day done".
-    let isTrip: Bool
     let columns: [GridItem]
     let spacing: CGFloat
     let load: (String) async -> UIImage?
@@ -448,27 +463,113 @@ private struct ClusterPage: View {
         }
     }
 
-    /// End-of-cluster CTA: "Mark trip done" for a trip (it spans several days) / "Mark day done" for a
-    /// date cluster — advances to the next unreviewed cluster, reached by scrolling to the end (#38).
+    /// End-of-cluster affordance (#202): the lighter "end-cap" that reaches you at the END of the
+    /// cluster's scroll — reached by scrolling, not a permanent bottom bar (#38). See `ClusterEndCap`.
     @ViewBuilder private func footer(isDone: Bool) -> some View {
-        let doneLabel = isTrip ? "Mark trip done" : "Mark day done"
-        HStack {
-            Spacer()
-            Button(action: onMarkDone) {
-                Label(isDone ? "Mark as not done" : doneLabel,
-                      systemImage: isDone ? "checkmark.seal.fill" : "checkmark.seal")
+        ClusterEndCap(cluster: cluster, isDone: isDone, onMarkDone: onMarkDone)
+            .padding(.top, 24)
+            .padding(.bottom, 28)
+    }
+}
+
+// MARK: - End-of-cluster end-cap (#202)
+
+/// The end-of-cluster affordance (#202) — the redesign of the lone `.borderedProminent` footer button
+/// into a considered "end-cap": a green (day-level) sibling of the viewer's gold (album-level)
+/// end-of-set card. NOT done → a green seal + "You've reached the end · N photos · M picked" + an
+/// explicit green "Mark day done" pill that marks the cluster reviewed and advances to the next
+/// unreviewed one ("Opens your next day to review"). DONE (revisiting a sealed day) → a filled green
+/// seal + "This day is done" + a low-emphasis, reversible "Mark not done" (no confirmation dialog, no
+/// time-boxed toast — HIG). GREEN, never gold: gold stays the album-level "Save to Photos" export CTA,
+/// so the routine per-day action doesn't compete with the big finish. Reads the `SelectionStore` itself
+/// for the picked count, so it updates as you pick without the page depending on `selected`. Keeps the
+/// `markDoneButton` identifier (the #43 XCUITest contract) though the label + form change.
+private struct ClusterEndCap: View {
+    let cluster: ReviewCluster
+    let isDone: Bool
+    let onMarkDone: () -> Void
+    @Environment(SelectionStore.self) private var selection
+
+    var body: some View {
+        // Alloc-free pick count (mirrors ClusterListRow.pickedCount) — no throwaway Set per pick.
+        let picked = cluster.assetIDs.reduce(into: 0) { if selection.selected.contains($1) { $0 += 1 } }
+        VStack(spacing: 14) {
+            seal
+            VStack(spacing: 5) {
+                Text(doneHeadline)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                // Two pieces: the count reuses the already-translated inflected "N photo(s)" key; " · N
+                // picked" is count-invariant ("picked" / "poimittu" don't pluralise), so no dual-number
+                // plural to hand-author.
+                (Text("^[\(cluster.count) photo](inflect: true)") + Text(" · \(picked) picked"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(isDone ? Color(.systemGray) : .brandGreen)
-            .accessibilityIdentifier("markDoneButton")   // stable id though the label toggles
-            .accessibilityHint(isDone
-                ? "Reopens this cluster for editing"
-                : "Marks this cluster reviewed and opens the next")
-            Spacer()
+            markButton
+            Text(isDone ? "You can change your picks any time" : "Opens the next to review")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
         }
-        .padding(.top, 16)
-        .padding(.bottom, 28)
+        .frame(maxWidth: .infinity)
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 24)
+    }
+
+    /// Kind-neutral copy (#202): a cluster may be a single day, a folded multi-day run, or a trip, so the
+    /// headline drops the noun rather than mis-calling a run "a day".
+    private var doneHeadline: LocalizedStringKey {
+        isDone ? "This is done" : "You've reached the end"
+    }
+
+    /// The seal echoes the top-bar toggle glyph so "done" reads consistently: an outline seal (open) or a
+    /// white-on-green filled seal (done).
+    @ViewBuilder private var seal: some View {
+        Group {
+            if isDone {
+                Image(systemName: "checkmark.seal.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Color.brandGreen)
+            } else {
+                Image(systemName: "checkmark.seal")
+                    .foregroundStyle(Color.brandGreen)
+            }
+        }
+        .font(.system(size: 52))
+        .accessibilityHidden(true)
+    }
+
+    /// Open → a solid green "Mark day/trip done" pill (green = done; a solid fill, not a material, so the
+    /// pure-glass guard is satisfied). Done → a bordered, low-emphasis "Mark not done". A solid COLOR is
+    /// used, never gold — gold is reserved for the album-level export CTA.
+    @ViewBuilder private var markButton: some View {
+        Button(action: onMarkDone) {
+            if isDone {
+                Text("Mark not done")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 11)
+                    .overlay { Capsule().strokeBorder(Color.secondary.opacity(0.4), lineWidth: 1) }
+            } else {
+                Text("Mark done")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 26)
+                    .padding(.vertical, 13)
+                    .background(Capsule().fill(Color.brandGreen))
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 2)
+        .accessibilityIdentifier("markDoneButton")   // stable id though the label + form change (#43)
+        .accessibilityLabel(isDone
+            ? String(localized: "Mark not done", comment: "End-cap: reopen a done cluster")  // matches the visible text
+            : String(localized: "Mark done", comment: "End-cap: mark a cluster reviewed"))
+        .accessibilityHint(isDone
+            ? String(localized: "Reopens it for editing", comment: "End-cap hint when done")
+            : String(localized: "Marks it reviewed and opens the next", comment: "End-cap hint when open"))
     }
 }
 
