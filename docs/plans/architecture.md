@@ -105,7 +105,10 @@ Tap opens a **navigation destination** (not a `.fullScreenCover`/overlay — D10
 
 **Liquid Glass surfaces.** Chrome is glass over opaque photo content. Standard navigation/toolbars adopt it for free; the few custom surfaces — the **tally + export grouped into one `GlassEffectContainer`** (never glass-on-glass), legibility guaranteed by the scroll-edge effect — use `glassEffect`/`.buttonStyle(.glass)`. These are `@MainActor` view modifiers and fit the concurrency model. Two enforced invariants: **no SDK-version availability gates / `.regularMaterial` version fallbacks** (CI-checked, Phase 1), and **every custom glass surface defines a Reduce-Transparency opaque appearance** (an accessibility axis, distinct from version fallbacks). **v1 status:** the review-grid header ships with a **`.bar` material** (translucent, Reduce-Transparency-safe) as a deliberate interim; the full `glassEffect` scroll-edge is a deferred device-iteration task (no in-app precedent yet, blur unverifiable from a screenshot, glass-nav-glitch-adjacent).
 
-### 7. Location bucketing *(v1.1 — deferred, D4)*
+### 7. Location: place/trip naming *(geocode + trip half SHIPPED #130; MapKit-pin / `NamedLocation` half still v1.1)*
+
+**Shipped in v1 (#130):** geocode-once reverse-geocoding (`LocationPreprocessor` + the `PlaceNaming` seam, System/Fake), the `GeocodedPlaceName` cache (the D18 pattern, in `AppSchemaV2`), and DBSCAN place/trip clustering (`Curation`: `PlaceCluster`/`TripOverlay`/`GeoDistance`) surfaced as **Overview trip titles** ("Week in …") — all on EXIF coordinates, **no CoreLocation permission** (D7), on by default per album (`locationEnabled`). The design below describes the **v1.1 remainder** (human-confirmed `NamedLocation` + MapKit pin/radius UI), which was NOT built.
+
 
 `NamedLocation` (center coordinate, radius, name) in SwiftData. Bucketing is a pure distance check in `Curation` (folded in; no separate `LocationKit` package for now). Optional cluster *suggestion* via simple grid/greedy clustering on capture coordinates — suggest a name, human confirms. Always a "no location" bucket. Coordinates come from `PHAsset.location` (EXIF), so **no CoreLocation permission is requested** (D7); MapKit is used only for pin/radius UI. **v1 scope (D33):** v1 sections stay **date-only** adaptive day-groups (§13); the design's by-location overview and trip names ("Italy", "Summer cabin") are an *additive view* over those same day-groups once location lands — not a rework. The concrete subsystem plan — the geocode-once preprocessing pass, the boundary placement (CL/MapKit in the app tier, distance math in `Curation`), and the persisted, invalidatable place-assignment cache (the D18 pattern) — is in [preprocessing-and-caching.md](preprocessing-and-caching.md).
 
@@ -121,7 +124,7 @@ Resolve selection → `PHAsset`s, create-or-find `PHAssetCollection` by stored a
 
 ### 9. Persistence (SwiftData)
 
-We persist **many `CurationProject`s** (the album library, §12 — date range, target count, chosen filters, exported album id, done-days, resume pointer), `NamedLocation` (v1.1), and each project's debounced selection snapshot (D15). Never photo bytes — with **one deliberate exception** (D18): a **resource-size cache** keyed by `localIdentifier` + modification date, because re-reading recorded original sizes for a year of photos is iCloud-touching and expensive — caching it *is* the point.
+We persist **many `CurationProject`s** (the album library, §12 — date range, target count, chosen filters, exported album id, done-days, resume pointer), the **`GeocodedPlaceName` cache** (shipped #130, `AppSchemaV2`; `NamedLocation` remains v1.1), and each project's debounced selection snapshot (D15). Never photo bytes — with **one deliberate exception** (D18): a **resource-size cache** keyed by `localIdentifier` + modification date, because re-reading recorded original sizes for a year of photos is iCloud-touching and expensive — caching it *is* the point.
 
 `@Model` instances are not `Sendable`; never pass them across the actor boundary — pass `PersistentIdentifier` and re-fetch. Autosave policy is set explicitly (not relying on per-mutation autosave). If we ever persist off-main, use a `ModelActor` — but the debounced main-actor snapshot (D15) should avoid needing a background context at all.
 
@@ -225,7 +228,8 @@ CurationProject            @Model
   markedDoneAt: Date?              // user finalized → status .done
   createdAt / lastOpenedAt: Date
 
-NamedLocation              @Model  // v1.1 (D4) — unchanged
+GeocodedPlaceName          @Model  // SHIPPED #130 — the D18 geocoded-name cache (AppSchemaV2)
+NamedLocation              @Model  // v1.1 (D4) — human-confirmed pin/radius; NOT built
 ResourceSizeCacheEntry     @Model  // D18 — keyed by localIdentifier + modificationDate
 ```
 
@@ -246,4 +250,4 @@ ResourceSizeCacheEntry     @Model  // D18 — keyed by localIdentifier + modific
 
 ## Explicitly out of scope (v1)
 
-No Vision/face clustering, no manual sequencing, no Combine, no UIKit. **Deferred to later:** the quality/camera-originals filter (D3) and location bucketing (D4).
+No Vision/face clustering, no manual sequencing, no Combine, no UIKit. **Deferred to later:** the quality/camera-originals filter (D3) and the MapKit-pin / human-confirmed `NamedLocation` half of location (D4) — the geocode/trip-naming half shipped in v1 (#130, §7).
