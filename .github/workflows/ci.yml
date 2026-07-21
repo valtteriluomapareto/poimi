@@ -105,6 +105,12 @@ jobs:
           fi
           echo "Curation executed ${count} test(s)."
 
+      - name: Guard self-tests
+        # Prove each CI guard below still FAILS on an injected violation (not just passes a clean
+        # tree) — a guard that silently stopped matching would pass CI forever while the invariant
+        # rots (codebase-checkup harness, #213). Uses throwaway temp skeletons; never touches the tree.
+        run: ./Scripts/tests/guard-selftests.sh
+
       - name: Check Curation domain boundary
         # Enforce the D14/D21 boundary invariant: Curation imports no platform
         # frameworks and uses no @MainActor.
