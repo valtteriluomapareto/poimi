@@ -716,7 +716,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kaikki kuvat tarkistettu"
+            "value": "Kaikki kuvat läpikäyty"
           }
         }
       }
@@ -1135,7 +1135,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kaikki on tarkistettu"
+            "value": "Kaikki on läpikäyty"
           }
         }
       }
@@ -1527,7 +1527,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Merkitsee sen tarkistetuksi"
+            "value": "Merkitsee sen läpikäydyksi"
           }
         }
       }
@@ -1538,7 +1538,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Merkitsee sen tarkistetuksi ja avaa seuraavan"
+            "value": "Merkitsee sen läpikäydyksi ja avaa seuraavan"
           }
         }
       }
@@ -1750,7 +1750,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Avaa seuraavan tarkistettavan"
+            "value": "Avaa seuraavan läpikäytävän"
           }
         }
       }
@@ -1760,7 +1760,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Avaa seuraavan tarkistettavan"
+            "value": "Avaa seuraavan läpikäytävän"
           }
         }
       }
@@ -2529,7 +2529,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tarkistettavat"
+            "value": "Läpikäytävät"
           }
         }
       }
@@ -2539,7 +2539,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tarkistettavat · %lld"
+            "value": "Läpikäytävät · %lld"
           }
         }
       }

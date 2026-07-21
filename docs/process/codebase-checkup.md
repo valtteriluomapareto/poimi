@@ -152,3 +152,14 @@ run-over-run.
     guard; liquid-glass block-comment stripping; a misleading `CandidateStore` "DETACHED" comment (→ Layer 2);
     CLAUDE.md / architecture.md / project-phases.md location drift (→ Layer 9).
   - **Accepted (won't-fix):** the concurrency escape hatches — see the ledger above.
+- **Layer 7 (localization):** fi coverage 100% (unchanged); `Text(verbatim:)` audit clean (all DEBUG dev
+  strings or formatted values).
+  - **Fixed:** finished the **tarkistaa → läpikäydä** review-flow terminology sweep (#190) — 8 keys
+    (filter "Läpikäytävät", the "…läpikäyty"/"…läpikäydyksi"/"…läpikäytävän" a11y + empty-state strings),
+    now consistent with the läpikäy* forms already in the catalog. Left the literal "check access /
+    connection" strings unchanged.
+  - **Deferred → `checkup:layer-7`:** thorough orphan-key pruning via `xcodebuild -exportLocalizations`
+    (a grep heuristic flagged ~7 likely orphans from the #190 verb-unification + day→cluster redesign —
+    e.g. "Pick photo/video", "Mark as not done", day/cluster reopen variants — but confirm with the
+    export tool before deleting; grep can't see wrapped/interpolated literals). "Review exclusions"
+    sense-check (kept as "Tarkista poissulkemiset").
