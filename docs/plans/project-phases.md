@@ -15,7 +15,7 @@ Phase 0  Spike            de-risk the make-or-break UX (data layer throwaway, re
 Phase 1  Core spine       Curation domain + protocol + minimal fake + lean CI
 Phase 2  v1 critical path the shippable app; the fake/CI grow feature-by-feature
 Phase 3  Ship v1          TestFlight → App Store
-Phase 4  Post-v1          quality filter, location, grow machinery
+Phase 4  Post-v1          quality filter, location v1.1 remainder (MapKit/NamedLocation), grow machinery
 ```
 
 **Two rules across all phases:**
@@ -173,7 +173,7 @@ Folds the original task list together with the design/architecture additions —
 **Goal:** real hands, through review. Deploy is manual at first (D26).
 
 **High-level tasks:**
-1. Manual TestFlight build from Xcode; dogfood on a real year; fix what hurts.
+1. ~~Manual TestFlight build from Xcode~~ — the **fastlane / TestFlight CI pipeline shipped** (#135; `.github/workflows/testflight.yml` + `fastlane/`, see `docs/deploy/testflight-setup.md`). Dogfood on a real year; fix what hurts.
 2. **Prepare the App Review submission for full-access** (the most likely rejection): written justification (no PHPicker — no persistent identifiers, no date-range fetch, no album writes), reviewer walkthrough, demo notes. **Decide the hard-gate-vs-degraded-limited-mode posture and a fallback *before* submitting**, not in response to rejection.
 3. App Store listing: accurate App Privacy label (on-device-only; iCloud is Apple's, not our servers — D8), description, subtitle, and the album/curation keyword placement (discoverability, given the opaque name). Screenshots must reflect the Liquid Glass UI (built against the current SDK — the App Store gives legacy appearance otherwise).
 4. **App icon** — the layered iOS 26 deliverable (Icon Composer; light/dark/clear/tinted), distinctive given the opaque name.
@@ -194,8 +194,8 @@ Folds the original task list together with the design/architecture additions —
 
 **High-level tasks:**
 1. **Quality / camera-originals filter (D3, D11)** — *only if Phase 0 validated it:* labeled-corpus tests with confusion-matrix metrics, **zero clean-HEIC false positives** (D24), thresholds grounded in the Phase 0 real-asset data (and the synthetic corpus validated to reflect that distribution); the scoring function in `Curation`; the persisted resource-size cache (D18); off-by-default toggle; inspectable hidden set; **plus the full long-scan progress surface** (determinate, cancelable, curate-while-scanning — D12, which this filter is what actually justifies).
-2. **Location bucketing v1.1 (D4):** `NamedLocation`, MapKit pin + radius UI, human-confirmed cluster *suggestions*, the always-present "no location" bucket — all on EXIF coordinates, no CoreLocation permission (D7). Requires the SwiftData migration approach established in Phase 2.
-3. **Grow the machinery (D26, D29, D28):** snapshot test tier — triggered by the Phase 3 UI-spec commit (the concrete "UI has stabilized" signal), pin simulator OS/device, ban committed record-mode; a fuller E2E suite; the fastlane/`match` deploy pipeline with the App Store Connect API key in CI secrets; promote the access-counting/scale check from a named test to a hard gate.
+2. **Location — v1.1 REMAINDER (D4):** the **geocode + trip-naming half SHIPPED in v1** (#130 — geocode-once preprocessing, `GeocodedPlaceName` cache, trip clustering → Overview trip titles; see architecture.md §7). Still v1.1: `NamedLocation`, MapKit pin + radius UI, human-confirmed cluster *suggestions*, the always-present "no location" bucket — all on EXIF coordinates, no CoreLocation permission (D7).
+3. **Grow the machinery (D26, D29, D28):** snapshot test tier — triggered by the Phase 3 UI-spec commit (the concrete "UI has stabilized" signal), pin simulator OS/device, ban committed record-mode; a fuller E2E suite; ~~the fastlane/`match` deploy pipeline~~ — the **fastlane deploy pipeline shipped** (#135, `.github/workflows/testflight.yml`); `match` + App Store submission remain; promote the access-counting/scale check from a named test to a hard gate.
 
 **Exit criteria:** judged per feature — each workstream carries the mini exit criterion from its referenced decision (D24 metrics, D29 budgets, D26 snapshot pinning).
 

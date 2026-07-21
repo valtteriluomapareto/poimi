@@ -32,10 +32,12 @@ the **review grid** (#35), the **photo viewer** (#36), the **cluster-index Overv
 **mark-as-done** (#38), **album export + completion** (#39), and **per-album settings** (#41). `@main`
 launches the real coordinator-driven `AppRootView` (onboarding → permission → albums → the built screens).
 
-The **review grid is an accordion**: exactly one day-group cluster is open (its full grid) at a time
-and every other is a collapsed peek; "done" is its own state (a green seal badge), decoupled from
-collapse, set by a **"Mark as done" button at the end of an open cluster** that collapses it and
-advances to the next unreviewed cluster (`DoneStore` + `Completion.reopening` reconcile). The
+The **review grid is a paged-clusters pager** (#35 redesign, superseding the earlier accordion whose
+open/collapse reflow was jumpy on device): one cluster fills the screen and you **swipe sideways**
+between them (a horizontal `TabView`); only the active page loads full-res cells. "Done" is its own
+state (a green seal badge), set by a **"Mark day done" end-cap** after a cluster's photos (or the
+tappable seal in the top bar) that advances to the next unreviewed cluster (`DoneStore` +
+`Completion.reopening` reconcile). The
 **Overview** is a **cluster index** (design 3BL): a per-day-cluster list + a coverage chart of
 adaptive time buckets shaded gold by density. **Export** writes the picks into a native Photos album
 (create-or-find + dupe-guard, one-way — D31) then shows the completion screen (`ExportStore` +
@@ -57,6 +59,21 @@ depends on id strings) as the D23 tripwire; the happy-path controls carry **acce
 (future XCUITest-ready); and the [ui-spec](docs/design/ui-spec.md) now transcribes all resolved v1
 screens (D27). Deferred to v1.1: **select-mode / drag-multi-select** (from #35) + iPad **input polish**
 (keyboard/hover/drag). The throwaway Phase-0 **Spike** was deleted (it seeded #35).
+
+**Since Phase 2 — the v1.1 wave, shipped to `main`** (docs beyond this Status may still lag; being
+reconciled by the codebase checkup, #213): the **location / place / trip subsystem** (#130) — DBSCAN
+place clustering + reverse-geocoded trip/place names, **on by default** per album
+(`CurationProject.locationEnabled`), names cached in `GeocodedPlaceName` (D18), surfaced as Overview
+trip titles ("Week in …"); this rides `AppSchemaV2` (a new entity under **automatic** lightweight
+migration — see D37). **Pacing/over-target + persisted pace estimate + cluster personality**
+(#170/#172/#200); **videos opt-in** (#177/#178, `includeVideos`); the **viewer redesign** — metadata,
+reversible pick + auto-advance, Apple-Photos-style date/info (#127/#180/#183); **Overview resume +
+filter + grid mark-done redesign** (#202); **honest post-export status + additions-only drift** (#191);
+**cluster-strip picked-photo previews** (#203); the **forward path from finished review** (#187); and
+the **TestFlight / fastlane pipeline** (#135). **Built then reverted (device verdict):** the
+day-cluster **locality caption** ("Mostly at home / Out and about" #201/#207; named "kohteessa …" #208)
+— reverted in #210/#212, but the underlying location/trip subsystem it sat on **stayed**.
+
 Phase/issue plan: [docs/plans/project-phases.md](docs/plans/project-phases.md).
 
 ## Repo map
@@ -67,18 +84,25 @@ App/
   PoimiApp.xcodeproj           hand-authored project (see "pbxproj" below)
   PoimiApp/
     Sources/                   @main PoimiApp (composition root)
-    PhotoLibrary/              System/FakePhotoLibrary, PhotoLibraryProvider (DI seam)
-    Persistence/               CurationProject @Model, AppSchema (SwiftData)
-    State/                     ProjectStore, SelectionStore (@MainActor @Observable)
+    PhotoLibrary/              System/FakePhotoLibrary, PhotoLibraryProvider (DI seam) + thumbnail seam
+    Persistence/               CurationProject + GeocodedPlaceName @Models, AppSchemaV2 (SwiftData)
+    State/                     ProjectStore, SelectionStore, DoneStore (@MainActor @Observable)
     Navigation/                Route, AppCoordinator, AppRootView (the adaptive spine, #30)
     Onboarding/                OnboardingView, AccessRecoveryView (first-run + auth, #31)
+    Albums/                    AlbumsView — the album library (#32)
+    Setup/                     NewAlbumSetupView + draft / target / exclude-picker (#33)
+    Review/                    the review flow: AlbumOverviewView, ReviewGridView, PhotoViewerView,
+                               ReviewChrome, CandidateStore, ExportView/Store, TimelineCache (#34–#39, #202)
+    Location/                  PlaceNaming (System/Fake), LocationPreprocessor, TripLabel — the v1
+                               place/trip subsystem (#130)
     Settings/                  AlbumSettingsView (per-album, #41) + AppSettingsView (app-level: access/about)
-    Support/                   Log (OSLog), DebugScreen (screenshot harness)
+    Support/                   Log (OSLog), DebugScreen (screenshot harness), LocationSpikeProbe (DEBUG)
     Resources/                 Assets.xcassets + Localizable.xcstrings (String Catalog, #95 Phase 0)
   PoimiAppTests/               integration tier (Swift Testing, runs on a sim)
 Curation/                      pure-domain SPM package — NO Photos/SwiftData/UIKit/SwiftUI
-  Sources/Curation/            AssetRef, DayKey, DayGrouping, Completion, TargetProgress,
-                               SelectionSnapshot, PhotoLibraryProviding, …
+  Sources/Curation/            AssetRef, DayKey, DayGrouping, Completion, TargetProgress, SelectionSnapshot,
+                               PhotoLibraryProviding, + the location math: GeoDistance, PlaceCluster,
+                               TripOverlay, ReviewTimeline, ClusterCharacter, …
   Tests/CurationTests/         pure unit/property tests (headless: `swift test`)
 Scripts/                       CI guards + the screenshot harness (see below)
 docs/                          the durable record — plans + design
@@ -103,7 +127,8 @@ guard or a reviewer.
 - **Identifiers:** bundle id + OSLog subsystem are `com.valtteriluoma.poimi` (tests:
   `com.valtteriluoma.poimiTests`). Never `fi.paretosoftware.*`. Match `~/personal/photo-export`.
 - **Photos are sacrosanct:** we store only `localIdentifier`s, never photo bytes; deleting a
-  project never touches the user's Photos album or originals (D31).
+  project never touches the user's Photos album or originals; export is one-way (D31). Guard:
+  `Scripts/check-photos-sacrosanct.sh` (forbids `removeAssets`/`deleteAssets` in app sources).
 
 ## Build / test / lint
 
@@ -122,11 +147,14 @@ xcodebuild build -project App/PoimiApp.xcodeproj -scheme PoimiApp -configuration
 # Lint — warnings advisory, errors gate (not --strict yet, per D28); no unjustified disables:
 swiftlint lint --quiet
 
-# CI guards (all four must pass):
+# CI guards (all must pass) + the guard self-tests (prove each guard fails on a violation, #213):
+Scripts/tests/guard-selftests.sh
 Scripts/check-curation-boundary.sh
 Scripts/check-liquid-glass.sh
 Scripts/check-fake-release-isolation.sh
+Scripts/check-photos-sacrosanct.sh      # no destructive PhotoKit calls (D31)
 Scripts/check-no-grouping-in-views.sh   # day-grouping stays in the store, never a View body
+# (CI also runs check-version.sh + check-testflight-trigger.sh — release-flow guards.)
 ```
 
 **Testing framework:** Swift Testing (`@Test`/`@Suite`/`#expect`/`#require`), not XCTest. The
@@ -149,9 +177,9 @@ the harness is for human/agent eyeballing, not assertions.
 
 ## CI gates (every PR, all green to merge)
 
-Checkout → select Xcode 26 → SwiftLint → `Curation` tests → the 4 guards → Release build → app
-build + integration tests on an iOS 26 sim → an **advisory coverage summary** (not a gate — #110).
-Defined in `.github/workflows/ci.yml`.
+Checkout → select Xcode 26 → SwiftLint → `Curation` tests → the guard self-tests + the guards →
+version/TestFlight-trigger guards → Release build → app build + integration tests on an iOS 26 sim →
+an **advisory coverage summary** (not a gate — #110). Defined in `.github/workflows/ci.yml`.
 
 ## Conventions
 
@@ -179,8 +207,8 @@ Defined in `.github/workflows/ci.yml`.
 - **The `.xcodeproj` is hand-authored** (no XcodeGen/Tuist). Add files by editing `project.pbxproj`
   with the structured ID blocks (app=1, PhotoLibrary=3, tests=4, Support=5, Persistence=6,
   State=7, Navigation=8, Onboarding=9; Albums/Setup/Review/Settings use A0/B0/C0/D0 ids; 2 retired
-  with the Spike; next new letter group = E0, next numeric = 10; the app-group `Localizable.xcstrings`
-  resource took `…A1`/`…A2`); `plutil -lint` after, and
+  with the Spike; **E0 = Location** (#130); **next new letter group = F0, next numeric = 10**; the
+  app-group `Localizable.xcstrings` resource took `…A1`/`…A2`); `plutil -lint` after, and
   `xcodebuild -list` to confirm it still reads. Keep diffs to
   the intended change — no Xcode reformatting churn.
 - **Tests with fixes:** every bug fix ships with a failing-then-passing regression test.
@@ -205,8 +233,17 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
 - **[docs/plans/development-guidelines.md](docs/plans/development-guidelines.md)** — testability,
   test tiers, tooling, CI, Definition of Done.
 - **[docs/plans/preprocessing-and-caching.md](docs/plans/preprocessing-and-caching.md)** — what we
-  cache (state, never bytes) and the v1.1 **location-preprocessing** subsystem (live clustering +
-  the geocoded-name cache as the only network-bound thing worth persisting, the D18 pattern).
+  cache (state, never bytes) and the **location-preprocessing** subsystem (live clustering +
+  the geocoded-name cache as the only network-bound thing worth persisting, the D18 pattern; shipped #130).
+- **[docs/plans/location-spike-preregistration.md](docs/plans/location-spike-preregistration.md)** +
+  **[docs/plans/location-spike-findings.md](docs/plans/location-spike-findings.md)** — the #129 location
+  spike: what was pre-registered to test, and the tuned findings (eps/minPts) that seeded #130.
+- **[docs/reviews/ui-smoothness-review.md](docs/reviews/ui-smoothness-review.md)** — the smoothness
+  review (Finding 1 = no grouping/heavy work in a `body`), enforced by `check-no-grouping-in-views.sh`.
+- **[docs/deploy/testflight-setup.md](docs/deploy/testflight-setup.md)** — the TestFlight / fastlane
+  release setup (signing, App Store Connect API key, the CI deploy workflow; #135).
+- **[docs/process/codebase-checkup.md](docs/process/codebase-checkup.md)** — the reproducible, layered
+  codebase-checkup playbook + run-log + won't-fix ledger (#213).
 - **[docs/plans/localization.md](docs/plans/localization.md)** — the multi-locale plan (#95): a String
   Catalog foundation + Claude translating only deltas (manual at release first, CI later) + `fastlane`
   release notes/metadata, minimizing manual maintenance. **Deferred spec** — Phase 0 (catalog +
@@ -218,8 +255,9 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
 - **[docs/design/ui-spec.md](docs/design/ui-spec.md)** — the UI spec: the review screen in depth
   (anatomy, grid/header/selection/chrome, a11y) + all resolved v1 screens transcribed concisely
   (overview, viewer, export, settings, empty/error, iPad), plus deferrals (spike-then-document, D27).
-- **[docs/design/paper-index.md](docs/design/paper-index.md)** — index of the Paper design file: all
-  33 artboards — 27 product screens + a 6-artboard v1.1 exploration cluster (node IDs, content,
-  issue + build status). Keep current when working with Paper.
+- **[docs/design/paper-index.md](docs/design/paper-index.md)** — index of every artboard in the Paper
+  design file (node IDs, content, issue + build status). Keep current when working with Paper.
+- **[docs/design/pacing.md](docs/design/pacing.md)** — the pacing / over-target visualization spec
+  (projection card, pick-frontier, the warning-amber token; #120/#170/#200).
 - **[docs/plans/spike-findings.md](docs/plans/spike-findings.md)** — the closed Phase-0 evidence
   (picking interaction, grouping, scale) that seeded Phase 1/2.

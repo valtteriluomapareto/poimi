@@ -163,3 +163,16 @@ run-over-run.
     e.g. "Pick photo/video", "Mark as not done", day/cluster reopen variants — but confirm with the
     export tool before deleting; grep can't see wrapped/interpolated literals). "Review exclusions"
     sense-check (kept as "Tarkista poissulkemiset").
+- **Layer 9 (documentation & CLAUDE.md):** a fresh-agent onboarding sim + doc-drift catalog found the
+  docs lagged the whole v1.1 wave.
+  - **Fixed:** CLAUDE.md — Status now records the v1.1 wave + the built-then-reverted locality caption;
+    the stale **accordion** grid description → the shipped **paged-clusters pager**; repo map gains
+    `Albums/`/`Setup/`/`Review/`/`Location/` + `GeocodedPlaceName`/`DoneStore`/location math; the
+    **pbxproj id cursor** corrected (E0 = Location; next = F0 — a fresh agent would have collided);
+    the Photos-sacrosanct invariant gets its guard line; guard count "four"→all + `check-photos-sacrosanct`;
+    doc map gains the 6 missing docs; paper-index count made version-agnostic. architecture.md §7 +
+    project-phases.md — location split (geocode/trip half SHIPPED #130; MapKit/`NamedLocation` half still
+    v1.1), `NamedLocation`→`GeocodedPlaceName` where it's the real model, TestFlight/fastlane marked
+    shipped (#135).
+  - **Deferred → `checkup:layer-9`:** minor project-phases wording ("event/place names arrive with
+    location" — trips already name); paper-index artboard-count accuracy is **Layer 8** (design).
