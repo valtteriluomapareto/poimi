@@ -176,3 +176,18 @@ run-over-run.
     shipped (#135).
   - **Deferred → `checkup:layer-9`:** minor project-phases wording ("event/place names arrive with
     location" — trips already name); paper-index artboard-count accuracy is **Layer 8** (design).
+- **Layer 2 (tests & test-trust):** the test tier is **strong** across three investigators — no HIGH
+  findings, no flakiness (no sleeps, all-seeded RNG, real-task awaits), both-impl PhotoLibrary
+  conformance, exhaustive reconcile/drift/export coverage, and the 5 catastrophic seams all pinned.
+  Regression discipline held (every recent device-fix shipped a test).
+  - **Fixed:** 3 cheap regression tests for load-bearing branches/guards that shipped untested —
+    `PlaceClustering.homeCluster` tie-breaks (equal-days → more-photos → lower-id), `TripOverlay.runLabel`
+    photo tie-break, and the `finishToExport` **double-tap re-entrancy guard** (the guard existed with no
+    test for the double-tap it's for).
+  - **Deferred → `checkup:layer-2`:** `SystemPlaceNaming` fake↔system parity — extract the
+    `CLError→PlaceNamingError` map + `label(from:)` chain as pure funcs + unit-test them; a serial-geocode
+    contract (FakePlaceNaming tolerates concurrency the real geocoder rejects); ProjectStore delete →
+    `timelineCache.remove`; an explicit-named container-retention test (already implicitly guarded +
+    documented); scenePhase flush wiring + FakeThumbnailProvider nil-modeling (XCUITest/perf); a
+    4-day-with-weekend `TripShape` assertion; a development-guidelines doc nit (Curation `swift test` runs
+    on the sim locally, not headless).
