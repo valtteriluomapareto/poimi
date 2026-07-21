@@ -67,6 +67,34 @@ struct PreviewStripTests {
         #expect(PreviewStrip.pickedFirst(orderedIDs: small, selected: Set(small), count: 6) == small)
     }
 
+    @Test("picks + backfill fills to count and stays distinct across the picks|unpicked seam")
+    func fullAndDistinctAcrossSeam() {
+        // 15 ids, 2 picks, count 8: 2 picks + an even spread of 6 unpicked = 8, all distinct (the picked
+        // and unpicked blocks are complementary, so no thumb repeats across the seam).
+        let ids15 = (0..<15).map { "a\($0)" }
+        let selected: Set<String> = ["a0", "a1"]
+        let strip = PreviewStrip.pickedFirst(orderedIDs: ids15, selected: selected, count: 8)
+        #expect(strip.count == 8)                                   // filled to count (cluster is large enough)
+        #expect(Set(strip).count == strip.count)                    // no duplicate thumb across the seam
+        #expect(Array(strip.prefix(2)) == ["a0", "a1"])             // picks lead
+        #expect(Array(strip.dropFirst(2)).allSatisfy { !selected.contains($0) })
+    }
+
+    @Test("a LATE pick leads the strip, ahead of an early unpicked (block-then-block, not global order)")
+    func latePickLeadsEarlyUnpicked() {
+        // Only a9 picked → it heads the strip even though a0 (unpicked) is chronologically earlier.
+        let strip = PreviewStrip.pickedFirst(orderedIDs: ids, selected: ["a9"], count: 4)
+        #expect(strip.first == "a9")                                // the pick leads its block
+        #expect(strip.contains("a0"))                               // the earliest unpicked is in the backfill
+        #expect(strip.firstIndex(of: "a9")! < strip.firstIndex(of: "a0")!)   // …but AFTER the pick
+    }
+
+    @Test("count == 1: a single pick still leads (else the even-sample's first id)")
+    func countOne() {
+        #expect(PreviewStrip.pickedFirst(orderedIDs: ids, selected: ["a3"], count: 1) == ["a3"])   // the pick
+        #expect(PreviewStrip.pickedFirst(orderedIDs: ids, selected: [], count: 1) == ["a0"])        // fallback
+    }
+
     @Test("count 0 → empty; a pick set with ids outside the cluster is ignored")
     func degenerate() {
         #expect(PreviewStrip.pickedFirst(orderedIDs: ids, selected: ["a1"], count: 0) == [])

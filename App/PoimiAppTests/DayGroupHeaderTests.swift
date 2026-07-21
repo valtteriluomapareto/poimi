@@ -140,29 +140,3 @@ struct ClusterCaptionTests {
         #expect(c?.text.contains("1 videos") == false)
     }
 }
-
-/// Locks the collapsed-peek "foreground the keeps" ordering (#89 product blocker) so it can't
-/// regress to raw chronology.
-@Suite("Collapsed peek ordering (#89)")
-struct KeptFirstOrderingTests {
-
-    @Test("picked ids move to the front, each side keeps source order")
-    func keepsFirst() {
-        let ordered = keptFirstOrdering(ids: ["a", "b", "c", "d"], picked: ["b", "d"])
-        #expect(ordered == ["b", "d", "a", "c"])
-    }
-
-    @Test("zero picks leaves the order untouched")
-    func nonePicked() {
-        #expect(keptFirstOrdering(ids: ["a", "b", "c"], picked: []) == ["a", "b", "c"])
-    }
-
-    @Test("a partition: every id appears exactly once regardless of the picked set")
-    func partition() {
-        let ids = ["a", "b", "c", "d", "e"]
-        let ordered = keptFirstOrdering(ids: ids, picked: ["c", "e", "zzz"])  // "zzz" not in ids
-        #expect(Set(ordered) == Set(ids))
-        #expect(ordered.count == ids.count)
-        #expect(Array(ordered.prefix(2)) == ["c", "e"])   // the in-range picks lead, in source order
-    }
-}

@@ -15,10 +15,11 @@ import Curation
 struct OverviewThumb: View {
     let id: String
     let size: CGFloat
-    /// Set by the caller — a cluster row's thumb and the grid's 56pt peek use different radii.
+    /// Set by the caller — the Overview cluster strip and the DEBUG spike row use different radii.
     let cornerRadius: CGFloat
-    /// Show the gold "picked" check (#203) — the same encoding as the viewer filmstrip + grid cell. Default
-    /// off, so the grid's collapsed peek (which reuses this tile) is unaffected.
+    /// Show the gold "picked" indicator (#203) — a check + thin border, the same accent-gold encoding as
+    /// the viewer filmstrip. Default off, so only the Overview strip opts in (other callers, e.g. the DEBUG
+    /// spike row, are unaffected).
     var isPicked: Bool = false
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.displayScale) private var displayScale
@@ -43,8 +44,9 @@ struct OverviewThumb: View {
                         .strokeBorder(Color.accentColor, lineWidth: 1.5)
                 }
             }
-            // The picked check, bottom-trailing — matching the viewer filmstrip (`FilmstripThumb`): a gold
-            // circle with a dark glyph, so a picked photo reads the same wherever its thumbnail appears.
+            // The picked check, bottom-trailing — echoes the viewer filmstrip (`FilmstripThumb`): a gold
+            // circle with a dark glyph. A subtle shadow (unlike the filmstrip) keeps it legible over a
+            // bright thumb at this small preview size; with the gold border it reads as one "picked" signal.
             .overlay(alignment: .bottomTrailing) {
                 if isPicked {
                     Image(systemName: "checkmark.circle.fill")
@@ -254,11 +256,3 @@ struct CoverageChart: View {
     }
 }
 
-/// Keeps-first ordering for the collapsed peek: the picked ids (in source order) then the rest.
-/// Pure + `internal` so the "foreground the keeps" ordering is unit-tested and can't silently regress
-/// to raw chronology. Currently unused by the paged grid (which shows every cell, no collapsed peek);
-/// retained as a tested helper for a future done-cluster "kept first" treatment. (The accordion's
-/// `CollapsedSectionPeek`, its only former caller, was removed with the paged-clusters redesign.)
-func keptFirstOrdering(ids: [String], picked: Set<String>) -> [String] {
-    ids.filter(picked.contains) + ids.filter { !picked.contains($0) }
-}

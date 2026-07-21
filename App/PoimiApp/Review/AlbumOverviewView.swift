@@ -138,9 +138,14 @@ struct AlbumOverviewView: View {
             // back from the grid) and on a filter switch. Refresh them off-body then (not per-pick).
             .onChange(of: doneStore.doneDays) { refreshReviewFacts() }
             .onChange(of: filter) { refreshReviewFacts() }
-            // Picks change in the grid; on the pop back the preview strips should show what you kept (#203).
-            // Recomputed OFF `body` here (cheap set-math, once per change), never per row in a `body`.
-            .onChange(of: selection.selected) { refreshStrips() }
+            // Picks change in the GRID, where the Overview sits mounted beneath it in the same
+            // NavigationStack. Refreshing the strips on `selection` change would re-sample the WHOLE album
+            // on every pick tap for a strip nobody's looking at (#203 forbids exactly that). Instead
+            // recompute when the Overview becomes visible again (pop back / re-appear) — picking stays
+            // free, and the strip is fresh the moment it's shown. (The per-thumb picked BORDER is live in
+            // `ClusterStrip`, so indicators are already correct on return; only the picks-first ORDER
+            // settles here.)
+            .onAppear { refreshStrips() }
     }
 
     /// The preview-strip length (#203) — how many thumbs a cluster's strip samples (~6.5 show; the rest
