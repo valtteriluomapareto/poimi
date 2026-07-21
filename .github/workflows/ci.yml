@@ -124,6 +124,11 @@ jobs:
         # D30: any Fake* test double must be #if DEBUG-gated (inert in release).
         run: ./Scripts/check-fake-release-isolation.sh
 
+      - name: Check Photos are sacrosanct
+        # D31: no destructive PhotoKit calls (remove/delete from the user's library) —
+        # export is one-way; deleting a project never touches the user's photos.
+        run: ./Scripts/check-photos-sacrosanct.sh
+
       - name: Check grouping stays out of views
         # Smoothness (docs/reviews/ui-smoothness-review.md, Finding 1): DayGrouping.groups is an
         # O(n log n) pass over the whole candidate set — it must run once in CandidateStore, never

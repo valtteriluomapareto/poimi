@@ -29,9 +29,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # (pruned from the scan below).
 SCAN_DIR="${REPO_ROOT}/App/PoimiApp"
 
-# Forbidden: iOS version-availability gates, and the pre-glass material APIs used as a
-# version fallback.
-FORBIDDEN_REGEX='#available\(iOS|(\.(ultraThin|thin|regular|thick|ultraThick)Material)\b'
+# Forbidden: iOS version-availability gates — BOTH the runtime `#available(iOS …)` form AND the
+# `@available(iOS N, *)` declaration-attribute form (equally a version gate; #213 Layer 1) — and the
+# pre-glass material APIs used as a version fallback.
+FORBIDDEN_REGEX='#available\(iOS|@available\(iOS[[:space:]]*[0-9]|(\.(ultraThin|thin|regular|thick|ultraThick)Material)\b'
 
 OPT_OUT_MARKER='liquid-glass-ok'
 
