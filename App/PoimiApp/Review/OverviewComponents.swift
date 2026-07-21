@@ -34,6 +34,15 @@ struct OverviewThumb: View {
             }
             .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            // A thin GOLD border outlines a picked thumbnail (#203) — the small corner check reads weakly
+            // on a ~52pt preview, so the border carries the clarity; both are the accent gold, so they read
+            // as one "picked" signal. `strokeBorder` insets so the ring isn't clipped.
+            .overlay {
+                if isPicked {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .strokeBorder(Color.accentColor, lineWidth: 1.5)
+                }
+            }
             // The picked check, bottom-trailing — matching the viewer filmstrip (`FilmstripThumb`): a gold
             // circle with a dark glyph, so a picked photo reads the same wherever its thumbnail appears.
             .overlay(alignment: .bottomTrailing) {
