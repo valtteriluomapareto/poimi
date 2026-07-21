@@ -119,6 +119,22 @@ struct TripOverlayTests {
         #expect(Set(trips[0].days) == Set([key(10), key(11), key(12), key(13)]))
     }
 
+    @Test("a run where two places TIE on days is labelled by total photos (runLabel photo tie-break)")
+    func runLabelPhotoTieBreak() {
+        // A 2-day away run: city A wins day 10 (6 photos), city B wins day 11 (4 photos) — one day each,
+        // a tie on DAYS. The run label then falls to total photos: A (6) > B (4) → A labels the run.
+        // (Distinct from `labelByTimeNotPhotoVolume`, where one place wins MORE days.)
+        let cityA = place("aaa", 60.0, 24.0, offsets: [10], perDay: 6)
+        let cityB = place("bbb", 41.9, 12.5, offsets: [11], perDay: 4)
+        let assets = cityA + cityB
+        let clusters = PlaceClustering.clusters(for: assets, minPts: 3, calendar: cal)
+        let trips = TripOverlay.trips(assets: assets, clusters: clusters, home: nil,
+                                      gapToleranceDays: 2, calendar: cal)
+        #expect(trips.count == 1)
+        let cityACluster = clusters.clusters.first { $0.assetIDs.contains { $0.hasPrefix("aaa-") } }
+        #expect(trips[0].clusterID == cityACluster?.id)   // more total photos breaks the days tie
+    }
+
     // MARK: Invariant 7 — the §6 trip cases
 
     @Test("the same place visited in two separate months → two trips, same cluster")

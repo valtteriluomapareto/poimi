@@ -277,6 +277,24 @@ struct PlaceClusterTests {
         #expect(detectedHome?.assetIDs.allSatisfy { !$0.hasPrefix("trip") } == true)
     }
 
+    @Test("home tie-breaks: equal distinct-days → more photos wins; equal again → lower medoid id")
+    func homeClusterTieBreaks() {
+        func at(_ id: String, day: Int) -> AssetRef { located(id, 60.0, 24.0, dayOffset: day) }
+        let coord = Coordinate(latitude: 60, longitude: 24)
+        // Case A — both span 2 distinct days (a tie on the primary axis); Y has MORE photos → Y is home.
+        let x2 = PlaceCluster(id: "x0", medoid: coord, assetIDs: ["x0", "x1"])
+        let y3 = PlaceCluster(id: "y0", medoid: coord, assetIDs: ["y0", "y1", "y2"])
+        let assetsA = [at("x0", day: 0), at("x1", day: 1),
+                       at("y0", day: 0), at("y1", day: 1), at("y2", day: 0)]
+        #expect(PlaceClustering.homeCluster([x2, y3], assets: assetsA, calendar: cal)?.id == "y0")
+        // Case B — equal days AND equal photos → the LOWER medoid id wins. Pass the clusters in
+        // descending id order so the defensive `cluster.id < best.id` clause must fire.
+        let x = PlaceCluster(id: "x0", medoid: coord, assetIDs: ["x0", "x1"])
+        let y = PlaceCluster(id: "y0", medoid: coord, assetIDs: ["y0", "y1"])
+        let assetsB = [at("x0", day: 0), at("x1", day: 1), at("y0", day: 0), at("y1", day: 1)]
+        #expect(PlaceClustering.homeCluster([y, x], assets: assetsB, calendar: cal)?.id == "x0")
+    }
+
     @Test("a NEAR addition may move the medoid (identity is medoid-derived, not frozen — invariant 3)")
     func medoidDriftsWithNearMass() {
         // Invariant 3 pins stability under FAR additions; the complement is that a near addition is

@@ -189,6 +189,20 @@ struct AppCoordinatorTests {
         #expect(coord.path.last == .export(id))
     }
 
+    @Test("finishToExport is re-entrancy-guarded — a double-tap can't push export twice (#187)")
+    func finishToExportDoubleTapGuarded() {
+        // The guard `path.last != .export(id)` exists for exactly this: a fumbled double-tap of the
+        // finish action must push export ONCE, not stack two export routes.
+        let coord = coordinator(.authorized)
+        let id = UUID()
+        coord.openProject(id)
+        coord.openReview(id)
+        coord.finishToExport()
+        coord.finishToExport()   // double-tap
+        #expect(coord.path.filter { $0 == .export(id) }.count == 1)
+        #expect(coord.path == [.albumOverview(id), .review(id, nil), .export(id)])
+    }
+
     @Test("pop leaves an open viewer alone; popToRoot dismisses it (#36)")
     func popVsPopToRootWithOpenViewer() {
         let coord = coordinator(.authorized)
