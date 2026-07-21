@@ -64,6 +64,9 @@ assert "forbidden import fails" "${d}" check-curation-boundary.sh nonzero
 rm -f "${d}/Curation/Sources/BadImport.swift"
 printf 'import Foundation\n@MainActor final class Bad {}\n' > "${d}/Curation/Sources/BadActor.swift"
 assert "@MainActor fails" "${d}" check-curation-boundary.sh nonzero
+rm -f "${d}/Curation/Sources/BadActor.swift"
+printf 'import MapKit\npublic let m = 1\n' > "${d}/Curation/Sources/BadMapKit.swift"
+assert "forbidden MapKit import fails" "${d}" check-curation-boundary.sh nonzero
 
 echo "== check-liquid-glass.sh =="
 d="$(skeleton check-liquid-glass.sh)"; mkdir -p "${d}/App/PoimiApp"
@@ -73,7 +76,10 @@ printf 'import SwiftUI\nlet bg = Color.clear.background(.thinMaterial)\n' > "${d
 assert "material fallback fails" "${d}" check-liquid-glass.sh nonzero
 rm -f "${d}/App/PoimiApp/BadMaterial.swift"
 printf 'import SwiftUI\nlet gate = { if #available(iOS 27, *) { } }\n' > "${d}/App/PoimiApp/BadGate.swift"
-assert "version gate fails" "${d}" check-liquid-glass.sh nonzero
+assert "runtime #available gate fails" "${d}" check-liquid-glass.sh nonzero
+rm -f "${d}/App/PoimiApp/BadGate.swift"
+printf 'import SwiftUI\n@available(iOS 27, *) struct NewThing {}\n' > "${d}/App/PoimiApp/BadAvail.swift"
+assert "@available attribute gate fails" "${d}" check-liquid-glass.sh nonzero
 
 echo "== check-fake-release-isolation.sh =="
 d="$(skeleton check-fake-release-isolation.sh)"; mkdir -p "${d}/App/PoimiApp"
@@ -91,6 +97,16 @@ printf 'import SwiftUI\nstruct FooView: View { var body: some View { Text("x") }
 assert "view without grouping passes" "${d}" check-no-grouping-in-views.sh zero
 printf 'import SwiftUI\nstruct BarView: View { let g = DayGrouping.groups(for: []) }\n' > "${d}/App/PoimiApp/BarView.swift"
 assert "grouping in a view fails" "${d}" check-no-grouping-in-views.sh nonzero
+
+echo "== check-photos-sacrosanct.sh =="
+d="$(skeleton check-photos-sacrosanct.sh)"; mkdir -p "${d}/App/PoimiApp"
+printf 'import Photos\nlet r = PHAssetCollectionChangeRequest()\nfunc go() { r.addAssets([] as NSArray) }\n' > "${d}/App/PoimiApp/Export.swift"
+assert "additive export passes" "${d}" check-photos-sacrosanct.sh zero
+printf 'import Photos\nlet r = PHAssetCollectionChangeRequest()\nfunc bad() { r.removeAssets([] as NSArray) }\n' > "${d}/App/PoimiApp/BadRemove.swift"
+assert "removeAssets fails" "${d}" check-photos-sacrosanct.sh nonzero
+rm -f "${d}/App/PoimiApp/BadRemove.swift"
+printf 'import Photos\nfunc bad() { PHAssetChangeRequest.deleteAssets([] as NSArray) }\n' > "${d}/App/PoimiApp/BadDelete.swift"
+assert "deleteAssets fails" "${d}" check-photos-sacrosanct.sh nonzero
 
 echo
 if [ "${fails}" -eq 0 ]; then

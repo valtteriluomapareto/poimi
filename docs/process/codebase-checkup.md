@@ -110,7 +110,11 @@ What makes run N+1 cheap:
 Investigators are handed this verbatim as "already known — do not re-report." Add an entry when a
 finding is consciously accepted; remove it if the decision changes.
 
-- _(Layer 1)_ — none yet.
+- _(Layer 1)_ — **Accepted concurrency escape hatches** (Swift 6 complete mode is on; these are the
+  justified overrides, don't re-flag): `PlayerItemBox: @unchecked Sendable` (`ThumbnailProviding.swift`)
+  — boxes a non-Sendable `AVPlayerItem`, touched only on main; `ThumbnailMemoryCache: @unchecked Sendable`
+  (thread-safe `NSCache`); `nonisolated(unsafe) didAdd`/`placeholderID` (`SystemPhotoLibrary.swift`, read
+  after a synchronous `performChanges`). All correctly justified in-comment.
 - _(Layer 2)_ — none yet.
 - _(Layer 3)_ — none yet.
 - _(Layer 4)_ — none yet.
@@ -127,11 +131,24 @@ finding is consciously accepted; remove it if the decision changes.
 Append one entry per run (newest first). Metrics are the cheap objective signals so drift is measurable
 run-over-run.
 
-### Run 1 — (in progress)
-- **Started at SHA:** _(fill in at kickoff)_
-- **Scope:** Layer 0 (harness) + P0 pre-flight + Layer 1, then go/no-go.
-- **Baseline metrics** _(capture during the P0 pre-flight)_: SwiftLint warnings · build warnings · test
-  count · files > 1000 lines · —.
-- **Layers run / skipped:** Layer 0 done (this playbook + guard self-tests). …
-- **Findings:** _(counts by severity, per layer)_ …
-- **Fixed / deferred (`checkup:*`) / won't-fix:** …
+### Run 1 — 2026-07 (Layer 0 + P0 pre-flight + Layer 1; go/no-go pending)
+- **Baseline SHA:** `467a7ce` (main after Layer 0). Future runs diff-scope from here.
+- **Scope:** Layer 0 (harness) + P0 pre-flight + Layer 1, then go/no-go before Layers 2–9.
+- **Baseline metrics:** SwiftLint 71 warnings / 0 errors · files > 900 lines: 3 (`AlbumOverviewView` 993;
+  `LocationSpikeProbe` 978 + `DebugScreen` 965 are DEBUG-harness) · none > 1000 · ~22k Swift LOC (App+Curation)
+  · Curation 204 tests + the app/integration suite · **zero third-party deps** · **no secrets**.
+- **P0 pre-flight:** clean — no secrets, deps license-compatible (none), all guards + self-tests green,
+  main green. No P0 fixed on the spot.
+- **Layer 1 (architecture, invariants & concurrency):** every invariant HELD; all guards + self-tests pass;
+  **app target already builds Swift 6 complete-concurrency** (the compiler is the concurrency guard) — every
+  actor seam clean.
+  - **Fixed:** added the **D31 photos-sacrosanct guard** (was the only safety-critical invariant with no
+    automated defense) + CI + self-tests; hardened the boundary denylist (**+MapKit/Contacts/CoreGraphics**)
+    and the liquid-glass guard (**+`@available` attribute gate**), both with self-test cases; reconciled the
+    decisions log (**D4/D33 → shipped; D37 → corrected** for the AppSchemaV2 new-entity automatic migration;
+    D6 → resolved; a deferred/resolved inconsistency).
+  - **Deferred → `checkup:layer-1`:** boundary allowlist rewrite; D30 nesting-depth + Fake/Stub/Mock content
+    detection; D15 selection guard; identifier-convention guard; Mutex-over-NSLock; unjustified-@unchecked
+    guard; liquid-glass block-comment stripping; a misleading `CandidateStore` "DETACHED" comment (→ Layer 2);
+    CLAUDE.md / architecture.md / project-phases.md location drift (→ Layer 9).
+  - **Accepted (won't-fix):** the concurrency escape hatches — see the ledger above.

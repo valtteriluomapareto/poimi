@@ -36,7 +36,11 @@ SCAN_DIRS=(
 )
 
 # Forbidden imports (whole-word match on the module name after `import`).
-FORBIDDEN_IMPORTS=(Photos PhotoKit PhotosUI SwiftData UIKit SwiftUI AppKit Combine CoreLocation)
+# MapKit/Contacts/CoreGraphics are pre-emptive (no current violation, #213 Layer 1): CLGeocoder is
+# soft-deprecated toward MapKit's MKReverseGeocodingRequest and CLPlacemark exposes a Contacts
+# CNPostalAddress, so a future geocoding migration is the realistic path a geo/geometry framework
+# would first reach the pure domain — and AssetRef deliberately avoids CGSize (uses PixelSize).
+FORBIDDEN_IMPORTS=(Photos PhotoKit PhotosUI SwiftData UIKit SwiftUI AppKit Combine CoreLocation MapKit Contacts CoreGraphics)
 
 status=0
 
