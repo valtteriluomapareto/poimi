@@ -17,6 +17,9 @@ struct OverviewThumb: View {
     let size: CGFloat
     /// Set by the caller — a cluster row's thumb and the grid's 56pt peek use different radii.
     let cornerRadius: CGFloat
+    /// Show the gold "picked" check (#203) — the same encoding as the viewer filmstrip + grid cell. Default
+    /// off, so the grid's collapsed peek (which reuses this tile) is unaffected.
+    var isPicked: Bool = false
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.displayScale) private var displayScale
     @State private var image: UIImage?
@@ -31,6 +34,17 @@ struct OverviewThumb: View {
             }
             .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            // The picked check, bottom-trailing — matching the viewer filmstrip (`FilmstripThumb`): a gold
+            // circle with a dark glyph, so a picked photo reads the same wherever its thumbnail appears.
+            .overlay(alignment: .bottomTrailing) {
+                if isPicked {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(Color.onAccent, Color.accentColor)
+                        .shadow(radius: 1)
+                        .padding(2)
+                }
+            }
             .task(id: id) {
                 let px = size * displayScale
                 let target = CGSize(width: px, height: px)
@@ -56,6 +70,10 @@ struct ClusterStrip: View {
     var spacing: CGFloat = 6
     /// How many thumbs fill the strip width — the fractional `.5` makes the next one run off the edge.
     var visibleThumbs: CGFloat = 6.5
+    /// The picked-check per thumb (#203) reads the shared store live, mirroring `Filmstrip` — the strip's
+    /// CONTENT (which ids) is precomputed off `body`, but the per-thumb picked flag is a cheap O(1) read
+    /// per VISIBLE thumb. On the Overview picks don't change, so this is dormant here.
+    @Environment(SelectionStore.self) private var selection
     /// Thumb edge — derived from the measured strip width so `visibleThumbs` fit. A sensible default
     /// until the first geometry read, so the row never lays out at zero height.
     @State private var thumbSize: CGFloat = 52
@@ -64,7 +82,7 @@ struct ClusterStrip: View {
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: spacing) {
                 ForEach(ids, id: \.self) { id in
-                    OverviewThumb(id: id, size: thumbSize, cornerRadius: 10)
+                    OverviewThumb(id: id, size: thumbSize, cornerRadius: 10, isPicked: selection.contains(id))
                 }
             }
         }
