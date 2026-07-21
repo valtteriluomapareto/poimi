@@ -15,8 +15,12 @@ import Curation
 struct OverviewThumb: View {
     let id: String
     let size: CGFloat
-    /// Set by the caller — a cluster row's thumb and the grid's 56pt peek use different radii.
+    /// Set by the caller — the Overview cluster strip and the DEBUG spike row use different radii.
     let cornerRadius: CGFloat
+    /// Show the gold "picked" indicator (#203) — a check + thin border, the same accent-gold encoding as
+    /// the viewer filmstrip. Default off, so only the Overview strip opts in (other callers, e.g. the DEBUG
+    /// spike row, are unaffected).
+    var isPicked: Bool = false
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.displayScale) private var displayScale
     @State private var image: UIImage?
@@ -31,6 +35,27 @@ struct OverviewThumb: View {
             }
             .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            // A thin GOLD border outlines a picked thumbnail (#203) — the small corner check reads weakly
+            // on a ~52pt preview, so the border carries the clarity; both are the accent gold, so they read
+            // as one "picked" signal. `strokeBorder` insets so the ring isn't clipped.
+            .overlay {
+                if isPicked {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .strokeBorder(Color.accentColor, lineWidth: 1.5)
+                }
+            }
+            // The picked check, bottom-trailing — echoes the viewer filmstrip (`FilmstripThumb`): a gold
+            // circle with a dark glyph. A subtle shadow (unlike the filmstrip) keeps it legible over a
+            // bright thumb at this small preview size; with the gold border it reads as one "picked" signal.
+            .overlay(alignment: .bottomTrailing) {
+                if isPicked {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(Color.onAccent, Color.accentColor)
+                        .shadow(radius: 1)
+                        .padding(2)
+                }
+            }
             .task(id: id) {
                 let px = size * displayScale
                 let target = CGSize(width: px, height: px)
@@ -44,29 +69,31 @@ struct OverviewThumb: View {
 }
 
 /// A horizontal, scrollable preview of a cluster's photos for the Overview (#35 paged-clusters): a
-/// handful of thumbnails **sampled evenly across the whole cluster** (via `ReviewCluster.evenlySampledIDs`
-/// — a trip samples across its merged days), so a glance conveys the cluster's shape without opening it.
-/// Thumbs are sized so **`visibleThumbs` (6.5)** fill the strip's width — the half-thumb runs off the
-/// right screen edge, an unmistakable "keep scrolling" cue. `LazyHStack` so only on-screen thumbs load;
-/// the rest of the sample load on horizontal scroll, not up front.
+/// handful of thumbnails, **the ones you PICKED first** backfilled with a spread of the rest (#203), so a
+/// glance shows "what I kept from this day" (an untouched day falls back to an even sample). The ids are
+/// **precomputed off `body`** by the parent (`AlbumOverviewView.refreshStrips`) and passed in — a pick
+/// never re-samples here. Thumbs are sized so **`visibleThumbs` (6.5)** fill the strip's width — the
+/// half-thumb runs off the right screen edge, an unmistakable "keep scrolling" cue. `LazyHStack` so only
+/// on-screen thumbs load; the rest reveal on horizontal scroll, not up front.
 struct ClusterStrip: View {
-    let cluster: ReviewCluster
+    /// The preview ids to show, in order (picked-first, precomputed by the parent).
+    let ids: [String]
     var spacing: CGFloat = 6
     /// How many thumbs fill the strip width — the fractional `.5` makes the next one run off the edge.
     var visibleThumbs: CGFloat = 6.5
-    /// Sample up to this many across the cluster; ~6.5 show, the rest reveal on scroll. Bounded so a
-    /// 500-photo busy day previews with a handful of thumbs, not five hundred.
-    var sampleCount: Int = 14
+    /// The picked-check per thumb (#203) reads the shared store live, mirroring `Filmstrip` — the strip's
+    /// CONTENT (which ids) is precomputed off `body`, but the per-thumb picked flag is a cheap O(1) read
+    /// per VISIBLE thumb. On the Overview picks don't change, so this is dormant here.
+    @Environment(SelectionStore.self) private var selection
     /// Thumb edge — derived from the measured strip width so `visibleThumbs` fit. A sensible default
     /// until the first geometry read, so the row never lays out at zero height.
     @State private var thumbSize: CGFloat = 52
 
     var body: some View {
-        let ids = cluster.evenlySampledIDs(sampleCount)
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: spacing) {
                 ForEach(ids, id: \.self) { id in
-                    OverviewThumb(id: id, size: thumbSize, cornerRadius: 10)
+                    OverviewThumb(id: id, size: thumbSize, cornerRadius: 10, isPicked: selection.contains(id))
                 }
             }
         }
@@ -229,11 +256,3 @@ struct CoverageChart: View {
     }
 }
 
-/// Keeps-first ordering for the collapsed peek: the picked ids (in source order) then the rest.
-/// Pure + `internal` so the "foreground the keeps" ordering is unit-tested and can't silently regress
-/// to raw chronology. Currently unused by the paged grid (which shows every cell, no collapsed peek);
-/// retained as a tested helper for a future done-cluster "kept first" treatment. (The accordion's
-/// `CollapsedSectionPeek`, its only former caller, was removed with the paged-clusters redesign.)
-func keptFirstOrdering(ids: [String], picked: Set<String>) -> [String] {
-    ids.filter(picked.contains) + ids.filter { !picked.contains($0) }
-}

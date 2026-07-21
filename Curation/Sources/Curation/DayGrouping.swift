@@ -46,18 +46,7 @@ public struct DayGroup: Sendable, Identifiable, Equatable, Codable {
     /// Indices are de-duplicated, so a group only slightly larger than `count` yields distinct thumbs
     /// (a repeated preview thumbnail would read as a bug), possibly returning fewer than `count`.
     public func evenlySampledIDs(_ count: Int) -> [String] {
-        guard count > 0 else { return [] }
-        let n = assetIDs.count
-        guard n > count else { return assetIDs }
-        if count == 1 { return [assetIDs[0]] }
-        var seen = Set<Int>()
-        var out: [String] = []
-        out.reserveCapacity(count)
-        for i in 0..<count {
-            let idx = Int((Double(i) * Double(n - 1) / Double(count - 1)).rounded())
-            if seen.insert(idx).inserted { out.append(assetIDs[idx]) }
-        }
-        return out
+        PreviewStrip.evenlySampled(assetIDs, count: count)
     }
 
     public init(id: String, assetIDs: [String], days: [DayKey], isBusyDay: Bool) {
