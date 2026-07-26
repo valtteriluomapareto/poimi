@@ -129,10 +129,10 @@ guard or a reviewer.
 - **Photos are sacrosanct:** we store only `localIdentifier`s, never photo bytes; deleting a
   project never touches the user's Photos album or originals; export is one-way (D31). Guard:
   `Scripts/check-photos-sacrosanct.sh` (forbids `removeAssets`/`deleteAssets` in app sources).
-- **Capture timestamp, never the edit timestamp:** every ordering, grouping and date label reads
-  `PHAsset.creationDate` → `AssetRef.captureDate`. `modificationDate` is when the photo was last
-  *edited* — ordering by it scrambles the timeline, and the fakes carry no edit dates so no test
-  would catch it. Review-only (no guard): `modificationDate` appears nowhere in app sources today.
+- **Capture timestamp, never the edit timestamp (D32):** every ordering, grouping and date label
+  reads `PHAsset.creationDate` → `AssetRef.captureDate`. `modificationDate` is the *edit* timestamp
+  — ordering by it scrambles the timeline, and the fakes carry no edit dates, so no test would catch
+  it. The sole sanctioned use is D18's resource-size cache key (a cache key, never an ordering).
 
 ## Build / test / lint
 

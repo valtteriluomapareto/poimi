@@ -115,7 +115,24 @@ finding is consciously accepted; remove it if the decision changes.
   — boxes a non-Sendable `AVPlayerItem`, touched only on main; `ThumbnailMemoryCache: @unchecked Sendable`
   (thread-safe `NSCache`); `nonisolated(unsafe) didAdd`/`placeholderID` (`SystemPhotoLibrary.swift`, read
   after a synchronous `performChanges`). All correctly justified in-comment.
-- _(Layer 2)_ — none yet.
+- _(Layer 2)_ — **Capture-date audit, two accepted PhotoKit limits** (2026-07; the sweep itself found no
+  edit-date usage — `modificationDate` appears in no Swift source, and `AssetRef` carries exactly one
+  `Date?`, so the domain is structurally incapable of the regression):
+  1. **`PHAsset.creationDate` is the save time, not the shutter time, for some imports.** Photos sets it
+     from EXIF when present, but a third-party-editor re-save, a WhatsApp image, or an AirDrop can carry
+     the save instant instead. Apple Photos shows the same date, so we agree with the system; the user's
+     repair path is Photos' "Adjust Date & Time," which writes `creationDate` and so flows to us.
+     **Won't-fix:** the alternative is EXIF `DateTimeOriginal` per asset via `PHAssetResource` +
+     `CGImageSource` — far too slow across a year, and for an edited asset you'd read the rendered
+     version's metadata anyway. `PHAsset.location?.timestamp` (the GPS fix time) was considered as a
+     cross-check and rejected: nil for the GPS-less majority, lags the shutter, mixes two clocks in one
+     sort, and would ignore the user's own date correction.
+  2. **Re-export appends instead of merging chronologically.** `SystemPhotoLibrary.export`'s
+     `existingAlbumID` branch adds only the new picks, so they land at the end of the album's custom
+     order rather than in date position. **Won't-fix for now:** Photos offers an Oldest/Newest sort
+     toggle on any album, and a real fix needs a second `performChanges` pass after the add (a re-fetch,
+     `canPerform(.rearrangeContent)`, and a permutation into repeated `moveAssets` calls) — device-only,
+     untestable in CI, and it would silently overwrite a user's manual arrangement.
 - _(Layer 3)_ — none yet.
 - _(Layer 4)_ — none yet.
 - _(Layer 5)_ — none yet.

@@ -177,12 +177,22 @@ actor SystemPhotoLibrary: PhotoLibraryProviding {
     /// `ids` resolved to live `PHAsset`s, oldest capture date first — so the album reads chronologically
     /// (architecture §8; `fetchAssets(withLocalIdentifiers:)` ignores sort descriptors, so sort here).
     /// Called only inside a `performChanges` block; the array never escapes it.
+    ///
+    /// Ties break on `localIdentifier`. Equal capture dates are common (a burst, a same-second import,
+    /// date-only EXIF, and every `.distantPast` fallback collapsing together), `ids` arrives from a
+    /// `Set` whose iteration order is per-process seeded, and Swift's `sort` is not stable — so without
+    /// a tiebreak the album's order within a tie would differ run to run. The tiebreak is arbitrary but
+    /// *fixed*, which is what a chronological album needs.
     private static func assetsByCaptureDate(withIDs ids: [String]) -> [PHAsset] {
         var assets: [PHAsset] = []
         PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil).enumerateObjects { asset, _, _ in
             assets.append(asset)
         }
-        return assets.sorted { ($0.creationDate ?? .distantPast) < ($1.creationDate ?? .distantPast) }
+        return assets.sorted { lhs, rhs in
+            let left = lhs.creationDate ?? .distantPast
+            let right = rhs.creationDate ?? .distantPast
+            return left != right ? left < right : lhs.localIdentifier < rhs.localIdentifier
+        }
     }
 
     /// The asset ids currently in `collection` — the dupe-guard baseline for a re-export.

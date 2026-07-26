@@ -119,8 +119,11 @@ the build if violated:
 ./Scripts/check-fake-release-isolation.sh   # fakes + debug flags are absent from Release (D30)
 ./Scripts/check-photos-sacrosanct.sh        # no destructive PhotoKit calls — export is one-way (D31)
 ./Scripts/check-no-grouping-in-views.sh     # day-grouping stays in the store, never a View body
-./Scripts/tests/guard-selftests.sh          # each guard passes clean AND fails on a violation
+# (CI also runs check-version.sh + check-testflight-trigger.sh — release-flow guards, see below.)
 ```
+
+`./Scripts/tests/guard-selftests.sh` backs them: it proves each guard passes a clean tree **and**
+fails an injected violation, so a guard that silently stopped matching can't pass CI forever.
 
 The full pipeline (lint → `Curation` tests → guards → Release build → app tests on an iOS 26
 sim) is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
