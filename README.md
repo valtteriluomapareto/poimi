@@ -110,13 +110,16 @@ xcodebuild test -project App/PoimiApp.xcodeproj -scheme PoimiApp -configuration 
 
 ## CI guards
 
-Three language-level invariants are enforced on every PR (and runnable locally). They fail
+A set of language-level invariants is enforced on every PR (and runnable locally). They fail
 the build if violated:
 
 ```sh
 ./Scripts/check-curation-boundary.sh        # Curation imports no Photos/SwiftData/UI (D14/D21)
 ./Scripts/check-liquid-glass.sh             # no SDK-version gates / material fallbacks (pure glass)
 ./Scripts/check-fake-release-isolation.sh   # fakes + debug flags are absent from Release (D30)
+./Scripts/check-photos-sacrosanct.sh        # no destructive PhotoKit calls — export is one-way (D31)
+./Scripts/check-no-grouping-in-views.sh     # day-grouping stays in the store, never a View body
+./Scripts/tests/guard-selftests.sh          # each guard passes clean AND fails on a violation
 ```
 
 The full pipeline (lint → `Curation` tests → guards → Release build → app tests on an iOS 26
