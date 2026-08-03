@@ -1,0 +1,197 @@
+---
+interface Props {
+	title: string;
+	subtitle: string;
+	count?: string;
+	markDone?: boolean;
+}
+const { title, subtitle, count = '128 / 200', markDone = false } = Astro.props;
+
+// Muted, photo-like placeholder tones; `sel` marks a picked (gold-checked) tile.
+const tiles = [
+	{ c: '#B9C2CB', sel: false },
+	{ c: '#CBB69E', sel: true },
+	{ c: '#9DA98F', sel: true },
+	{ c: '#D8C8B4', sel: false },
+	{ c: '#A7B4BC', sel: true },
+	{ c: '#C9B7AC', sel: false },
+	{ c: '#8FA0A6', sel: true },
+	{ c: '#DAD1C2', sel: false },
+	{ c: '#C4A98E', sel: true },
+	{ c: '#AEB8AE', sel: false },
+	{ c: '#CDBEB0', sel: true },
+	{ c: '#B0BAC2', sel: false },
+	{ c: '#D2C0AA', sel: false },
+	{ c: '#99A79B', sel: true },
+	{ c: '#C7BDB2', sel: false },
+	{ c: '#BFC7CE', sel: true },
+];
+---
+
+<div
+	class="grid-mock"
+	role="img"
+	aria-label={`Poimi review grid — ${title}, ${count} picked`}
+>
+	<div class="gm-head">
+		<div class="gm-titles">
+			<span class="gm-title">{title}</span>
+			<span class="gm-sub">{subtitle}</span>
+		</div>
+		<span class="gm-count">
+			<svg viewBox="0 0 24 24" aria-hidden="true"
+				><path
+					d="M5 12.5l4.2 4.2L19 7"
+					stroke="var(--color-accent)"
+					stroke-width="3"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					fill="none"></path></svg
+			>
+			{count}
+		</span>
+	</div>
+	<div class="gm-grid">
+		{
+			tiles.map((t) => (
+				<span
+					class:list={['gm-tile', { sel: t.sel }]}
+					style={`background:${t.c}`}
+				>
+					{t.sel && (
+						<span class="gm-badge">
+							<svg viewBox="0 0 24 24" aria-hidden="true">
+								<path
+									d="M5 12.5l4.2 4.2L19 7"
+									stroke="#fff"
+									stroke-width="3.2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									fill="none"
+								/>
+							</svg>
+						</span>
+					)}
+				</span>
+			))
+		}
+	</div>
+	{
+		markDone && (
+			<span class="gm-done">
+				<svg viewBox="0 0 24 24" aria-hidden="true">
+					<path
+						d="M5 12.5l4.2 4.2L19 7"
+						stroke="#fff"
+						stroke-width="2.8"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						fill="none"
+					/>
+				</svg>
+				Mark day done
+			</span>
+		)
+	}
+</div>
+
+<style>
+	.grid-mock {
+		background: #fff;
+		border: 1px solid var(--color-separator);
+		border-radius: var(--radius-xl);
+		box-shadow: var(--shadow-hero);
+		padding: 22px;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+	.gm-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	.gm-titles {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+	.gm-title {
+		font-size: 19px;
+		font-weight: 700;
+		letter-spacing: var(--tracking-tight);
+	}
+	.gm-sub {
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--color-label-secondary);
+	}
+	.gm-count {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		flex-shrink: 0;
+		background: var(--color-accent-tint);
+		color: var(--color-accent);
+		font-size: 14px;
+		font-weight: 700;
+		padding: 7px 13px;
+		border-radius: var(--radius-full);
+	}
+	.gm-count svg {
+		width: 14px;
+		height: 14px;
+	}
+	.gm-grid {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 10px;
+	}
+	.gm-tile {
+		position: relative;
+		aspect-ratio: 1;
+		border-radius: 14px;
+	}
+	.gm-tile.sel {
+		box-shadow: inset 0 0 0 3px var(--color-accent);
+	}
+	.gm-badge {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		width: 24px;
+		height: 24px;
+		border-radius: var(--radius-full);
+		background: var(--color-accent);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0 0 0 2px rgb(255 255 255 / 90%);
+	}
+	.gm-badge svg {
+		width: 13px;
+		height: 13px;
+	}
+	.gm-done {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 9px;
+		background: var(--color-secondary);
+		color: #fff;
+		font-size: 16px;
+		font-weight: 600;
+		padding: 14px;
+		border-radius: 14px;
+	}
+	.gm-done svg {
+		width: 17px;
+		height: 17px;
+	}
+	@media (max-width: 520px) {
+		.gm-grid {
+			grid-template-columns: repeat(3, 1fr);
+		}
+	}
+</style>

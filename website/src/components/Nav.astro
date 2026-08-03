@@ -1,0 +1,51 @@
+---
+import Wordmark from './Wordmark.astro';
+import AppStoreButton from './AppStoreButton.astro';
+import { withBase } from '../utils';
+
+const links = [
+	{ label: 'How it works', href: withBase('#how-it-works') },
+	{ label: 'Privacy', href: withBase('#privacy') },
+	{ label: 'Open source', href: withBase('#open-source') },
+];
+---
+
+<header class="nav">
+	<a class="brand" href={withBase()} aria-label="Poimi home">
+		<Wordmark />
+	</a>
+	<nav class="links" aria-label="Primary">
+		{links.map((l) => <a href={l.href}>{l.label}</a>)}
+		<AppStoreButton variant="compact" />
+	</nav>
+</header>
+
+<style>
+	.nav {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 18px clamp(20px, 6vw, 80px);
+		max-width: 1440px;
+		margin-inline: auto;
+	}
+	.links {
+		display: flex;
+		align-items: center;
+		gap: clamp(18px, 3vw, 34px);
+	}
+	.links > a {
+		font-size: 15px;
+		font-weight: 500;
+		color: var(--color-label-secondary);
+	}
+	.links > a:hover {
+		color: var(--color-label);
+	}
+	/* Hide the text links on narrow screens; the CTA stays. */
+	@media (max-width: 600px) {
+		.links > a {
+			display: none;
+		}
+	}
+</style>

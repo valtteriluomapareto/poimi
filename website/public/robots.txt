@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://valtteriluomapareto.github.io/poimi/sitemap-index.xml

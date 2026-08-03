@@ -1,0 +1,63 @@
+---
+import MarketingLayout from '../layouts/MarketingLayout.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import InfoPage from '../components/InfoPage.astro';
+import { CONTACT_EMAIL, GITHUB_URL, COMMERCIAL_LICENSE_URL } from '../consts';
+---
+
+<MarketingLayout
+	title="Terms of Use — Poimi"
+	description="Terms of use for Poimi, the iOS photo-album app."
+	noindex
+>
+	<Nav />
+	<InfoPage
+		kicker="Poimi"
+		title="Terms of Use"
+		updated="Draft — pending sign-off"
+	>
+		<p>
+			These terms govern your use of the Poimi app. The app is published by
+			<strong>Valtteri Luoma</strong> (contact:
+			<a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>).
+		</p>
+
+		<h2>Licence to use the app</h2>
+		<p>
+			Poimi is provided for personal use. The app is provided &ldquo;as
+			is,&rdquo; without warranties of any kind, and to the maximum extent
+			permitted by law the publisher is not liable for any damages arising from
+			its use.
+		</p>
+
+		<h2>Two licences, kept separate</h2>
+		<p>
+			The <strong>AGPL-3.0</strong> licence governs the app&rsquo;s
+			<a href={GITHUB_URL}>source code</a>. These Terms govern use of the
+			installed app. A <a href={COMMERCIAL_LICENSE_URL}>commercial licence</a>
+			for the code is available on request.
+		</p>
+
+		<h2>Your photos</h2>
+		<p>
+			Poimi reads your photo library and creates a new album from the photos you
+			pick. It never edits, moves, or deletes your originals. You are
+			responsible for maintaining your own backups of your photo library.
+		</p>
+
+		<h2>App Store</h2>
+		<p>
+			When installed from the App Store, Apple&rsquo;s Licensed Application End
+			User Licence Agreement also applies to your use of the app.
+		</p>
+
+		<h2>Contact</h2>
+		<p>
+			Questions about these terms: <a href={`mailto:${CONTACT_EMAIL}`}
+				>{CONTACT_EMAIL}</a
+			>.
+		</p>
+	</InfoPage>
+	<Footer />
+</MarketingLayout>

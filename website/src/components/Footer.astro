@@ -1,0 +1,99 @@
+---
+import Wordmark from './Wordmark.astro';
+import { GITHUB_URL, COMMERCIAL_LICENSE_URL } from '../consts';
+import { withBase } from '../utils';
+
+const links = [
+	{ label: 'Privacy', href: withBase('privacy/') },
+	{ label: 'Terms', href: withBase('terms/') },
+	{ label: 'Support', href: withBase('support/') },
+	{ label: 'GitHub', href: GITHUB_URL },
+	{ label: 'Commercial license', href: COMMERCIAL_LICENSE_URL },
+];
+---
+
+<footer class="footer">
+	<div class="footer-inner">
+		<div class="footer-top">
+			<div class="footer-brand">
+				<Wordmark tone="inverse" size={30} />
+				<span class="footer-tag">
+					Hand-pick photos into an album.
+					<span class="footer-dim"
+						>&ldquo;Poimi&rdquo; is Finnish for &ldquo;Pick!&rdquo;</span
+					>
+				</span>
+			</div>
+			<nav class="footer-links" aria-label="Footer">
+				{links.map((l) => <a href={l.href}>{l.label}</a>)}
+			</nav>
+		</div>
+		<div class="footer-rule"></div>
+		<div class="footer-bottom">
+			<span>&copy; 2026 Valtteri Luoma</span>
+			<span>For iPhone and iPad &middot; iOS 26 and iPadOS 26</span>
+		</div>
+	</div>
+</footer>
+
+<style>
+	.footer {
+		background: var(--color-surface-dark);
+		color: #fff;
+		padding: 66px clamp(20px, 6vw, 80px) 40px;
+	}
+	.footer-inner {
+		max-width: 1120px;
+		margin-inline: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 44px;
+	}
+	.footer-top {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 48px;
+		flex-wrap: wrap;
+	}
+	.footer-brand {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+		max-width: 360px;
+	}
+	.footer-tag {
+		font-size: 15px;
+		line-height: 1.45;
+		color: rgb(235 235 245 / 60%);
+	}
+	.footer-dim {
+		color: rgb(235 235 245 / 40%);
+	}
+	.footer-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 16px 32px;
+	}
+	.footer-links a {
+		font-size: 15px;
+		font-weight: 500;
+		color: rgb(235 235 245 / 70%);
+	}
+	.footer-links a:hover {
+		color: #fff;
+	}
+	.footer-rule {
+		height: 1px;
+		background: rgb(255 255 255 / 10%);
+	}
+	.footer-bottom {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		flex-wrap: wrap;
+		font-size: 14px;
+		color: rgb(235 235 245 / 42%);
+	}
+</style>

@@ -1,0 +1,226 @@
+/*
+ * Poimi website — design tokens (ported from the Paper "Website" page) + base
+ * + shared primitives. LIGHT-ONLY at launch (dark mode is a post-launch add and
+ * NOT a free prefers-color-scheme swap — see issue #227 / the island-token note).
+ */
+
+:root {
+	/* Surfaces & text */
+	--color-bg: #ffffff;
+	--color-bg-grouped: #f2f2f7;
+	--color-surface: #ffffff;
+	--color-label: #000000;
+	--color-label-secondary: rgb(60 60 67 / 60%);
+	--color-label-tertiary: rgb(60 60 67 / 30%);
+	--color-separator: rgb(60 60 67 / 29%);
+	--color-placeholder: #e5e5ea;
+
+	/* Dark islands (privacy band, footer) — stay dark in light mode by design */
+	--color-surface-dark: #1c1c1e;
+	--color-surface-dark-2: #2c2c2e;
+	--color-label-on-dark: #ffffff;
+	--color-label-secondary-on-dark: rgb(235 235 245 / 60%);
+
+	/* Accent (Cloudberry gold) + secondary (forest green) */
+	--color-accent: #d08a2a;
+	--color-accent-dark: #e8b05a;
+	--color-accent-on: #1c1c1e;
+	--color-accent-tint: rgb(208 138 42 / 14%);
+	--color-secondary: #3f5e37;
+	--color-secondary-dark: #7da164;
+	--color-secondary-on: #ffffff;
+
+	/* Type */
+	--font-sans:
+		'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+		sans-serif;
+	--tracking-tight: -0.02em;
+	--tracking-tighter: -0.03em;
+	--tracking-wide: 0.06em;
+
+	/* Spacing / radius */
+	--radius-sm: 8px;
+	--radius-md: 12px;
+	--radius-lg: 20px;
+	--radius-xl: 28px;
+	--radius-full: 999px;
+
+	/* Shared shadows */
+	--shadow-card: 0 20px 40px -24px rgb(0 0 0 / 18%);
+	--shadow-hero: 0 40px 80px -30px rgb(0 0 0 / 28%);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html {
+	scroll-behavior: smooth;
+}
+
+body {
+	margin: 0;
+	font-family: var(--font-sans);
+	background: var(--color-bg);
+	color: var(--color-label);
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+p {
+	margin: 0;
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+img {
+	display: block;
+	max-width: 100%;
+	height: auto;
+}
+
+.skip-link {
+	position: absolute;
+	top: 12px;
+	left: 12px;
+	z-index: 1000;
+	transform: translateY(-200%);
+	padding: 12px 16px;
+	border-radius: var(--radius-md);
+	background: var(--color-surface);
+	color: var(--color-label);
+	box-shadow: var(--shadow-card);
+}
+
+.skip-link:focus {
+	transform: translateY(0);
+}
+
+/* ---- Layout primitives ---- */
+
+.section {
+	padding-block: clamp(64px, 8vw, 104px);
+	padding-inline: clamp(20px, 6vw, 80px);
+}
+
+.section--grouped {
+	background: var(--color-bg-grouped);
+}
+
+.section--dark {
+	background: var(--color-surface-dark);
+	color: var(--color-label-on-dark);
+}
+
+.container {
+	max-width: 1120px;
+	margin-inline: auto;
+}
+
+.section-head {
+	max-width: 840px;
+	margin-inline: auto;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	gap: 20px;
+}
+
+/* Small-caps eyebrow with a gold dot (brand motif) */
+.eyebrow {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: var(--tracking-wide);
+	text-transform: uppercase;
+	color: var(--color-label-secondary);
+}
+
+.eyebrow::before {
+	content: '';
+	width: 7px;
+	height: 7px;
+	border-radius: var(--radius-full);
+	background: var(--color-accent);
+}
+
+.section--dark .eyebrow {
+	color: var(--color-label-secondary-on-dark);
+}
+
+.section--dark .eyebrow::before {
+	background: var(--color-accent-dark);
+}
+
+/* Headings */
+.h2 {
+	font-size: clamp(29px, 4.4vw, 44px);
+	font-weight: 800;
+	line-height: 1.08;
+	letter-spacing: -0.025em;
+}
+
+.lead {
+	font-size: clamp(16px, 2vw, 19px);
+	line-height: 1.5;
+	color: var(--color-label-secondary);
+}
+
+/* Buttons */
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	font-family: inherit;
+	font-size: 15px;
+	font-weight: 600;
+	padding: 13px 22px;
+	border-radius: var(--radius-md);
+	border: 1.5px solid transparent;
+	cursor: pointer;
+	transition:
+		transform 0.15s ease,
+		box-shadow 0.15s ease,
+		background-color 0.15s ease;
+}
+
+.btn:hover {
+	transform: translateY(-1px);
+}
+
+.btn:focus-visible {
+	outline: 3px solid var(--color-accent);
+	outline-offset: 3px;
+}
+
+.btn--dark {
+	background: var(--color-label);
+	color: #ffffff;
+}
+
+.btn--ghost {
+	background: transparent;
+	border-color: var(--color-separator);
+	color: var(--color-label);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+	* {
+		transition: none !important;
+	}
+}

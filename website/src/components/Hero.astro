@@ -1,0 +1,138 @@
+---
+import AppStoreButton from './AppStoreButton.astro';
+import ReviewGridMock from './mocks/ReviewGridMock.astro';
+---
+
+<section class="hero">
+	<div class="hero-copy">
+		<span class="eyebrow">Finnish for &ldquo;Pick!&rdquo;</span>
+		<h1 class="hero-title">
+			The best photos of your year &mdash; picked by you, not an algorithm.
+		</h1>
+		<p class="hero-sub">
+			Go through a whole year of photos &mdash; or any date range &mdash; and
+			choose the best ones yourself, into one album in Photos.
+		</p>
+		<div class="hero-cta">
+			<AppStoreButton variant="badge" />
+			<div class="hero-price">
+				<span class="hero-free">Free</span>
+				<span class="hero-price-sub">No ads. No tracking.</span>
+			</div>
+		</div>
+		<a class="hero-more" href="#how-it-works">
+			See how it works
+			<svg viewBox="0 0 24 24" aria-hidden="true"
+				><path
+					d="M12 5v14M6 13l6 6 6-6"
+					stroke="var(--color-accent)"
+					stroke-width="2.2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					fill="none"></path></svg
+			>
+		</a>
+		<span class="hero-platform">
+			For iPhone and iPad &middot; iOS&nbsp;26 and iPadOS&nbsp;26
+		</span>
+	</div>
+	<div class="hero-visual">
+		<ReviewGridMock
+			title="A week in Rome"
+			subtitle="14–20 July · 214 photos"
+			count="128 / 200"
+		/>
+	</div>
+</section>
+
+<style>
+	.hero {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		align-items: center;
+		gap: clamp(40px, 6vw, 64px);
+		max-width: 1280px;
+		margin-inline: auto;
+		padding: clamp(40px, 6vw, 64px) clamp(20px, 6vw, 80px)
+			clamp(56px, 7vw, 88px);
+	}
+	.hero-copy {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+	}
+	.hero-title {
+		margin-top: 24px;
+		font-size: clamp(37px, 5.2vw, 62px);
+		font-weight: 800;
+		line-height: 1.03;
+		letter-spacing: var(--tracking-tighter);
+	}
+	.hero-sub {
+		margin-top: 24px;
+		max-width: 520px;
+		font-size: clamp(17px, 2vw, 19px);
+		line-height: 1.5;
+		color: var(--color-label-secondary);
+	}
+	.hero-cta {
+		display: flex;
+		align-items: center;
+		gap: 18px;
+		margin-top: 38px;
+	}
+	.hero-price {
+		display: flex;
+		flex-direction: column;
+	}
+	.hero-free {
+		font-size: 17px;
+		font-weight: 700;
+	}
+	.hero-price-sub {
+		font-size: 13px;
+		color: var(--color-label-secondary);
+		margin-top: 2px;
+	}
+	.hero-more {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		margin-top: 20px;
+		font-size: 15px;
+		font-weight: 600;
+	}
+	.hero-more svg {
+		width: 15px;
+		height: 15px;
+	}
+	.hero-platform {
+		margin-top: 20px;
+		font-size: 13px;
+		color: var(--color-label-tertiary);
+	}
+	.hero-visual {
+		min-width: 0;
+	}
+	@media (max-width: 900px) {
+		.hero {
+			grid-template-columns: 1fr;
+		}
+		.hero-copy {
+			align-items: center;
+			text-align: center;
+		}
+		.hero-sub {
+			max-width: 560px;
+		}
+		.hero-cta {
+			flex-wrap: wrap;
+			justify-content: center;
+		}
+		.hero-visual {
+			max-width: 460px;
+			margin-inline: auto;
+			width: 100%;
+		}
+	}
+</style>

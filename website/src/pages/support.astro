@@ -1,0 +1,80 @@
+---
+import MarketingLayout from '../layouts/MarketingLayout.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import InfoPage from '../components/InfoPage.astro';
+import { CONTACT_EMAIL, GITHUB_ISSUES_URL } from '../consts';
+
+const title = 'Support — Poimi';
+const description =
+	'Support and FAQ for Poimi — how it handles your photos, permissions, place names, and more.';
+
+const faqs = [
+	{
+		q: 'Is Poimi free?',
+		a: 'Yes — free to download and use, with no ads and no tracking.',
+	},
+	{
+		q: 'Does Poimi change or delete my photos?',
+		a: 'No. Poimi only reads your library and creates a new album from the photos you pick. It never edits, moves, or deletes originals.',
+	},
+	{
+		q: 'Why does it need full photo access?',
+		a: 'To read a full date range, remember your picks, and write the album back — Apple’s Limited Access cannot do these.',
+	},
+	{
+		q: 'Where do the place names come from?',
+		a: 'From the GPS coordinate already in your photos, turned into a name by Apple’s service. Poimi does not ask for location permission.',
+	},
+	{
+		q: 'What do I need to run it?',
+		a: 'An iPhone or iPad on iOS 26 / iPadOS 26.',
+	},
+	{
+		q: 'Can I undo an export?',
+		a: 'The exported album is an ordinary Photos album — delete or edit it in Photos any time; your Poimi picks stay intact.',
+	},
+];
+
+const faqJsonLd = {
+	'@context': 'https://schema.org',
+	'@type': 'FAQPage',
+	mainEntity: faqs.map((f) => ({
+		'@type': 'Question',
+		name: f.q,
+		acceptedAnswer: { '@type': 'Answer', text: f.a },
+	})),
+};
+---
+
+<MarketingLayout title={title} description={description}>
+	<script
+		is:inline
+		type="application/ld+json"
+		set:html={JSON.stringify(faqJsonLd)}
+		slot="head"
+	/>
+	<Nav />
+	<InfoPage kicker="Poimi" title="Support">
+		<h2>Get in touch</h2>
+		<p>
+			Email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>, or report a
+			bug or request a feature on the <a href={GITHUB_ISSUES_URL}
+				>GitHub issue tracker</a
+			>.
+		</p>
+
+		<h2>Frequently asked questions</h2>
+		<dl>
+			{
+				faqs.map((f) => (
+					<Fragment>
+						<dt>{f.q}</dt>
+						<dd>{f.a}</dd>
+					</Fragment>
+				))
+			}
+		</dl>
+	</InfoPage>
+	<Footer />
+</MarketingLayout>

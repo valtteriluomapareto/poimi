@@ -1,0 +1,137 @@
+---
+import SetupMock from './mocks/SetupMock.astro';
+import ReviewGridMock from './mocks/ReviewGridMock.astro';
+import CompletionMock from './mocks/CompletionMock.astro';
+---
+
+<section id="how-it-works" class="section section--grouped how">
+	<div class="section-head">
+		<span class="eyebrow">How it works</span>
+		<h2 class="h2" style="max-width:760px;">
+			Turn a year of photos into one album, in three steps.
+		</h2>
+	</div>
+
+	<div class="steps">
+		<div class="step">
+			<div class="step-text">
+				<span class="step-num">1</span>
+				<h3 class="step-title">Pick a range</h3>
+				<p class="step-desc">
+					Choose a date range &mdash; a whole year, a summer, one trip. Then
+					leave out screenshots and any albums you don&rsquo;t want in the mix,
+					like WhatsApp saves.
+				</p>
+			</div>
+			<div class="step-visual"><SetupMock /></div>
+		</div>
+
+		<div class="step reverse">
+			<div class="step-text">
+				<span class="step-num">2</span>
+				<h3 class="step-title">Go through it</h3>
+				<p class="step-desc">
+					Your photos are grouped by day and by trip, so a year breaks into the
+					events it was made of. Tap to pick. A running count tracks you toward
+					your target &mdash; and you can mark a day done and pick up right
+					where you left off.
+				</p>
+			</div>
+			<div class="step-visual">
+				<ReviewGridMock
+					title="Sat 19 July"
+					subtitle="Rome · 53 photos"
+					count="128 / 200"
+					markDone
+				/>
+			</div>
+		</div>
+
+		<div class="step">
+			<div class="step-text">
+				<span class="step-num">3</span>
+				<h3 class="step-title">Export to Photos</h3>
+				<p class="step-desc">
+					Poimi creates a real album in Photos from your picks &mdash; yours to
+					keep, share, or open anywhere. Refine and re-run any time; it updates
+					the same album instead of making duplicates.
+				</p>
+			</div>
+			<div class="step-visual"><CompletionMock /></div>
+		</div>
+	</div>
+</section>
+
+<style>
+	.steps {
+		max-width: 1120px;
+		margin: 40px auto 0;
+		display: flex;
+		flex-direction: column;
+		gap: clamp(56px, 8vw, 96px);
+	}
+	.step {
+		display: grid;
+		grid-template-columns: 430px 1fr;
+		gap: clamp(40px, 6vw, 72px);
+		align-items: center;
+	}
+	.step.reverse {
+		grid-template-columns: 1fr 430px;
+	}
+	.step.reverse .step-text {
+		order: 2;
+	}
+	.step.reverse .step-visual {
+		order: 1;
+	}
+	.step-num {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 42px;
+		height: 42px;
+		border-radius: var(--radius-full);
+		background: var(--color-accent-tint);
+		color: var(--color-accent);
+		font-size: 19px;
+		font-weight: 800;
+		margin-bottom: 22px;
+	}
+	.step-title {
+		font-size: clamp(26px, 3vw, 30px);
+		font-weight: 700;
+		letter-spacing: var(--tracking-tight);
+	}
+	.step-desc {
+		margin-top: 16px;
+		font-size: 18px;
+		line-height: 1.55;
+		color: var(--color-label-secondary);
+	}
+	@media (max-width: 900px) {
+		.step,
+		.step.reverse {
+			grid-template-columns: 1fr;
+			gap: 24px;
+			justify-items: center;
+			text-align: center;
+		}
+		.step .step-text,
+		.step.reverse .step-text {
+			order: 0;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+		}
+		.step .step-visual,
+		.step.reverse .step-visual {
+			order: 1;
+			width: 100%;
+			max-width: 460px;
+		}
+		.step-desc {
+			max-width: 420px;
+		}
+	}
+</style>

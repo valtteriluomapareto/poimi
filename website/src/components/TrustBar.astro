@@ -1,0 +1,65 @@
+---
+const items = [
+	{
+		label: 'On your device',
+		path: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><line x1="10.5" y1="18.4" x2="13.5" y2="18.4" stroke-linecap="round"/>',
+	},
+	{
+		label: 'No account',
+		path: '<circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6" stroke-linecap="round"/><line x1="4" y1="4" x2="20" y2="20" stroke-linecap="round"/>',
+	},
+	{
+		label: 'No tracking',
+		path: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6"/><line x1="4" y1="3.6" x2="20" y2="20.4" stroke-linecap="round"/>',
+	},
+	{
+		label: 'Open source',
+		path: '<path d="M8.5 8L4.5 12l4 4M15.5 8l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/>',
+	},
+];
+---
+
+<div class="trust-bar">
+	<div class="trust-inner">
+		{
+			items.map((it) => (
+				<div class="trust-item">
+					<svg viewBox="0 0 24 24" aria-hidden="true" set:html={it.path} />
+					<span>{it.label}</span>
+				</div>
+			))
+		}
+	</div>
+</div>
+
+<style>
+	.trust-bar {
+		background: var(--color-bg-grouped);
+		border-block: 1px solid var(--color-separator);
+		padding: 20px clamp(20px, 6vw, 80px);
+	}
+	.trust-inner {
+		max-width: 1120px;
+		margin-inline: auto;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 16px clamp(24px, 5vw, 56px);
+	}
+	.trust-item {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--color-label);
+	}
+	.trust-item svg {
+		width: 19px;
+		height: 19px;
+		fill: none;
+		stroke: var(--color-secondary);
+		stroke-width: 1.8;
+		flex-shrink: 0;
+	}
+</style>

@@ -1,0 +1,101 @@
+---
+interface Props {
+	kicker: string;
+	title: string;
+	updated?: string;
+}
+const { kicker, title, updated }: Props = Astro.props;
+---
+
+<section class="info-shell">
+	<div class="info-card">
+		<p class="info-kicker">{kicker}</p>
+		<h1 class="info-title">{title}</h1>
+		{updated && <p class="info-meta">Last updated: {updated}</p>}
+		<div class="info-body"><slot /></div>
+	</div>
+</section>
+
+<style>
+	.info-shell {
+		padding: clamp(48px, 7vw, 80px) clamp(20px, 6vw, 40px);
+		background: var(--color-bg-grouped);
+	}
+	.info-card {
+		max-width: 52rem;
+		margin-inline: auto;
+		background: var(--color-surface);
+		border: 1px solid var(--color-separator);
+		border-radius: var(--radius-xl);
+		padding: clamp(24px, 4vw, 48px);
+		box-shadow: var(--shadow-card);
+	}
+	.info-kicker {
+		font-size: 13px;
+		font-weight: 700;
+		letter-spacing: var(--tracking-wide);
+		text-transform: uppercase;
+		color: var(--color-accent);
+		margin-bottom: 10px;
+	}
+	.info-title {
+		font-size: clamp(30px, 5vw, 40px);
+		font-weight: 800;
+		line-height: 1.1;
+		letter-spacing: -0.03em;
+	}
+	.info-meta {
+		margin-top: 12px;
+		color: var(--color-label-secondary);
+		font-size: 15px;
+	}
+	.info-body {
+		margin-top: 28px;
+		font-size: 16px;
+		line-height: 1.65;
+		color: var(--color-label-secondary);
+	}
+	.info-body :global(h2) {
+		margin: 32px 0 12px;
+		font-size: 20px;
+		font-weight: 700;
+		color: var(--color-label);
+	}
+	.info-body :global(h3) {
+		margin: 20px 0 8px;
+		font-size: 16px;
+		font-weight: 700;
+		color: var(--color-label);
+	}
+	.info-body :global(p) {
+		margin: 0 0 14px;
+	}
+	.info-body :global(ul) {
+		margin: 0 0 14px;
+		padding-left: 1.25rem;
+	}
+	.info-body :global(li) {
+		margin-bottom: 8px;
+	}
+	.info-body :global(strong) {
+		color: var(--color-label);
+	}
+	.info-body :global(a) {
+		color: var(--color-accent);
+		font-weight: 500;
+	}
+	.info-body :global(a:hover) {
+		text-decoration: underline;
+	}
+	.info-body :global(dl) {
+		margin: 0;
+	}
+	.info-body :global(dt) {
+		font-weight: 700;
+		color: var(--color-label);
+		margin-top: 20px;
+	}
+	.info-body :global(dd) {
+		margin: 6px 0 0;
+	}
+</style>
