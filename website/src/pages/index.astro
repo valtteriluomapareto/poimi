@@ -1,0 +1,30 @@
+---
+import MarketingLayout from '../layouts/MarketingLayout.astro';
+import Nav from '../components/Nav.astro';
+import Hero from '../components/Hero.astro';
+import TrustBar from '../components/TrustBar.astro';
+import WhySection from '../components/WhySection.astro';
+import HowItWorks from '../components/HowItWorks.astro';
+import Features from '../components/Features.astro';
+import Privacy from '../components/Privacy.astro';
+import OpenSource from '../components/OpenSource.astro';
+import ClosingCTA from '../components/ClosingCTA.astro';
+import Footer from '../components/Footer.astro';
+
+const title = 'Poimi — Hand-pick a year of photos into one album';
+const description =
+	'Poimi is an iPhone & iPad app for hand-picking a whole year of photos — or any date range — into one album in Photos. You choose every photo. On-device, private, free.';
+---
+
+<MarketingLayout title={title} description={description}>
+	<Nav />
+	<Hero />
+	<TrustBar />
+	<WhySection />
+	<HowItWorks />
+	<Features />
+	<Privacy />
+	<OpenSource />
+	<ClosingCTA />
+	<Footer />
+</MarketingLayout>

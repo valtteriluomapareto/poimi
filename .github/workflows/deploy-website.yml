@@ -1,0 +1,63 @@
+name: Deploy Website
+
+# Builds the Astro site in website/ and publishes it to GitHub Pages.
+# Independent of the Swift app CI: only website changes trigger it.
+# ONE-TIME SETUP: repo Settings → Pages → Source = "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+  workflow_dispatch:
+
+# `contents: read` is REQUIRED — a permissions block zeros every unlisted scope,
+# which would strip checkout's repo access.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Don't cancel an in-flight publish (leaves Pages half-updated).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: website
+
+      - name: Prettier (check)
+        run: npm run format:check
+        working-directory: website
+
+      - name: Validate (astro check + build)
+        run: npm run validate
+        working-directory: website
+
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: website/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

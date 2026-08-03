@@ -1,0 +1,51 @@
+---
+import AppStoreButton from './AppStoreButton.astro';
+---
+
+<section class="section section--grouped closing">
+	<h2 class="closing-title">Start on this year&rsquo;s album.</h2>
+	<p class="closing-sub">Free on the App Store, for iPhone and iPad.</p>
+	<div class="closing-cta"><AppStoreButton variant="badge" /></div>
+	<div class="closing-chips">
+		<span>On your device</span>
+		<span class="dot">&middot;</span>
+		<span>No account</span>
+		<span class="dot">&middot;</span>
+		<span>Free</span>
+	</div>
+</section>
+
+<style>
+	.closing {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+	}
+	.closing-title {
+		font-size: clamp(34px, 4.4vw, 50px);
+		font-weight: 800;
+		line-height: 1.05;
+		letter-spacing: var(--tracking-tighter);
+	}
+	.closing-sub {
+		margin-top: 18px;
+		font-size: 19px;
+		color: var(--color-label-secondary);
+	}
+	.closing-cta {
+		margin-top: 34px;
+	}
+	.closing-chips {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-top: 24px;
+		font-size: 15px;
+		font-weight: 500;
+		color: var(--color-label-secondary);
+	}
+	.closing-chips .dot {
+		color: var(--color-label-tertiary);
+	}
+</style>

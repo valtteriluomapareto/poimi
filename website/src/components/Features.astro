@@ -1,0 +1,162 @@
+---
+const top = [
+	{
+		title: 'You choose every photo',
+		desc: 'No auto-selection, ever. Poimi never picks for you or hides a photo behind a score.',
+		lead: true,
+		path: '<path d="M5 12.5l4.2 4.2L19 7" stroke-linecap="round" stroke-linejoin="round"/>',
+	},
+	{
+		title: 'Grouped by day and trip',
+		desc: 'The timeline breaks into events, and trips get names like “A week in Rome,” from the places in your photos.',
+		path: '<path d="M12 21s7-5.5 7-11a7 7 0 10-14 0c0 5.5 7 11 7 11z" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.6"/>',
+	},
+	{
+		title: 'Always know where you stand',
+		desc: 'A running total toward your target and a coverage view of the whole range.',
+		path: '<circle cx="12" cy="12" r="8.5"/><path d="M12 12l4-2.5" stroke-linecap="round"/>',
+	},
+];
+const bottom = [
+	{
+		title: 'Built for finishing',
+		desc: 'Mark days done and pick up exactly where you left off, session after session.',
+		path: '<path d="M6 21V4.5h11l-2 3.5 2 3.5H6" stroke-linecap="round" stroke-linejoin="round"/>',
+	},
+	{
+		title: 'A native album you own',
+		desc: 'The result is an ordinary album in Photos. Open it in any app.',
+		path: '<rect x="7" y="3.5" width="13" height="13" rx="2.5"/><path d="M4 7.5v11a2 2 0 002 2h11" stroke-linecap="round"/>',
+	},
+];
+---
+
+<section class="section features">
+	<div class="section-head" style="margin-bottom:56px;">
+		<span class="eyebrow">Features</span>
+		<h2 class="h2">What makes Poimi different</h2>
+	</div>
+
+	<div class="feat-wrap">
+		<div class="feat-row feat-row--3">
+			{
+				top.map((c) => (
+					<div class:list={['feat-card', { lead: c.lead }]}>
+						<span class:list={['feat-icon', { lead: c.lead }]}>
+							<svg viewBox="0 0 24 24" aria-hidden="true" set:html={c.path} />
+						</span>
+						<span class="feat-title">{c.title}</span>
+						<span class="feat-desc">{c.desc}</span>
+					</div>
+				))
+			}
+		</div>
+		<div class="feat-row feat-row--2">
+			{
+				bottom.map((c) => (
+					<div class="feat-card feat-card--wide">
+						<span class="feat-icon">
+							<svg viewBox="0 0 24 24" aria-hidden="true" set:html={c.path} />
+						</span>
+						<div class="feat-wide-copy">
+							<span class="feat-title">{c.title}</span>
+							<span class="feat-desc">{c.desc}</span>
+						</div>
+					</div>
+				))
+			}
+		</div>
+		<p class="feat-note">
+			Works with photos and videos &mdash; videos are off until you turn them
+			on.
+		</p>
+	</div>
+</section>
+
+<style>
+	.feat-wrap {
+		max-width: 1120px;
+		margin-inline: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+	}
+	.feat-row {
+		display: grid;
+		gap: 20px;
+	}
+	.feat-row--3 {
+		grid-template-columns: repeat(3, 1fr);
+	}
+	.feat-row--2 {
+		grid-template-columns: repeat(2, 1fr);
+	}
+	.feat-card {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		padding: 30px;
+		border: 1px solid var(--color-separator);
+		border-radius: 22px;
+	}
+	.feat-card.lead {
+		border-color: rgb(208 138 42 / 35%);
+		background: rgb(208 138 42 / 6%);
+	}
+	.feat-card--wide {
+		flex-direction: row;
+		align-items: flex-start;
+		gap: 20px;
+	}
+	.feat-wide-copy {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.feat-icon {
+		width: 48px;
+		height: 48px;
+		border-radius: 13px;
+		background: var(--color-bg-grouped);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+	.feat-icon.lead {
+		background: var(--color-accent);
+	}
+	.feat-icon svg {
+		width: 23px;
+		height: 23px;
+		fill: none;
+		stroke: var(--color-secondary);
+		stroke-width: 1.8;
+	}
+	.feat-icon.lead svg {
+		stroke: #fff;
+		stroke-width: 2.8;
+	}
+	.feat-title {
+		font-size: 21px;
+		font-weight: 700;
+		letter-spacing: var(--tracking-tight);
+	}
+	.feat-desc {
+		font-size: 16px;
+		line-height: 1.5;
+		color: var(--color-label-secondary);
+	}
+	.feat-note {
+		text-align: center;
+		font-size: 15px;
+		color: var(--color-label-tertiary);
+		margin-top: 12px;
+	}
+	@media (max-width: 820px) {
+		.feat-row--3,
+		.feat-row--2 {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

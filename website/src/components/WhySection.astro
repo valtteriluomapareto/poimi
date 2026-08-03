@@ -1,0 +1,186 @@
+---
+const cards = [
+	{
+		kicker: 'Cleanup apps',
+		verb: 'Delete',
+		desc: 'Swipe away the blurry shots, the duplicates, the junk.',
+		path: '<path d="M4 7h16M9 7V5a1.5 1.5 0 011.5-1.5h3A1.5 1.5 0 0115 5v2M6 7l1 12.5a1.5 1.5 0 001.5 1.4h7a1.5 1.5 0 001.5-1.4L18 7" stroke-linecap="round" stroke-linejoin="round"/>',
+	},
+	{
+		kicker: 'Editing tools',
+		verb: 'Polish',
+		desc: 'Fine-tune a few keepers and send them to the desktop.',
+		path: '<path d="M5 8h9M18 8h1M5 16h1M10 16h9" stroke-linecap="round"/><circle cx="16" cy="8" r="2.4"/><circle cx="8" cy="16" r="2.4"/>',
+	},
+	{
+		kicker: 'AI apps',
+		verb: 'Generate',
+		desc: 'Auto-made Memories and highlight reels, chosen for you.',
+		path: '<path d="M12 3.5l1.7 4.3 4.3 1.7-4.3 1.7L12 15.5l-1.7-4.3L6 9.5l4.3-1.7L12 3.5zM18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" stroke-linejoin="round"/>',
+	},
+];
+---
+
+<section class="section why">
+	<div class="section-head">
+		<span class="eyebrow">Why Poimi</span>
+		<h2 class="h2">Your best photos are already in there.</h2>
+		<p class="lead" style="max-width:680px;">
+			A year is thousands of photos, and the best ones are buried in the
+			everyday. Poimi helps you find them and gather them into one album &mdash;
+			by hand.
+		</p>
+		<p class="why-who">
+			Made for the parent who means to make <span>this year&rsquo;s</span> family
+			album &mdash; and the trip you keep meaning to pull together.
+		</p>
+	</div>
+
+	<div class="why-cards">
+		{
+			cards.map((c) => (
+				<div class="why-card">
+					<span class="why-icon">
+						<svg viewBox="0 0 24 24" aria-hidden="true" set:html={c.path} />
+					</span>
+					<span class="why-kicker">{c.kicker}</span>
+					<span class="why-verb">{c.verb}</span>
+					<span class="why-desc">{c.desc}</span>
+				</div>
+			))
+		}
+	</div>
+
+	<div class="why-punch">
+		<span class="punch-chip">
+			<svg viewBox="0 0 24 24" aria-hidden="true"
+				><path
+					d="M5 12.5l4.2 4.2L19 7"
+					stroke="#fff"
+					stroke-width="3"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					fill="none"></path></svg
+			>
+			The Poimi way
+		</span>
+		<h3 class="punch-title">
+			Poimi is the opposite &mdash; you assemble the best of your year,
+			yourself.
+		</h3>
+		<p class="punch-sub">
+			No AI Memories. No auto-generated highlight reel. No photo hidden behind a
+			score. Every photo in the album is one you put there.
+		</p>
+	</div>
+</section>
+
+<style>
+	.why-who {
+		max-width: 560px;
+		font-size: 16px;
+		font-weight: 500;
+		line-height: 1.5;
+		color: var(--color-label-secondary);
+	}
+	.why-who span {
+		color: var(--color-secondary);
+		font-weight: 600;
+	}
+	.why-cards {
+		max-width: 1120px;
+		margin: 60px auto 0;
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 20px;
+	}
+	.why-card {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		padding: 30px;
+		border: 1px solid var(--color-separator);
+		border-radius: 22px;
+	}
+	.why-icon {
+		width: 46px;
+		height: 46px;
+		border-radius: 13px;
+		background: var(--color-bg-grouped);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.why-icon svg {
+		width: 22px;
+		height: 22px;
+		fill: none;
+		stroke: var(--color-label-secondary);
+		stroke-width: 1.8;
+	}
+	.why-kicker {
+		font-size: 12px;
+		font-weight: 600;
+		letter-spacing: var(--tracking-wide);
+		text-transform: uppercase;
+		color: var(--color-label-tertiary);
+	}
+	.why-verb {
+		font-size: 23px;
+		font-weight: 700;
+		letter-spacing: var(--tracking-tight);
+		margin-top: -6px;
+	}
+	.why-desc {
+		font-size: 16px;
+		line-height: 1.45;
+		color: var(--color-label-secondary);
+	}
+	.why-punch {
+		max-width: 1120px;
+		margin: 20px auto 0;
+		padding: clamp(36px, 5vw, 46px) clamp(24px, 4vw, 48px);
+		border-radius: 24px;
+		background: var(--color-secondary);
+		color: #fff;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: 16px;
+	}
+	.punch-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		background: rgb(255 255 255 / 16%);
+		padding: 7px 15px;
+		border-radius: var(--radius-full);
+		font-size: 13px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	.punch-chip svg {
+		width: 14px;
+		height: 14px;
+	}
+	.punch-title {
+		max-width: 780px;
+		font-size: clamp(23px, 3vw, 29px);
+		font-weight: 700;
+		line-height: 1.25;
+		letter-spacing: var(--tracking-tight);
+	}
+	.punch-sub {
+		max-width: 660px;
+		font-size: 17px;
+		line-height: 1.5;
+		color: rgb(255 255 255 / 82%);
+	}
+	@media (max-width: 820px) {
+		.why-cards {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

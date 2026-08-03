@@ -1,0 +1,50 @@
+---
+import MarketingLayout from '../layouts/MarketingLayout.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import { withBase } from '../utils';
+---
+
+<MarketingLayout
+	title="Page not found — Poimi"
+	description="This page could not be found."
+	noindex
+>
+	<Nav />
+	<section class="nf">
+		<span class="nf-code">404</span>
+		<h1 class="nf-title">This page wandered off.</h1>
+		<p class="nf-sub">The page you were looking for isn&rsquo;t here.</p>
+		<a class="btn btn--dark" href={withBase()}>Back to home</a>
+	</section>
+	<Footer />
+</MarketingLayout>
+
+<style>
+	.nf {
+		min-height: 52vh;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		gap: 12px;
+		padding: 80px 24px;
+	}
+	.nf-code {
+		font-size: 15px;
+		font-weight: 700;
+		letter-spacing: var(--tracking-wide);
+		color: var(--color-accent);
+	}
+	.nf-title {
+		font-size: clamp(28px, 5vw, 40px);
+		font-weight: 800;
+		letter-spacing: var(--tracking-tighter);
+	}
+	.nf-sub {
+		font-size: 17px;
+		color: var(--color-label-secondary);
+		margin-bottom: 12px;
+	}
+</style>

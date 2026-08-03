@@ -1,0 +1,91 @@
+---
+import '@fontsource-variable/inter';
+import '../styles/site.css';
+import { withBase } from '../utils';
+import { IS_APP_STORE_LIVE, APP_STORE_URL, APP_VERSION } from '../consts';
+
+interface Props {
+	title: string;
+	description: string;
+	/** Legal drafts stay out of the index until sign-off. */
+	noindex?: boolean;
+}
+
+const { title, description, noindex = false } = Astro.props;
+
+// Build absolute URLs against Astro.site so OpenGraph / canonical are
+// fully-qualified (social scrapers reject relative image paths).
+const abs = (p: string) =>
+	Astro.site ? new URL(withBase(p), Astro.site).toString() : withBase(p);
+
+const canonicalUrl = Astro.site
+	? new URL(Astro.url.pathname, Astro.site).toString()
+	: Astro.url.toString();
+const ogImageUrl = abs('og-image.png');
+
+// Rebuilt each deploy so crawlers see a fresh dateModified.
+const dateModified = import.meta.env.PUBLIC_BUILD_DATE ?? undefined;
+
+const structuredData = {
+	'@context': 'https://schema.org',
+	'@type': 'SoftwareApplication',
+	name: 'Poimi',
+	alternateName: 'Poimi photo album app',
+	description,
+	operatingSystem: 'iOS 26, iPadOS 26',
+	applicationCategory: 'PhotographyApplication',
+	softwareVersion: APP_VERSION,
+	...(dateModified ? { dateModified } : {}),
+	offers: {
+		'@type': 'Offer',
+		price: '0',
+		priceCurrency: 'USD',
+		// Only point at the store once the listing exists (launch gate).
+		...(IS_APP_STORE_LIVE ? { url: APP_STORE_URL } : {}),
+	},
+	...(IS_APP_STORE_LIVE ? { downloadUrl: APP_STORE_URL } : {}),
+	license: 'https://www.gnu.org/licenses/agpl-3.0.html',
+	url: canonicalUrl,
+	image: ogImageUrl,
+};
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{title}</title>
+		<meta name="description" content={description} />
+		{noindex && <meta name="robots" content="noindex" />}
+		<meta name="theme-color" content="#d08a2a" />
+		<link rel="canonical" href={canonicalUrl} />
+		<link rel="icon" href={withBase('favicon.svg')} type="image/svg+xml" />
+		<link rel="sitemap" href={withBase('sitemap-index.xml')} />
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:url" content={canonicalUrl} />
+		<meta property="og:image" content={ogImageUrl} />
+		<meta
+			property="og:image:alt"
+			content="Poimi — hand-pick a year of photos into one album"
+		/>
+		<meta property="og:site_name" content="Poimi" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={description} />
+		<meta name="twitter:image" content={ogImageUrl} />
+		<script
+			is:inline
+			type="application/ld+json"
+			set:html={JSON.stringify(structuredData)}
+		/>
+		<slot name="head" />
+	</head>
+	<body>
+		<a class="skip-link" href="#main-content">Skip to content</a>
+		<main id="main-content">
+			<slot />
+		</main>
+	</body>
+</html>

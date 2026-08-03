@@ -1,0 +1,107 @@
+---
+const chips = [
+	'On your device',
+	'No account',
+	'No third-party analytics',
+	'No ads',
+];
+import { withBase } from '../utils';
+---
+
+<section id="privacy" class="section section--dark privacy">
+	<div class="section-head">
+		<span class="eyebrow">Privacy</span>
+		<h2 class="h2" style="color:#fff;">Your photos are never uploaded.</h2>
+	</div>
+
+	<div class="pv-chips">
+		{
+			chips.map((c) => (
+				<span class="pv-chip">
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<path
+							d="M5 12.5l4.2 4.2L19 7"
+							stroke="var(--color-secondary-dark)"
+							stroke-width="3"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							fill="none"
+						/>
+					</svg>
+					{c}
+				</span>
+			))
+		}
+	</div>
+
+	<p class="pv-body">
+		Poimi runs entirely on your iPhone or iPad. It never uploads your photos,
+		and there&rsquo;s no account to create &mdash; it remembers only which
+		photos you picked, never the images themselves. The one thing that uses the
+		network is turning a photo&rsquo;s map coordinate into a place name, through
+		Apple&rsquo;s service.
+	</p>
+
+	<a class="pv-link" href={withBase('privacy/')}>
+		Read the full Privacy Policy
+		<svg viewBox="0 0 24 24" aria-hidden="true"
+			><path
+				d="M5 12h14M13 6l6 6-6 6"
+				stroke="var(--color-accent-dark)"
+				stroke-width="2.2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				fill="none"></path></svg
+		>
+	</a>
+</section>
+
+<style>
+	.privacy {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+	.pv-chips {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 12px;
+		margin-top: 38px;
+	}
+	.pv-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 9px;
+		background: var(--color-surface-dark-2);
+		padding: 11px 19px;
+		border-radius: var(--radius-full);
+		font-size: 15px;
+		font-weight: 600;
+	}
+	.pv-chip svg {
+		width: 16px;
+		height: 16px;
+	}
+	.pv-body {
+		max-width: 720px;
+		margin-top: 36px;
+		text-align: center;
+		font-size: 18px;
+		line-height: 1.55;
+		color: rgb(235 235 245 / 68%);
+	}
+	.pv-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		margin-top: 28px;
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--color-accent-dark);
+	}
+	.pv-link svg {
+		width: 16px;
+		height: 16px;
+	}
+</style>

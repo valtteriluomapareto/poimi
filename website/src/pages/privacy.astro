@@ -1,0 +1,87 @@
+---
+import MarketingLayout from '../layouts/MarketingLayout.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import InfoPage from '../components/InfoPage.astro';
+import { CONTACT_EMAIL, GITHUB_ISSUES_URL } from '../consts';
+
+const title = 'Privacy Policy — Poimi';
+const description =
+	'Privacy policy for Poimi, the iOS app for hand-picking photos into an album. On-device, no account, no tracking.';
+---
+
+<MarketingLayout title={title} description={description} noindex>
+	<Nav />
+	<InfoPage
+		kicker="Poimi"
+		title="Privacy Policy"
+		updated="Draft — pending sign-off"
+	>
+		<p>
+			Poimi is an on-device iPhone and iPad app for hand-picking your photos
+			into an album in Apple Photos. It does not run ads, does not use
+			third-party analytics, and does not upload your photos. The publisher and
+			data controller is <strong>Valtteri Luoma</strong> (contact:
+			<a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>).
+		</p>
+
+		<h2>The short version</h2>
+		<p>
+			Poimi processes your photos entirely on your device. It does not upload,
+			transmit, or store your photos anywhere. There is no account and no
+			tracking. Poimi is free, with no purchases &mdash; so there is no payment
+			data.
+		</p>
+
+		<h2>What Poimi accesses</h2>
+		<p>
+			Poimi requests <strong>Full Access</strong> to your photo library &mdash; required
+			so it can read a whole date range, remember your selections across sessions,
+			and write the finished album back (Apple&rsquo;s Limited Access / Selected Photos
+			cannot do these). Poimi does <strong>not</strong>
+			request location permission; it reads the GPS coordinate already embedded in
+			a photo when one is present.
+		</p>
+
+		<h2>What is stored, and where</h2>
+		<p>
+			Only on your device: the identifiers of the photos you picked, your album
+			settings (name, date range, target, exclusions), and a local cache of
+			place names. Poimi never stores the image or video files themselves.
+		</p>
+
+		<h2>Network use — the one exception</h2>
+		<p>
+			To label trips and places, Poimi sends a photo&rsquo;s coordinate to
+			Apple&rsquo;s reverse-geocoding service to get back a human place name.
+			This uses Apple&rsquo;s service under Apple&rsquo;s terms; Poimi runs no
+			server of its own and keeps no coordinate log. Resulting names are cached
+			locally.
+		</p>
+
+		<h2>No third parties</h2>
+		<p>
+			No advertising, analytics, or tracking SDKs; no data is sold or shared. If
+			you opt in to sharing diagnostics with developers in iOS Settings, Apple
+			may provide aggregate, anonymized crash and usage reports via App Store
+			Connect &mdash; Poimi collects nothing else.
+		</p>
+
+		<h2>Your control and deletion</h2>
+		<ul>
+			<li>
+				Deleting an album inside Poimi removes only Poimi&rsquo;s record of it;
+				your real photos are untouched.
+			</li>
+			<li>Uninstalling the app removes all of Poimi&rsquo;s local data.</li>
+			<li>An exported album is a normal Photos album you manage in Photos.</li>
+		</ul>
+
+		<h2>Questions</h2>
+		<p>
+			Email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> or open an issue
+			on the <a href={GITHUB_ISSUES_URL}>GitHub issue tracker</a>.
+		</p>
+	</InfoPage>
+	<Footer />
+</MarketingLayout>

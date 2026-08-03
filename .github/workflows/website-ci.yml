@@ -1,0 +1,53 @@
+name: Website CI
+
+# PR validation for the website — deliberately SEPARATE from the Swift ci.yml so
+# a .astro change doesn't run the macOS Xcode build, and so a required Swift check
+# isn't left "pending" by a paths filter. Linux only, website changes only.
+
+on:
+  pull_request:
+    paths:
+      - 'website/**'
+      - '.github/workflows/website-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: website
+
+      - name: Prettier (check)
+        run: npm run format:check
+        working-directory: website
+
+      - name: Validate (astro check + build)
+        run: npm run validate
+        working-directory: website
+
+      # Link check against the built site served at its real /poimi/ base path,
+      # so internal links + referenced assets (favicon, sitemap, CSS) are caught.
+      # External hosts are skipped (fast, non-flaky).
+      - name: Link check
+        working-directory: website
+        run: |
+          npm run preview &
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:4321/poimi/ >/dev/null && break
+            sleep 1
+          done
+          npx --yes linkinator@6 http://localhost:4321/poimi/ \
+            --recurse \
+            --skip "^https?://(github\.com|apps\.apple\.com|www\.gnu\.org|valtteriluomapareto\.github\.io)|^mailto:"
