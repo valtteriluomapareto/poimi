@@ -11,7 +11,7 @@ import { withBase } from '../utils';
 <section id="privacy" class="section section--dark privacy">
 	<div class="section-head">
 		<span class="eyebrow">Privacy</span>
-		<h2 class="h2" style="color:#fff;">Your photos are never uploaded.</h2>
+		<h2 class="h2" style="color:#fff;">Everything stays on your device.</h2>
 	</div>
 
 	<div class="pv-chips">
@@ -35,11 +35,13 @@ import { withBase } from '../utils';
 	</div>
 
 	<p class="pv-body">
-		Poimi runs entirely on your iPhone or iPad. It never uploads your photos,
-		and there&rsquo;s no account to create &mdash; it remembers only which
-		photos you picked, never the images themselves. The one thing that uses the
-		network is turning a photo&rsquo;s map coordinate into a place name, through
-		Apple&rsquo;s service.
+		Poimi reads your library through Apple&rsquo;s PhotoKit &mdash; the same
+		framework the Photos app uses &mdash; entirely on your iPhone or iPad. It
+		builds a new album from your picks and never changes or deletes your
+		originals. There&rsquo;s no account, and your photos are never sent to a
+		server of ours. The one thing that uses the network is turning a
+		photo&rsquo;s map coordinate into a place name, through Apple&rsquo;s
+		service.
 	</p>
 
 	<a class="pv-link" href={withBase('privacy/')}>
