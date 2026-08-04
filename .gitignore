@@ -71,6 +71,10 @@ fastlane/test_output
 
 # Poimi screenshot harness (Scripts/screenshots.sh) — regenerated on demand, not committed.
 /screenshots/
+# App Store screenshot SOURCE photos (owner drops them here; #230). Untracked on purpose — a public
+# repo would keep them downloadable forever in git history. The harness pushes them onto the sim at
+# runtime; only the final framed screenshots ever go public.
+/screenshots-assets/
 /build/
 
 # Local fastlane/bundler install artifacts (see docs/deploy/testflight-setup.md — the match seed runs `bundle install`)
