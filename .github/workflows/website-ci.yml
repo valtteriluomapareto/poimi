@@ -9,6 +9,7 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website-ci.yml'
+      - '.github/workflows/deploy-website.yml'
 
 permissions:
   contents: read

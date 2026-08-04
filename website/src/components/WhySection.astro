@@ -36,6 +36,8 @@ const cards = [
 		</p>
 	</div>
 
+	<p class="why-cards-lead">Most photo apps are built for a different job:</p>
+
 	<div class="why-cards">
 		{
 			cards.map((c) => (
@@ -87,9 +89,17 @@ const cards = [
 		color: var(--color-secondary);
 		font-weight: 600;
 	}
+	.why-cards-lead {
+		max-width: 720px;
+		margin: 60px auto 0;
+		text-align: center;
+		font-size: 17px;
+		font-weight: 500;
+		color: var(--color-label-secondary);
+	}
 	.why-cards {
 		max-width: 1120px;
-		margin: 60px auto 0;
+		margin: 20px auto 0;
 		display: grid;
 		grid-template-columns: repeat(3, 1fr);
 		gap: 20px;
