@@ -5,9 +5,22 @@ name: CI
 # the boundary / pure-glass / fake-isolation guards + the PoimiAppTests integration
 # tier (on an iOS 26 simulator). E2E, signing, and deploy are later phases.
 on:
+  # Skip the (macOS, ~12 min) Swift CI when a change touches ONLY the website —
+  # it has its own website-ci.yml / deploy-website.yml. `paths-ignore` skips a run
+  # only when EVERY changed file matches, so mixed Swift+website PRs still run.
+  # Safe here because no status check is required on main (an otherwise-required
+  # check skipped by paths-ignore would be left "pending" and block merges).
   pull_request:
+    paths-ignore:
+      - 'website/**'
+      - '.github/workflows/website-ci.yml'
+      - '.github/workflows/deploy-website.yml'
   push:
     branches: [main]
+    paths-ignore:
+      - 'website/**'
+      - '.github/workflows/website-ci.yml'
+      - '.github/workflows/deploy-website.yml'
 
 # Least privilege: CI only reads the repo (no deploy, no writes).
 permissions:
