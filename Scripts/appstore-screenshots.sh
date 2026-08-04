@@ -42,7 +42,7 @@ log() { printf '\033[36m[appstore-shots]\033[0m %s\n' "$*" >&2; }
 # --- Matrix -----------------------------------------------------------------------------------------
 # device key | simulator device name | expected "WxH" (App Store accepted size for the slot)
 DEVICE_TABLE=(
-    "iphone69|iPhone 16 Pro Max|1320x2868"
+    "iphone69|iPhone 17 Pro Max|1320x2868"
     "ipad13|iPad Pro 13-inch (M4)|2064x2752"
 )
 # locale key | -AppleLanguages code | -AppleLocale | ASC folder code (fastlane deliver)
@@ -101,6 +101,20 @@ wait_for_ready() {
     return 1
 }
 
+# Install with one resilient retry: CoreSimulator occasionally fails with "Failed to create promise"
+# / "Failed to set metadata" on a fresh device — a stale service. Restart it and retry once.
+install_app() {
+    local sim="$1"
+    if xcrun simctl install "${sim}" "${APP_PATH}" 2>/dev/null; then return 0; fi
+    log "install failed (likely a stale CoreSimulator service) — restarting it and retrying once…"
+    xcrun simctl shutdown all 2>/dev/null || true
+    killall -9 com.apple.CoreSimulator.CoreSimulatorService 2>/dev/null || true
+    sleep 4
+    xcrun simctl boot "${sim}" 2>/dev/null || true
+    xcrun simctl bootstatus "${sim}" -b >/dev/null 2>&1
+    xcrun simctl install "${sim}" "${APP_PATH}"   # fail loudly if still broken
+}
+
 # Push the real photos into the app's Documents/ScreenshotPhotos on a booted sim.
 push_photos() {
     local sim="$1"
@@ -115,17 +129,21 @@ push_photos() {
 for dkey in ${DEVICES}; do
     drow="$(lookup "${dkey}" "${DEVICE_TABLE[@]}")" || { echo "error: unknown device '${dkey}'" >&2; exit 1; }
     IFS='|' read -r _ SIM_NAME EXPECT <<< "${drow}"
-    # Resolve the device UUID from the *available* list. Fixed-string match on "<name> (" so
-    # "iPhone 16 Pro" doesn't also match "iPhone 16 Pro Max", and a UUID regex so parens in the name
-    # (e.g. "iPad Pro 13-inch (M4)") don't confuse extraction. BSD awk (macOS) has no 3-arg match().
-    SIM_LINE="$(xcrun simctl list devices available | grep -F "${SIM_NAME} (" | head -1 || true)"
+    # Resolve the device UUID under an *iOS 26* runtime (the app's floor). `simctl` lists the same
+    # device name under every installed runtime, so we track the "-- iOS 26.x --" section header and
+    # only match a name line inside it. `index($0, name " (")` is a fixed substring (so parens in a
+    # name like "iPad Pro 13-inch (M4)" are fine, and "iPhone 16 Pro" won't match "…Pro Max"); grep
+    # then lifts the UUID. All POSIX/BSD-awk-safe.
+    SIM_LINE="$(xcrun simctl list devices available | awk -v name="${SIM_NAME}" '
+        /^-- iOS / { rt = $0 }
+        (rt ~ /iOS 26/) && index($0, name " (") { print; exit }')"
     SIM_ID="$(printf '%s' "${SIM_LINE}" | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}' | head -1 || true)"
-    [ -n "${SIM_ID}" ] || { echo "error: no available iOS 26 '${SIM_NAME}' simulator found (install it in Xcode)." >&2; exit 1; }
+    [ -n "${SIM_ID}" ] || { echo "error: no *iOS 26* '${SIM_NAME}' simulator found (install the iOS 26 runtime + this device in Xcode)." >&2; exit 1; }
 
     log "Device ${dkey} → ${SIM_NAME} (${SIM_ID}), expect ${EXPECT}"
     xcrun simctl boot "${SIM_ID}" 2>/dev/null || true
     xcrun simctl bootstatus "${SIM_ID}" -b >/dev/null
-    xcrun simctl install "${SIM_ID}" "${APP_PATH}"
+    install_app "${SIM_ID}"
     xcrun simctl privacy "${SIM_ID}" grant photos "${BUNDLE_ID}" 2>/dev/null || true
     push_photos "${SIM_ID}"
 
