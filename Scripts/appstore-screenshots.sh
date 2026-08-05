@@ -50,11 +50,11 @@ LOCALE_TABLE=(
     "en|en|en_US|en-US"
     "fi|fi|fi_FI|fi"
 )
-# Hero screens in store display order. NOTE (#230 review): grid = `scanning` (the real review grid,
-# not the chrome-less `thumbs` debug view); albums = `shell` (AppRootView + seeded albums, not the
-# `library` text inspector). `pacing` is a placeholder — add a DebugScreen case that shows the
-# over-target projection, or reuse `overview`, before the full run.
-SCREEN_ORDER=(scanning overview export shell)
+# Hero screens in store display order. `overview` leads (it carries the pacing/target card + the
+# coverage chart), then the review grid (`scanning` — the real grid, not the chrome-less `thumbs`),
+# the photo viewer, and the export payoff. `shell` (albums) is deferred until album cover thumbnails
+# are implemented (today AlbumRow shows a placeholder cover).
+SCREEN_ORDER=(overview scanning photoviewer export)
 
 DEVICES="${DEVICES:-iphone69 ipad13}"
 LOCALES="${LOCALES:-en fi}"
