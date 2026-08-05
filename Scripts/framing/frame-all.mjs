@@ -15,26 +15,32 @@ import { fileURLToPath } from 'node:url';
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(DIR, '../../screenshots/appstore');
 
-// Hero headline per screen, per ASC locale (2 lines). A missing locale falls back to en-US.
-// NOTE: the fi copy is a non-native DRAFT — the owner (fi-native) should review/refine before publish.
+// Hero headline per screen, per ASC locale (2 lines). A missing locale falls back to en-US. Copy was
+// reviewed by a 4-lens panel incl. a native-Finnish pass (#230); worth the owner's final eye before
+// publish. Store display order is set by STORE_ORDER below — not the app-flow order.
 const HEADLINES = {
 	overview: {
-		'en-US': ['Always know', 'where you stand.'],
-		fi: ['Tiedä aina,', 'missä mennään.'],
+		'en-US': ['Thousands of photos.', 'One clear view.'],
+		fi: ['Tuhansia kuvia.', 'Yksi selkeä näkymä.'],
 	},
 	scanning: {
-		'en-US': ['Hand-pick your year.', 'Every photo, not an algorithm.'],
-		fi: ['Poimi vuotesi käsin.', 'Jokainen kuva, ei algoritmi.'],
+		'en-US': ['You pick every photo.', 'Not an algorithm.'],
+		fi: ['Sinä poimit jokaisen kuvan.', 'Ei algoritmi.'],
 	},
 	photoviewer: {
-		'en-US': ['Look closer,', 'then pick the keeper.'],
-		fi: ['Katso tarkemmin,', 'ja poimi paras.'],
+		'en-US': ['Take a closer look.', 'Pick what stays.'],
+		fi: ['Katso tarkemmin.', 'Poimi, mikä jää.'],
 	},
 	export: {
 		'en-US': ['A real album in Photos.', 'Yours to keep.'],
-		fi: ['Oikea albumi Kuvissa.', 'Jää sinulle.'],
+		fi: ['Oikea albumi Kuvissa.', 'Sinun, pysyvästi.'],
 	},
 };
+
+// App Store display order — `deliver`/ASC sorts by the framed filename's numeric prefix, so we renumber
+// the framed set here. Leads with the grid (the "every photo, not an algorithm" differentiator);
+// screenshot 1 is what shows in search results. (Keep in sync with SCREEN_ORDER in the capture script.)
+const STORE_ORDER = ['scanning', 'photoviewer', 'overview', 'export'];
 
 function headline(screen, locale) {
 	const s = HEADLINES[screen];
@@ -67,9 +73,13 @@ for (const locale of locales) {
 		const device = m[2];
 		const screen = m[3];
 		const [line1, line2] = headline(screen, locale);
-		const out = path.join(outDir, file);
+		// Renumber to STORE_ORDER (independent of the raw capture prefix) so `deliver` shows them in
+		// store order. Unknown screens sort last (99).
+		const pos = STORE_ORDER.indexOf(screen);
+		const prefix = String(pos < 0 ? 99 : pos + 1).padStart(2, '0');
+		const out = path.join(outDir, `${prefix}_${device}_${screen}.png`);
 		await frame({ rawPath: path.join(srcDir, file), out, line1, line2, device });
-		console.log(`framed  ${locale}/${file}  (${device})  →  "${line1} ${line2}"`);
+		console.log(`framed  ${locale}/${path.basename(out)}  (${device})  →  "${line1} ${line2}"`);
 		framed += 1;
 	}
 }

@@ -57,7 +57,9 @@ LOCALE_TABLE=(
 # coverage chart), then the review grid (`scanning` — the real grid, not the chrome-less `thumbs`),
 # the photo viewer, and the export payoff. `shell` (albums) is deferred until album cover thumbnails
 # are implemented (today AlbumRow shows a placeholder cover).
-SCREEN_ORDER=(overview scanning photoviewer export)
+# Store display order (leads with the grid — the differentiator). Keep in sync with STORE_ORDER in
+# Scripts/framing/frame-all.mjs. `scanning` = the review grid, `photoviewer` = the single-photo view.
+SCREEN_ORDER=(scanning photoviewer overview export)
 
 DEVICES="${DEVICES:-iphone69 ipad13}"
 LOCALES="${LOCALES:-en fi}"
