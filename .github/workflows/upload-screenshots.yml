@@ -1,0 +1,98 @@
+name: Upload screenshots
+
+# =============================================================================
+# Manually-triggered App Store screenshot upload (issue #230). Ships the framed
+# marketing screenshots committed under screenshots/appstore/framed/ to App Store
+# Connect via `fastlane upload_screenshots` (deliver) — screenshots ONLY: no
+# binary, no metadata, no app-version change, no review submission.
+#
+# WHY THIS EXISTS: the screenshots are generated on a Mac (iOS 26 sims + the
+# owner's real photos; see Scripts/framing/README.md) and the FINAL framed set is
+# committed to the repo, so this workflow needs no simulator, no Xcode, and no
+# photos — just the committed images and the ASC API key. That's why it runs on
+# Linux and skips the Xcode/match setup the TestFlight lane needs.
+#
+# DELIBERATELY separate from ci.yml (a screenshot push must never gate PR CI) and
+# from testflight.yml (different blast radius, no signing). Triggered ONLY by an
+# explicit human workflow_dispatch.
+#
+# ---------------------------------------------------------------------------
+# HUMAN STEPS BEFORE RUNNING
+# ---------------------------------------------------------------------------
+#   1. Generate + commit the framed set: Scripts/appstore-screenshots.sh, then
+#      `node Scripts/framing/frame-all.mjs`, then commit screenshots/appstore/framed/.
+#   2. In App Store Connect, ensure an EDITABLE app version exists (a version in
+#      "Prepare for Submission") — screenshots attach to it.
+#   3. Trigger this workflow (Actions → Upload screenshots → Run workflow) and
+#      approve the `testflight` environment's reviewer gate.
+#
+# NOTE: overwrite_screenshots clears ALL existing screenshot slots for en-US + fi
+# before uploading, so the committed set must be COMPLETE (both devices, both
+# locales). The lane pre-checks every image is an accepted size and aborts if the
+# framed set is missing — it can never push a partial/empty set silently.
+#
+# REQUIRED `testflight` ENVIRONMENT SECRETS (a subset of the TestFlight lane's —
+# no match/signing secrets needed here):
+#   ASC_KEY_ID              App Store Connect API key id
+#   ASC_ISSUER_ID           App Store Connect API issuer id
+#   ASC_KEY_CONTENT_BASE64  base64 of the .p8 private key
+# =============================================================================
+
+on:
+  workflow_dispatch:
+
+# Least privilege: reads the repo (for the committed framed set); uploads to ASC
+# via the API key, not the GITHUB_TOKEN.
+permissions:
+  contents: read
+
+# Never run two uploads at once; do not cancel an in-flight upload.
+concurrency:
+  group: upload-screenshots
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: Upload framed screenshots to App Store Connect
+    # No Xcode/simulator needed — deliver only talks to the ASC API. Linux is faster
+    # and cheaper than a macOS runner for a pure API upload.
+    runs-on: ubuntu-latest
+    # Binds the required-reviewer gate + scopes the ASC secrets to this job only.
+    environment: testflight
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Ruby + bundler
+        uses: ruby/setup-ruby@a4effe49ee8ee5b8b5091268c473a4628afb5651 # v1.245.0
+        with:
+          ruby-version: "3.3"
+          bundler-cache: false
+
+      - name: Install gems (frozen)
+        run: |
+          # Frozen install: refuse to change Gemfile.lock, so the resolved graph is
+          # exactly what was committed (supply-chain pinning).
+          bundle config set --local frozen true
+          bundle install --jobs 4
+
+      - name: Run fastlane upload_screenshots
+        # No `set -x`, no `--verbose`: the ASC key must never reach the log.
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT_BASE64: ${{ secrets.ASC_KEY_CONTENT_BASE64 }}
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          FASTLANE_HIDE_CHANGELOG: "1"
+        run: |
+          bundle exec fastlane upload_screenshots
+
+      - name: Upload fastlane report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: upload-screenshots-${{ github.run_number }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: fastlane/report.xml

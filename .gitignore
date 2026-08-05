@@ -72,8 +72,13 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
-# Poimi screenshot harness (Scripts/screenshots.sh) — regenerated on demand, not committed.
-/screenshots/
+# Poimi dev screenshot harness output (Scripts/screenshots.sh) + the App Store RAW captures and review
+# montages — regenerated on demand, NOT committed. The exception: the final framed App Store set IS
+# committed (screenshots/appstore/framed/) so the CI upload workflow can ship it to ASC (#230).
+/screenshots/*
+!/screenshots/appstore/
+/screenshots/appstore/*
+!/screenshots/appstore/framed/
 # App Store screenshot SOURCE photos (owner drops them here; #230). Untracked on purpose — a public
 # repo would keep them downloadable forever in git history. The harness pushes them onto the sim at
 # runtime; only the final framed screenshots ever go public.
