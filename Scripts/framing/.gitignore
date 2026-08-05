@@ -1,0 +1,3 @@
+node_modules/
+# Device bezels are fetched from fastlane/frameit-frames (run fetch-frames.sh), not redistributed here.
+frames/*.png
