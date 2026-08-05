@@ -1,12 +1,16 @@
 # fastlane Fastfile — CI → TestFlight deploy pipeline (issue #135).
 #
-# Two lanes, sharing one archive path:
+# Lanes:
 #   • build_only — archive + sign a Release .ipa, NO upload. The bring-up step-2
 #                  isolator: proves runner + Xcode pin + signing + secret loading
 #                  without touching App Store Connect. Runnable independently.
 #   • beta       — build_only's archive → upload to TestFlight (internal) → poll
 #                  App Store Connect until the build's processingState is VALID
 #                  (bounded timeout; fails the run on INVALID / timeout).
+#   • upload_screenshots — push the framed App Store marketing screenshots (the
+#                  Scripts/framing output) to App Store Connect. Screenshots ONLY —
+#                  no binary, no metadata, no submission. Independent of the build
+#                  lanes; run locally after generating the set (needs the ASC key env).
 #
 # Signing (see the issue's "Signing" section): Apple offers no server-side
 # distribution signing, so a real Apple Distribution cert + App Store profile must
@@ -98,6 +102,23 @@ def pbxproj_path
   end
 end
 
+# The framed App Store screenshots produced by Scripts/framing (frame-all.mjs): one folder per ASC
+# locale (en-US, fi), each holding NN_<device>_<screen>.png. Anchored to the Fastfile's own folder
+# (fastlane runs with CWD = fastlane/ — the same fragility pbxproj_path guards against). Raises with a
+# generate-me hint if the set is missing, so the upload can never quietly push zero screenshots.
+def framed_screenshots_path
+  @framed_screenshots_path ||= begin
+    path = File.expand_path(
+      File.join(FastlaneCore::FastlaneFolder.path.to_s, "..", "screenshots", "appstore", "framed")
+    )
+    unless Dir.exist?(path) && Dir.glob(File.join(path, "*", "*.png")).any?
+      UI.user_error!("No framed screenshots at #{path} — run Scripts/appstore-screenshots.sh, then " \
+                     "`node Scripts/framing/frame-all.mjs`, before this lane.")
+    end
+    path
+  end
+end
+
 platform :ios do
   # --- build_only: archive + signed .ipa, no upload -------------------------
   desc "Archive + sign a Release .ipa (no upload). Bring-up step 2 isolator."
@@ -173,6 +194,33 @@ platform :ios do
     processing_state = wait_for_valid_build(build_number)
 
     summarize(build_number, processing_state)
+  end
+
+  # --- upload_screenshots: push the framed App Store screenshots to ASC ------
+  desc "Upload the framed App Store screenshots to App Store Connect — screenshots ONLY (no binary, no metadata, no submission). Run locally after Scripts/appstore-screenshots.sh + frame-all.mjs."
+  lane :upload_screenshots do
+    path = framed_screenshots_path
+
+    # Screenshots only. deliver's `skip_metadata` still uploads screenshots (per its own docs); we also
+    # skip the binary, the app-version fields, and review — so this touches nothing but the screenshot
+    # slots of the current editable App Store version. ASC infers the device from image dimensions
+    # (1320×2868 → iPhone 6.9", 2064×2752 → iPad 13"); the <locale> folders (en-US, fi) map to ASC
+    # localizations; the NN_ filename prefix sets display order. `overwrite_screenshots` makes re-runs
+    # idempotent (clears the old set first). `force` skips the interactive HTML preview.
+    upload_to_app_store(
+      api_key: asc_api_key,
+      app_identifier: APP_IDENTIFIER,
+      screenshots_path: path,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_app_version_update: true,
+      overwrite_screenshots: true,
+      submit_for_review: false,
+      run_precheck_before_submit: false,
+      force: true
+    )
+
+    UI.success("Uploaded screenshots from #{path} to App Store Connect (no binary, no metadata, no submission).")
   end
 
   # Poll App Store Connect for THIS run's build until it is VALID. Raises (fails the

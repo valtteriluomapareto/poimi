@@ -220,6 +220,29 @@ Scripts/bump-version.sh patch     # or minor | major | X.Y.Z  → commit in its 
 ```
 `Scripts/check-version.sh` (in CI) asserts every `MARKETING_VERSION` occurrence is an identical semver.
 
+### 5.5 Uploading marketing screenshots (`upload_screenshots`)
+Separate from the build lanes and **run locally** — the screenshots are generated on your Mac (they need
+the iOS 26 sims + your real photos; see [Scripts/framing/README.md](../../Scripts/framing/README.md)), so
+there is no CI workflow. The lane pushes **only the screenshots** — never the binary, the textual
+metadata, or a review submission.
+
+Prerequisites:
+- The framed set exists at `screenshots/appstore/framed/<locale>/` — run `Scripts/appstore-screenshots.sh`,
+  then `node Scripts/framing/frame-all.mjs`. The lane aborts if it's missing (never uploads nothing).
+- An **editable App Store version** exists in App Store Connect (a version in *Prepare for Submission* —
+  screenshots attach to it; create one under App Store Connect → your app → **+ Version** if needed).
+
+Run it with the same App Store Connect API key the CI lanes use, supplied locally:
+```sh
+export ASC_KEY_ID=<key-id> ASC_ISSUER_ID=<issuer-id>
+export ASC_KEY_CONTENT_BASE64="$(base64 -i <AuthKey_XXXX.p8>)"
+bundle exec fastlane upload_screenshots
+```
+ASC infers each device slot from the image dimensions (1320×2868 → iPhone 6.9″, 2064×2752 → iPad 13″), the
+`<locale>` folders (`en-US`, `fi`) map to ASC localizations, and the `NN_` filename prefix sets display
+order. `overwrite_screenshots` makes it idempotent — a re-run clears the old set first, so you can
+regenerate and re-upload freely. It does **not** submit for review.
+
 ---
 
 ## 6. Troubleshooting (things that actually bit us)
