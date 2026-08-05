@@ -187,10 +187,8 @@ struct DebugShellView: View {
     }
 }
 
-/// A locale-aware sample album title for the DEBUG hosts, so the Finnish App Store screenshots aren't
-/// stuck with the hardcoded English fixture title (#230). Checked against the launch locale
-/// (`-AppleLanguages`), NOT the String Catalog — DEBUG fixtures must not pollute the catalog (#95). In
-/// any locale but fi (incl. the test default), it returns the English title unchanged.
+/// A locale-aware sample album title for the DEBUG hosts so the fi App Store screenshots aren't stuck
+/// with the English fixture title (#230). NOT the String Catalog — DEBUG fixtures must not pollute it (#95).
 func debugSampleTitle(_ english: String) -> String {
     // Match the *resolved* language code, not a `hasPrefix("fi")` — that also matches "fil" (Filipino).
     let lang = Locale(identifier: Locale.preferredLanguages.first ?? "en").language.languageCode?.identifier
@@ -200,8 +198,7 @@ func debugSampleTitle(_ english: String) -> String {
     case "Best of 2024": return "Vuoden 2024 parhaat"
     case "Italy 2024": return "Italia 2024"
     case "Summer trip": return "Kesäreissu"
-    default:
-        // A new fixture title reached fi without a translation → it would silently leak English.
+    default:  // a new fixture title reached fi without a translation → would silently leak English
         Log.app.notice("debugSampleTitle: no fi translation for '\(english, privacy: .public)'")
         return english
     }
@@ -276,18 +273,14 @@ struct DebugScanningHostView: View {
     @State private var coordinator: AppCoordinator?
     @State private var project: CurationProject?
 
-    /// A dedicated dense single-day fake so the review grid FILLS on iPad. The shared `yearMixedSeed`
-    /// busy day is ~10 photos — fine at 3 columns on iPhone, but sparse at iPad's ~8 columns. This is
-    /// NOT the global seed: that one is pinned by exact-count/id tests (`FakePhotoLibrary.yearMixedSeed`),
-    /// so a screenshot-only density tweak lives here instead. Ids are `fake/grid/<n>` so the real-photo
+    /// A dedicated dense single-day fake (54 photos) so the review grid FILLS on iPad's ~8 columns — NOT
+    /// the global `yearMixedSeed` (pinned by exact-count/id tests). Ids `fake/grid/<n>` so the real-photo
     /// thumbnail fake maps each cell to a photo by its trailing ordinal.
     private static let fake: FakePhotoLibrary = {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
         let start = cal.date(from: DateComponents(year: 2025, month: 7, day: 5, hour: 8))!
         let assets = (0..<54).map { i in
-            AssetRef(id: "fake/grid/\(i)",
-                     captureDate: cal.date(byAdding: .minute, value: i * 11, to: start)!,
+            AssetRef(id: "fake/grid/\(i)", captureDate: cal.date(byAdding: .minute, value: i * 11, to: start)!,
                      pixelSize: PixelSize(width: 4032, height: 3024))
         }
         return FakePhotoLibrary(assets: assets, albums: [], membership: [:])
