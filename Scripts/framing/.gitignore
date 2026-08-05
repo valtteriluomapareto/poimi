@@ -1,3 +1,5 @@
 node_modules/
-# Device bezels are fetched from fastlane/frameit-frames (run fetch-frames.sh), not redistributed here.
+# Bezels + fonts are fetched (run fetch-assets.sh), not committed — keeps the repo light and avoids
+# redistributing Apple's device likeness.
 frames/*.png
+fonts/*.ttf
