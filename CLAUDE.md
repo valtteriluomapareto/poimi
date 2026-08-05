@@ -107,6 +107,7 @@ Curation/                      pure-domain SPM package — NO Photos/SwiftData/U
 Scripts/                       CI guards; the dev screenshot harness + the App Store screenshot
                                pipeline (appstore-screenshots.sh + framing/, #230) — see below
 docs/                          the durable record — plans + design
+website/                       the Astro marketing site → GitHub Pages (#227; see website/README.md)
 ```
 
 ## Hard invariants (do not break)
@@ -189,7 +190,10 @@ The dev screenshot harness and logging are documented in the [README](README.md)
 
 Checkout → select Xcode 26 → SwiftLint → `Curation` tests → the guard self-tests + the guards →
 version/TestFlight-trigger guards → Release build → app build + integration tests on an iOS 26 sim →
-an **advisory coverage summary** (not a gate — #110). Defined in `.github/workflows/ci.yml`.
+an **advisory coverage summary** (not a gate — #110). Defined in `.github/workflows/ci.yml`, which
+carries a `paths-ignore` for `website/**` so website-only changes skip the Swift CI. The site has its
+own workflows: `website-ci.yml` (build check) and `deploy-website.yml` (build + deploy to GitHub
+Pages, #227).
 
 ## Conventions
 
