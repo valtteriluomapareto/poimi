@@ -12,6 +12,7 @@ mkdir -p "${FRAMES}" "${FONTS}"
 # --- Device bezels (fastlane/frameit-frames): local filename | exact name in latest/ ---
 FRAME_ROWS=(
     "iphone-17-pro-max.png|Apple iPhone 17 Pro Max Silver.png"
+    "ipad-pro-13.png|Apple iPad Pro (12.9-inch) (4th generation) Silver.png"
 )
 for row in "${FRAME_ROWS[@]}"; do
     out="${row%%|*}"; name="${row#*|}"

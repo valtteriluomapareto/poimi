@@ -55,16 +55,17 @@ for (const locale of locales) {
 	fs.mkdirSync(outDir, { recursive: true });
 
 	for (const file of fs.readdirSync(srcDir).filter((f) => f.endsWith('.png')).sort()) {
-		const m = file.match(/^(\d+)_[^_]+_(.+)\.png$/); // NN_<device>_<screen>.png
+		const m = file.match(/^(\d+)_([^_]+)_(.+)\.png$/); // NN_<device>_<screen>.png
 		if (!m) {
 			console.warn(`skip (unrecognized name): ${file}`);
 			continue;
 		}
-		const screen = m[2];
+		const device = m[2];
+		const screen = m[3];
 		const [line1, line2] = headline(screen, locale);
 		const out = path.join(outDir, file);
-		await frame({ rawPath: path.join(srcDir, file), out, line1, line2 });
-		console.log(`framed  ${locale}/${file}  →  "${line1} ${line2}"`);
+		await frame({ rawPath: path.join(srcDir, file), out, line1, line2, device });
+		console.log(`framed  ${locale}/${file}  (${device})  →  "${line1} ${line2}"`);
 		framed += 1;
 	}
 }
