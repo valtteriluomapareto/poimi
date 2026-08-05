@@ -20,14 +20,15 @@
 import UIKit
 
 actor FakeThumbnailProvider: ThumbnailProviding {
+    // Grid cell: fill the (square) cell — crop to cover.
     func thumbnail(for assetID: String, targetSize: CGSize) async -> UIImage? {
-        Self.image(for: assetID, size: targetSize)
+        Self.image(for: assetID, size: targetSize, fill: true)
     }
 
-    // Same mapping at the viewer's (larger) size, so the full-screen image matches the cell the user
-    // tapped: the flat tile shares the id's stable hue; a screenshot photo shares the id's ordinal.
+    // Full-screen viewer: natural aspect (fit, not fill) so the whole photo shows (letterboxed by the
+    // viewer) — never cropped. Same id→photo mapping as the thumbnail, so the two match.
     func fullImage(for assetID: String, targetSize: CGSize) async -> UIImage? {
-        Self.image(for: assetID, size: targetSize)
+        Self.image(for: assetID, size: targetSize, fill: false)
     }
 
     // No synchronous cache for the fake: its images are recomputed/redrawn deterministically, so it
@@ -55,7 +56,7 @@ actor FakeThumbnailProvider: ThumbnailProviding {
     /// The image for an id: a real photo in screenshot mode, else the deterministic flat tile. In
     /// screenshot mode with NO photos found, renders a LOUD magenta error tile and logs — it never
     /// silently pretty-falls-back to tiles, so a broken capture run is unmistakable.
-    static func image(for id: String, size: CGSize) -> UIImage {
+    static func image(for id: String, size: CGSize, fill: Bool) -> UIImage {
         guard usePhotos else { return tile(for: id, size: size) }
         guard !photos.isEmpty else {
             Log.photoLibrary.error(
@@ -63,7 +64,8 @@ actor FakeThumbnailProvider: ThumbnailProviding {
             )
             return errorTile(size: size)
         }
-        return aspectFill(photos[ordinal(id) % photos.count], to: size)
+        let source = photos[ordinal(id) % photos.count]
+        return fill ? aspectFill(source, to: size) : aspectFit(source, to: size)
     }
 
     /// A deterministic index into the photo set: the LAST integer run in the id (fake ids end with an
@@ -92,6 +94,20 @@ actor FakeThumbnailProvider: ThumbnailProviding {
         let images = urls.compactMap { UIImage(contentsOfFile: $0.path) }
         Log.photoLibrary.notice("Screenshot mode: loaded \(images.count) real photo(s) from Documents/ScreenshotPhotos")
         return images
+    }
+
+    /// Scale `image` to fit within `size` preserving aspect (aspect-fit) — the whole photo at its
+    /// natural aspect (≤ size), for the full-screen viewer to letterbox (never a cropped fill).
+    static func aspectFit(_ image: UIImage, to size: CGSize) -> UIImage {
+        let target = CGSize(width: max(1, size.width), height: max(1, size.height))
+        let scale = min(target.width / image.size.width, target.height / image.size.height)
+        let drawn = CGSize(
+            width: max(1, (image.size.width * scale).rounded()),
+            height: max(1, (image.size.height * scale).rounded())
+        )
+        return UIGraphicsImageRenderer(size: drawn).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: drawn))
+        }
     }
 
     /// Scale-and-center-crop `image` to exactly `size` (aspect-fill), so grid cells fill without
