@@ -51,16 +51,21 @@ const roundRect = (w, h, r, fill) =>
 	Buffer.from(`<svg width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="${r}" ry="${r}" fill="${fill}"/></svg>`);
 const escapeXml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** Render one headline line as an Inter ExtraBold rgba text image. */
-async function renderLine(text) {
-	const buf = await sharp({
+/** Render the (1–2 line) headline as ONE centered Inter ExtraBold block, trimmed to content. A single
+ *  pango render gives natural line spacing (no cramped manual line stacking). */
+async function renderHeadline(line1, line2) {
+	const text = [line1, line2].filter(Boolean).map(escapeXml).join('\n');
+	if (!text) return null;
+	const raw = await sharp({
 		text: {
-			text: `<span weight="800" foreground="${INK}">${escapeXml(text)}</span>`,
+			text: `<span weight="800" foreground="${INK}">${text}</span>`,
 			font: 'Inter 100', fontfile: FONT, rgba: true, dpi: 72,
+			align: 'centre', width: 4000, spacing: 12,
 		},
 	}).png().toBuffer();
-	const m = await sharp(buf).metadata();
-	return { buf, w: m.width, h: m.height };
+	const trimmed = await sharp(raw).trim().toBuffer();
+	const m = await sharp(trimmed).metadata();
+	return { buf: trimmed, w: m.width, h: m.height };
 }
 
 /** Frame one screenshot → an opaque App-Store-sized PNG. */
@@ -89,15 +94,15 @@ export async function frame({ rawPath, out, line1 = '', line2 = '', device = 'ip
 	const deviceScaled = await sharp(framed).resize(d.deviceW, deviceH).png().toBuffer();
 	const deviceX = Math.round((d.canvas.w - d.deviceW) / 2);
 
-	// 3. Headline: both lines share one size (scaled so the wider fills titleMaxW).
-	const lines = await Promise.all([line1, line2].filter((l) => l).map(renderLine));
-	const maxW = Math.max(1, ...lines.map((l) => l.w));
-	const scale = Math.min(1, d.titleMaxW / maxW);
-	const scaled = await Promise.all(lines.map(async (l) => {
-		const w = Math.max(1, Math.round(l.w * scale));
-		const h = Math.max(1, Math.round(l.h * scale));
-		return { buf: await sharp(l.buf).resize(w, h).png().toBuffer(), w, h };
-	}));
+	// 3. Headline: one centered Inter block, scaled so it fills titleMaxW (natural line spacing).
+	const head = await renderHeadline(line1, line2);
+	let headScaled = null;
+	if (head) {
+		const scale = Math.min(1, d.titleMaxW / head.w);
+		const w = Math.max(1, Math.round(head.w * scale));
+		const h = Math.max(1, Math.round(head.h * scale));
+		headScaled = { buf: await sharp(head.buf).resize(w, h).png().toBuffer(), w, h };
+	}
 
 	// 4. Background + phone-shaped shadow.
 	const bg = Buffer.from(`<svg width="${d.canvas.w}" height="${d.canvas.h}" xmlns="http://www.w3.org/2000/svg">
@@ -114,12 +119,11 @@ export async function frame({ rawPath, out, line1 = '', line2 = '', device = 'ip
 		{ input: shadow, left: deviceX - 70, top: d.deviceY - 70 + 34 },
 		{ input: deviceScaled, left: deviceX, top: d.deviceY },
 	];
-	let y = d.titleTop;
-	for (const s of scaled) {
-		layers.push({ input: s.buf, left: Math.round((d.canvas.w - s.w) / 2), top: Math.round(y) });
-		y += s.h + Math.round(s.h * 0.06);
+	if (headScaled) {
+		layers.push({ input: headScaled.buf, left: Math.round((d.canvas.w - headScaled.w) / 2), top: d.titleTop });
+		const ruleY = d.titleTop + headScaled.h + 34;
+		layers.push({ input: roundRect(144, 9, 4.5, ACCENT), left: Math.round((d.canvas.w - 144) / 2), top: Math.round(ruleY) });
 	}
-	layers.push({ input: roundRect(144, 9, 4.5, ACCENT), left: Math.round((d.canvas.w - 144) / 2), top: Math.round(y + 30) });
 
 	await sharp(bg).composite(layers).flatten({ background: '#F5F6F9' }).png().toFile(out);
 }
