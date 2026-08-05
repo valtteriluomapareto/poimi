@@ -42,7 +42,7 @@ const DEVICES = {
 	},
 	ipad13: {
 		frame: 'frames/ipad-pro-13.png', fw: 2245, fh: 2930, screen: { x: 96, y: 102, w: 2048, h: 2732 },
-		canvas: { w: 2064, h: 2752 }, deviceW: 1680, deviceY: 496, screenR: 42, shadowRF: 0.035,
+		canvas: { w: 2064, h: 2752 }, deviceW: 1680, deviceY: 496, screenR: 34, shadowRF: 0.035,
 		titleMaxW: 1560, titleTop: 150,
 	},
 };
