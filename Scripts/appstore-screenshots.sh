@@ -146,6 +146,17 @@ for dkey in ${DEVICES}; do
     log "Device ${dkey} → ${SIM_NAME} (${SIM_ID}), expect ${EXPECT}"
     xcrun simctl boot "${SIM_ID}" 2>/dev/null || true
     xcrun simctl bootstatus "${SIM_ID}" -b >/dev/null
+    # Force Apple's colon "9:41" marketing clock regardless of the host Mac's region — on a Finnish host
+    # the status bar otherwise renders "9.41". The system locale only takes effect after a respring, so
+    # set it while booted, then reboot. The app's own UI/date locale still comes from the per-locale
+    # -AppleLanguages/-AppleLocale launch args below, so the fi shots stay Finnish. (The iPad status-bar
+    # *date* can't be pinned: `status_bar override --time` rejects every ISO date string on Xcode 26.3
+    # — "Invalid, non-ISO date/time string" — so the iPad shows the real date.)
+    xcrun simctl spawn "${SIM_ID}" defaults write .GlobalPreferences AppleLocale -string "en_US" 2>/dev/null || true
+    xcrun simctl spawn "${SIM_ID}" defaults write .GlobalPreferences AppleLanguages -array "en" 2>/dev/null || true
+    xcrun simctl shutdown "${SIM_ID}" 2>/dev/null || true
+    xcrun simctl boot "${SIM_ID}" 2>/dev/null || true
+    xcrun simctl bootstatus "${SIM_ID}" -b >/dev/null
     install_app "${SIM_ID}"
     xcrun simctl privacy "${SIM_ID}" grant photos "${BUNDLE_ID}" 2>/dev/null || true
     push_photos "${SIM_ID}"

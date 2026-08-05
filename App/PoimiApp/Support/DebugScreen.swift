@@ -268,7 +268,6 @@ struct DebugAlbumPickerHostView: View {
 /// excluded. `.ready` renders the grid, so this captures the grid against the deterministic fake
 /// thumbnails with a few cells pre-selected (so selection encoding shows).
 struct DebugScanningHostView: View {
-    @Environment(\.photoLibrary) private var library
     // Retained so the in-memory container (owned by the stores) outlives `.task` — otherwise it
     // deallocates, resets its context, and destroys `project` out from under ScanningView.
     @State private var projectStore: ProjectStore?
@@ -277,13 +276,31 @@ struct DebugScanningHostView: View {
     @State private var coordinator: AppCoordinator?
     @State private var project: CurationProject?
 
-    /// A few candidate ids to pre-select so the captured grid shows the badge + dim encoding.
-    private static let preselected = ["fake/busy/2", "fake/busy/5", "fake/quiet/16"]
+    /// A dedicated dense single-day fake so the review grid FILLS on iPad. The shared `yearMixedSeed`
+    /// busy day is ~10 photos — fine at 3 columns on iPhone, but sparse at iPad's ~8 columns. This is
+    /// NOT the global seed: that one is pinned by exact-count/id tests (`FakePhotoLibrary.yearMixedSeed`),
+    /// so a screenshot-only density tweak lives here instead. Ids are `fake/grid/<n>` so the real-photo
+    /// thumbnail fake maps each cell to a photo by its trailing ordinal.
+    private static let fake: FakePhotoLibrary = {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let start = cal.date(from: DateComponents(year: 2025, month: 7, day: 5, hour: 8))!
+        let assets = (0..<54).map { i in
+            AssetRef(id: "fake/grid/\(i)",
+                     captureDate: cal.date(byAdding: .minute, value: i * 11, to: start)!,
+                     pixelSize: PixelSize(width: 4032, height: 3024))
+        }
+        return FakePhotoLibrary(assets: assets, albums: [], membership: [:])
+    }()
+
+    /// Pre-select roughly every fourth photo so the captured grid shows the pick badge + dim encoding.
+    private static let preselected = stride(from: 1, to: 54, by: 4).map { "fake/grid/\($0)" }
 
     var body: some View {
         Group {
             if let selectionStore, let doneStore, let coordinator, let project {
                 NavigationStack { ScanningView(project: project) }
+                    .environment(\.photoLibrary, Self.fake)
                     .environment(selectionStore)
                     .environment(doneStore)
                     .environment(coordinator)
@@ -303,15 +320,11 @@ struct DebugScanningHostView: View {
                 title: debugSampleTitle("Best of 2025"),
                 rangeStart: Self.yearStart, rangeEnd: Self.yearEnd,
                 targetCount: 100,
-                excludeScreenshots: true,
-                excludedAlbumIDs: ["album/whatsapp"])
+                excludeScreenshots: true)
             selection.activate(created)
             Self.preselected.forEach { selection.toggle($0) }
-            // Mark the March quiet run done so the capture shows a collapsed cluster (idea ③) next to
-            // the open July one. ScanningView's own `doneStore.activate` reads these back.
-            created.doneDays = ["2025-03-16", "2025-03-17", "2025-03-18"]
 
-            let coord = AppCoordinator(library: library)
+            let coord = AppCoordinator(library: Self.fake)
             projectStore = projects
             selectionStore = selection
             doneStore = done
@@ -320,7 +333,7 @@ struct DebugScanningHostView: View {
 
             // Probe the same fake the view loads against (instant) so we signal ready only once
             // the candidates have settled — the capture script never snapshots mid-scan.
-            let probe = CandidateStore(library: library)
+            let probe = CandidateStore(library: Self.fake)
             await probe.load(created)
             Log.app.notice("screenshot-ready: \(DebugScreen.scanning.rawValue, privacy: .public)")
         }

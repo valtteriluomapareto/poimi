@@ -110,13 +110,22 @@ export async function frame({ rawPath, out, line1 = '', line2 = '', device = 'ip
     <stop offset="0" stop-color="#F5F6F9"/><stop offset="1" stop-color="#E6E9F0"/></linearGradient></defs>
   <rect width="${d.canvas.w}" height="${d.canvas.h}" fill="url(#g)"/>
 </svg>`);
-	const shadow = await sharp(roundRect(d.deviceW, deviceH, Math.round(d.deviceW * d.shadowRF), 'rgba(20,22,28,0.26)'))
-		.extend({ top: 70, bottom: 70, left: 70, right: 70, background: { r: 0, g: 0, b: 0, alpha: 0 } })
-		.blur(52).png().toBuffer();
+	// A subtle *grounded* shadow: the silhouette is inset from the device footprint and offset
+	// slightly down, so its blur stays under/below the device instead of bleeding a gray band past
+	// the sides (which read as a seam next to the bezel). Low opacity; corners follow the device.
+	const shInset = Math.round(d.deviceW * 0.11);
+	const shOffsetY = Math.round(d.deviceW * 0.14);
+	const shBlur = Math.round(d.deviceW * 0.045);
+	const shPad = shBlur * 3;
+	const shW = d.deviceW - shInset * 2;
+	const shH = deviceH - shInset;
+	const shadow = await sharp(roundRect(shW, shH, Math.round(shW * d.shadowRF), 'rgba(18,20,26,0.22)'))
+		.extend({ top: shPad, bottom: shPad, left: shPad, right: shPad, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+		.blur(shBlur).png().toBuffer();
 
 	// 5. Compose: shadow, device, headline lines (centered, stacked), gold rule.
 	const layers = [
-		{ input: shadow, left: deviceX - 70, top: d.deviceY - 70 + 34 },
+		{ input: shadow, left: deviceX + shInset - shPad, top: d.deviceY + shOffsetY - shPad },
 		{ input: deviceScaled, left: deviceX, top: d.deviceY },
 	];
 	if (headScaled) {
