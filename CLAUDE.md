@@ -104,7 +104,8 @@ Curation/                      pure-domain SPM package — NO Photos/SwiftData/U
                                PhotoLibraryProviding, + the location math: GeoDistance, PlaceCluster,
                                TripOverlay, ReviewTimeline, ClusterCharacter, …
   Tests/CurationTests/         pure unit/property tests (headless: `swift test`)
-Scripts/                       CI guards + the screenshot harness (see below)
+Scripts/                       CI guards; the dev screenshot harness + the App Store screenshot
+                               pipeline (appstore-screenshots.sh + framing/, #230) — see below
 docs/                          the durable record — plans + design
 ```
 
@@ -172,12 +173,17 @@ the container deallocates).
 - **Screenshots** (eyeball a screen against its Paper design): `./Scripts/screenshots.sh --list`,
   then `./Scripts/screenshots.sh <id>`. Boots a sim, builds, launches straight to a `DebugScreen`
   against the deterministic fake, captures `screenshots/<id>.png`. Deterministic, DEBUG-only.
+- **App Store screenshots** (#230, on-demand + local, not a CI gate): `Scripts/appstore-screenshots.sh`
+  captures the hero screens against the fake filled with the owner's real photos (`-PoimiScreenshotPhotos`,
+  DEBUG-only, served from the app's `Documents/` so nothing lands in a built artifact — D30 holds), then
+  `Scripts/framing/` (a `sharp` compositor) frames each into a real device bezel + Inter headline at the
+  exact App Store size. Bezels/Inter + the outputs are gitignored; see `Scripts/framing/README.md`.
 - **Logs:** `os.Logger` under subsystem `com.valtteriluoma.poimi` at the impure seams. Retrieve
   with `xcrun simctl spawn booted log show --predicate 'subsystem == "com.valtteriluoma.poimi"'
   --last 2m --style compact` (`.notice`+; use `log stream --level debug` for `.info`/`.debug`).
 
-Both are documented in the [README](README.md). Pixel-snapshot *testing* stays deferred (D26) —
-the harness is for human/agent eyeballing, not assertions.
+The dev screenshot harness and logging are documented in the [README](README.md). Pixel-snapshot
+*testing* stays deferred (D26) — the harness is for human/agent eyeballing, not assertions.
 
 ## CI gates (every PR, all green to merge)
 
