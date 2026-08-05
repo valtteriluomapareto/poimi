@@ -1,12 +1,18 @@
 # fastlane Fastfile — CI → TestFlight deploy pipeline (issue #135).
 #
-# Two lanes, sharing one archive path:
+# Lanes:
 #   • build_only — archive + sign a Release .ipa, NO upload. The bring-up step-2
 #                  isolator: proves runner + Xcode pin + signing + secret loading
 #                  without touching App Store Connect. Runnable independently.
 #   • beta       — build_only's archive → upload to TestFlight (internal) → poll
 #                  App Store Connect until the build's processingState is VALID
 #                  (bounded timeout; fails the run on INVALID / timeout).
+#   • upload_screenshots — push the framed App Store marketing screenshots (the
+#                  Scripts/framing output, committed under screenshots/appstore/framed/)
+#                  to App Store Connect. Screenshots ONLY — no binary, no metadata, no
+#                  submission. Run via the manual `upload-screenshots.yml` workflow (the
+#                  framed set is committed, so CI needs no sim/photos) or locally with the
+#                  ASC key env. Independent of the build lanes.
 #
 # Signing (see the issue's "Signing" section): Apple offers no server-side
 # distribution signing, so a real Apple Distribution cert + App Store profile must
@@ -98,6 +104,37 @@ def pbxproj_path
   end
 end
 
+# The framed App Store screenshots produced by Scripts/framing (frame-all.mjs): one folder per ASC
+# locale (en-US, fi), each holding NN_<device>_<screen>.png. Anchored to the Fastfile's own folder
+# (fastlane runs with CWD = fastlane/ — the same fragility pbxproj_path guards against). Raises with a
+# generate-me hint if the set is missing, so the upload can never quietly push zero screenshots.
+def framed_screenshots_path
+  @framed_screenshots_path ||= begin
+    path = File.expand_path(
+      File.join(FastlaneCore::FastlaneFolder.path.to_s, "..", "screenshots", "appstore", "framed")
+    )
+    unless Dir.exist?(path) && Dir.glob(File.join(path, "*", "*.png")).any?
+      UI.user_error!("No framed screenshots at #{path} — run Scripts/appstore-screenshots.sh, then " \
+                     "`node Scripts/framing/frame-all.mjs`, before this lane.")
+    end
+    path
+  end
+end
+
+# The App Store marketing sizes for the slots we ship (portrait): iPhone 6.9" + iPad 13". deliver infers
+# the device slot from the image dimensions and SILENTLY drops any image whose size it doesn't recognize
+# (calculate_display_type returns nil, no error) — so upload_screenshots pre-checks against this list and
+# fails loudly, rather than shipping a half-empty set if the bespoke compositor ever drifts a few pixels.
+ACCEPTED_SCREENSHOT_SIZES = [[1320, 2868], [2064, 2752]].freeze
+
+# A PNG's [width, height] read straight from its IHDR chunk (big-endian u32 at bytes 16..24) — no image
+# gem needed. Returns nil for anything that isn't a PNG.
+def png_dimensions(file)
+  header = File.binread(file, 24)
+  return nil unless header && header.bytesize == 24 && header[0, 8] == "\x89PNG\r\n\x1a\n".b
+  header[16, 8].unpack("N2")
+end
+
 platform :ios do
   # --- build_only: archive + signed .ipa, no upload -------------------------
   desc "Archive + sign a Release .ipa (no upload). Bring-up step 2 isolator."
@@ -173,6 +210,49 @@ platform :ios do
     processing_state = wait_for_valid_build(build_number)
 
     summarize(build_number, processing_state)
+  end
+
+  # --- upload_screenshots: push the framed App Store screenshots to ASC ------
+  desc "Upload the framed App Store screenshots to App Store Connect — screenshots ONLY (no binary, no metadata, no submission). Run locally after Scripts/appstore-screenshots.sh + frame-all.mjs."
+  lane :upload_screenshots do
+    # Fail fast on missing auth — this lane is run by hand as often as in CI, so a forgotten export
+    # should give a hint, not a bare KeyError from asc_api_key's ENV.fetch.
+    missing = %w[ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_CONTENT_BASE64].reject { |v| ENV[v].to_s.strip != "" }
+    UI.user_error!("Missing App Store Connect API key env: #{missing.join(', ')} — export them (see " \
+                   "docs/deploy/testflight-setup.md §5.5) or run the upload-screenshots CI workflow.") unless missing.empty?
+
+    path = framed_screenshots_path
+
+    # Every framed image must be an exact ASC-accepted size — deliver silently skips any it can't map to
+    # a device, so a compositor drift (e.g. 1320×2869) would ship a half-empty set under a green success.
+    wrong = Dir.glob(File.join(path, "*", "*.png")).reject { |f| ACCEPTED_SCREENSHOT_SIZES.include?(png_dimensions(f)) }
+    unless wrong.empty?
+      listing = wrong.map { |f| "#{File.basename(File.dirname(f))}/#{File.basename(f)} = #{(png_dimensions(f) || %w[? ?]).join('×')}" }
+      UI.user_error!("Framed screenshots not at an App-Store-accepted size (want 1320×2868 or 2064×2752) — " \
+                     "deliver would silently drop these:\n  #{listing.join("\n  ")}")
+    end
+
+    # Screenshots only. deliver's `skip_metadata` still uploads screenshots (per its own docs, verified in
+    # 2.237.0); we also skip the binary, the app-version fields, and review — so this touches nothing but
+    # the screenshot slots of the current editable App Store version. ASC infers the device from image
+    # dimensions (1320×2868 → iPhone 6.9", 2064×2752 → iPad 13"); the <locale> folders (en-US, fi) map to
+    # ASC localizations (missing ones are auto-created); the NN_ filename prefix sets display order.
+    # `overwrite_screenshots` clears ALL existing screenshot slots for en-US + fi before uploading (other
+    # locales untouched) — so always upload a COMPLETE set. `force` skips the interactive HTML preview.
+    upload_to_app_store(
+      api_key: asc_api_key,
+      app_identifier: APP_IDENTIFIER,
+      screenshots_path: path,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_app_version_update: true,
+      overwrite_screenshots: true,
+      submit_for_review: false,
+      run_precheck_before_submit: false,
+      force: true
+    )
+
+    UI.success("Uploaded screenshots from #{path} to App Store Connect (no binary, no metadata, no submission).")
   end
 
   # Poll App Store Connect for THIS run's build until it is VALID. Raises (fails the

@@ -220,6 +220,36 @@ Scripts/bump-version.sh patch     # or minor | major | X.Y.Z  → commit in its 
 ```
 `Scripts/check-version.sh` (in CI) asserts every `MARKETING_VERSION` occurrence is an identical semver.
 
+### 5.5 Uploading marketing screenshots (`upload_screenshots`)
+The `upload_screenshots` lane pushes **only the screenshots** to App Store Connect — never the binary, the
+textual metadata, or a review submission. The screenshots are generated on a Mac (iOS 26 sims + your real
+photos; see [Scripts/framing/README.md](../../Scripts/framing/README.md)) and the **final framed set is
+committed** to the repo (`screenshots/appstore/framed/`), so the upload itself needs no Mac.
+
+Prerequisites:
+- Regenerate + **commit** the framed set: `Scripts/appstore-screenshots.sh`, then
+  `node Scripts/framing/frame-all.mjs`, then commit `screenshots/appstore/framed/`. The lane aborts if the
+  set is missing and pre-checks every image is an accepted size (1320×2868 / 2064×2752) — it never pushes a
+  partial or empty set.
+- An **editable App Store version** exists in App Store Connect (a version in *Prepare for Submission* —
+  screenshots attach to it; create one under App Store Connect → your app → **+ Version** if needed).
+
+**Preferred — via CI:** run `.github/workflows/upload-screenshots.yml` (Actions → **Upload screenshots** →
+Run workflow) and approve the `testflight` reviewer gate. It reuses this environment's `ASC_*` secrets (no
+match/signing secrets needed) and runs on Linux — deliver only talks to the ASC API, so no Xcode.
+
+**Local alternative:** with the API key exported (`base64 -i` on macOS emits a single line):
+```sh
+export ASC_KEY_ID=<key-id> ASC_ISSUER_ID=<issuer-id>
+export ASC_KEY_CONTENT_BASE64="$(base64 -i <AuthKey_XXXX.p8>)"
+bundle exec fastlane upload_screenshots
+```
+ASC infers each device slot from the image dimensions (1320×2868 → iPhone 6.9″, 2064×2752 → iPad 13″), the
+`<locale>` folders (`en-US`, `fi`) map to ASC localizations (missing ones are auto-created), and the `NN_`
+prefix sets display order. `overwrite_screenshots` **clears all existing screenshot slots for en-US + fi
+before uploading** (other locales untouched) — so always upload a COMPLETE set; anything not present
+locally ends up empty in ASC. It does **not** submit for review.
+
 ---
 
 ## 6. Troubleshooting (things that actually bit us)

@@ -178,7 +178,10 @@ the container deallocates).
   captures the hero screens against the fake filled with the owner's real photos (`-PoimiScreenshotPhotos`,
   DEBUG-only, served from the app's `Documents/` so nothing lands in a built artifact — D30 holds), then
   `Scripts/framing/` (a `sharp` compositor) frames each into a real device bezel + Inter headline at the
-  exact App Store size. Bezels/Inter + the outputs are gitignored; see `Scripts/framing/README.md`.
+  exact App Store size. Bezels/Inter + the raw captures are gitignored; the **final framed set is
+  committed** (`screenshots/appstore/framed/`) so the manual `upload-screenshots.yml` workflow (or
+  `fastlane upload_screenshots`, reusing the ASC key) ships it to App Store Connect. See
+  `Scripts/framing/README.md`.
 - **Logs:** `os.Logger` under subsystem `com.valtteriluoma.poimi` at the impure seams. Retrieve
   with `xcrun simctl spawn booted log show --predicate 'subsystem == "com.valtteriluoma.poimi"'
   --last 2m --style compact` (`.notice`+; use `log stream --level debug` for `.info`/`.debug`).
