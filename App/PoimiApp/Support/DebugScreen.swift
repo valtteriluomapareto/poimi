@@ -164,22 +164,41 @@ struct DebugShellView: View {
             (try? SelectionSnapshot(assetIDs: Set((0..<count).map { "id\($0)" })).encoded()) ?? Data()
         }
         // Exported + in sync → "Exported · 200 in Photos".
-        let exported = store.create(title: "Best of 2024", rangeStart: start, rangeEnd: end, targetCount: 200)
+        let exported = store.create(
+            title: debugSampleTitle("Best of 2024"), rangeStart: start, rangeEnd: end, targetCount: 200)
         exported.selectionSnapshot = snapshot(200)
         exported.markedDoneAt = exportedAt
         exported.exportedSelectionSnapshot = snapshot(200)
         exported.exportedPhotoCount = 200
         exported.lastExportedAt = exportedAt
         // Exported, then 3 more picks (snapshot(203) ⊃ snapshot(200)) → "Edited since export · 3 to add".
-        let edited = store.create(title: "Italy 2024", rangeStart: start, rangeEnd: end, targetCount: 200)
+        let edited = store.create(
+            title: debugSampleTitle("Italy 2024"), rangeStart: start, rangeEnd: end, targetCount: 200)
         edited.selectionSnapshot = snapshot(203)
         edited.markedDoneAt = exportedAt
         edited.exportedSelectionSnapshot = snapshot(200)
         edited.lastExportedAt = exportedAt
-        let inProgress = store.create(title: "Summer trip", rangeStart: start, rangeEnd: end, targetCount: 80)
+        let inProgress = store.create(
+            title: debugSampleTitle("Summer trip"), rangeStart: start, rangeEnd: end, targetCount: 80)
         inProgress.selectionSnapshot = snapshot(34)
-        _ = store.create(title: "Best of 2025", rangeStart: start, rangeEnd: end, targetCount: 150)  // not started
+        _ = store.create(                                                          // not started
+            title: debugSampleTitle("Best of 2025"), rangeStart: start, rangeEnd: end, targetCount: 150)
         store.refresh()
+    }
+}
+
+/// A locale-aware sample album title for the DEBUG hosts, so the Finnish App Store screenshots aren't
+/// stuck with the hardcoded English fixture title (#230). Checked against the launch locale
+/// (`-AppleLanguages`), NOT the String Catalog — DEBUG fixtures must not pollute the catalog (#95). In
+/// any locale but fi (incl. the test default), it returns the English title unchanged.
+func debugSampleTitle(_ english: String) -> String {
+    guard Locale.preferredLanguages.first?.hasPrefix("fi") == true else { return english }
+    switch english {
+    case "Best of 2025": return "Vuoden 2025 parhaat"
+    case "Best of 2024": return "Vuoden 2024 parhaat"
+    case "Italy 2024": return "Italia 2024"
+    case "Summer trip": return "Kesäreissu"
+    default: return english
     }
 }
 
@@ -276,7 +295,7 @@ struct DebugScanningHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: Self.yearStart, rangeEnd: Self.yearEnd,
                 targetCount: 100,
                 excludeScreenshots: true,
@@ -343,7 +362,7 @@ struct DebugEmptyHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100, excludeScreenshots: true)
             selection.activate(created)
@@ -393,7 +412,7 @@ struct DebugScanFailedHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
             selection.activate(created)
@@ -456,7 +475,7 @@ struct DebugOverviewHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
             created.doneDays = Self.doneDays        // set before activate — DoneStore reads it on hydrate
@@ -573,7 +592,7 @@ struct DebugExportHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
             selection.activate(created)
@@ -638,7 +657,7 @@ struct DebugSettingsHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 200,
                 excludedAlbumIDs: ["album/whatsapp", "album/downloads"])
@@ -734,7 +753,7 @@ struct DebugPhotoViewerHostView: View {
             let projects = ProjectStore(container: container)
             let selection = SelectionStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
             selection.activate(created)

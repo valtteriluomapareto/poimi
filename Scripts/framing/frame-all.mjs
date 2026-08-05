@@ -17,18 +17,23 @@ const ROOT = path.resolve(DIR, '../../screenshots/appstore');
 
 // Hero headline per screen, per ASC locale (2 lines). `fi` copy is TODO (owner writes it) — falls
 // back to en-US until then.
+// NOTE: fi copy is a non-native draft — the owner (fi-native) should review/refine before publish.
 const HEADLINES = {
 	overview: {
 		'en-US': ['Always know', 'where you stand.'],
+		fi: ['Tiedä aina,', 'missä mennään.'],
 	},
 	scanning: {
 		'en-US': ['Hand-pick your year.', 'Every photo, not an algorithm.'],
+		fi: ['Poimi vuotesi käsin.', 'Jokainen kuva, ei algoritmi.'],
 	},
 	photoviewer: {
 		'en-US': ['Look closer,', 'then pick the keeper.'],
+		fi: ['Katso tarkemmin,', 'ja poimi paras.'],
 	},
 	export: {
 		'en-US': ['A real album in Photos.', 'Yours to keep.'],
+		fi: ['Oikea albumi Kuvissa.', 'Jää sinulle.'],
 	},
 };
 
