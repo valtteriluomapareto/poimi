@@ -21,7 +21,7 @@ for row in "${FRAME_ROWS[@]}"; do
         --jq ".[] | select(.name==\"${name}\") | .download_url" 2>/dev/null || true)"
     [ -n "${url}" ] || { echo "error: '${name}' not found in fastlane/frameit-frames/latest" >&2; exit 1; }
     echo "fetching frames/${out} ← ${name}"
-    curl -sSL "${url}" -o "${FRAMES}/${out}"
+    curl -fsSL "${url}" -o "${FRAMES}/${out}"   # -f: fail on HTTP error instead of saving the error body
 done
 
 # --- Fonts (SIL OFL — freely redistributable; fetched to keep the repo light) ---
@@ -29,7 +29,7 @@ if [ -f "${FONTS}/Inter.ttf" ]; then
     echo "have fonts/Inter.ttf"
 else
     echo "fetching fonts/Inter.ttf (Inter variable, Google Fonts)"
-    curl -sSL "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf" \
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf" \
         -o "${FONTS}/Inter.ttf"
 fi
 

@@ -22,13 +22,15 @@ node frame-all.mjs
 node frame.mjs <raw.png> <out.png> "<hero line 1>" "<hero line 2>"
 ```
 
-- **Bezel:** iPhone 17 Pro Max (1470×3000); screen rect `(75, 66, 1320×2868)` from frameit-frames
-  `offsets.json`. Output: an **opaque** PNG at **1320×2868** (6.9″).
+- **Devices (both portrait):** iPhone 17 Pro Max → **1320×2868** (6.9″) and iPad Pro 13″ → **2064×2752**
+  (13″). Each entry in `frame.mjs`'s `DEVICES` map carries its bezel + screen rect (from frameit-frames
+  `offsets.json`) + canvas; output is an **opaque** PNG at the accepted App Store size. Only a
+  **landscape** path is still TODO.
 - **Font:** Inter ExtraBold via libvips text + `fontfile` (no system install needed). Both headline
-  lines share one size (scaled so the wider one fills the canvas).
-- **iPad 13″** bezel + a landscape path are still TODO (add the frame to `fetch-assets.sh` + a device
-  entry in `frame.mjs`).
+  lines share one size (scaled down so the wider one fits the canvas).
+- **Geometry** (`deviceY`, `titleTop`, screen rects, `shadowRF`) is hand-tuned against the specific
+  fetched bezel versions — re-eyeball it if you swap a bezel.
 
-Assets are fetched, not committed: the **bezel** from
-[fastlane/frameit-frames](https://github.com/fastlane/frameit-frames) (Apple device likeness), and
-**Inter** (SIL OFL) from Google Fonts.
+Assets are fetched, not committed: the **bezels** from
+[fastlane/frameit-frames](https://github.com/fastlane/frameit-frames) (Apple device likeness, via the
+`gh` CLI — needs `gh auth login`), and **Inter** (SIL OFL) from Google Fonts. Run `./fetch-assets.sh`.

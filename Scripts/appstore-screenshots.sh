@@ -20,13 +20,16 @@
 #       Scripts/appstore-screenshots.sh                   # the thin-slice go/no-go (one framed shot)
 #   Scripts/appstore-screenshots.sh --list                # print the device/locale/screen matrix, exit
 #
-# Output: screenshots/appstore/<asc-locale>/<NN>_<screen>.png  (git-ignored). Layout matches what
-# fastlane `deliver` expects: one folder per ASC locale, numeric prefix = store display order.
+# Output: screenshots/appstore/<asc-locale>/<NN>_<device>_<screen>.png  (git-ignored). Layout matches
+# what fastlane `deliver` expects: one folder per ASC locale, numeric prefix = store display order.
+# NOTE: these are the RAW (unframed) captures — `deliver` must upload the framed set under
+# screenshots/appstore/framed/<locale>/ (see Scripts/framing), never this raw root.
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+FAILURES=0   # per-shot warnings (not-ready / wrong size); a non-zero total fails the whole run.
 PROJECT="${REPO_ROOT}/App/PoimiApp.xcodeproj"
 SCHEME="PoimiApp"
 BUNDLE_ID="com.valtteriluoma.poimi"
@@ -72,7 +75,7 @@ fi
 # --- Real photos ------------------------------------------------------------------------------------
 PHOTO_COUNT=0
 if [ -d "${PHOTOS_SRC}" ]; then
-    PHOTO_COUNT="$(find "${PHOTOS_SRC}" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.heic' \) | wc -l | tr -d ' ')"
+    PHOTO_COUNT="$(find "${PHOTOS_SRC}" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.heic' -o -iname '*.heif' \) | wc -l | tr -d ' ')"
 fi
 if [ "${PHOTO_COUNT}" -eq 0 ]; then
     log "WARNING: no photos in ${PHOTOS_SRC}/ — screenshots will show magenta error tiles. Drop 01.jpg, 02.jpg, … there."
@@ -122,7 +125,7 @@ push_photos() {
     local container; container="$(xcrun simctl get_app_container "${sim}" "${BUNDLE_ID}" data 2>/dev/null)" || return 0
     local dest="${container}/Documents/ScreenshotPhotos"
     rm -rf "${dest}"; mkdir -p "${dest}"
-    find "${PHOTOS_SRC}" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.heic' \) -exec cp {} "${dest}/" \;
+    find "${PHOTOS_SRC}" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.heic' -o -iname '*.heif' \) -exec cp {} "${dest}/" \;
 }
 
 # --- Capture --------------------------------------------------------------------------------------
@@ -167,6 +170,7 @@ for dkey in ${DEVICES}; do
                 -AppleLanguages "(${LANG_CODE})" -AppleLocale "${LOCALE_CODE}" >/dev/null
             if wait_for_ready "${SIM_ID}" "${screen}" "${since}"; then sleep "${RENDER_SETTLE}"; else
                 echo "warning: '${screen}' never signalled ready within ${READY_TIMEOUT}s — capturing anyway." >&2
+                FAILURES=$((FAILURES + 1))
             fi
             xcrun simctl io "${SIM_ID}" screenshot "${out}" >/dev/null
 
@@ -174,6 +178,7 @@ for dkey in ${DEVICES}; do
             got="$(sips -g pixelWidth -g pixelHeight "${out}" 2>/dev/null | awk '/pixelWidth/{w=$2}/pixelHeight/{h=$2}END{print w"x"h}')"
             if [ "${got}" != "${EXPECT}" ]; then
                 echo "warning: ${out##*/} is ${got}, expected ${EXPECT} for ${dkey} — App Store Connect may reject it. Check the sim device / orientation." >&2
+                FAILURES=$((FAILURES + 1))
             fi
         done
     done
@@ -183,3 +188,8 @@ done
 
 log "Done. Raw screenshots under ${OUT_DIR}/ (per ASC locale). Next: frame + hero text (frameit / sharp)."
 find "${OUT_DIR}" -type f -name '*.png' | sort
+
+if [ "${FAILURES}" -ne 0 ]; then
+    echo "error: ${FAILURES} shot(s) had a warning (not-ready / wrong size) — see above; do not ship these." >&2
+    exit 1
+fi

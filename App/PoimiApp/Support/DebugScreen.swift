@@ -192,13 +192,18 @@ struct DebugShellView: View {
 /// (`-AppleLanguages`), NOT the String Catalog — DEBUG fixtures must not pollute the catalog (#95). In
 /// any locale but fi (incl. the test default), it returns the English title unchanged.
 func debugSampleTitle(_ english: String) -> String {
-    guard Locale.preferredLanguages.first?.hasPrefix("fi") == true else { return english }
+    // Match the *resolved* language code, not a `hasPrefix("fi")` — that also matches "fil" (Filipino).
+    let lang = Locale(identifier: Locale.preferredLanguages.first ?? "en").language.languageCode?.identifier
+    guard lang == "fi" else { return english }
     switch english {
     case "Best of 2025": return "Vuoden 2025 parhaat"
     case "Best of 2024": return "Vuoden 2024 parhaat"
     case "Italy 2024": return "Italia 2024"
     case "Summer trip": return "Kesäreissu"
-    default: return english
+    default:
+        // A new fixture title reached fi without a translation → it would silently leak English.
+        Log.app.notice("debugSampleTitle: no fi translation for '\(english, privacy: .public)'")
+        return english
     }
 }
 

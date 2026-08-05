@@ -15,9 +15,8 @@ import { fileURLToPath } from 'node:url';
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(DIR, '../../screenshots/appstore');
 
-// Hero headline per screen, per ASC locale (2 lines). `fi` copy is TODO (owner writes it) — falls
-// back to en-US until then.
-// NOTE: fi copy is a non-native draft — the owner (fi-native) should review/refine before publish.
+// Hero headline per screen, per ASC locale (2 lines). A missing locale falls back to en-US.
+// NOTE: the fi copy is a non-native DRAFT — the owner (fi-native) should review/refine before publish.
 const HEADLINES = {
 	overview: {
 		'en-US': ['Always know', 'where you stand.'],
