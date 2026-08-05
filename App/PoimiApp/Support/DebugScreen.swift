@@ -164,22 +164,43 @@ struct DebugShellView: View {
             (try? SelectionSnapshot(assetIDs: Set((0..<count).map { "id\($0)" })).encoded()) ?? Data()
         }
         // Exported + in sync → "Exported · 200 in Photos".
-        let exported = store.create(title: "Best of 2024", rangeStart: start, rangeEnd: end, targetCount: 200)
+        let exported = store.create(
+            title: debugSampleTitle("Best of 2024"), rangeStart: start, rangeEnd: end, targetCount: 200)
         exported.selectionSnapshot = snapshot(200)
         exported.markedDoneAt = exportedAt
         exported.exportedSelectionSnapshot = snapshot(200)
         exported.exportedPhotoCount = 200
         exported.lastExportedAt = exportedAt
         // Exported, then 3 more picks (snapshot(203) ⊃ snapshot(200)) → "Edited since export · 3 to add".
-        let edited = store.create(title: "Italy 2024", rangeStart: start, rangeEnd: end, targetCount: 200)
+        let edited = store.create(
+            title: debugSampleTitle("Italy 2024"), rangeStart: start, rangeEnd: end, targetCount: 200)
         edited.selectionSnapshot = snapshot(203)
         edited.markedDoneAt = exportedAt
         edited.exportedSelectionSnapshot = snapshot(200)
         edited.lastExportedAt = exportedAt
-        let inProgress = store.create(title: "Summer trip", rangeStart: start, rangeEnd: end, targetCount: 80)
+        let inProgress = store.create(
+            title: debugSampleTitle("Summer trip"), rangeStart: start, rangeEnd: end, targetCount: 80)
         inProgress.selectionSnapshot = snapshot(34)
-        _ = store.create(title: "Best of 2025", rangeStart: start, rangeEnd: end, targetCount: 150)  // not started
+        _ = store.create(                                                          // not started
+            title: debugSampleTitle("Best of 2025"), rangeStart: start, rangeEnd: end, targetCount: 150)
         store.refresh()
+    }
+}
+
+/// A locale-aware sample album title for the DEBUG hosts so the fi App Store screenshots aren't stuck
+/// with the English fixture title (#230). NOT the String Catalog — DEBUG fixtures must not pollute it (#95).
+func debugSampleTitle(_ english: String) -> String {
+    // Match the *resolved* language code, not a `hasPrefix("fi")` — that also matches "fil" (Filipino).
+    let lang = Locale(identifier: Locale.preferredLanguages.first ?? "en").language.languageCode?.identifier
+    guard lang == "fi" else { return english }
+    switch english {
+    case "Best of 2025": return "Vuoden 2025 parhaat"
+    case "Best of 2024": return "Vuoden 2024 parhaat"
+    case "Italy 2024": return "Italia 2024"
+    case "Summer trip": return "Kesäreissu"
+    default:  // a new fixture title reached fi without a translation → would silently leak English
+        Log.app.notice("debugSampleTitle: no fi translation for '\(english, privacy: .public)'")
+        return english
     }
 }
 
@@ -244,7 +265,6 @@ struct DebugAlbumPickerHostView: View {
 /// excluded. `.ready` renders the grid, so this captures the grid against the deterministic fake
 /// thumbnails with a few cells pre-selected (so selection encoding shows).
 struct DebugScanningHostView: View {
-    @Environment(\.photoLibrary) private var library
     // Retained so the in-memory container (owned by the stores) outlives `.task` — otherwise it
     // deallocates, resets its context, and destroys `project` out from under ScanningView.
     @State private var projectStore: ProjectStore?
@@ -253,13 +273,27 @@ struct DebugScanningHostView: View {
     @State private var coordinator: AppCoordinator?
     @State private var project: CurationProject?
 
-    /// A few candidate ids to pre-select so the captured grid shows the badge + dim encoding.
-    private static let preselected = ["fake/busy/2", "fake/busy/5", "fake/quiet/16"]
+    /// A dedicated dense single-day fake (54 photos) so the review grid FILLS on iPad's ~8 columns — NOT
+    /// the global `yearMixedSeed` (pinned by exact-count/id tests). Ids `fake/grid/<n>` so the real-photo
+    /// thumbnail fake maps each cell to a photo by its trailing ordinal.
+    private static let fake: FakePhotoLibrary = {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
+        let start = cal.date(from: DateComponents(year: 2025, month: 7, day: 5, hour: 8))!
+        let assets = (0..<54).map { i in
+            AssetRef(id: "fake/grid/\(i)", captureDate: cal.date(byAdding: .minute, value: i * 11, to: start)!,
+                     pixelSize: PixelSize(width: 4032, height: 3024))
+        }
+        return FakePhotoLibrary(assets: assets, albums: [], membership: [:])
+    }()
+
+    /// Pre-select roughly every fourth photo so the captured grid shows the pick badge + dim encoding.
+    private static let preselected = stride(from: 1, to: 54, by: 4).map { "fake/grid/\($0)" }
 
     var body: some View {
         Group {
             if let selectionStore, let doneStore, let coordinator, let project {
                 NavigationStack { ScanningView(project: project) }
+                    .environment(\.photoLibrary, Self.fake)
                     .environment(selectionStore)
                     .environment(doneStore)
                     .environment(coordinator)
@@ -276,18 +310,14 @@ struct DebugScanningHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: Self.yearStart, rangeEnd: Self.yearEnd,
                 targetCount: 100,
-                excludeScreenshots: true,
-                excludedAlbumIDs: ["album/whatsapp"])
+                excludeScreenshots: true)
             selection.activate(created)
             Self.preselected.forEach { selection.toggle($0) }
-            // Mark the March quiet run done so the capture shows a collapsed cluster (idea ③) next to
-            // the open July one. ScanningView's own `doneStore.activate` reads these back.
-            created.doneDays = ["2025-03-16", "2025-03-17", "2025-03-18"]
 
-            let coord = AppCoordinator(library: library)
+            let coord = AppCoordinator(library: Self.fake)
             projectStore = projects
             selectionStore = selection
             doneStore = done
@@ -296,7 +326,7 @@ struct DebugScanningHostView: View {
 
             // Probe the same fake the view loads against (instant) so we signal ready only once
             // the candidates have settled — the capture script never snapshots mid-scan.
-            let probe = CandidateStore(library: library)
+            let probe = CandidateStore(library: Self.fake)
             await probe.load(created)
             Log.app.notice("screenshot-ready: \(DebugScreen.scanning.rawValue, privacy: .public)")
         }
@@ -343,7 +373,7 @@ struct DebugEmptyHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100, excludeScreenshots: true)
             selection.activate(created)
@@ -393,7 +423,7 @@ struct DebugScanFailedHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
             selection.activate(created)
@@ -456,7 +486,7 @@ struct DebugOverviewHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
             created.doneDays = Self.doneDays        // set before activate — DoneStore reads it on hydrate
@@ -573,7 +603,7 @@ struct DebugExportHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
             selection.activate(created)
@@ -638,7 +668,7 @@ struct DebugSettingsHostView: View {
             let selection = SelectionStore(container: container)
             let done = DoneStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 200,
                 excludedAlbumIDs: ["album/whatsapp", "album/downloads"])
@@ -734,7 +764,7 @@ struct DebugPhotoViewerHostView: View {
             let projects = ProjectStore(container: container)
             let selection = SelectionStore(container: container)
             let created = projects.create(
-                title: "Best of 2025",
+                title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
             selection.activate(created)

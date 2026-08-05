@@ -1,0 +1,9 @@
+{
+	"name": "poimi-framing",
+	"type": "module",
+	"private": true,
+	"description": "Composites App Store raw screenshots into a real device frame + branded background + hero text (#230).",
+	"dependencies": {
+		"sharp": "^0.34.5"
+	}
+}

@@ -1,0 +1,5 @@
+node_modules/
+# Bezels + fonts are fetched (run fetch-assets.sh), not committed — keeps the repo light and avoids
+# redistributing Apple's device likeness.
+frames/*.png
+fonts/*.ttf
