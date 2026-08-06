@@ -262,20 +262,22 @@ is *already* duplicated (e.g. from an earlier run), clean it without re-uploadin
 ever removes same-named duplicates, so it can't delete a wanted screenshot.
 
 ### 5.6 Uploading text metadata (`upload_metadata`)
-The App Store **text** (description / keywords / subtitle / marketing+support+privacy URLs) lives as
-`fastlane/metadata/<locale>/*.txt` — the repo is the source of truth (#236). The `upload_metadata` lane
-pushes them to the editable version via deliver: **text only** — no binary, no screenshots, no
-submission. The managed field list + the sharp edges (**an empty file WIPES the field**; the in-review
-lock; drift reverting ASC hand-edits) are documented in
+The App Store **version-localization text** (`description` / `keywords` / `marketing_url` /
+`support_url`) lives as `fastlane/metadata/<locale>/*.txt` — the repo is the source of truth (#236). The
+`upload_metadata` lane pushes them to the editable version via deliver: **text only** — no binary, no
+screenshots, no submission. The managed field list + the sharp edges (**an empty file WIPES the field**;
+the in-review lock; drift reverting ASC hand-edits) are documented in
 [`fastlane/metadata/README.md`](../../fastlane/metadata/README.md).
 
 **Run it:** Actions → **Upload to App Store** → Run workflow → `lane = upload_metadata` → approve the
 gate. Locally: `bundle exec fastlane upload_metadata` (ASC key exported as above). The lane pre-flights
 every managed file for non-emptiness + char limits, and reuses the same editable-version prerequisite.
 
-**NOT managed by the lane** (stay in ASC): the app **name** (set to `Poimi: Photo Album Curation`),
-**promotional text** (the live-edit escape hatch), release notes (per-update), pricing, age rating, the
-App Privacy label, categories, and App Review notes.
+**NOT managed by the lane** (stay in ASC): the **App-Information** group — app **name** (set to
+`Poimi: Photo Album Curation`), **subtitle**, and **privacy URL** — because deliver's app-info write
+returns `No data` on a brand-new app's first version (revisit after v1 exists). Also `promotional_text`
+(the live-edit escape hatch), release notes (per-update), pricing, age rating, the App Privacy label,
+categories, and App Review notes.
 
 ---
 

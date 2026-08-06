@@ -405,12 +405,14 @@ platform :ios do
     end
     UI.user_error!("Metadata pre-flight failed:\n  #{problems.join("\n  ")}") unless problems.empty?
 
-    # Text only. No metadata_path: → deliver anchors fastlane/metadata to the Fastfile's folder (a
-    # relative path would resolve under CWD = fastlane/). skip_app_version_update: localizations attach
-    # to the editable version regardless; true avoids touching version-level fields. deliver only writes
-    # the fields it has files for — the app name, promo text, pricing, etc. stay ASC-owned (see
-    # fastlane/metadata/README.md). Errors clearly if there's no editable version, or if the version has
-    # left "Prepare for Submission" (the version-locked fields then reject).
+    # Text only, and only the VERSION-LOCALIZATION fields (description/keywords/marketing_url/support_url).
+    # No metadata_path: → deliver anchors fastlane/metadata to the Fastfile's folder (a relative path
+    # would resolve under CWD = fastlane/). skip_app_version_update: localizations attach to the editable
+    # version regardless; true avoids touching version-level fields. deliver only writes the fields it has
+    # files for — so the App-Information group (name, subtitle, privacy URL) + promo text + pricing stay
+    # ASC-owned (see fastlane/metadata/README.md). We deliberately keep App-Information OUT: deliver's
+    # app-info write returns "No data" on a brand-new app's first version. Errors clearly if there's no
+    # editable version, or if it has left "Prepare for Submission" (version-loc fields then reject).
     upload_to_app_store(
       api_key: asc_api_key,
       app_identifier: APP_IDENTIFIER,
