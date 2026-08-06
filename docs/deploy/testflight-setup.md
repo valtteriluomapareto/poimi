@@ -253,10 +253,13 @@ locally ends up empty in ASC. It does **not** submit for review.
 **Duplicates (a deliver quirk, #230).** deliver's presence-check after upload races ASC's processing
 (~6 s wait vs ~10–17 s to register a 16-image set), decides the upload failed, and re-uploads the whole
 set — so you end up with **2× of every screenshot**. The lane fixes this automatically: after uploading
-it deletes same-named duplicates (keeping one per file name per slot). If a listing is *already*
-duplicated (e.g. from an earlier run), clean it without re-uploading via the **`dedup_screenshots`** lane
-(run the workflow with `lane = dedup_screenshots`). It's idempotent and only ever removes same-named
-duplicates, so it can't delete a wanted screenshot.
+it deletes same-named duplicates (keeping the lowest-position one per file name per slot, preserving the
+`NN_` order). Because the dedup runs in that same ASC-processing window, it then **verifies** — re-checks
+each locale's screenshot count against the committed set and retries with a settle wait until they match,
+**failing the run loudly** if it can't converge — so a duplicate can never survive silently. If a listing
+is *already* duplicated (e.g. from an earlier run), clean it without re-uploading via the
+**`dedup_screenshots`** lane (run the workflow with `lane = dedup_screenshots`). It's idempotent and only
+ever removes same-named duplicates, so it can't delete a wanted screenshot.
 
 ---
 
