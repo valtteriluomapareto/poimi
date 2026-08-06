@@ -132,12 +132,24 @@ ACCEPTED_SCREENSHOT_SIZES = [[1320, 2868], [2064, 2752]].freeze
 DEDUP_MAX_ATTEMPTS = 4
 DEDUP_SETTLE_SECONDS = 15
 
+# App Store text-metadata char limits, by filename (for upload_metadata's local pre-flight — deliver
+# also errors on over-limit, but we fail faster + friendlier). Fields without a limit (the *_url.txt) are
+# only checked for non-emptiness. Keep in sync with fastlane/metadata/README.md.
+METADATA_CHAR_LIMITS = { "subtitle" => 30, "keywords" => 100, "description" => 4000, "promotional_text" => 170 }.freeze
+
 # A PNG's [width, height] read straight from its IHDR chunk (big-endian u32 at bytes 16..24) — no image
 # gem needed. Returns nil for anything that isn't a PNG.
 def png_dimensions(file)
   header = File.binread(file, 24)
   return nil unless header && header.bytesize == 24 && header[0, 8] == "\x89PNG\r\n\x1a\n".b
   header[16, 8].unpack("N2")
+end
+
+# The repo's App Store text-metadata folder (deliver's fastlane/metadata layout). Anchored to the
+# Fastfile's own folder — fastlane runs with CWD = fastlane/, so a bare relative path is fragile (same
+# reason pbxproj_path/framed_screenshots_path resolve absolutely).
+def metadata_dir
+  @metadata_dir ||= File.join(FastlaneCore::FastlaneFolder.path.to_s, "metadata")
 end
 
 # Fail fast (with a hint) if the App Store Connect API key env is missing — shared by the upload lane
@@ -372,6 +384,47 @@ platform :ios do
   desc "Delete duplicate screenshots from the editable App Store version (deliver's verify-race leaves 2× of each, #230)."
   lane :dedup_screenshots do
     dedup_asc_screenshots
+  end
+
+  # --- upload_metadata: push the repo's App Store TEXT metadata to ASC (#236) --------
+  desc "Upload the App Store text metadata (fastlane/metadata) to App Store Connect — TEXT ONLY (no binary, no screenshots, no submission). Repo is the source of truth."
+  lane :upload_metadata do
+    check_asc_env!
+
+    # Pre-flight: every managed file must be NON-EMPTY (an empty file makes deliver PUT an empty value =
+    # WIPES that ASC field, not a no-op) and within its char limit (deliver errors on over-limit; we fail
+    # faster + friendlier). Only *.txt under a locale folder is metadata; a missing file stays unmanaged.
+    files = Dir.glob(File.join(metadata_dir, "*", "*.txt")).sort
+    UI.user_error!("No metadata files under #{metadata_dir} — nothing to upload.") if files.empty?
+    problems = files.each_with_object([]) do |f, acc|
+      rel = "#{File.basename(File.dirname(f))}/#{File.basename(f)}"
+      text = File.read(f).strip
+      acc << "#{rel} is EMPTY — that would wipe the ASC field" if text.empty?
+      limit = METADATA_CHAR_LIMITS[File.basename(f, ".txt")]
+      acc << "#{rel} is #{text.length} chars (max #{limit})" if limit && text.length > limit
+    end
+    UI.user_error!("Metadata pre-flight failed:\n  #{problems.join("\n  ")}") unless problems.empty?
+
+    # Text only, and only the VERSION-LOCALIZATION fields (description/keywords/marketing_url/support_url).
+    # No metadata_path: → deliver anchors fastlane/metadata to the Fastfile's folder (a relative path
+    # would resolve under CWD = fastlane/). skip_app_version_update: localizations attach to the editable
+    # version regardless; true avoids touching version-level fields. deliver only writes the fields it has
+    # files for — so the App-Information group (name, subtitle, privacy URL) + promo text + pricing stay
+    # ASC-owned (see fastlane/metadata/README.md). We deliberately keep App-Information OUT: deliver's
+    # app-info write returns "No data" on a brand-new app's first version. Errors clearly if there's no
+    # editable version, or if it has left "Prepare for Submission" (version-loc fields then reject).
+    upload_to_app_store(
+      api_key: asc_api_key,
+      app_identifier: APP_IDENTIFIER,
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_app_version_update: true,
+      submit_for_review: false,
+      run_precheck_before_submit: false,
+      force: true
+    )
+
+    UI.success("Uploaded #{files.size} metadata file(s) from #{metadata_dir} to App Store Connect (text only — no binary, no screenshots, no submission).")
   end
 
   # Poll App Store Connect for THIS run's build until it is VALID. Raises (fails the

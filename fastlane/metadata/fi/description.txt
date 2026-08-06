@@ -1,0 +1,10 @@
+Sinä valitset jokaisen kuvan – ei algoritmi.
+
+Poimi auttaa poimimaan vuoden (tai minkä tahansa ajanjakson) kuvakirjastostasi yhteen albumiin Apple Kuvissa, kuva kerrallaan. Ei automaattista valintaa, ei "parhaat palat" -arvauksia: sinä päätät, mikä jää.
+
+• Poimi kohti tavoitemäärää ja näe aina, missä mennään – edistyminen, kattavuus ja tahti.
+• Avaa mikä tahansa kuva koko ruutuun ja katso tarkemmin ennen kuin päätät.
+• Ryhmitelty päivittäin ja reissuittain, niin koko vuosi pysyy hallinnassa.
+• Lopputulos on oikea, natiivi albumi Kuvissa – jää sinulle.
+
+Kuvasi eivät poistu laitteeltasi. Poimi toimii Applen PhotoKit-rajapinnan kautta ja tallentaa vain valintasi, ei kopioita kuvista.

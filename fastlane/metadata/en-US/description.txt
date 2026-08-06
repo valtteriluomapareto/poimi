@@ -1,0 +1,10 @@
+You choose every photo — not an algorithm.
+
+Poimi helps you hand-pick a year (or any stretch of time) from your library into a single album in Apple Photos, one tap at a time. No auto-selection, no "best of" guesses: you decide what stays.
+
+• Pick toward a target count, and always see where you stand — progress, coverage across the period, and your pace.
+• Open any shot full-screen to look closer before you decide.
+• Grouped by day and by trip, so a whole year stays manageable.
+• The result is a real, native album in your Photos — yours to keep.
+
+Your pictures never leave your device. Poimi works through Apple's PhotoKit and stores only your choices, never copies of your photos.

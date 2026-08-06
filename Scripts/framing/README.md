@@ -38,7 +38,7 @@ part of `screenshots/`) so CI can ship it without a Mac. Both upload paths run t
 `upload_screenshots` fastlane lane — screenshots only, no binary / metadata / review submission:
 
 **Via CI (preferred).** Commit the regenerated framed set, then run the manual
-`.github/workflows/upload-screenshots.yml` (Actions → **Upload screenshots** → Run workflow) and approve
+`.github/workflows/upload-screenshots.yml` (Actions → **Upload to App Store** → Run workflow) and approve
 the `testflight` reviewer gate. No local ASC key needed — it reuses the TestFlight lane's secrets.
 
 **Locally.** With the ASC API key in the env:

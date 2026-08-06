@@ -1,39 +1,30 @@
-name: Upload screenshots
+name: Upload to App Store
 
 # =============================================================================
-# Manually-triggered App Store screenshot upload (issue #230). Ships the framed
-# marketing screenshots committed under screenshots/appstore/framed/ to App Store
-# Connect via `fastlane upload_screenshots` (deliver) — screenshots ONLY: no
-# binary, no metadata, no app-version change, no review submission.
+# Manually-triggered App Store Connect uploads via fastlane deliver (#230, #236). One workflow, pick a
+# lane:
+#   • upload_screenshots — ship the framed marketing screenshots committed under
+#     screenshots/appstore/framed/, then self-dedup (deliver's verify-race leaves 2× of each).
+#   • dedup_screenshots  — clean an already-duplicated screenshot set, no upload.
+#   • upload_metadata    — push the App Store TEXT metadata (fastlane/metadata/<locale>/*.txt:
+#     description, keywords, subtitle, URLs). See fastlane/metadata/README.md for the managed set.
+# All lanes are metadata/image ONLY — never the binary, never a review submission.
 #
-# WHY THIS EXISTS: the screenshots are generated on a Mac (iOS 26 sims + the
-# owner's real photos; see Scripts/framing/README.md) and the FINAL framed set is
-# committed to the repo, so this workflow needs no simulator, no Xcode, and no
-# photos — just the committed images and the ASC API key. That's why it runs on
-# Linux and skips the Xcode/match setup the TestFlight lane needs.
-#
-# DELIBERATELY separate from ci.yml (a screenshot push must never gate PR CI) and
-# from testflight.yml (different blast radius, no signing). Triggered ONLY by an
-# explicit human workflow_dispatch.
+# WHY LINUX / NO XCODE: deliver only talks to the ASC API, and the screenshots are pre-generated on a Mac
+# + committed, so this workflow needs no simulator/Xcode/photos — just the committed files + the ASC API
+# key. DELIBERATELY separate from ci.yml (never gates PR CI) and testflight.yml (no signing). Triggered
+# ONLY by an explicit human workflow_dispatch, behind the protected `testflight` environment.
 #
 # ---------------------------------------------------------------------------
-# HUMAN STEPS BEFORE RUNNING
+# BEFORE RUNNING
 # ---------------------------------------------------------------------------
-#   1. Generate + commit the framed set: Scripts/appstore-screenshots.sh, then
-#      `node Scripts/framing/frame-all.mjs`, then commit screenshots/appstore/framed/.
-#   2. In App Store Connect, ensure an EDITABLE app version exists (a version in
-#      "Prepare for Submission") — screenshots attach to it.
-#   3. Trigger this workflow (Actions → Upload screenshots → Run workflow) and
-#      approve the `testflight` environment's reviewer gate.
-#
-# NOTE: overwrite_screenshots clears ALL existing screenshot slots for en-US + fi
-# before uploading, so the committed set must be COMPLETE (both devices, both
-# locales). The lane pre-checks every image is an accepted size and aborts if the
-# framed set is missing — it can never push a partial/empty set silently. It then
-# de-duplicates: deliver's presence-check races ASC's processing and re-uploads the
-# whole set, leaving 2× of each (#230), so the lane deletes same-named duplicates
-# afterwards. Use the `dedup_screenshots` lane to clean an already-duplicated listing
-# without re-uploading.
+#   • An EDITABLE App Store version must exist in ASC ("Prepare for Submission") — everything attaches to it.
+#   • Screenshots: generate + commit the framed set (Scripts/appstore-screenshots.sh →
+#     `node Scripts/framing/frame-all.mjs` → commit screenshots/appstore/framed/). The lane size-checks
+#     every image, aborts on a missing set, and self-dedups — it never pushes a partial/empty set silently.
+#   • Metadata: edit fastlane/metadata/<locale>/*.txt (the lane refuses empty files — an empty file wipes
+#     the ASC field — and enforces the char limits).
+#   • Trigger (Actions → Upload to App Store → Run workflow), pick the lane, approve the reviewer gate.
 #
 # REQUIRED `testflight` ENVIRONMENT SECRETS (a subset of the TestFlight lane's —
 # no match/signing secrets needed here):
@@ -46,12 +37,13 @@ on:
   workflow_dispatch:
     inputs:
       lane:
-        description: "lane: upload_screenshots (upload + self-dedup) | dedup_screenshots (clean dupes only)"
+        description: "lane: upload_screenshots (+self-dedup) | dedup_screenshots (clean dupes) | upload_metadata (text)"
         type: choice
         default: upload_screenshots
         options:
           - upload_screenshots
           - dedup_screenshots
+          - upload_metadata
 
 # Least privilege: reads the repo (for the committed framed set); uploads to ASC
 # via the API key, not the GITHUB_TOKEN.
@@ -65,7 +57,7 @@ concurrency:
 
 jobs:
   upload:
-    name: Upload framed screenshots to App Store Connect
+    name: Upload to App Store Connect (deliver)
     # No Xcode/simulator needed — deliver only talks to the ASC API. Linux is faster
     # and cheaper than a macOS runner for a pure API upload.
     runs-on: ubuntu-latest
