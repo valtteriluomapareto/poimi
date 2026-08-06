@@ -135,6 +135,52 @@ def png_dimensions(file)
   header[16, 8].unpack("N2")
 end
 
+# Point spaceship's ConnectAPI at the ASC API key (for direct model calls used by the screenshot
+# de-dup). Mirrors the token the TestFlight processing-poll builds.
+def configure_spaceship_token
+  require "spaceship"
+  require "base64"
+  Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
+    key_id: ENV.fetch("ASC_KEY_ID"),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key: Base64.decode64(ENV.fetch("ASC_KEY_CONTENT_BASE64"))
+  )
+end
+
+# Remove deliver's duplicate screenshot uploads (#230): deliver's presence-check races ASC's processing
+# and re-uploads the whole set, leaving TWO of each. For each localization × screenshot set on the
+# EDITABLE App Store version, keep one screenshot per file name and delete the rest. Deletes ONLY
+# same-named duplicates — and never when a name is blank — so it can't remove a wanted screenshot; worst
+# case it is a no-op. Idempotent. Returns the number removed.
+def dedup_asc_screenshots
+  configure_spaceship_token
+  app = Spaceship::ConnectAPI::App.find(APP_IDENTIFIER)
+  UI.user_error!("No App Store Connect app record for #{APP_IDENTIFIER}.") if app.nil?
+
+  version = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS)
+  UI.user_error!("No editable App Store version found — nothing to de-duplicate.") if version.nil?
+
+  # spaceship exposes both `get_<x>` (fetch) and `<x>` (cached) accessors across versions — prefer the
+  # fetch form, fall back to the attribute, so this survives a spaceship bump.
+  fetch = ->(obj, getter, attr) { obj.respond_to?(getter) ? obj.public_send(getter) : obj.public_send(attr) }
+
+  removed = 0
+  fetch.call(version, :get_app_store_version_localizations, :app_store_version_localizations).each do |loc|
+    fetch.call(loc, :get_app_screenshot_sets, :app_screenshot_sets).each do |set|
+      shots = fetch.call(set, :get_app_screenshots, :app_screenshots) || []
+      shots.group_by(&:file_name).each do |name, group|
+        next if name.nil? || name.to_s.empty? || group.size <= 1 # only delete identifiable duplicates
+        group.drop(1).each do |dup|                              # keep the first, delete the rest
+          dup.delete!
+          removed += 1
+        end
+      end
+    end
+  end
+  UI.success("De-dup: removed #{removed} duplicate screenshot(s) from the editable App Store version.")
+  removed
+end
+
 platform :ios do
   # --- build_only: archive + signed .ipa, no upload -------------------------
   desc "Archive + sign a Release .ipa (no upload). Bring-up step 2 isolator."
@@ -252,7 +298,18 @@ platform :ios do
       force: true
     )
 
-    UI.success("Uploaded screenshots from #{path} to App Store Connect (no binary, no metadata, no submission).")
+    # deliver's presence-check races ASC's processing and re-uploads the whole set, leaving 2× of each
+    # (#230). Remove the duplicates so the listing ends with exactly the intended set — self-healing.
+    dedup_asc_screenshots
+
+    UI.success("Uploaded + de-duplicated screenshots from #{path} to App Store Connect (no binary, no metadata, no submission).")
+  end
+
+  # Clean up an already-duplicated listing WITHOUT re-uploading (deliver's verify-race leaves 2× of each,
+  # #230). Idempotent + safe — deletes only same-named duplicates. See dedup_asc_screenshots.
+  desc "Delete duplicate screenshots from the editable App Store version (deliver's verify-race leaves 2× of each, #230)."
+  lane :dedup_screenshots do
+    dedup_asc_screenshots
   end
 
   # Poll App Store Connect for THIS run's build until it is VALID. Raises (fails the

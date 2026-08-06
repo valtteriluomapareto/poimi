@@ -53,8 +53,11 @@ for Submission" — screenshots attach to it). ASC infers the device slot from t
 `<locale>` folders map to ASC localizations; the `NN_` prefix sets display order. `overwrite_screenshots`
 **clears all existing screenshot slots for en-US + fi first**, so always upload a COMPLETE set (both
 devices, both locales). The lane also pre-checks every image is an accepted size (1320×2868 / 2064×2752)
-and aborts on a missing set — it never pushes a partial/empty upload. Full lane + auth details:
-[docs/deploy/testflight-setup.md](../../docs/deploy/testflight-setup.md) §5.5.
+and aborts on a missing set — it never pushes a partial/empty upload. **After uploading it de-duplicates:**
+deliver's presence-check races ASC's processing and re-uploads the whole set, leaving 2× of each (#230),
+so the lane deletes same-named duplicates afterwards. To clean an *already*-duplicated listing without
+re-uploading, run `fastlane dedup_screenshots` (or the workflow with `lane = dedup_screenshots`). Full
+lane + auth details: [docs/deploy/testflight-setup.md](../../docs/deploy/testflight-setup.md) §5.5.
 
 End to end: `Scripts/appstore-screenshots.sh` (capture) → `node Scripts/framing/frame-all.mjs` (frame) →
 commit `screenshots/appstore/framed/` → the `upload-screenshots` CI workflow (or `fastlane upload_screenshots`).

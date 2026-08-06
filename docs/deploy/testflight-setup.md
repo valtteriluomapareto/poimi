@@ -250,6 +250,14 @@ prefix sets display order. `overwrite_screenshots` **clears all existing screens
 before uploading** (other locales untouched) — so always upload a COMPLETE set; anything not present
 locally ends up empty in ASC. It does **not** submit for review.
 
+**Duplicates (a deliver quirk, #230).** deliver's presence-check after upload races ASC's processing
+(~6 s wait vs ~10–17 s to register a 16-image set), decides the upload failed, and re-uploads the whole
+set — so you end up with **2× of every screenshot**. The lane fixes this automatically: after uploading
+it deletes same-named duplicates (keeping one per file name per slot). If a listing is *already*
+duplicated (e.g. from an earlier run), clean it without re-uploading via the **`dedup_screenshots`** lane
+(run the workflow with `lane = dedup_screenshots`). It's idempotent and only ever removes same-named
+duplicates, so it can't delete a wanted screenshot.
+
 ---
 
 ## 6. Troubleshooting (things that actually bit us)
