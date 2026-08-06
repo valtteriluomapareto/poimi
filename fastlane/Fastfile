@@ -127,6 +127,11 @@ end
 # fails loudly, rather than shipping a half-empty set if the bespoke compositor ever drifts a few pixels.
 ACCEPTED_SCREENSHOT_SIZES = [[1320, 2868], [2064, 2752]].freeze
 
+# Screenshot de-dup convergence: how many settle-and-retry passes, and how long to wait between them for
+# ASC to register deletes/uploads (the dedup runs inside the same ~10-17s processing window as the bug).
+DEDUP_MAX_ATTEMPTS = 4
+DEDUP_SETTLE_SECONDS = 15
+
 # A PNG's [width, height] read straight from its IHDR chunk (big-endian u32 at bytes 16..24) — no image
 # gem needed. Returns nil for anything that isn't a PNG.
 def png_dimensions(file)
@@ -135,11 +140,20 @@ def png_dimensions(file)
   header[16, 8].unpack("N2")
 end
 
-# Point spaceship's ConnectAPI at the ASC API key (for direct model calls used by the screenshot
-# de-dup). Mirrors the token the TestFlight processing-poll builds.
+# Fail fast (with a hint) if the App Store Connect API key env is missing — shared by the upload lane
+# and the standalone dedup lane, both of which get run by hand.
+def check_asc_env!
+  missing = %w[ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_CONTENT_BASE64].reject { |v| ENV[v].to_s.strip != "" }
+  return if missing.empty?
+  UI.user_error!("Missing App Store Connect API key env: #{missing.join(', ')} — export them (see " \
+                 "docs/deploy/testflight-setup.md §5.5) or run the upload-screenshots CI workflow.")
+end
+
+# Point spaceship's ConnectAPI at the ASC API key (for the direct model calls the screenshot dedup makes).
 def configure_spaceship_token
   require "spaceship"
   require "base64"
+  check_asc_env!
   Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
     key_id: ENV.fetch("ASC_KEY_ID"),
     issuer_id: ENV.fetch("ASC_ISSUER_ID"),
@@ -147,38 +161,90 @@ def configure_spaceship_token
   )
 end
 
-# Remove deliver's duplicate screenshot uploads (#230): deliver's presence-check races ASC's processing
-# and re-uploads the whole set, leaving TWO of each. For each localization × screenshot set on the
-# EDITABLE App Store version, keep one screenshot per file name and delete the rest. Deletes ONLY
-# same-named duplicates — and never when a name is blank — so it can't remove a wanted screenshot; worst
-# case it is a no-op. Idempotent. Returns the number removed.
+# How many screenshots each ASC locale should end up with, from the committed framed set — the source of
+# truth the dedup verifies against. Counted from the local files (not ASC's file_name), so it catches a
+# silent no-op (e.g. a spaceship bump that nils file_name) as well as visible duplicates.
+def expected_screenshots_by_locale
+  Dir.glob(File.join(framed_screenshots_path, "*", "*.png")).each_with_object(Hash.new(0)) do |f, counts|
+    counts[File.basename(File.dirname(f))] += 1
+  end
+end
+
+# Screenshots currently on the editable version, per locale (summed across its display-type sets).
+def asc_screenshots_by_locale(version)
+  version.get_app_store_version_localizations.each_with_object(Hash.new(0)) do |loc, counts|
+    loc.get_app_screenshot_sets.each { |set| counts[loc.locale] += set.get_app_screenshots.size }
+  end
+end
+
+# One dedup pass over the editable version: within each localization × screenshot set, keep the
+# LOWEST-position screenshot per file name and delete the rest. Deletes ONLY same-named duplicates (never
+# a blank name), so it can never remove a wanted screenshot; keeping the lowest position preserves the
+# NN_ display order. Logs each deletion; a transient delete failure is logged, not raised (the caller
+# re-checks counts and retries). Returns how many it deleted.
+def dedup_pass(version)
+  removed = 0
+  version.get_app_store_version_localizations.each do |loc|
+    loc.get_app_screenshot_sets.each do |set|
+      slot = set.respond_to?(:screenshot_display_type) ? set.screenshot_display_type : "?"
+      set.get_app_screenshots.group_by(&:file_name).each do |name, group|
+        next if name.nil? || name.to_s.empty? || group.size <= 1 # only delete identifiable duplicates
+        keep, *dups = group.sort_by { |s| s.respond_to?(:position) ? s.position.to_i : 0 }
+        dups.each do |dup|
+          UI.message("De-dup: #{loc.locale} #{slot} — deleting duplicate '#{name}' (keeping id #{keep.id}).")
+          begin
+            dup.delete!
+            removed += 1
+          rescue StandardError => e
+            UI.important("De-dup: delete failed for '#{name}' (#{loc.locale}): #{e.message} — will re-check + retry.")
+          end
+        end
+      end
+    end
+  end
+  removed
+end
+
+# Remove deliver's duplicate uploads (#230) from the editable App Store version, and VERIFY the result.
+# deliver's presence-check races ASC's ~10-17s processing and re-uploads the whole set, leaving 2× of
+# each. Because this dedup runs in that same window, a late-registering duplicate can be invisible on the
+# first pass — so after each pass it re-checks per-locale counts against the committed set and, if they
+# don't match, waits for ASC to settle and passes again, failing LOUD if it can't converge (never a
+# silent green with duplicates left). Safe: only ever deletes same-named duplicates.
+#
+# The "same file name = duplicate" grouping is safe ONLY because each intended screenshot has a unique
+# file name within its set (the framed set is NN_<device>_<screen>.png). Pagination isn't handled, but an
+# ASC screenshot set caps at 10 and we ship 4/slot, so a set always fits one page.
 def dedup_asc_screenshots
   configure_spaceship_token
   app = Spaceship::ConnectAPI::App.find(APP_IDENTIFIER)
   UI.user_error!("No App Store Connect app record for #{APP_IDENTIFIER}.") if app.nil?
 
-  version = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS)
-  UI.user_error!("No editable App Store version found — nothing to de-duplicate.") if version.nil?
+  expected = expected_screenshots_by_locale
+  removed_total = 0
 
-  # spaceship exposes both `get_<x>` (fetch) and `<x>` (cached) accessors across versions — prefer the
-  # fetch form, fall back to the attribute, so this survives a spaceship bump.
-  fetch = ->(obj, getter, attr) { obj.respond_to?(getter) ? obj.public_send(getter) : obj.public_send(attr) }
+  DEDUP_MAX_ATTEMPTS.times do |attempt|
+    version = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS)
+    UI.user_error!("No editable App Store version found — nothing to de-duplicate.") if version.nil?
 
-  removed = 0
-  fetch.call(version, :get_app_store_version_localizations, :app_store_version_localizations).each do |loc|
-    fetch.call(loc, :get_app_screenshot_sets, :app_screenshot_sets).each do |set|
-      shots = fetch.call(set, :get_app_screenshots, :app_screenshots) || []
-      shots.group_by(&:file_name).each do |name, group|
-        next if name.nil? || name.to_s.empty? || group.size <= 1 # only delete identifiable duplicates
-        group.drop(1).each do |dup|                              # keep the first, delete the rest
-          dup.delete!
-          removed += 1
-        end
-      end
+    removed_total += dedup_pass(version)
+
+    actual = asc_screenshots_by_locale(version)
+    off = expected.reject { |locale, n| actual[locale] == n }
+    if off.empty?
+      UI.success("De-dup: removed #{removed_total} duplicate(s); every locale matches the committed set (#{expected.map { |l, n| "#{l}=#{n}" }.join(', ')}).")
+      return removed_total
+    end
+
+    detail = off.map { |locale, n| "#{locale}: #{actual[locale]} on ASC vs #{n} expected" }.join("; ")
+    if attempt < DEDUP_MAX_ATTEMPTS - 1
+      UI.message("De-dup: not settled (#{detail}) — waiting #{DEDUP_SETTLE_SECONDS}s for ASC, then re-checking…")
+      sleep(DEDUP_SETTLE_SECONDS)
+    else
+      UI.user_error!("De-dup did not converge after #{DEDUP_MAX_ATTEMPTS} attempts (#{detail}). Re-run `fastlane dedup_screenshots`.")
     end
   end
-  UI.success("De-dup: removed #{removed} duplicate screenshot(s) from the editable App Store version.")
-  removed
+  removed_total
 end
 
 platform :ios do
@@ -261,11 +327,7 @@ platform :ios do
   # --- upload_screenshots: push the framed App Store screenshots to ASC ------
   desc "Upload the framed App Store screenshots to App Store Connect — screenshots ONLY (no binary, no metadata, no submission). Run locally after Scripts/appstore-screenshots.sh + frame-all.mjs."
   lane :upload_screenshots do
-    # Fail fast on missing auth — this lane is run by hand as often as in CI, so a forgotten export
-    # should give a hint, not a bare KeyError from asc_api_key's ENV.fetch.
-    missing = %w[ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_CONTENT_BASE64].reject { |v| ENV[v].to_s.strip != "" }
-    UI.user_error!("Missing App Store Connect API key env: #{missing.join(', ')} — export them (see " \
-                   "docs/deploy/testflight-setup.md §5.5) or run the upload-screenshots CI workflow.") unless missing.empty?
+    check_asc_env! # fail fast with a hint before upload_to_app_store hits a bare ENV.fetch
 
     path = framed_screenshots_path
 
