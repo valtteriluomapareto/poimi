@@ -279,6 +279,40 @@ returns `No data` on a brand-new app's first version (revisit after v1 exists). 
 (the live-edit escape hatch), release notes (per-update), pricing, age rating, the App Privacy label,
 categories, and App Review notes.
 
+### 5.7 App Store release checklist (submit for review)
+The end-to-end release, tying the lanes together. There is **no CI submit lane** — the final "Submit"
+is a deliberate manual step in ASC (deferred by [#239]; the safe-automation design lives there for
+if/when updates get frequent). The one safety that matters: set the version to **"Manually release this
+version"** so an approval doesn't auto-launch you.
+
+**One-time setup (first release), in ASC — the lanes don't do these:**
+- App record + bundle id (§2). Pricing & availability (Poimi = **free**). Age-rating questionnaire.
+- **App Privacy** "nutrition label": Poimi collects nothing and photos stay on device (PhotoKit) — declare
+  accordingly (this is a required, ASC-only, one-time step; App Review checks it).
+- Category: **Photo & Video** (primary); secondary optional (Lifestyle / Productivity).
+- **App-Information** text (manual, per §5.6 / #236): **name** `Poimi: Photo Album Curation`, **subtitle**,
+  **privacy URL**. Export compliance is already `NO` (guarded, #136) — no per-submit prompt.
+
+**Every release:**
+1. **Version** — `Scripts/bump-version.sh <major|minor|patch>` in a PR; merge to `main` (`check-version.sh` gates). `main`'s `MARKETING_VERSION` = the release version.
+2. **Build** — run **TestFlight** (`lane = beta`) → approve the gate → a build at `MARKETING_VERSION` (build no. = run no.) lands in TestFlight and is polled to `VALID` (§5.3).
+3. **Test** — install from TestFlight (internal) and smoke-test the **exact** build you'll ship.
+4. **ASC version** — ensure an editable App Store version exists whose version string **exactly equals** `MARKETING_VERSION` (e.g. `1.0.0`) — create/rename it if needed (a `1.0` vs `1.0.0` mismatch makes the build unselectable). Set it to **"Manually release this version."**
+5. **Assets + text** — run **Upload to App Store** → `upload_screenshots` (self-dedups) and `upload_metadata` (§5.5–5.6). Eyeball the listing in both locales.
+6. **Attach** the tested build to the version.
+7. **App Review Information** — note that the app needs **Photos access** (grant when prompted on launch; no account/login). No demo account needed.
+8. **Submit** for review.
+9. **After approval** — it parks in **Pending Developer Release**; click **Release** when you're ready.
+
+**Abort ladder (if something's wrong):**
+- In review → **Reject / Remove from Review** in ASC.
+- Approved, manual release → it's in **Pending Developer Release**; just don't click Release — fix + resubmit.
+- Accidentally released → **Remove from Sale** + ship an expedited fix.
+
+**Updates only:** add "What's New" (`release_notes`) — not valid on the first version.
+
+[#239]: https://github.com/valtteriluomapareto/poimi/issues/239
+
 ---
 
 ## 6. Troubleshooting (things that actually bit us)
