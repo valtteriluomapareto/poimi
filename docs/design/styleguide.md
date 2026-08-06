@@ -131,7 +131,8 @@ Where green appears (colour only — no motifs):
 
 **Redundant encoding — never color alone** (HIG; accessible in grayscale).
 
-- **Selected cell** *(resolved in Paper, provisional — fine-tune later)* = three layers: a **gold (Cloudberry) `checkmark.circle.fill`** badge (top-trailing) as the primary affordance · a **2px green (`--color-secondary-dark`) inset border** hugging the cell's rounded edge (marks the selected cell; with the ~3pt gutter now separating cells, this reads purely as selection) · a **subtle dim (~18% scrim)**. The *check + dim* satisfy the never-color-alone rule; the green border is a quiet structural accent, the **gold check carries the contrast** on any photo (incl. green/foliage, where a green check alone would vanish).
+- **Selected cell** *(resolved in Paper, provisional — fine-tune later)* = three layers: a **gold (Cloudberry) `checkmark.circle.fill`** badge (bottom-trailing — #242, matching every other
+  thumbnail in the app) as the primary affordance · a **2px green (`--color-secondary-dark`) inset border** hugging the cell's rounded edge (marks the selected cell; with the ~3pt gutter now separating cells, this reads purely as selection) · a **subtle dim (~18% scrim)**. The *check + dim* satisfy the never-color-alone rule; the green border is a quiet structural accent, the **gold check carries the contrast** on any photo (incl. green/foliage, where a green check alone would vanish).
 - **Why gold check, green border:** a green *check* blends on green photos; warm gold pops universally. The green *border* is narrow enough to read as structure, not chrome, and brings the brand colour into selection subtly. *(This is the deliberate exception to "green stays out of review-grid chrome" — see §1.)*
 - **Unselected cell** = empty **`circle`** badge (low-emphasis, appears in select contexts) — the affordance is discoverable but quiet.
 - **Hit area** for the badge = the whole corner, ≥44pt, independent of the glyph size.
