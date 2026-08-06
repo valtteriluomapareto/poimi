@@ -173,7 +173,7 @@ end
 # Screenshots currently on the editable version, per locale (summed across its display-type sets).
 def asc_screenshots_by_locale(version)
   version.get_app_store_version_localizations.each_with_object(Hash.new(0)) do |loc, counts|
-    loc.get_app_screenshot_sets.each { |set| counts[loc.locale] += set.get_app_screenshots.size }
+    loc.get_app_screenshot_sets.each { |set| counts[loc.locale] += set.app_screenshots.size }
   end
 end
 
@@ -187,7 +187,7 @@ def dedup_pass(version)
   version.get_app_store_version_localizations.each do |loc|
     loc.get_app_screenshot_sets.each do |set|
       slot = set.respond_to?(:screenshot_display_type) ? set.screenshot_display_type : "?"
-      set.get_app_screenshots.group_by(&:file_name).each do |name, group|
+      set.app_screenshots.group_by(&:file_name).each do |name, group|
         next if name.nil? || name.to_s.empty? || group.size <= 1 # only delete identifiable duplicates
         keep, *dups = group.sort_by { |s| s.respond_to?(:position) ? s.position.to_i : 0 }
         dups.each do |dup|
