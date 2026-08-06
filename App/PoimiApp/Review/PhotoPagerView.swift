@@ -449,6 +449,8 @@ final class VideoPageController: UIViewController, ViewerPage {
         intendedPlaying = false
         spinner.stopAnimating()
         playButton.isHidden = false   // back to the poster + play affordance
+        updatePlayPauseAccessibility()   // resync to "Play video" — a paged-away page can be reused, so a
+                                         // stale "Pause video" label/action would mislead VoiceOver on return
     }
 
     // No `endObserver` cleanup here: the observer is created only in `startPlaying` (a play tap on a

@@ -148,8 +148,12 @@ struct PhotoViewerView: View {
         autoDoneCluster = finished
         // The mark is otherwise SILENT to VoiceOver (a haptic + a visual toast only) — announce it, and
         // that the toast's Undo is available, so a VO user knows what just happened and can reverse it.
-        let announcement = String(localized: "\(toastTitle(for: finished)). Undo available.",
-                                  comment: "VoiceOver announcement when paging past a day auto-marks it done")
+        // HIGH priority: this fires exactly as VoiceOver is mid-transition announcing the newly-paged
+        // photo, and a default-priority announcement posted during a focus change is routinely swallowed
+        // by iOS — which would silently defeat the whole point. `.high` interrupts + is delivered.
+        var announcement = AttributedString(String(localized: "\(toastTitle(for: finished)). Undo available.",
+                                                   comment: "VoiceOver announcement when paging past a day auto-marks it done"))
+        announcement.accessibilitySpeechAnnouncementPriority = .high
         AccessibilityNotification.Announcement(announcement).post()
     }
 
@@ -171,7 +175,10 @@ struct PhotoViewerView: View {
                 }
                 .font(.subheadline.weight(.semibold))
                 .buttonStyle(.borderless)
-                .tint(Color.accentColor)
+                // Gold over the dark glass, but the adaptive `.primary` under RT: the capsule then becomes a
+                // light solid, and the accent gold is low-contrast as small text on a light ground (styleguide
+                // §1). This is the toast's one ACTIONABLE control — it must stay legible in the RT case too.
+                .tint(reduceTransparency ? Color.primary : Color.accentColor)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
