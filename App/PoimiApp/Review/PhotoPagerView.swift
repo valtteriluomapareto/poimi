@@ -307,6 +307,7 @@ final class VideoPageController: UIViewController, ViewerPage {
         playButton.addAction(UIAction { [weak self] _ in self?.togglePlayback() }, for: .touchUpInside)
         playButton.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(playButton)
+        updatePlayPauseAccessibility()   // seed the poster's play/pause action for VoiceOver
 
         spinner.translatesAutoresizingMaskIntoConstraints = false
         spinner.color = .white
@@ -326,6 +327,24 @@ final class VideoPageController: UIViewController, ViewerPage {
     }
 
     @objc private func handleTap() { togglePlayback() }
+
+    /// Keep the play/pause affordance reachable to VoiceOver in BOTH states. The visible `playButton` is
+    /// hidden during playback (so it doesn't sit over the video), which would leave a VO user with no way
+    /// to pause — so we also hang a play/pause custom action on the always-present poster element, and keep
+    /// both the button's label and that action named for the NEXT action ("Pause" while playing, else
+    /// "Play"). Called after setup and on every playback-state change.
+    private func updatePlayPauseAccessibility() {
+        let title = intendedPlaying
+            ? String(localized: "Pause video", comment: "Viewer: pause the inline video")
+            : String(localized: "Play video", comment: "Viewer: play an inline video")
+        playButton.accessibilityLabel = title
+        posterView.accessibilityCustomActions = [
+            UIAccessibilityCustomAction(name: title) { [weak self] _ in
+                self?.togglePlayback()
+                return true
+            }
+        ]
+    }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
@@ -364,6 +383,7 @@ final class VideoPageController: UIViewController, ViewerPage {
             intendedPlaying.toggle()
             if intendedPlaying { player.play() } else { player.pause() }
             playButton.isHidden = intendedPlaying
+            updatePlayPauseAccessibility()
             return
         }
         guard playerTask == nil else { return }   // a load is already in flight
@@ -400,9 +420,11 @@ final class VideoPageController: UIViewController, ViewerPage {
             self?.player?.seek(to: .zero)
             self?.intendedPlaying = false
             self?.playButton.isHidden = false
+            self?.updatePlayPauseAccessibility()
         }
         intendedPlaying = true
         playButton.isHidden = true
+        updatePlayPauseAccessibility()
         player.play()
     }
 
