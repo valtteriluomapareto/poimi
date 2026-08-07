@@ -171,8 +171,16 @@ struct ReviewGridView: View {
             .scrollTargetLayout()
         }
         .scrollTargetBehavior(.paging)
-        .scrollPosition(id: $currentPageID)
-        .scrollIndicators(.hidden)
+        // Nil-filtered on purpose (D36 rider): the scroll can write nil mid-gesture (rubber-band past
+        // the ends, a re-layout with no resolvable page) and every consumer of `currentPageID` falls
+        // back to `clusters.first` — the top bar would show CLUSTER 1's identity and its tappable done
+        // seal would mark the wrong cluster. The page state only ever moves to a real page id.
+        .scrollPosition(id: Binding(
+            get: { currentPageID },
+            set: { if let id = $0 { currentPageID = id } }))
+        // Horizontal ONLY: the modifier is environment-carried, and unscoped it would also hide each
+        // cluster page's VERTICAL indicator — the user's only within-cluster position cue.
+        .scrollIndicators(.hidden, axes: .horizontal)
     }
 
     /// The fixed top bar — the CURRENT cluster's identity + the album's progress ring (design 4AB).
@@ -308,12 +316,19 @@ struct ReviewGridView: View {
 
     /// Advance to the next UNREVIEWED cluster after the current page; else the literal next; else stay
     /// (finished the last stretch). Finishing a day lands you on the next one to review. The choice is
-    /// the pure `nextUnreviewedPage` (tested); this just applies it with animation.
+    /// the pure `nextUnreviewedPage` (tested); this just applies it. Animated ONLY for an adjacent move:
+    /// an animated `scrollPosition` write travels the content offset across every page in between —
+    /// a far target (the next unreviewed cluster can be dozens of done days away) would materialise
+    /// each passing `ClusterPage` and fire its cell loads mid-flight. A far move jumps instead.
     private func advance() {
         let next = nextUnreviewedPage(after: currentIndex, count: clusters.count,
                                       isDone: { done.isDone(clusters[$0]) })
         guard clusters.indices.contains(next) else { return }
-        withAnimation(reduceMotion ? nil : .snappy) { currentPageID = clusters[next].id }
+        if reduceMotion || abs(next - currentIndex) > 1 {
+            currentPageID = clusters[next].id
+        } else {
+            withAnimation(.snappy) { currentPageID = clusters[next].id }
+        }
     }
 
     // MARK: Cell load (the thumbnail seam)
@@ -346,8 +361,8 @@ struct ReviewGridView: View {
     }
 
     /// Only the CURRENT cluster's cells render at full cell size, so the window's universe is just its
-    /// ids — visible ± a row margin. A neighbouring page's cells (rendered by TabView for the swipe) may
-    /// report visible, but they're not in this universe so `slice` filters them out.
+    /// ids — visible ± a row margin. A neighbouring page's cells (materialised by the lazy pager for the
+    /// swipe) may report visible, but they're not in this universe so `slice` filters them out.
     private func rebuildWindow() {
         window = PrefetchWindow(orderedIDs: currentCluster?.assetIDs ?? [])
     }
@@ -438,7 +453,11 @@ private struct ClusterPage: View {
                     }
                 }
                 .padding(.horizontal, spacing)
-                .scrollTargetLayout()
+                // No `.scrollTargetLayout()` here: it was inert (nothing inside the page consumes it —
+                // the #126 restore is `ScrollViewReader.scrollTo`), and with the OUTER pager now
+                // carrying `.scrollTargetBehavior(.paging)` + `.scrollPosition(id:)` a marked inner
+                // layout is the one hook that could ever let those reach the vertical grid (paging it
+                // by screenfuls, or writing ASSET ids into the page selection).
             }
             // Restore scroll to the ended-on photo on return from the viewer (#126). Only the cluster that
             // holds it acts; deferred a beat so a just-paged-to page has laid out before `scrollTo`. Then
