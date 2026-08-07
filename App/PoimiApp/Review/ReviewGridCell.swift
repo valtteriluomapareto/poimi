@@ -89,13 +89,14 @@ struct ReviewGridCell: View {
                     .allowsHitTesting(false)
             }
         }
-        // Video badge bottom-leading (opposite the top-trailing selection check so they never collide):
+        // Video badge bottom-leading (opposite the bottom-trailing selection check so they never collide):
         // a play glyph + running time, Apple-Photos-style. Non-interactive so a tap anywhere still opens.
         .overlay(alignment: .bottomLeading) {
             if let videoBadge { videoDurationBadge(videoBadge) }
         }
-        // Badge top-trailing (Paper design): the gold check sits in the top-right corner.
-        .overlay(alignment: .topTrailing) { selectionBadge(isSelected) }
+        // Selection check bottom-trailing (#242): matches where the check sits on every other thumbnail
+        // (viewer filmstrip, cluster strips) — the platform-consistent corner.
+        .overlay(alignment: .bottomTrailing) { selectionBadge(isSelected) }
         .contentShape(Rectangle())
         .onTapGesture { onOpen() }
         // VoiceOver: double-tap opens; a named rotor action selects (the badge is a touch target).

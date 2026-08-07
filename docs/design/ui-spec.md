@@ -30,7 +30,7 @@ every other cluster is a collapsed peek. "Done" is its own state (a green seal b
 │   ▣ ▣ ▣ ▣ ▣ ▣  (width-filled peek thumbs)      │     tap header/peek to open
 │ ⌄ Sat, Jul 5            · 24      Select all   │  ← OPEN cluster (chevron ⌄)
 │  ┌────┬────┬────┐                              │
-│  │ ▣✓ │  ◯ │  ◯ │   square cells · ~3pt gap    │  ← gold check top-right
+│  │ ▣✓ │  ◯ │  ◯ │   square cells · ~3pt gap    │  ← gold check bottom-right
 │  └────┴────┴────┘                              │
 │              [ Mark as done ]                  │  ← end-of-cluster button → collapse + advance
 │ › Jun 2 – Jun 9     0 of 18 kept               │  ← next collapsed cluster
@@ -103,9 +103,10 @@ every other cluster is a collapsed peek. "Done" is its own state (a green seal b
 ## Selection (D9)
 
 - **Badge-select** (resolved): tap the **cell** opens it full-screen; tap the **≥44pt badge**
-  (**top-right**, Paper design) selects. Light **selection haptic** on each flip.
+  (**bottom-right**, matching every other thumbnail in the app — #242) selects. Light **selection
+  haptic** on each flip.
 - **Three-layer redundant encoding** so state survives color-blindness + bright thumbnails:
-  1. a **gold circle with a dark check** (top-right) — *the affordance* (foreground on the gold
+  1. a **gold circle with a dark check** (bottom-right) — *the affordance* (foreground on the gold
      accent is dark, not white, styleguide §1),
   2. a **dim** overlay,
   3. a **2px green inset border** (`brandGreen`) — structural. (Green is no longer *only* the
