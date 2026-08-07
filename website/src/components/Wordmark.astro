@@ -8,12 +8,16 @@ interface Props {
 }
 const { tone = 'ink', size = 30 }: Props = Astro.props;
 const textColor = tone === 'inverse' ? '#ffffff' : 'var(--color-label)';
+// The app icon has an opaque ground, so pick the variant that blends into the
+// wordmark's background: white on light, the dark variant on dark surfaces (the
+// footer) — otherwise the white tile glares on dark.
+const iconSrc = tone === 'inverse' ? 'icon-dark.png' : 'icon.png';
 ---
 
 <span class="wordmark">
 	<img
 		class="mark"
-		src={withBase('icon.png')}
+		src={withBase(iconSrc)}
 		alt=""
 		aria-hidden="true"
 		width={size}

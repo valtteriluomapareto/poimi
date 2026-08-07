@@ -24,7 +24,6 @@
 	/* Accent (Cloudberry gold) + secondary (forest green) */
 	--color-accent: #d08a2a;
 	--color-accent-dark: #e8b05a;
-	--color-accent-on: #1c1c1e;
 	--color-accent-tint: rgb(208 138 42 / 14%);
 	--color-secondary: #3f5e37;
 	--color-secondary-dark: #7da164;
@@ -47,7 +46,6 @@
 
 	/* Shared shadows */
 	--shadow-card: 0 20px 40px -24px rgb(0 0 0 / 18%);
-	--shadow-hero: 0 40px 80px -30px rgb(0 0 0 / 28%);
 }
 
 * {
