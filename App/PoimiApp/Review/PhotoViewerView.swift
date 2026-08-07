@@ -27,6 +27,12 @@ struct PhotoViewerView: View {
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Reduce Transparency swaps every `.glassSurface` from glass to a SOLID `secondarySystemBackground`
+    /// (styleguide §5) — which is LIGHT in light mode. The viewer's glass chrome (auto-done toast,
+    /// end-of-set card) is white-on-dark, so fixed `.white` text would VANISH on that light solid. Under
+    /// RT we swap the chrome text to the adaptive `.primary`, which is guaranteed legible on the RT solid
+    /// in both modes; without RT it stays `.white` over the glass-atop-photo.
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var currentID: String
     /// The cluster just auto-marked done by paging past its end (#128) — drives the undoable toast. `nil`
     /// hides it. Auto-done is opinionated, so it MUST be obviously reversible: a haptic + this toast.
@@ -140,7 +146,20 @@ struct PhotoViewerView: View {
         doneStore.toggle(finished)
         autoDoneHaptic &+= 1
         autoDoneCluster = finished
+        // The mark is otherwise SILENT to VoiceOver (a haptic + a visual toast only) — announce it, and
+        // that the toast's Undo is available, so a VO user knows what just happened and can reverse it.
+        // HIGH priority: this fires exactly as VoiceOver is mid-transition announcing the newly-paged
+        // photo, and a default-priority announcement posted during a focus change is routinely swallowed
+        // by iOS — which would silently defeat the whole point. `.high` interrupts + is delivered.
+        var announcement = AttributedString(String(localized: "\(toastTitle(for: finished)). Undo available.",
+                                                   comment: "VoiceOver announcement when paging past a day auto-marks it done"))
+        announcement.accessibilitySpeechAnnouncementPriority = .high
+        AccessibilityNotification.Announcement(announcement).post()
     }
+
+    /// Foreground for the viewer's glass chrome: `.white` over glass, but the adaptive `.primary` under
+    /// Reduce Transparency (where the glass becomes a light solid — see `reduceTransparency`).
+    private var chromeText: Color { reduceTransparency ? .primary : .white }
 
     /// A brief, undoable "Marked <day> done" toast — the reversibility affordance for the automatic mark.
     @ViewBuilder
@@ -156,18 +175,26 @@ struct PhotoViewerView: View {
                 }
                 .font(.subheadline.weight(.semibold))
                 .buttonStyle(.borderless)
-                .tint(Color.accentColor)
+                // Gold over the dark glass, but the adaptive `.primary` under RT: the capsule then becomes a
+                // light solid, and the accent gold is low-contrast as small text on a light ground (styleguide
+                // §1). This is the toast's one ACTIONABLE control — it must stay legible in the RT case too.
+                .tint(reduceTransparency ? Color.primary : Color.accentColor)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .glassSurface(in: Capsule())   // native glass; RT → solid (styleguide §5) — unified with the info panel
-            .foregroundStyle(.white)
+            .foregroundStyle(chromeText)
             .padding(.bottom, 12)
             .transition(.move(edge: .bottom).combined(with: .opacity))
-            .accessibilityElement(children: .combine)
-            // Auto-dismiss after a few seconds (re-armed each time a new cluster is marked).
+            // NOT `.combine`: the status label and the "Undo" button stay SEPARATE VoiceOver elements so the
+            // Undo is actually reachable + activatable (combining would fold the button's action away). The
+            // paged-past mark is announced (see `autoMarkDoneIfPagedPastCluster`), so a VO user hears it and
+            // can swipe to Undo.
+            .accessibilityElement(children: .contain)
+            // Auto-dismiss after a few seconds (re-armed each time a new cluster is marked). Under VoiceOver
+            // the toast lingers longer so there's time to navigate to Undo before it disappears.
             .task(id: cluster.id) {
-                try? await Task.sleep(for: .seconds(4))
+                try? await Task.sleep(for: .seconds(UIAccessibility.isVoiceOverRunning ? 12 : 4))
                 guard !Task.isCancelled else { return }
                 withAnimation(reduceMotion ? nil : .easeOut) { autoDoneCluster = nil }
             }
@@ -200,10 +227,10 @@ struct PhotoViewerView: View {
                     .background(Circle().fill(Color.accentColor))   // gold "reviewed everything" mark
                 Text("You’ve reached the end")
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(chromeText)
                 Text("\(selection.progress.picked) of \(selection.progress.target) picked")
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(chromeText.opacity(0.7))
                     .monospacedDigit()
                 VStack(spacing: 10) {
                     Button { coordinator.finishToExport() } label: {
@@ -213,10 +240,10 @@ struct PhotoViewerView: View {
                     .disabled(selection.progress.picked == 0)   // nothing to save with zero picks
                     .accessibilityIdentifier("endOfSetFinishButton")
                     Button("Keep reviewing") { endReached = false }
-                        .buttonStyle(.glass).foregroundStyle(.white)
+                        .buttonStyle(.glass).foregroundStyle(chromeText)
                     Button("Back to grid") { coordinator.dismissPhoto() }
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(chromeText.opacity(0.7))
                         .padding(.top, 2)
                 }
                 .padding(.top, 6)

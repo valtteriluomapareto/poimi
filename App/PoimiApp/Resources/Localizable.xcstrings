@@ -273,6 +273,17 @@
         }
       }
     },
+    "%@. Undo available.": {
+      "comment": "VoiceOver announcement when paging past a day auto-marks it done",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@. Voit kumota."
+          }
+        }
+      }
+    },
     "%lld": {
       "localizations": {
         "fi": {
@@ -1771,6 +1782,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avaa tämän päivän läpikäyntiin"
+          }
+        }
+      }
+    },
+    "Pause video": {
+      "comment": "Viewer: pause the inline video",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keskeytä video"
           }
         }
       }
