@@ -1,0 +1,33 @@
+---
+// A bare app-screen card: a real screenshot with rounded "screen" corners + a
+// soft shadow, no device bezel (the hero carries the framed phone; the steps
+// stay lighter). Aspect is pinned so the page reserves space (no layout shift).
+import { withBase } from '../utils';
+
+interface Props {
+	src: string;
+	alt: string;
+}
+const { src, alt }: Props = Astro.props;
+---
+
+<div class="shot">
+	<img src={withBase(src)} alt={alt} loading="lazy" decoding="async" />
+</div>
+
+<style>
+	.shot {
+		display: flex;
+		justify-content: center;
+	}
+	.shot img {
+		display: block;
+		width: 100%;
+		max-width: 290px;
+		aspect-ratio: 800 / 1738;
+		object-fit: cover;
+		border-radius: 34px;
+		background: #000;
+		box-shadow: 0 30px 60px -24px rgba(0, 0, 0, 0.28);
+	}
+</style>
