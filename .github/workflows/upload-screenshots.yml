@@ -1,14 +1,17 @@
 name: Upload to App Store
 
 # =============================================================================
-# Manually-triggered App Store Connect uploads via fastlane deliver (#230, #236). One workflow, pick a
+# Manually-triggered App Store Connect uploads via fastlane deliver (#230, #236, #239). One workflow, pick a
 # lane:
+#   • ensure_version     — create the editable App Store version record for MARKETING_VERSION if one is
+#     missing (a DRAFT only — no build/submit/release; #239). Idempotent. The upload lanes below call it
+#     first, so you rarely run it directly.
 #   • upload_screenshots — ship the framed marketing screenshots committed under
 #     screenshots/appstore/framed/, then self-dedup (deliver's verify-race leaves 2× of each).
 #   • dedup_screenshots  — clean an already-duplicated screenshot set, no upload.
 #   • upload_metadata    — push the App Store TEXT metadata (fastlane/metadata/<locale>/*.txt:
 #     description, keywords, subtitle, URLs). See fastlane/metadata/README.md for the managed set.
-# All lanes are metadata/image ONLY — never the binary, never a review submission.
+# All lanes are metadata / image / version-DRAFT ONLY — never the binary, never a review submission.
 #
 # WHY LINUX / NO XCODE: deliver only talks to the ASC API, and the screenshots are pre-generated on a Mac
 # + committed, so this workflow needs no simulator/Xcode/photos — just the committed files + the ASC API
@@ -18,7 +21,9 @@ name: Upload to App Store
 # ---------------------------------------------------------------------------
 # BEFORE RUNNING
 # ---------------------------------------------------------------------------
-#   • An EDITABLE App Store version must exist in ASC ("Prepare for Submission") — everything attaches to it.
+#   • An EDITABLE App Store version ("Prepare for Submission") is what everything attaches to. You no longer
+#     have to create it by hand: the upload lanes call `ensure_version` first (creates the draft for
+#     MARKETING_VERSION if missing), or run the `ensure_version` lane on its own after a bump.
 #   • Screenshots: generate + commit the framed set (Scripts/appstore-screenshots.sh →
 #     `node Scripts/framing/frame-all.mjs` → commit screenshots/appstore/framed/). The lane size-checks
 #     every image, aborts on a missing set, and self-dedups — it never pushes a partial/empty set silently.
@@ -37,10 +42,11 @@ on:
   workflow_dispatch:
     inputs:
       lane:
-        description: "lane: upload_screenshots (+self-dedup) | dedup_screenshots (clean dupes) | upload_metadata (text)"
+        description: "lane: ensure_version (create draft) | upload_screenshots (+self-dedup) | dedup_screenshots (clean dupes) | upload_metadata (text)"
         type: choice
         default: upload_screenshots
         options:
+          - ensure_version
           - upload_screenshots
           - dedup_screenshots
           - upload_metadata

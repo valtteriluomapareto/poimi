@@ -340,6 +340,7 @@ platform :ios do
   desc "Upload the framed App Store screenshots to App Store Connect — screenshots ONLY (no binary, no metadata, no submission). Run locally after Scripts/appstore-screenshots.sh + frame-all.mjs."
   lane :upload_screenshots do
     check_asc_env! # fail fast with a hint before upload_to_app_store hits a bare ENV.fetch
+    ensure_version # create the draft version record if a bump left ASC without an editable target (#239)
 
     path = framed_screenshots_path
 
@@ -386,10 +387,47 @@ platform :ios do
     dedup_asc_screenshots
   end
 
+  # --- ensure_version: create the editable App Store version record if one is missing (#239) --------
+  # The upload lanes (screenshots / metadata) attach to an EDITABLE App Store version but never CREATE one,
+  # so after a `Scripts/bump-version.sh` bump ASC has no target and they error ("no editable version"). This
+  # creates the DRAFT version record (a "Prepare for Submission" version whose string == MARKETING_VERSION)
+  # so the upload lanes have somewhere to write.
+  #
+  # Idempotent: a no-op when an editable version already exists. `get_edit_app_store_version` only matches
+  # PREPARE_FOR_SUBMISSION / *_REJECTED states — so an approved-but-unreleased version (Pending Developer
+  # Release) reads as "none present" and this creates the NEXT draft (e.g. 1.0.1 superseding an unshipped
+  # 1.0.0 — see docs/deploy/testflight-setup.md §5.7).
+  #
+  # Deliberately the SAFE, non-destructive slice of #239: it creates a draft version ONLY — it does NOT
+  # attach a build, upload anything, submit for review, or release. The high-blast-radius "Submit for Review"
+  # click stays manual by design (§5.7). Spaceship exposes no `AppStoreVersion.create`, so this posts through
+  # the client the same way the model's own `create_*` helpers do (`resp.to_models.first`).
+  desc "Create the editable App Store version record for MARKETING_VERSION if none exists — draft only, no build/submit/release. Idempotent (#239)."
+  lane :ensure_version do
+    configure_spaceship_token
+    app = Spaceship::ConnectAPI::App.find(APP_IDENTIFIER)
+    UI.user_error!("App '#{APP_IDENTIFIER}' not found in App Store Connect.") if app.nil?
+
+    if (existing = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS))
+      UI.success("Editable App Store version #{existing.version_string} already exists — nothing to create.")
+      next
+    end
+
+    version = marketing_version
+    UI.message("No editable App Store version in ASC — creating a draft for #{version} (iOS).")
+    created = Spaceship::ConnectAPI.post_app_store_version(
+      app_id: app.id,
+      attributes: { platform: Spaceship::ConnectAPI::Platform::IOS, versionString: version }
+    ).to_models.first
+    UI.success("Created draft App Store version #{created&.version_string || version} (Prepare for Submission) — " \
+               "no build attached, nothing submitted or released (those stay manual, §5.7).")
+  end
+
   # --- upload_metadata: push the repo's App Store TEXT metadata to ASC (#236) --------
   desc "Upload the App Store text metadata (fastlane/metadata) to App Store Connect — TEXT ONLY (no binary, no screenshots, no submission). Repo is the source of truth."
   lane :upload_metadata do
     check_asc_env!
+    ensure_version # create the draft version record if a bump left ASC without an editable target (#239)
 
     # Pre-flight: every managed file must be NON-EMPTY (an empty file makes deliver PUT an empty value =
     # WIPES that ASC field, not a no-op) and within its char limit (deliver errors on over-limit; we fail
