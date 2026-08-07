@@ -297,7 +297,7 @@ version"** so an approval doesn't auto-launch you.
 1. **Version** — `Scripts/bump-version.sh <major|minor|patch>` in a PR; merge to `main` (`check-version.sh` gates). `main`'s `MARKETING_VERSION` = the release version.
 2. **Build** — run **TestFlight** (`lane = beta`) → approve the gate → a build at `MARKETING_VERSION` (build no. = run no.) lands in TestFlight and is polled to `VALID` (§5.3).
 3. **Test** — install from TestFlight (internal) and smoke-test the **exact** build you'll ship.
-4. **ASC version** — ensure an editable App Store version exists whose version string **exactly equals** `MARKETING_VERSION` (e.g. `1.0.0`) — create/rename it if needed (a `1.0` vs `1.0.0` mismatch makes the build unselectable). Set it to **"Manually release this version."**
+4. **ASC version** — an editable App Store version whose string **exactly equals** `MARKETING_VERSION` (e.g. `1.0.0`) must exist (a `1.0` vs `1.0.0` mismatch makes the build unselectable). The **`ensure_version`** lane creates this *draft* for you if it's missing — and `upload_screenshots` / `upload_metadata` call it first, so step 5 self-creates it. You only hand-create/rename if the string is wrong. Set the version to **"Manually release this version."** *(Draft automation from [#239]; the actual **Submit** in step 8 stays a manual click — that's the deliberately-deferred, high-blast-radius part.)*
 5. **Assets + text** — run **Upload to App Store** → `upload_screenshots` (self-dedups) and `upload_metadata` (§5.5–5.6). Eyeball the listing in both locales.
 6. **Attach** the tested build to the version.
 7. **App Review Information** — note that the app needs **Photos access** (grant when prompted on launch; no account/login). No demo account needed.
@@ -310,6 +310,8 @@ version"** so an approval doesn't auto-launch you.
 - Accidentally released → **Remove from Sale** + ship an expedited fix.
 
 **Updates only:** add "What's New" (`release_notes`) — not valid on the first version.
+
+**Superseding an unreleased version:** if a prior version is approved-but-unreleased (**Pending Developer Release**) and you'd rather ship a newer build than release it, bump to the next version (e.g. `1.0.0` → `1.0.1`). `ensure_version` sees no *editable* version (Pending Developer Release isn't one) and creates the `1.0.1` draft; dispose of the old pending version in ASC — it just never ships.
 
 [#239]: https://github.com/valtteriluomapareto/poimi/issues/239
 
