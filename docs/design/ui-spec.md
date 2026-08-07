@@ -137,6 +137,9 @@ floating on the bar's glass — the nav backdrop is hidden).
   cluster is picked) on the trailing lane. Same visual height, vertically centred (glass capsules).
 - **Mark-day-done** is the end-of-cluster scroll **footer** (a trip reads "Mark trip done"); it advances
   to the next unreviewed cluster.
+- **Edge-to-edge bottom (#232).** The grid scrolls **under the home indicator** — no background strip;
+  the resting scroll offset still respects the safe area (the end-cap footer rests above the indicator).
+  A dark bottom-gradient scrim was tried and removed after device testing (kept simple for now).
 - **No Export/Clear on the grid.** Export lives on the **Overview** (its own toolbar, above the full
   linear `ReviewTally`); album-wide clear is **"Reset picks"** in album Settings. The grid is purely
   picking.

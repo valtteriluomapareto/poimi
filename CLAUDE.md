@@ -34,7 +34,9 @@ launches the real coordinator-driven `AppRootView` (onboarding → permission �
 
 The **review grid is a paged-clusters pager** (#35 redesign, superseding the earlier accordion whose
 open/collapse reflow was jumpy on device): one cluster fills the screen and you **swipe sideways**
-between them (a horizontal `TabView`); only the active page loads full-res cells. "Done" is its own
+between them (a horizontal paging `ScrollView` — not a page `TabView`, whose internal UIKit scroll view
+inset the bottom safe area and left a background strip under the grid, #232); only the active page loads
+full-res cells, and the grid scrolls edge-to-edge under the home indicator. "Done" is its own
 state (a green seal badge), set by a **"Mark day done" end-cap** after a cluster's photos (or the
 tappable seal in the top bar) that advances to the next unreviewed cluster (`DoneStore` +
 `Completion.reopening` reconcile). The
