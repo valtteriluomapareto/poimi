@@ -1,4 +1,6 @@
 ---
+import { withBase } from '../utils';
+
 interface Props {
 	/** 'ink' = dark text (light bg); 'inverse' = white text (dark bg). */
 	tone?: 'ink' | 'inverse';
@@ -6,20 +8,22 @@ interface Props {
 }
 const { tone = 'ink', size = 30 }: Props = Astro.props;
 const textColor = tone === 'inverse' ? '#ffffff' : 'var(--color-label)';
+// The app icon has an opaque ground, so pick the variant that blends into the
+// wordmark's background: white on light, the dark variant on dark surfaces (the
+// footer) — otherwise the white tile glares on dark.
+const iconSrc = tone === 'inverse' ? 'icon-dark.png' : 'icon.png';
 ---
 
 <span class="wordmark">
-	<span class="mark" style={`width:${size}px;height:${size}px;`}>
-		<svg viewBox="0 0 24 24" aria-hidden="true">
-			<path
-				d="M5 12.5l4.2 4.2L19 7"
-				stroke="var(--color-accent-on)"
-				stroke-width="2.6"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				fill="none"></path>
-		</svg>
-	</span>
+	<img
+		class="mark"
+		src={withBase(iconSrc)}
+		alt=""
+		aria-hidden="true"
+		width={size}
+		height={size}
+		style={`width:${size}px;height:${size}px;`}
+	/>
 	<span class="name" style={`color:${textColor};font-size:${size * 0.67}px;`}
 		>Poimi</span
 	>
@@ -32,16 +36,9 @@ const textColor = tone === 'inverse' ? '#ffffff' : 'var(--color-label)';
 		gap: 11px;
 	}
 	.mark {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--color-accent);
-		border-radius: 9px;
 		flex-shrink: 0;
-	}
-	.mark svg {
-		width: 58%;
-		height: 58%;
+		border-radius: 22%;
+		object-fit: cover;
 	}
 	.name {
 		font-weight: 700;

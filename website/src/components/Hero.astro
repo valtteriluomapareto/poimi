@@ -1,6 +1,6 @@
 ---
 import AppStoreButton from './AppStoreButton.astro';
-import ReviewGridMock from './mocks/ReviewGridMock.astro';
+import { withBase } from '../utils';
 ---
 
 <section class="hero">
@@ -37,11 +37,16 @@ import ReviewGridMock from './mocks/ReviewGridMock.astro';
 		</span>
 	</div>
 	<div class="hero-visual">
-		<ReviewGridMock
-			title="A week in Rome"
-			subtitle="14–20 July · 214 photos"
-			count="128 / 200"
-		/>
+		<div class="phone">
+			<img
+				src={withBase('shots/hero-overview.jpg')}
+				alt="Poimi’s Overview screen — a year’s picks at a glance, 80 of 100 chosen, grouped by day and trip."
+				width="340"
+				height="738"
+				fetchpriority="high"
+				decoding="async"
+			/>
+		</div>
 	</div>
 </section>
 
@@ -113,6 +118,24 @@ import ReviewGridMock from './mocks/ReviewGridMock.astro';
 	}
 	.hero-visual {
 		min-width: 0;
+	}
+	.phone {
+		width: 100%;
+		max-width: 360px;
+		margin-inline: auto;
+		padding: 14px;
+		background: #1c1c1e;
+		border-radius: 56px;
+		box-shadow: 0 44px 84px -28px rgba(0, 0, 0, 0.32);
+	}
+	.phone img {
+		display: block;
+		width: 100%;
+		height: auto;
+		aspect-ratio: 340 / 738;
+		object-fit: cover;
+		border-radius: 42px;
+		background: #000;
 	}
 	@media (max-width: 900px) {
 		.hero {

@@ -26,11 +26,11 @@ npm run dev
 ## Layout
 
 - `src/pages/` — `index.astro` (landing) + `privacy` / `terms` / `support` / `404`.
-- `src/components/` — one component per landing section (Hero → Footer) + `mocks/`.
+- `src/components/` — one component per landing section (Hero → Footer); `ScreenShot.astro` wraps the step screenshots.
 - `src/layouts/MarketingLayout.astro` — the shared `<head>` (SEO / OpenGraph / JSON-LD) + skip link.
 - `src/styles/site.css` — design tokens (light) + base + shared classes.
 - `src/consts.ts` — outbound links + the `IS_APP_STORE_LIVE` launch gate.
-- `src/assets/` — real app screenshots (via `astro:assets`); `public/` — favicon, og-image, robots.
+- `public/` — the app icon (`icon.png` / `icon-dark.png`), screenshots (`shots/`), `og-image.png`, robots.
 
 ## Configuration
 

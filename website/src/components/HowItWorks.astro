@@ -1,7 +1,5 @@
 ---
-import SetupMock from './mocks/SetupMock.astro';
-import ReviewGridMock from './mocks/ReviewGridMock.astro';
-import CompletionMock from './mocks/CompletionMock.astro';
+import ScreenShot from './ScreenShot.astro';
 ---
 
 <section id="how-it-works" class="section section--grouped how">
@@ -23,7 +21,12 @@ import CompletionMock from './mocks/CompletionMock.astro';
 					like WhatsApp saves.
 				</p>
 			</div>
-			<div class="step-visual"><SetupMock /></div>
+			<div class="step-visual">
+				<ScreenShot
+					src="shots/step-setup.jpg"
+					alt="New-album setup — name, date range, target count, and toggles to exclude screenshots and albums like WhatsApp."
+				/>
+			</div>
 		</div>
 
 		<div class="step reverse">
@@ -38,11 +41,9 @@ import CompletionMock from './mocks/CompletionMock.astro';
 				</p>
 			</div>
 			<div class="step-visual">
-				<ReviewGridMock
-					title="Sat 19 July"
-					subtitle="Rome · 53 photos"
-					count="128 / 200"
-					markDone
+				<ScreenShot
+					src="shots/step-review.jpg"
+					alt="Review grid — a day of real photos in a grid, some picked with a gold check, with a running count toward the target."
 				/>
 			</div>
 		</div>
@@ -57,7 +58,12 @@ import CompletionMock from './mocks/CompletionMock.astro';
 					the same album instead of making duplicates.
 				</p>
 			</div>
-			<div class="step-visual"><CompletionMock /></div>
+			<div class="step-visual">
+				<ScreenShot
+					src="shots/step-export.jpg"
+					alt="Completion screen — “Your album is ready”, with the picks saved into a real album in Photos."
+				/>
+			</div>
 		</div>
 	</div>
 </section>
