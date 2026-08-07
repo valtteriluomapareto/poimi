@@ -2,7 +2,7 @@
 //  ReviewGridView.swift
 //  PoimiApp — the review grid (issue #35), PAGED-CLUSTERS model (#35 paged-clusters redesign).
 //
-//  One cluster fills the screen; you SWIPE SIDEWAYS between clusters (a horizontal page `TabView`,
+//  One cluster fills the screen; you SWIPE SIDEWAYS between clusters (a horizontal PAGING `ScrollView`,
 //  selected by group id — not a positional index — so a re-scan can't strand the selection), replacing
 //  the earlier single-scroll accordion whose collapse/open reflow was jumpy on device now that the
 //  Overview is itself a full cluster index (with per-cluster thumbnail strips). Each page is that
@@ -56,7 +56,7 @@ struct ReviewGridView: View {
 
     /// The current cluster page, identified by its GROUP ID (a stable id, not a positional index —
     /// so a re-scan that reshapes grouping can't leave the selection pointing at a different cluster).
-    /// Swiping (TabView) or "Mark day done" moves it.
+    /// Swiping (the pager's `.scrollPosition(id:)`) or "Mark day done" moves it.
     @State private var currentPageID: String?
     /// Pick the entry page once per appearance (drill target, or first-unreviewed resume).
     @State private var didInitialOpen = false
@@ -129,38 +129,58 @@ struct ReviewGridView: View {
         if ideal != columnCount { columnCount = ideal }
     }
 
-    /// The horizontal page pager — one `ClusterPage` per cluster, selected by group id. Extracted from
-    /// `body` so the (long) modifier chain below type-checks as a smaller expression.
+    /// The horizontal page pager — one `ClusterPage` per cluster, selected by group id. A horizontal
+    /// PAGING `ScrollView` (`.scrollTargetBehavior(.paging)` + `.scrollPosition(id:)`), deliberately NOT
+    /// a page-style `TabView`: the page `TabView` is backed by an internal UIKit scroll view that applies
+    /// the window's bottom safe area as a content inset SwiftUI can't reach, which left a
+    /// `systemBackground` strip under the grid (#232). A plain `ScrollView` has the standard safe-area
+    /// behavior — the grid draws edge-to-edge under the home indicator and only the resting offset
+    /// respects the inset (same as the Overview's scroll). Extracted from `body` so the (long) modifier
+    /// chain below type-checks as a smaller expression.
     private var pager: some View {
-        TabView(selection: $currentPageID) {
-            ForEach(Array(clusters.enumerated()), id: \.element.id) { index, cluster in
-                ClusterPage(
-                    cluster: cluster,
-                    headerTitle: headerTitle(for: cluster),
-                    columns: columns,
-                    spacing: spacing,
-                    load: load,
-                    cachedImage: cachedImage,
-                    videoBadge: videoBadge,
-                    openAsset: openAsset,
-                    // Only the ACTIVE page reports cell visibility — TabView pre-renders neighbours, and
-                    // their cells reporting visible would churn the prefetch recompute on every swipe.
-                    isActive: cluster.id == currentPageID,
-                    onVisible: { visibleIDs.insert($0) },
-                    onHidden: { visibleIDs.remove($0) },
-                    position: index + 1,
-                    total: clusters.count,
-                    onMarkDone: { markDoneAndAdvance(cluster) },
-                    // Restore scroll to the photo you ended on in the viewer (#126); each page acts only
-                    // if it holds the id, then clears it (one-shot).
-                    scrollToID: pendingScrollID,
-                    onScrolledToTarget: { pendingScrollID = nil },
-                    reviewComplete: reviewComplete,
-                    totalPhotos: totalCandidatePhotos)
-                    .tag(cluster.id as String?)
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 0) {
+                ForEach(Array(clusters.enumerated()), id: \.element.id) { index, cluster in
+                    ClusterPage(
+                        cluster: cluster,
+                        headerTitle: headerTitle(for: cluster),
+                        columns: columns,
+                        spacing: spacing,
+                        load: load,
+                        cachedImage: cachedImage,
+                        videoBadge: videoBadge,
+                        openAsset: openAsset,
+                        // Only the ACTIVE page reports cell visibility — the lazy pager materialises
+                        // neighbours as they approach, and their cells reporting visible would churn
+                        // the prefetch recompute on every swipe.
+                        isActive: cluster.id == currentPageID,
+                        onVisible: { visibleIDs.insert($0) },
+                        onHidden: { visibleIDs.remove($0) },
+                        position: index + 1,
+                        total: clusters.count,
+                        onMarkDone: { markDoneAndAdvance(cluster) },
+                        // Restore scroll to the photo you ended on in the viewer (#126); each page acts
+                        // only if it holds the id, then clears it (one-shot).
+                        scrollToID: pendingScrollID,
+                        onScrolledToTarget: { pendingScrollID = nil },
+                        reviewComplete: reviewComplete,
+                        totalPhotos: totalCandidatePhotos)
+                        .containerRelativeFrame(.horizontal)   // each page is exactly the pager's width
+                }
             }
+            .scrollTargetLayout()
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
+        .scrollTargetBehavior(.paging)
+        // Nil-filtered on purpose (D36 rider): the scroll can write nil mid-gesture (rubber-band past
+        // the ends, a re-layout with no resolvable page) and every consumer of `currentPageID` falls
+        // back to `clusters.first` — the top bar would show CLUSTER 1's identity and its tappable done
+        // seal would mark the wrong cluster. The page state only ever moves to a real page id.
+        .scrollPosition(id: Binding(
+            get: { currentPageID },
+            set: { if let id = $0 { currentPageID = id } }))
+        // Horizontal ONLY: the modifier is environment-carried, and unscoped it would also hide each
+        // cluster page's VERTICAL indicator — the user's only within-cluster position cue.
+        .scrollIndicators(.hidden, axes: .horizontal)
     }
 
     /// The fixed top bar — the CURRENT cluster's identity + the album's progress ring (design 4AB).
@@ -207,7 +227,7 @@ struct ReviewGridView: View {
         // permanent bottom bar; you reach mark-done by scrolling to the end of the cluster.
         .safeAreaInset(edge: .top, spacing: 0) { topBar }
         .background(Color(.systemBackground))
-        // No implicit `.animation(value: currentPage)` — the TabView animates its own page transition;
+        // No implicit `.animation(value: currentPage)` — the pager animates its own page transition;
         // a programmatic advance (mark-done) animates via `withAnimation` in `advance()`. Stacking both
         // double-animated the chrome on a swipe.
         // Success haptic when a day is marked done (count up), a light tap on undo.
@@ -296,12 +316,19 @@ struct ReviewGridView: View {
 
     /// Advance to the next UNREVIEWED cluster after the current page; else the literal next; else stay
     /// (finished the last stretch). Finishing a day lands you on the next one to review. The choice is
-    /// the pure `nextUnreviewedPage` (tested); this just applies it with animation.
+    /// the pure `nextUnreviewedPage` (tested); this just applies it. Animated ONLY for an adjacent move:
+    /// an animated `scrollPosition` write travels the content offset across every page in between —
+    /// a far target (the next unreviewed cluster can be dozens of done days away) would materialise
+    /// each passing `ClusterPage` and fire its cell loads mid-flight. A far move jumps instead.
     private func advance() {
         let next = nextUnreviewedPage(after: currentIndex, count: clusters.count,
                                       isDone: { done.isDone(clusters[$0]) })
         guard clusters.indices.contains(next) else { return }
-        withAnimation(reduceMotion ? nil : .snappy) { currentPageID = clusters[next].id }
+        if reduceMotion || abs(next - currentIndex) > 1 {
+            currentPageID = clusters[next].id
+        } else {
+            withAnimation(.snappy) { currentPageID = clusters[next].id }
+        }
     }
 
     // MARK: Cell load (the thumbnail seam)
@@ -334,8 +361,8 @@ struct ReviewGridView: View {
     }
 
     /// Only the CURRENT cluster's cells render at full cell size, so the window's universe is just its
-    /// ids — visible ± a row margin. A neighbouring page's cells (rendered by TabView for the swipe) may
-    /// report visible, but they're not in this universe so `slice` filters them out.
+    /// ids — visible ± a row margin. A neighbouring page's cells (materialised by the lazy pager for the
+    /// swipe) may report visible, but they're not in this universe so `slice` filters them out.
     private func rebuildWindow() {
         window = PrefetchWindow(orderedIDs: currentCluster?.assetIDs ?? [])
     }
@@ -381,7 +408,7 @@ private struct ClusterPage: View {
     let videoBadge: (String) -> String?
     let openAsset: (String) -> Void
     /// Only the active (current) page reports cell visibility — keeps the prefetch recompute off the
-    /// swipe hot path, since TabView pre-renders neighbours whose cells would otherwise churn it.
+    /// swipe hot path, since the lazy pager materialises neighbours whose cells would otherwise churn it.
     let isActive: Bool
     let onVisible: (String) -> Void
     let onHidden: (String) -> Void
@@ -426,7 +453,11 @@ private struct ClusterPage: View {
                     }
                 }
                 .padding(.horizontal, spacing)
-                .scrollTargetLayout()
+                // No `.scrollTargetLayout()` here: it was inert (nothing inside the page consumes it —
+                // the #126 restore is `ScrollViewReader.scrollTo`), and with the OUTER pager now
+                // carrying `.scrollTargetBehavior(.paging)` + `.scrollPosition(id:)` a marked inner
+                // layout is the one hook that could ever let those reach the vertical grid (paging it
+                // by screenfuls, or writing ASSET ids into the page selection).
             }
             // Restore scroll to the ended-on photo on return from the viewer (#126). Only the cluster that
             // holds it acts; deferred a beat so a just-paged-to page has laid out before `scrollTo`. Then
