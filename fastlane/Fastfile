@@ -393,27 +393,38 @@ platform :ios do
   # creates the DRAFT version record (a "Prepare for Submission" version whose string == MARKETING_VERSION)
   # so the upload lanes have somewhere to write.
   #
-  # Idempotent: a no-op when an editable version already exists. `get_edit_app_store_version` only matches
-  # PREPARE_FOR_SUBMISSION / *_REJECTED states — so an approved-but-unreleased version (Pending Developer
-  # Release) reads as "none present" and this creates the NEXT draft (e.g. 1.0.1 superseding an unshipped
-  # 1.0.0 — see docs/deploy/testflight-setup.md §5.7).
+  # Idempotent: a no-op when an editable version already exists. `get_edit_app_store_version` matches the
+  # editable states (PREPARE_FOR_SUBMISSION, the *_REJECTED states, WAITING_FOR_REVIEW, INVALID_BINARY) — an
+  # approved-but-unreleased version (Pending Developer Release) is NOT among them, so it reads as "none
+  # present" and this creates the NEXT draft (e.g. 1.0.1 superseding an unshipped 1.0.0 — see
+  # docs/deploy/testflight-setup.md §5.7). It matches on editable STATE, not version string, so a lingering
+  # draft at an OLD string is reused (and warned about below), never duplicated.
   #
-  # Deliberately the SAFE, non-destructive slice of #239: it creates a draft version ONLY — it does NOT
-  # attach a build, upload anything, submit for review, or release. The high-blast-radius "Submit for Review"
-  # click stays manual by design (§5.7). Spaceship exposes no `AppStoreVersion.create`, so this posts through
-  # the client the same way the model's own `create_*` helpers do (`resp.to_models.first`).
+  # Create-only by design (the safe, non-destructive slice of #239): it does NOT attach a build, upload
+  # anything, submit for review, or release — the high-blast-radius "Submit for Review" click stays manual
+  # (§5.7). Spaceship's own `App#ensure_version!` (what deliver uses) would also create it, but it SILENTLY
+  # RENAMES a mismatched editable version; we'd rather create-or-warn and leave any rename a deliberate manual
+  # step — so we post the create directly (`resp.to_models.first`, the shape spaceship's `create_*` return).
   desc "Create the editable App Store version record for MARKETING_VERSION if none exists — draft only, no build/submit/release. Idempotent (#239)."
   lane :ensure_version do
     configure_spaceship_token
     app = Spaceship::ConnectAPI::App.find(APP_IDENTIFIER)
     UI.user_error!("App '#{APP_IDENTIFIER}' not found in App Store Connect.") if app.nil?
 
+    version = marketing_version
     if (existing = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS))
-      UI.success("Editable App Store version #{existing.version_string} already exists — nothing to create.")
+      if existing.version_string == version
+        UI.success("Editable App Store version #{version} already exists — nothing to create.")
+      else
+        # A draft lingers at a different string than the bumped MARKETING_VERSION — the upload lanes would
+        # write to it. Never silently: shout so the operator renames it (or the build goes unselectable, §5.7).
+        UI.important("An editable App Store version #{existing.version_string} exists but MARKETING_VERSION is " \
+                     "#{version}; the upload lanes will write to the #{existing.version_string} draft. Rename it " \
+                     "to #{version} in ASC if that's wrong — a mismatch makes the build unselectable (§5.7).")
+      end
       next
     end
 
-    version = marketing_version
     UI.message("No editable App Store version in ASC — creating a draft for #{version} (iOS).")
     created = Spaceship::ConnectAPI.post_app_store_version(
       app_id: app.id,
