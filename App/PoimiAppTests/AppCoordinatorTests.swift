@@ -301,4 +301,43 @@ struct AppCoordinatorTests {
         #expect(coord.path.isEmpty)
         #expect(coord.presentedPhotoID == nil)
     }
+
+    @Test("openAppSettings is idempotent — repeat taps can't stack duplicates (iPad sidebar cog, #258)")
+    func openAppSettingsIdempotent() {
+        // On iPad the cog stays visible in the split-view sidebar while App settings shows in the
+        // detail column, so it can be tapped repeatedly — each tap must NOT push another `.appSettings`.
+        let coord = coordinator(.authorized)
+        coord.openAppSettings()
+        coord.openAppSettings()
+        coord.openAppSettings()
+        #expect(coord.path == [.appSettings])
+        // …and Back (pop) leaves the stack empty, not holding leftover copies.
+        coord.pop()
+        #expect(coord.path.isEmpty)
+    }
+
+    @Test("openAppSettings guards only the top — it still returns to the album underneath on Back (#258)")
+    func openAppSettingsKeepsAlbumContext() {
+        // The guard is `path.last != .appSettings`, NOT a path reset: opening App settings while an album
+        // is showing in the detail column pushes on top, so Back returns to the album (context preserved).
+        let coord = coordinator(.authorized)
+        let id = UUID()
+        coord.openProject(id)
+        coord.openReview(id)
+        coord.openAppSettings()
+        coord.openAppSettings()   // repeat tap from the still-visible sidebar cog
+        #expect(coord.path == [.albumOverview(id), .review(id, nil), .appSettings])
+        coord.pop()
+        #expect(coord.path == [.albumOverview(id), .review(id, nil)])   // back to the album, not a dead end
+    }
+
+    @Test("openSettings is idempotent too — a double-tap can't stack per-album settings (#258)")
+    func openSettingsIdempotent() {
+        let coord = coordinator(.authorized)
+        let id = UUID()
+        coord.openProject(id)
+        coord.openSettings(id)
+        coord.openSettings(id)
+        #expect(coord.path == [.albumOverview(id), .settings(id)])
+    }
 }

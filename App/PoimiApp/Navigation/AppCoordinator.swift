@@ -221,13 +221,20 @@ final class AppCoordinator {
         path.append(.export(id))
     }
 
-    /// Push the album's settings screen (#41).
+    /// Push the album's settings screen (#41). Idempotent — a repeat tap can't stack a second copy
+    /// (same guard as `finishToExport`, for symmetry with `openAppSettings` below).
     func openSettings(_ projectID: UUID) {
+        guard path.last != .settings(projectID) else { return }
         path.append(.settings(projectID))
     }
 
-    /// Push the app-level settings screen (Photos access + About) — not album-scoped.
+    /// Push the app-level settings screen (Photos access + About) — not album-scoped. Idempotent:
+    /// on iPad the cog lives in the always-visible split-view *sidebar* (`AppRootView.splitView`), so it
+    /// stays tappable while App settings shows in the detail column — without this guard every extra tap
+    /// pushed another `.appSettings` and the user had to Back out N times (#258). Guarding the append
+    /// (rather than resetting the path) keeps Back returning to the album the detail was showing.
     func openAppSettings() {
+        guard path.last != .appSettings else { return }
         path.append(.appSettings)
     }
 
