@@ -29,13 +29,15 @@ struct NewAlbumSetupView: View {
                 }
 
                 Section {
-                    // Mutually bounded so an inverted/zero range is unreachable (Create can't be
-                    // silently disabled with no explanation): From ≤ the inclusive To, and vice-versa.
-                    // Row label on `LabeledContent`, not the picker (`labelsHidden`), so the date button
-                    // keeps its natural width (no truncation at larger text sizes) + stacks at AX sizes (#173).
+                    // "From" is unbounded; "To" stays ≥ "From". Moving "From" to or past "To" collapses
+                    // "To" to a single day at the new start (`rangeStartBinding` → `nonInvertedEnd`) instead
+                    // of greying out later dates — so a range past the default is reachable without
+                    // reordering taps, and the interval is never inverted (Create can't be silently
+                    // disabled). Same behaviour in AlbumSettingsView (#259). Row label on `LabeledContent`,
+                    // not the picker (`labelsHidden`), so the date button keeps its natural width (no
+                    // truncation at larger text sizes) + stacks at AX sizes (#173).
                     LabeledContent("From") {
-                        DatePicker("From", selection: $draft.rangeStart, in: ...inclusiveEndDate,
-                                   displayedComponents: .date)
+                        DatePicker("From", selection: rangeStartBinding, displayedComponents: .date)
                             .labelsHidden()
                     }
                     LabeledContent("To") {
@@ -137,9 +139,16 @@ struct NewAlbumSetupView: View {
         }
     }
 
-    /// The inclusive end day as a value — the upper bound for the "From" picker (see above).
-    private var inclusiveEndDate: Date {
-        NewAlbumDraft.inclusiveEndDay(forExclusiveEnd: draft.rangeEnd, calendar: calendar)
+    /// "From" writes through here so moving the start past the end never leaves an inverted or greyed-out
+    /// range: set the new start, then let `nonInvertedEnd` collapse "To" to a single day at that start if
+    /// the start has reached/passed it (the user then extends "To"). No hard upper bound on "From" (#259).
+    private var rangeStartBinding: Binding<Date> {
+        Binding(
+            get: { draft.rangeStart },
+            set: {
+                draft.rangeStart = $0
+                draft.rangeEnd = NewAlbumDraft.nonInvertedEnd(start: $0, end: draft.rangeEnd, calendar: calendar)
+            })
     }
 
     /// The "To" picker shows an **inclusive** end day, while the draft stores `rangeEnd`
