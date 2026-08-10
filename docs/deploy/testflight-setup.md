@@ -220,6 +220,13 @@ Scripts/bump-version.sh patch     # or minor | major | X.Y.Z  → commit in its 
 ```
 `Scripts/check-version.sh` (in CI) asserts every `MARKETING_VERSION` occurrence is an identical semver.
 
+**In the same PR as the bump**, update `CHANGELOG.md` (#182): move the `[Unreleased]` entries into a new
+`## [<version>] — <date>` section (leaving a fresh empty `[Unreleased]` above it). The section must be
+**non-empty** — the in-app *What's New* (#248) and the App Store release notes (§5.7) are authored from
+it. `Scripts/check-changelog.sh` (in CI) fails the bump if `MARKETING_VERSION` has no matching
+`## [<version>]` section, so the move can't be forgotten (it proves the section *exists*, not that it's
+complete — that's on you).
+
 ### 5.5 Uploading marketing screenshots (`upload_screenshots`)
 The `upload_screenshots` lane pushes **only the screenshots** to App Store Connect — never the binary, the
 textual metadata, or a review submission. The screenshots are generated on a Mac (iOS 26 sims + your real
@@ -294,7 +301,7 @@ version"** so an approval doesn't auto-launch you.
   **privacy URL**. Export compliance is already `NO` (guarded, #136) — no per-submit prompt.
 
 **Every release:**
-1. **Version** — `Scripts/bump-version.sh <major|minor|patch>` in a PR; merge to `main` (`check-version.sh` gates). `main`'s `MARKETING_VERSION` = the release version.
+1. **Version** — `Scripts/bump-version.sh <major|minor|patch>` in a PR **and** move `CHANGELOG.md`'s `[Unreleased]` into a `## [<version>] — <date>` section in that same PR; merge to `main` (`check-version.sh` + `check-changelog.sh` gate). `main`'s `MARKETING_VERSION` = the release version.
 2. **Build** — run **TestFlight** (`lane = beta`) → approve the gate → a build at `MARKETING_VERSION` (build no. = run no.) lands in TestFlight and is polled to `VALID` (§5.3).
 3. **Test** — install from TestFlight (internal) and smoke-test the **exact** build you'll ship.
 4. **ASC version** — an editable App Store version whose string **exactly equals** `MARKETING_VERSION` (e.g. `1.0.0`) must exist (a `1.0` vs `1.0.0` mismatch makes the build unselectable). The **`ensure_version`** lane creates this *draft* for you if it's missing — and `upload_screenshots` / `upload_metadata` call it first, so step 5 self-creates it. You only hand-create/rename if the string is wrong. Set the version to **"Manually release this version."** *(Draft automation from [#239]; the actual **Submit** in step 8 stays a manual click — that's the deliberately-deferred, high-blast-radius part.)*
@@ -309,7 +316,22 @@ version"** so an approval doesn't auto-launch you.
 - Approved, manual release → it's in **Pending Developer Release**; just don't click Release — fix + resubmit.
 - Accidentally released → **Remove from Sale** + ship an expedited fix.
 
-**Updates only:** add "What's New" (`release_notes`) — not valid on the first version.
+**Updates only:** add "What's New" (`release_notes`) — not valid on the first version. Author both the
+App Store release notes and the in-app *What's New* entry (#248) **from the `CHANGELOG.md` `## [<version>]`
+section** — don't reconstruct them from `git log`.
+
+**No git tags / GitHub Releases** (by decision, #182): App-Store-only distribution, so `CHANGELOG.md` + ASC
+*are* the record. To recover the exact commit a shipped version was built from (the `v<version>` tag
+substitute):
+```sh
+# ASC shows the approved version's build number N (== the TestFlight run number).
+gh run list --workflow=testflight.yml --limit 200 --json number,headSha \
+  -q ".[] | select(.number==N) | .headSha"
+```
+Holds for builds uploaded by the TestFlight CI workflow (a local archive's build number is a
+`yyyymmddHHMM` timestamp — recover its commit from local git / the archive `Info.plist` instead). The
+`v*`-push allowance kept in `testflight.yml` / `check-testflight-trigger.sh` is reserved for a possible
+future *automated* tag-on-approval — it is **not** a manual release step.
 
 **Superseding an unreleased version:** if a prior version is approved-but-unreleased (**Pending Developer Release**) and you'd rather ship a newer build than release it, bump to the next version (e.g. `1.0.0` → `1.0.1`). `ensure_version` sees no *editable* version (Pending Developer Release isn't one) and creates the `1.0.1` draft; dispose of the old pending version in ASC — it just never ships.
 

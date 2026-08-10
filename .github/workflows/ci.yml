@@ -158,6 +158,12 @@ jobs:
         # an identical semver (no Debug/Release/app/test drift). Bump with Scripts/bump-version.sh.
         run: ./Scripts/check-version.sh
 
+      - name: Check changelog
+        # Release record (#182): the current MARKETING_VERSION must have a matching `## [x.y.z]`
+        # section in CHANGELOG.md — the section the in-app What's New (#248) and App Store release
+        # notes (#95) are authored from. Pure working-tree check (fires on a bump without notes).
+        run: ./Scripts/check-changelog.sh
+
       # --- App build + integration tests (slowest; after the fast checks) ------
 
       - name: Build PoimiApp (Release)

@@ -162,7 +162,7 @@ Scripts/check-liquid-glass.sh
 Scripts/check-fake-release-isolation.sh
 Scripts/check-photos-sacrosanct.sh      # no destructive PhotoKit calls (D31)
 Scripts/check-no-grouping-in-views.sh   # day-grouping stays in the store, never a View body
-# (CI also runs check-version.sh + check-testflight-trigger.sh — release-flow guards.)
+# (CI also runs check-version.sh + check-testflight-trigger.sh + check-changelog.sh — release-flow guards.)
 ```
 
 **Testing framework:** Swift Testing (`@Test`/`@Suite`/`#expect`/`#require`), not XCTest. The
@@ -194,7 +194,7 @@ The dev screenshot harness and logging are documented in the [README](README.md)
 ## CI gates (every PR, all green to merge)
 
 Checkout → select Xcode 26 → SwiftLint → `Curation` tests → the guard self-tests + the guards →
-version/TestFlight-trigger guards → Release build → app build + integration tests on an iOS 26 sim →
+version/changelog/TestFlight-trigger guards → Release build → app build + integration tests on an iOS 26 sim →
 an **advisory coverage summary** (not a gate — #110). Defined in `.github/workflows/ci.yml`, which
 carries a `paths-ignore` for `website/**` so website-only changes skip the Swift CI. The site has its
 own workflows: `website-ci.yml` (build check) and `deploy-website.yml` (build + deploy to GitHub

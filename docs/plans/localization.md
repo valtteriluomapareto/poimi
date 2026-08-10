@@ -282,8 +282,10 @@ jobs:
 > `github.event.pull_request.head.repo.full_name == github.repository`.
 
 ### 6. Release notes + store metadata (Phase 4) — use `fastlane deliver`
-- English notes: `claude -p` over `git log <lastTag>..HEAD` (merged PR titles) → 2–3 lines → translate to
-  each locale (same engine) → write `fastlane/metadata/<locale>/{release_notes,subtitle,keywords,description}.txt`.
+- English notes: `claude -p` over the release's **`CHANGELOG.md` `## [<version>]` section** (the hand-curated
+  record, #182 — *not* `git log`; there are no release tags, and the changelog is the canonical per-version
+  source) → 2–3 lines → translate to each locale (same engine) → write
+  `fastlane/metadata/<locale>/{release_notes,subtitle,keywords,description}.txt`.
 - **Upload with `fastlane deliver`** behind a **manual-approval environment**. `fastlane` is dev/release
   tooling (never in the shipped binary), so the app's dependency-minimalism rule doesn't apply — and it
   already solves the plumbing a hand-rolled script would re-implement: ES256-JWT auth, **creating/finding
