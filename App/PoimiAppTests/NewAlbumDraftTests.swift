@@ -55,4 +55,52 @@ struct NewAlbumDraftTests {
         let roundTripped = NewAlbumDraft.exclusiveEnd(forInclusiveDay: inclusiveDay, calendar: calendar)
         #expect(roundTripped == exclusiveEnd)
     }
+
+    // MARK: - nonInvertedEnd: the From-past-To auto-correct (#259)
+
+    private func day(_ y: Int, _ m: Int, _ d: Int, _ cal: Calendar) -> Date {
+        cal.date(from: DateComponents(year: y, month: m, day: d))!
+    }
+
+    @Test("nonInvertedEnd: a start before the end leaves the end untouched (the common case)")
+    func nonInvertedEndKeepsValidRange() {
+        let cal = utcCalendar()
+        // Default-style range: start 2025-01-01, end-exclusive 2026-01-01. Nudge start forward but keep
+        // it well before the end — nothing should move.
+        let end = day(2026, 1, 1, cal)
+        let corrected = NewAlbumDraft.nonInvertedEnd(start: day(2025, 6, 15, cal), end: end, calendar: cal)
+        #expect(corrected == end)
+    }
+
+    @Test("nonInvertedEnd: From == To (single-day range, start = inclusive last day) is kept, not collapsed")
+    func nonInvertedEndKeepsSingleDay() {
+        let cal = utcCalendar()
+        // Inclusive To = Dec 31 → exclusive end = Jan 1. Start ON Dec 31 is a valid one-day range: start
+        // (Dec 31) < end (Jan 1), so it must NOT be treated as inverted.
+        let end = day(2026, 1, 1, cal)
+        let corrected = NewAlbumDraft.nonInvertedEnd(start: day(2025, 12, 31, cal), end: end, calendar: cal)
+        #expect(corrected == end)
+    }
+
+    @Test("nonInvertedEnd: From dragged past To collapses To to a single day at the new start (#259)")
+    func nonInvertedEndCollapsesWhenPast() {
+        let cal = utcCalendar()
+        // The reported bug: default end is in 2025, user drags From into 2026. Start (2026-06-15) is well
+        // past the exclusive end (2026-01-01) → collapse to a single day: end becomes 2026-06-16.
+        let newStart = day(2026, 6, 15, cal)
+        let corrected = NewAlbumDraft.nonInvertedEnd(start: newStart, end: day(2026, 1, 1, cal), calendar: cal)
+        #expect(corrected == day(2026, 6, 16, cal))
+        // The result is a valid, non-inverted single-day range, and its inclusive To reads back as the start.
+        #expect(corrected > newStart)
+        #expect(NewAlbumDraft.inclusiveEndDay(forExclusiveEnd: corrected, calendar: cal) == newStart)
+    }
+
+    @Test("nonInvertedEnd: start exactly AT the exclusive end (one past inclusive To) still collapses")
+    func nonInvertedEndCollapsesAtBoundary() {
+        let cal = utcCalendar()
+        // Start == end-exclusive (the day after the inclusive To) makes [start, end) empty → collapse.
+        let end = day(2026, 1, 1, cal)
+        let corrected = NewAlbumDraft.nonInvertedEnd(start: end, end: end, calendar: cal)
+        #expect(corrected == day(2026, 1, 2, cal))
+    }
 }

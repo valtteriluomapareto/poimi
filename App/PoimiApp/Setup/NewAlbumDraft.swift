@@ -56,4 +56,14 @@ struct NewAlbumDraft: Equatable {
     static func exclusiveEnd(forInclusiveDay day: Date, calendar: Calendar) -> Date {
         calendar.date(byAdding: .day, value: 1, to: day) ?? day
     }
+
+    /// Keep the source period non-inverted when "From" moves: given an end-exclusive `end`, return an
+    /// end that still leaves `[start, end)` non-empty. If `start` has reached or passed `end` — the user
+    /// dragged "From" to or beyond "To" — collapse to a single-day range at `start` (`start` + 1 day);
+    /// otherwise `end` is unchanged. This replaces the old hard upper-bound on the "From" picker that
+    /// greyed out every later date and deadlocked anyone wanting a range past the default (#259). Pure +
+    /// calendar-injectable so the clamp is unit-tested, not buried in a view body.
+    static func nonInvertedEnd(start: Date, end: Date, calendar: Calendar) -> Date {
+        start >= end ? exclusiveEnd(forInclusiveDay: start, calendar: calendar) : end
+    }
 }
