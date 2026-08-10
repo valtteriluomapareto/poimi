@@ -103,4 +103,24 @@ struct NewAlbumDraftTests {
         let corrected = NewAlbumDraft.nonInvertedEnd(start: end, end: end, calendar: cal)
         #expect(corrected == day(2026, 1, 2, cal))
     }
+
+    @Test("nonInvertedEnd: the collapse's +1 day is calendar-correct across a DST spring-forward")
+    func nonInvertedEndDSTSafe() {
+        // Europe/Helsinki (a live locale for this app) springs forward on 2026-03-29 — that calendar day
+        // is only 23h long. Collapsing onto it must land on the NEXT calendar midnight (Mar 30 00:00),
+        // which `date(byAdding:.day,value:1)` gives but a naïve +86_400s would not (it'd land at 01:00).
+        // Guards against a future refactor to interval math silently breaking the collapse across a DST day.
+        let cal = utcCalendar("Europe/Helsinki")
+        let dstDay = day(2026, 3, 29, cal)
+        let corrected = NewAlbumDraft.nonInvertedEnd(start: dstDay, end: day(2026, 1, 1, cal), calendar: cal)
+        #expect(corrected == day(2026, 3, 30, cal))   // next calendar midnight, not off by the lost hour
+    }
+
+    @Test("nonInvertedEnd: the collapse's +1 day crosses a leap day correctly (Feb 28 → Feb 29, 2024)")
+    func nonInvertedEndLeapDay() {
+        let cal = utcCalendar()
+        // Collapse onto Feb 28 of a leap year must land on Feb 29, not Mar 1.
+        let corrected = NewAlbumDraft.nonInvertedEnd(start: day(2024, 2, 28, cal), end: day(2024, 1, 1, cal), calendar: cal)
+        #expect(corrected == day(2024, 2, 29, cal))
+    }
 }
