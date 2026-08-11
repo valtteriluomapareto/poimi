@@ -16,6 +16,7 @@ struct AlbumsView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
+    @Environment(WhatsNewState.self) private var whatsNew
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showingSetup = false
     @State private var albumToDelete: CurationProject?
@@ -81,6 +82,16 @@ struct AlbumsView: View {
         }
         .sheet(isPresented: $showingSetup) {
             NewAlbumSetupView(draft: .priorCalendarYear(now: Date(), calendar: .current))
+        }
+        // What's New (#248): auto-presents once per new version at the albums root — structurally in the
+        // `.albums` phase only (AlbumsView is the compact root / iPad sidebar, never shown during
+        // onboarding). Routing Continue AND swipe-down through the binding's setter means an interactive
+        // dismiss still persists (WhatsNewState.markAsSeen is idempotent).
+        .sheet(isPresented: Binding(
+            get: { whatsNew.shouldShow },
+            set: { if !$0 { whatsNew.markAsSeen() } }
+        )) {
+            WhatsNewView(notes: whatsNew.notes) { whatsNew.markAsSeen() }
         }
         .confirmationDialog("Delete this album?", isPresented: deleteConfirmation,
                             titleVisibility: .visible, presenting: albumToDelete) { project in

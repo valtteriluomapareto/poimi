@@ -1,0 +1,178 @@
+//
+//  WhatsNewStateTests.swift
+//  PoimiAppTests — the What's New version-jump matrix (#248).
+//
+//  Ported from photo-export's WhatsNewStateTests and adapted to Poimi's decisions: fresh install
+//  shows NOTHING (photo-export showed a welcome) but SILENTLY PERSISTS a baseline; a self-expiring
+//  DEBUT carve-out shows once on the feature-introducing version; markAsSeen covers Continue AND
+//  swipe-dismiss.
+//
+
+import Testing
+import Foundation
+@testable import PoimiApp
+
+@MainActor
+@Suite("WhatsNewState (#248)")
+struct WhatsNewStateTests {
+
+    /// A fresh, isolated UserDefaults per test (no cross-test bleed).
+    private func defaults() -> UserDefaults {
+        UserDefaults(suiteName: "whatsnew.test.\(UUID().uuidString)")!
+    }
+
+    private func note(_ version: String) -> ReleaseNote {
+        ReleaseNote(version: version, highlights: [.init(symbol: "star", headline: "H", detail: "D")])
+    }
+
+    private func state(current: String, stored: String? = nil,
+                       catalog: [ReleaseNote] = []) -> (WhatsNewState, UserDefaults) {
+        let d = defaults()
+        if let stored { d.set(stored, forKey: WhatsNewState.lastSeenVersionKey) }
+        return (WhatsNewState(userDefaults: d, currentVersion: current, catalog: catalog), d)
+    }
+
+    // MARK: - Fresh install (FLIPPED from photo-export: silent, and persists a baseline)
+
+    @Test("fresh install at a non-debut version shows nothing AND persists the baseline (#248 H1)")
+    func freshInstallSilentAndPersists() {
+        let (s, d) = state(current: "2.5.0", catalog: [note("2.5.0")])   // not the debut version
+        #expect(s.shouldShow == false)
+        #expect(s.notes.isEmpty)
+        // The load-bearing hook: the baseline is written in init, not on a (never-shown) dismissal.
+        #expect(d.string(forKey: WhatsNewState.lastSeenVersionKey) == "2.5.0")
+        #expect(s.lastSeenVersion == "2.5.0")
+    }
+
+    @Test("a fresh install that silently banks its version DOES show on the next upgrade (#248 H1 two-step)")
+    func freshThenUpgradeShows() {
+        let d = defaults()
+        // First launch, fresh, non-debut → silent + persisted.
+        _ = WhatsNewState(userDefaults: d, currentVersion: "2.5.0", catalog: [note("2.5.0")])
+        #expect(d.string(forKey: WhatsNewState.lastSeenVersionKey) == "2.5.0")
+        // Next launch after an update → upgrade, so it shows (this is what a missing init-persist would break).
+        let next = WhatsNewState(userDefaults: d, currentVersion: "2.6.0", catalog: [note("2.6.0")])
+        #expect(next.shouldShow == true)
+        #expect(next.notes.map(\.version) == ["2.6.0"])
+    }
+
+    // MARK: - Debut carve-out (reaches existing users once, then self-expires)
+
+    @Test("debut version: fresh install shows the debut notes once, then persists on dismiss (#248)")
+    func debutShowsOnceThenSilent() {
+        let debut = WhatsNewState.debutVersion
+        let (s, d) = state(current: debut, catalog: [note(debut)])
+        #expect(s.shouldShow == true)                              // existing user (no stored) reached on debut
+        #expect(s.notes.map(\.version) == [debut])
+        #expect(d.string(forKey: WhatsNewState.lastSeenVersionKey) == nil)   // NOT marked before shown
+        s.markAsSeen()
+        #expect(s.shouldShow == false)
+        #expect(d.string(forKey: WhatsNewState.lastSeenVersionKey) == debut) // persisted on dismiss
+    }
+
+    // MARK: - Upgrade / same / downgrade
+
+    @Test("same version after seen does not show again")
+    func sameVersionSilent() {
+        let (s, _) = state(current: "1.2.0", stored: "1.2.0", catalog: [note("1.2.0")])
+        #expect(s.shouldShow == false)
+    }
+
+    @Test("an upgrade shows, with the matching catalog entry exposed")
+    func upgradeShowsWithNotes() {
+        let (s, _) = state(current: "1.1.0", stored: "1.0.0", catalog: [note("1.1.0")])
+        #expect(s.shouldShow == true)
+        #expect(s.notes.map(\.version) == ["1.1.0"])
+        #expect(s.isUnknownUpgrade == false)
+    }
+
+    @Test("an upgrade with no catalog entry for the jump flags an unknown upgrade (generic fallback)")
+    func unknownUpgradeFallback() {
+        let (s, _) = state(current: "2.0.0", stored: "1.0.0", catalog: [note("1.0.0")])
+        #expect(s.shouldShow == true)
+        #expect(s.notes.isEmpty)
+        #expect(s.isUnknownUpgrade == true)
+    }
+
+    @Test("a multi-version jump returns every intervening note, oldest first")
+    func multiVersionJump() {
+        let catalog = [note("1.3.0"), note("1.1.0"), note("1.2.0")]   // unordered on purpose
+        let (s, _) = state(current: "1.3.0", stored: "1.0.0", catalog: catalog)
+        #expect(s.notes.map(\.version) == ["1.1.0", "1.2.0", "1.3.0"])
+    }
+
+    @Test("upgrade bounds exclude last-seen and include current")
+    func upgradeBounds() {
+        let catalog = [note("1.1.0"), note("1.2.0"), note("1.3.0")]
+        let (s, _) = state(current: "1.3.0", stored: "1.1.0", catalog: catalog)
+        #expect(s.notes.map(\.version) == ["1.2.0", "1.3.0"])   // 1.1.0 excluded, 1.3.0 included
+    }
+
+    @Test("downgrade never triggers the sheet")
+    func downgradeSilent() {
+        let (s, _) = state(current: "1.0.0", stored: "2.0.0", catalog: [note("1.0.0")])
+        #expect(s.shouldShow == false)
+    }
+
+    // MARK: - Numeric semver (not lexical) — minor AND patch above nine
+
+    @Test("numeric compare: 1.9.0 → 1.10.0 is an upgrade (minor above nine)")
+    func numericMinorAboveNine() {
+        #expect(ReleaseNotesCatalog.compare("1.10.0", "1.9.0") == .orderedDescending)
+        let (s, _) = state(current: "1.10.0", stored: "1.9.0", catalog: [note("1.10.0")])
+        #expect(s.shouldShow == true)
+    }
+
+    @Test("numeric compare: 1.0.9 → 1.0.10 is an upgrade (patch above nine — the boundary Poimi hits first)")
+    func numericPatchAboveNine() {
+        #expect(ReleaseNotesCatalog.compare("1.0.10", "1.0.9") == .orderedDescending)
+        let (s, _) = state(current: "1.0.10", stored: "1.0.9", catalog: [note("1.0.10")])
+        #expect(s.shouldShow == true)
+        #expect(s.notes.map(\.version) == ["1.0.10"])
+    }
+
+    // MARK: - markAsSeen
+
+    @Test("markAsSeen flips shouldShow synchronously and refreshes derived state (seeded as an upgrade)")
+    func markAsSeenFlipsSynchronously() {
+        let (s, d) = state(current: "1.1.0", stored: "1.0.0", catalog: [note("1.1.0")])
+        #expect(s.shouldShow == true)             // an upgrade genuinely starts true
+        s.markAsSeen()
+        #expect(s.shouldShow == false)            // flipped in the same run loop, no stale flash
+        #expect(s.lastSeenVersion == "1.1.0")
+        #expect(s.notes.isEmpty)                  // derived state refreshed
+        #expect(d.string(forKey: WhatsNewState.lastSeenVersionKey) == "1.1.0")
+    }
+
+    @Test("markAsSeen persists so a fresh state on the same store no longer shows (swipe-dismiss path)")
+    func markAsSeenPersistsAcrossReconstruction() {
+        let (s, d) = state(current: "1.1.0", stored: "1.0.0", catalog: [note("1.1.0")])
+        s.markAsSeen()   // Continue OR swipe-down both route here
+        let reopened = WhatsNewState(userDefaults: d, currentVersion: "1.1.0", catalog: [note("1.1.0")])
+        #expect(reopened.shouldShow == false)
+    }
+
+    // MARK: - Manual open + catalog invariant
+
+    @Test("manual open (Settings → About) has content even when the sheet stayed silent")
+    func manualNotesIndependentOfSeenState() {
+        // Fresh install at a non-debut, catalogued version → silent (shouldShow false), but the manual
+        // open still resolves the current version's notes.
+        let (s, _) = state(current: "1.0.5", catalog: [note("1.0.5")])
+        #expect(s.shouldShow == false)
+        #expect(s.manualNotes.map(\.version) == ["1.0.5"])
+    }
+
+    @Test("the production catalog covers the shipped bundle version (never ship a version with no notes)")
+    func productionCatalogCoversBundleVersion() {
+        let bundleVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        // Guard against a vacuous pass if the host bundle is unreadable (M2): the integration tier is
+        // app-hosted, so this must resolve to the app's MARKETING_VERSION.
+        let version = try! #require(bundleVersion)
+        #expect(!version.isEmpty)
+        let newest = try! #require(ReleaseNotesCatalog.all
+            .max { ReleaseNotesCatalog.compare($0.version, $1.version) == .orderedAscending })
+        // Catalog must be current OR ahead of the shipped version — never behind (a bump without notes).
+        #expect(ReleaseNotesCatalog.compare(newest.version, version) != .orderedAscending)
+    }
+}

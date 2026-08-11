@@ -63,6 +63,9 @@ enum DebugScreen: String, CaseIterable {
     case settings
     /// The app-level settings screen — Photos access + About, against an authorized fake (design 3N9).
     case appsettings
+    /// The What's New sheet (#248, design 5YI-0) — the catalog's debut entry rendered full-screen for
+    /// eyeballing against the Paper design. Static content, no fake needed.
+    case whatsnew
     /// The review scan's EMPTY state (#40, design 2JE): an in-range library that's all excluded → the
     /// actionable "Nothing to pick here" (Change range / Review excluded albums).
     case empty
@@ -110,6 +113,7 @@ struct DebugScreenHost: View {
         case .export: DebugExportHostView()
         case .settings: DebugSettingsHostView()
         case .appsettings: DebugAppSettingsHostView()
+        case .whatsnew: DebugWhatsNewHostView()
         case .empty: DebugEmptyHostView()
         case .scanfailed: DebugScanFailedHostView()
         case .locationspike: DebugLocationSpikeHostView()
@@ -714,6 +718,15 @@ struct DebugAppSettingsHostView: View {
             coordinator = coord
             Log.app.notice("screenshot-ready: \(DebugScreen.appsettings.rawValue, privacy: .public)")
         }
+    }
+}
+
+/// Hosts the What's New sheet (#248, design 5YI-0) with the catalog's debut entry, rendered full-screen
+/// (on device it's a `.sheet` — the card chrome adds no content change). Static content → no fake/library.
+struct DebugWhatsNewHostView: View {
+    var body: some View {
+        WhatsNewView(notes: ReleaseNotesCatalog.all, onContinue: {})
+            .task { Log.app.notice("screenshot-ready: \(DebugScreen.whatsnew.rawValue, privacy: .public)") }
     }
 }
 
