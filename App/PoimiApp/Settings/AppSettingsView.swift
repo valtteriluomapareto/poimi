@@ -16,7 +16,9 @@ import Curation       // LibraryAuthorization
 
 struct AppSettingsView: View {
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(WhatsNewState.self) private var whatsNew
     @Environment(\.openURL) private var openURL
+    @State private var showingWhatsNew = false
 
     /// The public source repository — Poimi is dual-licensed (AGPL-3.0 + commercial), curating in the open.
     private static let sourceURL = URL(string: "https://github.com/valtteriluomapareto/poimi")!
@@ -40,6 +42,15 @@ struct AppSettingsView: View {
             Section("About") {
                 LabeledContent("Version", value: appVersion)
                 LabeledContent("License", value: "AGPL-3.0")
+                // Re-open the What's New sheet on demand (#248).
+                Button { showingWhatsNew = true } label: {
+                    LabeledContent("What's New") {
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .tint(.primary)
                 Button { openURL(Self.sourceURL) } label: {
                     LabeledContent("Source code") {
                         // Text then an up-right glyph → reads "GitHub ↗" (opens Safari), not an in-app push.
@@ -55,6 +66,11 @@ struct AppSettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        // Manual re-read: shows the current version's notes regardless of seen-state, so it never
+        // touches the persisted last-seen version (#248).
+        .sheet(isPresented: $showingWhatsNew) {
+            WhatsNewView(notes: whatsNew.manualNotes) { showingWhatsNew = false }
+        }
     }
 
     private func openPhotosSettings() {

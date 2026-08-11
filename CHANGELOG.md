@@ -7,6 +7,9 @@ worth telling users about, in plain language (not a commit log). The format foll
 
 ## [Unreleased]
 
+### Added
+- A "What's New" screen that highlights what changed after you update the app.
+
 ### Fixed
 - Setting an album's date range no longer gets stuck: you can now pick a start date
   later than the default end without the calendar greying out every later day.

@@ -30,6 +30,7 @@ struct PoimiApp: App {
     @State private var selectionStore: SelectionStore
     @State private var doneStore: DoneStore
     @State private var coordinator: AppCoordinator
+    @State private var whatsNewState: WhatsNewState
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -49,6 +50,10 @@ struct PoimiApp: App {
         _selectionStore = State(initialValue: SelectionStore(container: container))
         _doneStore = State(initialValue: DoneStore(container: container))
         _coordinator = State(initialValue: AppCoordinator(library: photoLibrary, timelineCache: timelineCache))
+        // What's New (#248): reads the current CFBundleShortVersionString + the last-seen version from
+        // UserDefaults and decides whether to present on this launch. Owned once here (above the layout
+        // swap) so it survives the iPad size-class re-init and its silent-mark persist is lifecycle-free.
+        _whatsNewState = State(initialValue: WhatsNewState())
         Log.app.notice("Poimi launched")
     }
 
@@ -62,6 +67,7 @@ struct PoimiApp: App {
                 .environment(selectionStore)
                 .environment(doneStore)
                 .environment(coordinator)
+                .environment(whatsNewState)
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active {
                         // Durability point (D15/§12): persist the live selection as soon as we
