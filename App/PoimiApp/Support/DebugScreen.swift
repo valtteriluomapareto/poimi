@@ -66,6 +66,9 @@ enum DebugScreen: String, CaseIterable {
     /// The What's New sheet (#248, design 5YI-0) — the catalog's debut entry rendered full-screen for
     /// eyeballing against the Paper design. Static content, no fake needed.
     case whatsnew
+    /// The What's New sheet's empty / unknown-upgrade fallback (no highlights → the generic message) —
+    /// the layout a fresh 1.0.1 Settings → About open actually shows. Eyeball path for the empty branch.
+    case whatsnewempty
     /// The review scan's EMPTY state (#40, design 2JE): an in-range library that's all excluded → the
     /// actionable "Nothing to pick here" (Change range / Review excluded albums).
     case empty
@@ -113,7 +116,8 @@ struct DebugScreenHost: View {
         case .export: DebugExportHostView()
         case .settings: DebugSettingsHostView()
         case .appsettings: DebugAppSettingsHostView()
-        case .whatsnew: DebugWhatsNewHostView()
+        case .whatsnew: DebugWhatsNewHostView(screen: .whatsnew, notes: ReleaseNotesCatalog.all)
+        case .whatsnewempty: DebugWhatsNewHostView(screen: .whatsnewempty, notes: [])
         case .empty: DebugEmptyHostView()
         case .scanfailed: DebugScanFailedHostView()
         case .locationspike: DebugLocationSpikeHostView()
@@ -724,9 +728,11 @@ struct DebugAppSettingsHostView: View {
 /// Hosts the What's New sheet (#248, design 5YI-0) with the catalog's debut entry, rendered full-screen
 /// (on device it's a `.sheet` — the card chrome adds no content change). Static content → no fake/library.
 struct DebugWhatsNewHostView: View {
+    let screen: DebugScreen
+    let notes: [ReleaseNote]
     var body: some View {
-        WhatsNewView(notes: ReleaseNotesCatalog.all, onContinue: {})
-            .task { Log.app.notice("screenshot-ready: \(DebugScreen.whatsnew.rawValue, privacy: .public)") }
+        WhatsNewView(notes: notes, onContinue: {})
+            .task { Log.app.notice("screenshot-ready: \(screen.rawValue, privacy: .public)") }
     }
 }
 

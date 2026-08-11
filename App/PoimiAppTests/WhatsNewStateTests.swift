@@ -133,14 +133,15 @@ struct WhatsNewStateTests {
 
     // MARK: - markAsSeen
 
-    @Test("markAsSeen flips shouldShow synchronously and refreshes derived state (seeded as an upgrade)")
+    @Test("markAsSeen flips shouldShow synchronously + persists; keeps notes for the dismiss animation")
     func markAsSeenFlipsSynchronously() {
         let (s, d) = state(current: "1.1.0", stored: "1.0.0", catalog: [note("1.1.0")])
-        #expect(s.shouldShow == true)             // an upgrade genuinely starts true
+        #expect(s.shouldShow == true)                    // an upgrade genuinely starts true
+        #expect(s.notes.map(\.version) == ["1.1.0"])
         s.markAsSeen()
-        #expect(s.shouldShow == false)            // flipped in the same run loop, no stale flash
+        #expect(s.shouldShow == false)                   // flipped in the same run loop, no stale flash
         #expect(s.lastSeenVersion == "1.1.0")
-        #expect(s.notes.isEmpty)                  // derived state refreshed
+        #expect(s.notes.map(\.version) == ["1.1.0"])     // NOT cleared — the sheet reads them as it dismisses
         #expect(d.string(forKey: WhatsNewState.lastSeenVersionKey) == "1.1.0")
     }
 
@@ -163,16 +164,34 @@ struct WhatsNewStateTests {
         #expect(s.manualNotes.map(\.version) == ["1.0.5"])
     }
 
-    @Test("the production catalog covers the shipped bundle version (never ship a version with no notes)")
-    func productionCatalogCoversBundleVersion() {
-        let bundleVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        // Guard against a vacuous pass if the host bundle is unreadable (M2): the integration tier is
-        // app-hosted, so this must resolve to the app's MARKETING_VERSION.
-        let version = try! #require(bundleVersion)
-        #expect(!version.isEmpty)
+    @Test("manualNotes is empty when every catalogued entry is newer than the current version")
+    func manualNotesEmptyWhenCatalogAhead() {
+        // The actual shipped-1.0.1 behavior: the catalog's only entry is the 1.0.2 debut, so on 1.0.1 the
+        // manual Settings → About open resolves to nothing → WhatsNewView shows the generic message.
+        let (s, _) = state(current: "1.0.1", catalog: [note("1.0.2")])
+        #expect(s.manualNotes.isEmpty)
+    }
+
+    @Test("manualNotes returns the NEWEST entry at or below current, not all of them")
+    func manualNotesNewestNotAll() {
+        let catalog = [note("1.0.0"), note("1.0.5"), note("1.1.0")]
+        let (s, _) = state(current: "1.0.5", catalog: catalog)
+        #expect(s.manualNotes.map(\.version) == ["1.0.5"])   // 1.0.0 excluded (older), 1.1.0 excluded (newer)
+    }
+
+    @Test("the production catalog is not behind the shipped version AND has the debut entry")
+    func productionCatalogInvariants() {
+        // Prove we read the HOST APP's bundle, not the xctest runner (M2) — else this guard is vacuous.
+        #expect(Bundle.main.bundleIdentifier == "com.valtteriluoma.poimi")
+        let version = try! #require(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
+        #expect(version.range(of: #"^\d+\.\d+\.\d+$"#, options: .regularExpression) != nil)
+
         let newest = try! #require(ReleaseNotesCatalog.all
             .max { ReleaseNotesCatalog.compare($0.version, $1.version) == .orderedAscending })
         // Catalog must be current OR ahead of the shipped version — never behind (a bump without notes).
         #expect(ReleaseNotesCatalog.compare(newest.version, version) != .orderedAscending)
+        // The debut carve-out is keyed off debutVersion — its catalog entry MUST exist, or the sheet ships
+        // invisible for existing users on the debut release (#248).
+        #expect(ReleaseNotesCatalog.all.contains { $0.version == WhatsNewState.debutVersion })
     }
 }

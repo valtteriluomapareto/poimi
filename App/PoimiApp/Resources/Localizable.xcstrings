@@ -2958,6 +2958,94 @@
           }
         }
       }
+    },
+    "What's New": {
+      "comment": "What's New sheet: the large title + the App settings row label (#248).",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitä uutta"
+          }
+        }
+      }
+    },
+    "A few things we've added and fixed in this update.": {
+      "comment": "What's New sheet: subtitle under the title (#248).",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muutamia lisäyksiä ja korjauksia tähän päivitykseen."
+          }
+        }
+      }
+    },
+    "Continue": {
+      "comment": "What's New sheet: the primary dismiss button (#248).",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jatka"
+          }
+        }
+      }
+    },
+    "Poimi has been updated with fixes and refinements.": {
+      "comment": "What's New sheet: generic fallback when there are no per-version highlights (#248).",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poimia on päivitetty korjauksilla ja hienosäädöillä."
+          }
+        }
+      }
+    },
+    "Pick any date range": {
+      "comment": "What's New 1.0.2 highlight headline (#248/#259).",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valitse mikä tahansa aikaväli"
+          }
+        }
+      }
+    },
+    "Setting an album's dates no longer gets stuck — you can choose a start date later than the default without the calendar greying out.": {
+      "comment": "What's New 1.0.2 highlight detail (#248/#259).",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Albumin päivämäärien asettaminen ei enää jää jumiin — voit valita oletusarvoa myöhemmän aloituspäivän ilman, että kalenteri harmaantuu."
+          }
+        }
+      }
+    },
+    "Smoother on iPad": {
+      "comment": "What's New 1.0.2 highlight headline (#248/#258).",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sujuvampi iPadilla"
+          }
+        }
+      }
+    },
+    "App settings no longer opens a new screen each time you tap the button.": {
+      "comment": "What's New 1.0.2 highlight detail (#248/#258).",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sovellusasetukset eivät enää avaa uutta näkymää joka kerta painiketta painettaessa."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

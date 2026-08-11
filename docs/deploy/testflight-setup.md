@@ -227,6 +227,12 @@ it. `Scripts/check-changelog.sh` (in CI) fails the bump if `MARKETING_VERSION` h
 `## [<version>]` section, so the move can't be forgotten (it proves the section *exists*, not that it's
 complete — that's on you).
 
+Also reconcile the in-app **What's New** (#248) in that same PR, or the sheet ships invisible / English-only:
+- set **`WhatsNewState.debutVersion`** to `<version>` (the carve-out + catalog entry are keyed off it);
+- add its **`ReleaseNotesCatalog`** entry, authored from the new CHANGELOG section (≤3 highlights);
+- add the **`fi`** translations for the new String Catalog keys (fi is a live locale — the manual Settings → About open is reachable on any version).
+`WhatsNewStateTests.productionCatalogInvariants` fails the build if the catalog is behind the bundle version or missing the debut entry.
+
 ### 5.5 Uploading marketing screenshots (`upload_screenshots`)
 The `upload_screenshots` lane pushes **only the screenshots** to App Store Connect — never the binary, the
 textual metadata, or a review submission. The screenshots are generated on a Mac (iOS 26 sims + your real

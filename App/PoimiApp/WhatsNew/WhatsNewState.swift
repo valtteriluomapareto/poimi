@@ -25,12 +25,13 @@ import Observation
 final class WhatsNewState {
     /// The version that first ships What's New. The debut carve-out shows the notes once to existing
     /// users (no stored version) on THIS version, then reverts to silent on every later release.
-    /// **Set this to the actual release version when you cut it** — and give it a `ReleaseNotesCatalog`
-    /// entry — or the debut won't fire. (#248)
+    /// The version this What's New debuts in — the self-expiring carve-out reaches existing users once on
+    /// THIS version. **Bump it in lockstep with the release** (its `ReleaseNotesCatalog` entry is keyed off
+    /// this constant), per the §5.7 release checklist — or the sheet ships invisible. (#248)
     ///
     /// `nonisolated` so the (nonisolated) `ReleaseNotesCatalog.all` can reference it — an immutable
     /// `String`, so it's safe to read from any isolation.
-    nonisolated static let debutVersion = "1.1.0"
+    nonisolated static let debutVersion = "1.0.2"
 
     /// `UserDefaults` key for the most recently dismissed version. Reset it to re-trigger the sheet
     /// for testing: `defaults delete com.valtteriluoma.poimi WhatsNew.lastSeenVersion`.
@@ -99,12 +100,12 @@ final class WhatsNewState {
     /// generic "Poimi has been updated" message rather than stale copy.
     var isUnknownUpgrade: Bool { shouldShow && notes.isEmpty }
 
-    /// Persist the current version as seen + refresh derived state. Driven by the sheet's dismissal
-    /// (Continue AND swipe-down). Idempotent.
+    /// Persist the current version as seen + flip `shouldShow`. Driven by the sheet's dismissal (Continue
+    /// AND swipe-down). Idempotent. Deliberately does NOT clear `notes`: the sheet is still reading them as
+    /// it slides away, so emptying `notes` here could flash the generic message for a frame during dismiss.
     func markAsSeen() {
         userDefaults.set(currentVersion, forKey: Self.lastSeenVersionKey)
         lastSeenVersion = currentVersion
-        notes = ReleaseNotesCatalog.notesForUpgrade(lastSeen: currentVersion, current: currentVersion, catalog: catalog)
         if shouldShow { shouldShow = false }
     }
 }

@@ -17,21 +17,18 @@ enum ReleaseNotesCatalog {
     /// All release notes. Order is irrelevant (lookup sorts by semver). Each `version` must equal
     /// a real shipped `CFBundleShortVersionString`.
     static let all: [ReleaseNote] = [
-        // PLACEHOLDER debut entry (#248): replace these highlights with the real ones authored from
-        // the CHANGELOG for the ACTUAL release version, and set `WhatsNewState.debutVersion` to that
-        // same version. Keep it ≤3 highlights, each detail ≤2 sentences, and add the `fi` copy.
+        // 1.0.2 — the two fixes shipped in this patch, authored from CHANGELOG.md's section (#182).
+        // Per release: add a new entry (keyed off WhatsNewState.debutVersion), ≤3 highlights, each detail
+        // ≤2 sentences, and add the `fi` copy (§5.7 checklist).
         ReleaseNote(
-            version: WhatsNewState.debutVersion,
+            version: WhatsNewState.debutVersion,   // 1.0.2 — the version this What's New debuts in
             highlights: [
-                .init(symbol: "mappin.and.ellipse",
-                      headline: "Trips, grouped for you",
-                      detail: "Days away from home now gather into a single trip, named for where you were — like “Week in Åland” — so a holiday reads as one story, not scattered dates."),
                 .init(symbol: "calendar",
-                      headline: "Curate any stretch",
-                      detail: "Pick a whole year, a single weekend, or anything in between. Choosing the dates is smoother now, right up to today."),
-                .init(symbol: "square.grid.2x2",
-                      headline: "Smoother to review",
-                      detail: "The grid runs edge-to-edge and flows from one day to the next with a swipe, with clearer VoiceOver along the way."),
+                      headline: "Pick any date range",
+                      detail: "Setting an album's dates no longer gets stuck — you can choose a start date later than the default without the calendar greying out."),
+                .init(symbol: "ipad",
+                      headline: "Smoother on iPad",
+                      detail: "App settings no longer opens a new screen each time you tap the button."),
             ]),
     ]
 
