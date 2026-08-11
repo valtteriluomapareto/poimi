@@ -28,8 +28,8 @@ enum ReleaseNotesCatalog {
                       detail: "Setting an album's dates no longer gets stuck — you can choose a start date later than the default without the calendar greying out."),
                 .init(symbol: "ipad",
                       headline: "Smoother on iPad",
-                      detail: "App settings no longer opens a new screen each time you tap the button."),
-            ]),
+                      detail: "App settings no longer opens a new screen each time you tap the button.")
+            ])
     ]
 
     /// Numeric semver compare of two `MAJOR.MINOR.PATCH` strings — `1.0.10` > `1.0.9`, not a lexical

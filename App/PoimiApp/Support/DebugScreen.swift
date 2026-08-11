@@ -2,20 +2,12 @@
 //  DebugScreen.swift
 //  PoimiApp — the DEBUG-only screenshot harness (issue #48).
 //
-//  `-PoimiScreen <id>` boots the app straight to one named screen instead of the normal root,
-//  rendered against the injected `\.photoLibrary`. Paired with `-PoimiUseFakeLibrary` the
-//  content is deterministic, so `Scripts/screenshots.sh` can loop the catalog and capture a
-//  stable PNG of each screen to eyeball against its Paper design — in one command, no taps.
-//
-//  Everything here is `#if DEBUG`: the catalog, the launch override, and the `-PoimiScreen`
-//  flag are absent from release (D30, enforced by Scripts/check-fake-release-isolation.sh).
-//  This is the screenshot *harness*, distinct from pixel-snapshot *testing* (deferred, D26).
-//
-//  Real Phase-2 screens register a `case` here as they land. Each screen logs
-//  `Log.app.notice("screenshot-ready: <id>")` once its content is on screen; the
-//  capture script waits for that signal instead of a blind sleep, so the PNG never races the
-//  screen's async load. A screen catalogued here MUST render against `\.photoLibrary` (the
-//  fake) — never real PhotoKit — or its screenshot is no longer deterministic.
+//  `-PoimiScreen <id>` boots straight to one catalogued screen; with `-PoimiUseFakeLibrary` the content
+//  is deterministic, so `Scripts/screenshots.sh` captures a stable PNG per screen to eyeball vs its Paper
+//  design. Each screen logs `screenshot-ready: <id>` once on screen (the capture waits for it, never a
+//  blind sleep) and MUST render against `\.photoLibrary`, never real PhotoKit. All `#if DEBUG` — absent
+//  from release (D30, check-fake-release-isolation.sh); a screenshot *harness*, not pixel-snapshot
+//  *testing* (D26).
 //
 #if DEBUG
 
@@ -63,11 +55,9 @@ enum DebugScreen: String, CaseIterable {
     case settings
     /// The app-level settings screen — Photos access + About, against an authorized fake (design 3N9).
     case appsettings
-    /// The What's New sheet (#248, design 5YI-0) — the catalog's debut entry rendered full-screen for
-    /// eyeballing against the Paper design. Static content, no fake needed.
+    /// The What's New sheet (#248, design 5YI-0) — the catalog's debut entry, for eyeballing vs the design.
     case whatsnew
-    /// The What's New sheet's empty / unknown-upgrade fallback (no highlights → the generic message) —
-    /// the layout a fresh 1.0.1 Settings → About open actually shows. Eyeball path for the empty branch.
+    /// The What's New sheet's empty / unknown-upgrade fallback (the generic message) — eyeball path.
     case whatsnewempty
     /// The review scan's EMPTY state (#40, design 2JE): an in-range library that's all excluded → the
     /// actionable "Nothing to pick here" (Change range / Review excluded albums).
@@ -861,11 +851,9 @@ struct DebugUnknownScreenView: View {
     }
 }
 
-/// Hosts the interactive location-clustering spike probe (#133). Under `-PoimiUseFakeLibrary` it drives
-/// a dedicated fake seeded with the planted-trip `locationSpikeSeed` (the injected global fake has no GPS
-/// data) + the deterministic placeholder geocoder, so the probe renders meaningful clusters/trips in CI
-/// and the screenshot harness. On device (no fake flag) it drives the real `\.photoLibrary` + `CLGeocoder`.
-/// The host owns loading so `screenshot-ready` fires only once the first clustering has settled.
+/// Hosts the location-clustering spike probe (#133): `-PoimiUseFakeLibrary` drives a fake seeded with the
+/// planted `locationSpikeSeed` + placeholder geocoder (deterministic in CI/screenshots); on device, the
+/// real `\.photoLibrary` + `CLGeocoder`. Owns loading so `screenshot-ready` fires after the first cluster.
 struct DebugLocationSpikeHostView: View {
     @Environment(\.photoLibrary) private var library
     @State private var model: LocationSpikeModel?
@@ -886,9 +874,7 @@ struct DebugLocationSpikeHostView: View {
         }
         .task {
             let usingFake = ProcessInfo.processInfo.arguments.contains("-PoimiUseFakeLibrary")
-            // A UTC calendar for the fake path keeps the seed's day keys deterministic in the screenshot;
-            // the device path uses `.current` (the user's own calendar) since the probe reasons about
-            // real local capture days.
+            // UTC for the fake path (deterministic seed day-keys); `.current` on device (real capture days).
             let calendar = usingFake ? Self.utc : .current
             let resolvedLibrary: any PhotoLibraryProviding = usingFake
                 ? FakePhotoLibrary(assets: FakePhotoLibrary.locationSpikeSeed())
@@ -902,10 +888,8 @@ struct DebugLocationSpikeHostView: View {
     }
 }
 
-/// Hosts the location spike scoped to ONE album's date range (the `AlbumSettingsView` ▸ Developer entry).
-/// Scoping to the album's period + exclusions shrinks the located set from the whole library (tens of
-/// thousands) to that range (typically a few thousand), so the O(n²) core runs without downsampling —
-/// the point of doing this per-album rather than as a library-wide one-shot.
+/// Hosts the location spike scoped to ONE album's range (`AlbumSettingsView` ▸ Developer): the album's
+/// period + exclusions shrink the located set enough that the O(n²) core runs without downsampling.
 struct DebugAlbumLocationSpikeHostView: View {
     let project: CurationProject
     @Environment(\.photoLibrary) private var library

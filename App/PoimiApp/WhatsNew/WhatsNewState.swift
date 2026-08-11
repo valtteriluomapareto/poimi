@@ -69,7 +69,8 @@ final class WhatsNewState {
         if let stored {
             // Upgrade → show if current is strictly newer; same / downgrade → silent.
             self.shouldShow = ReleaseNotesCatalog.compare(stored, currentVersion) == .orderedAscending
-            self.notes = ReleaseNotesCatalog.notesForUpgrade(lastSeen: stored, current: currentVersion, catalog: catalog)
+            self.notes = ReleaseNotesCatalog.notesForUpgrade(
+                lastSeen: stored, current: currentVersion, catalog: catalog)
         } else {
             // No stored version. Standard: fresh install = silent. Debut carve-out: on the
             // feature-introducing version, show ONCE (reaches existing users) with that version's notes.
