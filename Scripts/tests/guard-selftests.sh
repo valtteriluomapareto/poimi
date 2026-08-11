@@ -108,6 +108,25 @@ rm -f "${d}/App/PoimiApp/BadRemove.swift"
 printf 'import Photos\nfunc bad() { PHAssetChangeRequest.deleteAssets([] as NSArray) }\n' > "${d}/App/PoimiApp/BadDelete.swift"
 assert "deleteAssets fails" "${d}" check-photos-sacrosanct.sh nonzero
 
+echo "== check-changelog.sh =="
+# The guard reads TWO inputs: MARKETING_VERSION from project.pbxproj + the CHANGELOG.md section.
+# So each fixture is a PAIR — a synthetic pbxproj (one MARKETING_VERSION line, matching the
+# check-version.sh extractor) + a CHANGELOG variant. The version is 1.0.1 throughout.
+d="$(skeleton check-changelog.sh)"; mkdir -p "${d}/App/PoimiApp.xcodeproj"
+printf '\t\t\t\tMARKETING_VERSION = 1.0.1;\n' > "${d}/App/PoimiApp.xcodeproj/project.pbxproj"
+printf '# Changelog\n\n## [Unreleased]\n\n## [1.0.1]\n### Fixed\n- x\n' > "${d}/CHANGELOG.md"
+assert "bare '## [1.0.1]' passes" "${d}" check-changelog.sh zero
+printf '# Changelog\n\n## [1.0.1] — 2026-08-07\n### Fixed\n- x\n' > "${d}/CHANGELOG.md"
+assert "dated '## [1.0.1] — date' passes" "${d}" check-changelog.sh zero
+printf '# Changelog\n\n## [Unreleased]\n### Fixed\n- x\n' > "${d}/CHANGELOG.md"
+assert "no matching section fails" "${d}" check-changelog.sh nonzero
+printf '# Changelog\n\n## [Unreleased]\n- prep for [1.0.1] release\n' > "${d}/CHANGELOG.md"
+assert "version only in prose (not a heading) fails" "${d}" check-changelog.sh nonzero
+printf '# Changelog\n\n## [1.0.10]\n### Fixed\n- x\n' > "${d}/CHANGELOG.md"
+assert "prefix '## [1.0.10]' does not satisfy 1.0.1" "${d}" check-changelog.sh nonzero
+rm -f "${d}/CHANGELOG.md"
+assert "missing CHANGELOG.md fails" "${d}" check-changelog.sh nonzero
+
 echo
 if [ "${fails}" -eq 0 ]; then
     echo "OK: all guard self-tests passed (each guard passes clean + fails on a violation)."
