@@ -137,6 +137,11 @@ DEDUP_SETTLE_SECONDS = 15
 # only checked for non-emptiness. Keep in sync with fastlane/metadata/README.md.
 METADATA_CHAR_LIMITS = { "subtitle" => 30, "keywords" => 100, "description" => 4000, "promotional_text" => 170 }.freeze
 
+# The App Store "What's New" (whatsNew / release_notes) per-locale char limit — the one field
+# upload_release_notes manages (#95 Phase 4). Its own constant (not in METADATA_CHAR_LIMITS) because those
+# are keyed by the stable-metadata filenames under fastlane/metadata, a deliberately separate concern.
+RELEASE_NOTES_CHAR_LIMIT = 4000
+
 # A PNG's [width, height] read straight from its IHDR chunk (big-endian u32 at bytes 16..24) — no image
 # gem needed. Returns nil for anything that isn't a PNG.
 def png_dimensions(file)
@@ -150,6 +155,14 @@ end
 # reason pbxproj_path/framed_screenshots_path resolve absolutely).
 def metadata_dir
   @metadata_dir ||= File.join(FastlaneCore::FastlaneFolder.path.to_s, "metadata")
+end
+
+# The repo's App Store release-notes folder (fastlane/release_notes/<locale>/release_notes.txt) — a SIBLING
+# of metadata/ on purpose: those are stable store text, these change every release. deliver reads it as a
+# metadata_path (it holds only release_notes.txt per locale, so only the whatsNew field is written). Anchored
+# to the Fastfile's own folder, same fragility as metadata_dir.
+def release_notes_dir
+  @release_notes_dir ||= File.join(FastlaneCore::FastlaneFolder.path.to_s, "release_notes")
 end
 
 # Fail fast (with a hint) if the App Store Connect API key env is missing — shared by the upload lane
@@ -474,6 +487,54 @@ platform :ios do
     )
 
     UI.success("Uploaded #{files.size} metadata file(s) from #{metadata_dir} to App Store Connect (text only — no binary, no screenshots, no submission).")
+  end
+
+  # --- upload_release_notes: push the per-version "What's New" to ASC (#95 Phase 4) --------
+  # The App Store release notes CHANGE every version (unlike the stable description/keywords in
+  # upload_metadata), so they live in their own folder (fastlane/release_notes/<locale>/release_notes.txt)
+  # and their own lane. Text only, and ONLY the whatsNew (release_notes) version-localization field — no
+  # binary, no screenshots, no other metadata, no submission. Authored from CHANGELOG.md's ## [<version>]
+  # section (#182), not git log; Finnish gets a native sign-off (#95).
+  desc "Upload the per-version App Store release notes (What's New) from fastlane/release_notes/<locale>/release_notes.txt — the whatsNew field ONLY (no binary/screenshots/other metadata/submission). Invalid on a first version. (#95 Phase 4)"
+  lane :upload_release_notes do
+    check_asc_env!
+    ensure_version # create the draft version record if a bump left ASC without an editable target (#239)
+
+    # Pre-flight: each present file must be NON-EMPTY and within the 4000-char limit. deliver SKIPS an empty
+    # value (a no-op, not a wipe), so the guard's real job is catching a blank/forgotten notes file that would
+    # otherwise report "uploaded" while shipping nothing. A MISSING locale file stays unmanaged.
+    files = Dir.glob(File.join(release_notes_dir, "*", "release_notes.txt")).sort
+    UI.user_error!("No release_notes.txt under #{release_notes_dir} — add " \
+                   "fastlane/release_notes/<locale>/release_notes.txt (draft from CHANGELOG's ## [<version>] " \
+                   "section).") if files.empty?
+    problems = files.each_with_object([]) do |f, acc|
+      rel = "#{File.basename(File.dirname(f))}/#{File.basename(f)}"
+      text = File.read(f).strip
+      acc << "#{rel} is EMPTY — write the release notes (deliver skips a blank value, so it would ship nothing)" if text.empty?
+      acc << "#{rel} is #{text.length} chars (max #{RELEASE_NOTES_CHAR_LIMIT})" if text.length > RELEASE_NOTES_CHAR_LIMIT
+    end
+    UI.user_error!("Release-notes pre-flight failed:\n  #{problems.join("\n  ")}") unless problems.empty?
+
+    # metadata_path points deliver at the release_notes folder, which holds ONLY release_notes.txt per locale
+    # — so deliver loads + writes just the whatsNew field (it only writes fields it has files for) and nothing
+    # else. release_notes is a LOCALISED_VERSION_VALUE, so skip_app_version_update (version-LEVEL fields) does
+    # not block it. deliver SKIPS release_notes on a first version (a notice, not an error). Errors clearly if
+    # there is no editable version, or it has left "Prepare for Submission" (whatsNew then rejects).
+    upload_to_app_store(
+      api_key: asc_api_key,
+      app_identifier: APP_IDENTIFIER,
+      metadata_path: release_notes_dir,
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_app_version_update: true,
+      submit_for_review: false,
+      run_precheck_before_submit: false,
+      force: true
+    )
+
+    locales = files.map { |f| File.basename(File.dirname(f)) }.join(", ")
+    UI.success("Uploaded release notes (#{locales}) from #{release_notes_dir} to App Store Connect (What's New " \
+               "only — no binary, screenshots, other metadata, or submission).")
   end
 
   # --- attach_build: attach the tested VALID build to the editable version (#257) ------------

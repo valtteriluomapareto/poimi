@@ -1,0 +1,5 @@
+This update smooths out a couple of rough edges:
+
+• Setting an album's date range no longer gets stuck — you can choose a start date later than the default without the calendar greying out.
+• On iPad, opening app settings no longer stacks a new screen each time you tap.
+• New: a What's New screen recaps what changed each time you update.
