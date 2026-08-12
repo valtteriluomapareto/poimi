@@ -476,6 +476,64 @@ platform :ios do
     UI.success("Uploaded #{files.size} metadata file(s) from #{metadata_dir} to App Store Connect (text only — no binary, no screenshots, no submission).")
   end
 
+  # --- attach_build: attach the tested VALID build to the editable version (#257) ------------
+  # The second safe slice of #239 (after ensure_version, #253): §5.7 step 6 — attach the smoke-tested,
+  # VALID build to the editable "Prepare for Submission" version, leaving a DRAFT WITH THE BUILD attached,
+  # ready for the human to fill in App Review info + click Submit (both stay MANUAL).
+  #
+  # NEVER submits or releases: no create_app_store_version_submission, no auto-release. Draft-only, so the
+  # high-blast-radius Submit click stays a deliberate human step (§5.7, #239).
+  #
+  # Build selection: the build pinned by the BUILD_NUMBER env (the exact GITHUB_RUN_NUMBER from the `beta`
+  # run's step summary — the recommended, explicit choice: it attaches the build you actually tested, §5.7
+  # step 3), else the newest VALID build for MARKETING_VERSION. See build_to_attach.
+  #
+  # Preconditions (fail LOUD — never a silent no-op / wrong attach):
+  #   • an EDITABLE version must already exist (minted upstream by `ensure_version` / the ASC draft step —
+  #     attach is not where a version record is created), AND its string must equal MARKETING_VERSION.
+  #     get_edit returns the HIGHEST editable draft, which could be a lingering mismatched one; attaching a
+  #     build across a version-string mismatch is an ASC error, so we stop first with a rename hint.
+  #   • a VALID build for MARKETING_VERSION must exist (build_to_attach distinguishes none / still-processing).
+  # Idempotent: re-running when the chosen build is already attached is a no-op.
+  desc "Attach the newest (or BUILD_NUMBER-pinned) VALID build for MARKETING_VERSION to the editable App Store version — draft only, never submits/releases. Idempotent (#257)."
+  lane :attach_build do
+    configure_spaceship_token # requires + checks the ASC env, points spaceship at the key
+    app = Spaceship::ConnectAPI::App.find(APP_IDENTIFIER)
+    UI.user_error!("App '#{APP_IDENTIFIER}' not found in App Store Connect.") if app.nil?
+
+    version = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS)
+    if version.nil?
+      UI.user_error!("No editable App Store version in ASC. Create the #{marketing_version} draft first (run the " \
+                     "`ensure_version` lane, or add the version in App Store Connect). Attach only works while the " \
+                     "version is 'Prepare for Submission' — if #{marketing_version} is already In Review / approved, " \
+                     "there is nothing to attach to.")
+    end
+
+    # get_edit returns the HIGHEST editable draft, not necessarily one at MARKETING_VERSION (ensure_version
+    # only WARNS about a lingering mismatched draft, Fastfile ~421). Attaching a build whose
+    # CFBundleShortVersionString != the draft's string is an ASC error — stop cleanly here, at the step the
+    # mismatch actually breaks, with a rename hint.
+    unless version.version_string == marketing_version
+      UI.user_error!("The editable App Store version is #{version.version_string}, but MARKETING_VERSION is " \
+                     "#{marketing_version}. Rename the draft to #{marketing_version} in App Store Connect (or bump " \
+                     "MARKETING_VERSION) before attaching — a mismatch makes the build unselectable (§5.7).")
+    end
+
+    build = build_to_attach(app)
+
+    # version.build is hydrated by get_edit (ESSENTIAL_INCLUDES = "appStoreVersionSubmission,build"), so this
+    # no-op guard is real: nil when nothing is attached, else the attached build's id.
+    if version.build&.id == build.id
+      UI.success("Build #{marketing_version} (#{build.version}) is already attached to the #{version.version_string} " \
+                 "draft — nothing to do.")
+      next
+    end
+
+    version.select_build(build_id: build.id)
+    UI.success("Attached build #{marketing_version} (#{build.version}) to the #{version.version_string} draft. " \
+               "Fill in App Review info + Submit for Review by hand — those stay manual (§5.7, #239).")
+  end
+
   # Poll App Store Connect for THIS run's build until it is VALID. Raises (fails the
   # run non-zero) on INVALID or on timeout — satisfying the falsifiable acceptance
   # criterion that "upload returned 0" is not sufficient.
@@ -519,6 +577,49 @@ platform :ios do
       end
 
       sleep(PROCESSING_POLL_SECONDS)
+    end
+  end
+
+  # The non-expired builds for MARKETING_VERSION matching `filter`, NEWEST FIRST by build number.
+  # Build#version is the CFBundleVersion STRING, so "newest" is numeric (.to_i) — a lexical sort would rank
+  # "99" above "100" once run numbers cross a power-of-ten boundary and silently attach an older build.
+  # `includes: "preReleaseVersion"` lets us re-check the marketing version client-side (belt-and-braces on
+  # the server filter, as wait_for_valid_build does); expired builds are un-attachable, so they're dropped.
+  def marketing_builds(app, filter)
+    app.get_builds(filter: filter, includes: "preReleaseVersion")
+       .select { |b| b.pre_release_version&.version == marketing_version && !b.expired }
+       .sort_by { |b| -b.version.to_i }
+  end
+
+  # The build attach_build should select: pinned by the BUILD_NUMBER env (the exact GITHUB_RUN_NUMBER printed
+  # in the `beta` run's step summary — the recommended, explicit choice: it guarantees you attach the build
+  # you smoke-tested, §5.7 step 3), else the newest VALID build for MARKETING_VERSION. Fails LOUD, and the
+  # message distinguishes "no build at all" (run `beta`) from "still PROCESSING" (wait) from "pinned build
+  # isn't VALID" — so the operator never gets nudged to upload a redundant build.
+  def build_to_attach(app)
+    pinned = ENV["BUILD_NUMBER"].to_s.strip
+
+    unless pinned.empty?
+      build = marketing_builds(app, { "version" => pinned }).first
+      UI.user_error!("No build #{pinned} for #{marketing_version} in App Store Connect — check the number in the " \
+                     "`beta` run's step summary, or leave the build number blank to attach the newest VALID build.") if build.nil?
+      unless build.processing_state == "VALID"
+        UI.user_error!("Build #{marketing_version} (#{pinned}) is #{build.processing_state || 'still processing'}, not " \
+                       "VALID — wait for processing to finish (the `beta` lane polls to VALID), then re-run.")
+      end
+      return build
+    end
+
+    builds = marketing_builds(app, { "preReleaseVersion.version" => marketing_version })
+    valid = builds.select { |b| b.processing_state == "VALID" }
+    return valid.first unless valid.empty? # marketing_builds is newest-first, so .first is the newest VALID
+
+    if builds.empty?
+      UI.user_error!("No build for #{marketing_version} in App Store Connect — run the `beta` lane first.")
+    else
+      states = builds.map { |b| "#{b.version}=#{b.processing_state || 'processing'}" }.join(", ")
+      UI.user_error!("No VALID build for #{marketing_version} yet (#{states}) — wait for processing to finish " \
+                     "(the `beta` lane polls to VALID), then re-run.")
     end
   end
 

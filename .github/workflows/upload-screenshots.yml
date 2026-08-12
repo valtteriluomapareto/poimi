@@ -11,7 +11,12 @@ name: Upload to App Store
 #   • dedup_screenshots  — clean an already-duplicated screenshot set, no upload.
 #   • upload_metadata    — push the App Store TEXT metadata (fastlane/metadata/<locale>/*.txt:
 #     description, keywords, subtitle, URLs). See fastlane/metadata/README.md for the managed set.
-# All lanes are metadata / image / version-DRAFT ONLY — never the binary, never a review submission.
+#   • attach_build       — attach the tested VALID build to the editable version, leaving a DRAFT WITH THE
+#     BUILD attached, ready for the manual App-Review-info + Submit (both stay a human click; #257). Uses
+#     the newest VALID build for MARKETING_VERSION, or the one pinned in the `build_number` input (the
+#     GITHUB_RUN_NUMBER from the `beta` run — attach the exact build you smoke-tested). Idempotent.
+# All lanes are metadata / image / build-attach / version-DRAFT ONLY — never the binary upload, never a
+# review submission or release.
 #
 # WHY LINUX / NO XCODE: deliver only talks to the ASC API, and the screenshots are pre-generated on a Mac
 # + committed, so this workflow needs no simulator/Xcode/photos — just the committed files + the ASC API
@@ -29,6 +34,9 @@ name: Upload to App Store
 #     every image, aborts on a missing set, and self-dedups — it never pushes a partial/empty set silently.
 #   • Metadata: edit fastlane/metadata/<locale>/*.txt (the lane refuses empty files — an empty file wipes
 #     the ASC field — and enforces the char limits).
+#   • attach_build: the build must already be uploaded + VALID (run `beta` on the testflight workflow and
+#     smoke-test it first). Put its build number (the `beta` run number, in that run's summary) in the
+#     `build_number` input to attach the exact build you tested; leave blank to take the newest VALID one.
 #   • Trigger (Actions → Upload to App Store → Run workflow), pick the lane, approve the reviewer gate.
 #
 # REQUIRED `testflight` ENVIRONMENT SECRETS (a subset of the TestFlight lane's —
@@ -42,7 +50,7 @@ on:
   workflow_dispatch:
     inputs:
       lane:
-        description: "lane: ensure_version (create draft) | upload_screenshots (+self-dedup) | dedup_screenshots (clean dupes) | upload_metadata (text)"
+        description: "lane: ensure_version (draft) | upload_screenshots (+dedup) | dedup_screenshots | upload_metadata (text) | attach_build (tested build → draft)"
         type: choice
         default: upload_screenshots
         options:
@@ -50,6 +58,12 @@ on:
           - upload_screenshots
           - dedup_screenshots
           - upload_metadata
+          - attach_build
+      build_number:
+        description: "attach_build only: the build number to attach (from the beta run's summary). Blank = newest VALID build for MARKETING_VERSION."
+        type: string
+        required: false
+        default: ""
 
 # Least privilege: reads the repo (for the committed framed set); uploads to ASC
 # via the API key, not the GITHUB_TOKEN.
@@ -93,6 +107,8 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_CONTENT_BASE64: ${{ secrets.ASC_KEY_CONTENT_BASE64 }}
+          # attach_build reads this to pin an exact build (blank = newest VALID). Ignored by other lanes.
+          BUILD_NUMBER: ${{ github.event.inputs.build_number }}
           FASTLANE_SKIP_UPDATE_CHECK: "1"
           FASTLANE_HIDE_CHANGELOG: "1"
         run: |
