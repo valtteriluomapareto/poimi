@@ -46,5 +46,6 @@ fastlane/release_notes/
 
 ## Status
 
-The English + Finnish below are drafted by Claude from the CHANGELOG; the Finnish awaits a native-speaker
-sign-off (owner is a Finnish speaker — same one-line gate as the in-app #248 copy).
+The English + Finnish are drafted by Claude from the CHANGELOG. The **1.0.2** Finnish is owner-signed-off
+(native speaker). Re-run that one-line native gate on each release's notes (the same gate as the in-app
+#248 copy) before shipping.
