@@ -1,0 +1,5 @@
+Tämä päivitys hioo paria karkeaa reunaa:
+
+• Albumin päivämäärävälin asettaminen ei enää jää jumiin — voit valita oletusarvoa myöhemmän aloituspäivän ilman, että kalenteri harmaantuu.
+• iPadilla sovellusasetukset eivät enää avaa uutta näkymää joka kerta painiketta painettaessa.
+• Uutta: Mitä uutta -näkymä kokoaa muutokset aina kun päivität sovelluksen.

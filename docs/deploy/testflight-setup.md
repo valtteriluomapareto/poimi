@@ -311,7 +311,7 @@ version"** so an approval doesn't auto-launch you.
 2. **Build** — run **TestFlight** (`lane = beta`) → approve the gate → a build at `MARKETING_VERSION` (build no. = run no.) lands in TestFlight and is polled to `VALID` (§5.3).
 3. **Test** — install from TestFlight (internal) and smoke-test the **exact** build you'll ship.
 4. **ASC version** — an editable App Store version whose string **exactly equals** `MARKETING_VERSION` (e.g. `1.0.0`) must exist (a `1.0` vs `1.0.0` mismatch makes the build unselectable). The **`ensure_version`** lane creates this *draft* for you if it's missing — and `upload_screenshots` / `upload_metadata` call it first, so step 5 self-creates it. You only hand-create/rename if the string is wrong. Set the version to **"Manually release this version."** *(Draft automation from [#239]; the actual **Submit** in step 8 stays a manual click — that's the deliberately-deferred, high-blast-radius part.)*
-5. **Assets + text** — run **Upload to App Store** → `upload_screenshots` (self-dedups) and `upload_metadata` (§5.5–5.6). Eyeball the listing in both locales.
+5. **Assets + text** — run **Upload to App Store** → `upload_screenshots` (self-dedups) and `upload_metadata` (§5.5–5.6), and — **on an update** — `upload_release_notes` (the What's New; skipped on a first version). Eyeball the listing in both locales.
 6. **Attach** the tested build — run **Upload to App Store** (`lane = attach_build`) with the build number from step 2 in the `build_number` input, so it attaches the **exact** build you smoke-tested (blank = newest `VALID` build for `MARKETING_VERSION`). Or pick it from the build dropdown in ASC by hand. The lane is **draft-only + idempotent**: it fails loud if the editable version's string ≠ `MARKETING_VERSION` (rename in ASC first) or if no `VALID` build exists yet (build still processing → wait; none at all → run `beta`), and it **never submits or releases**. It mostly saves the ASC dropdown — its value compounds only once the Submit-adjacent steps below are folded in (they're `#239`, deliberately still manual). *(First time you run it, verify in ASC that the version is still **Prepare for Submission** afterward — the proof it attached without submitting — and a re-dispatch reports the idempotent no-op.)*
 7. **App Review Information** — note that the app needs **Photos access** (grant when prompted on launch; no account/login). No demo account needed.
 8. **Submit** for review.
@@ -322,9 +322,12 @@ version"** so an approval doesn't auto-launch you.
 - Approved, manual release → it's in **Pending Developer Release**; just don't click Release — fix + resubmit.
 - Accidentally released → **Remove from Sale** + ship an expedited fix.
 
-**Updates only:** add "What's New" (`release_notes`) — not valid on the first version. Author both the
-App Store release notes and the in-app *What's New* entry (#248) **from the `CHANGELOG.md` `## [<version>]`
-section** — don't reconstruct them from `git log`.
+**Updates only:** the "What's New" (`release_notes`) is invalid on the first version, so 1.0.2 is the
+first release that carries it. Author **both** the App Store release notes
+(`fastlane/release_notes/<locale>/release_notes.txt`, uploaded by the **`upload_release_notes`** lane) and
+the in-app *What's New* entry (#248) **from the `CHANGELOG.md` `## [<version>]` section** — don't
+reconstruct them from `git log` — and get the Finnish natively signed off (#95). Edit them in the release
+PR alongside the bump so they never lag the version.
 
 **No git tags / GitHub Releases** (by decision, #182): App-Store-only distribution, so `CHANGELOG.md` + ASC
 *are* the record. To recover the exact commit a shipped version was built from (the `v<version>` tag

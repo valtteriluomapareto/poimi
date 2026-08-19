@@ -31,7 +31,9 @@ that field to the repo (a surprise on the next run):
   required at review). *Revisit adding subtitle/privacy to the lane after the app's first version exists.*
 - **Promotional text** — the live-edit escape hatch (editable anytime without a new version); keep it in
   ASC for launch/campaign tweaks so a lane run can't revert them.
-- **Release notes / "What's New"** — invalid on a first version; add per-update later.
+- **Release notes / "What's New"** — managed **separately** (they change every release, this text is
+  stable): `fastlane/release_notes/<locale>/release_notes.txt`, uploaded by the `upload_release_notes` lane.
+  See `fastlane/release_notes/README.md`. Invalid on a first version.
 - Pricing, availability, age rating, the **App Privacy** nutrition label, categories, App Review
   Information (demo/notes), in-app purchases.
 

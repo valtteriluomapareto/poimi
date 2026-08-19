@@ -11,6 +11,8 @@ name: Upload to App Store
 #   • dedup_screenshots  — clean an already-duplicated screenshot set, no upload.
 #   • upload_metadata    — push the App Store TEXT metadata (fastlane/metadata/<locale>/*.txt:
 #     description, keywords, subtitle, URLs). See fastlane/metadata/README.md for the managed set.
+#   • upload_release_notes — push the per-version "What's New" (fastlane/release_notes/<locale>/
+#     release_notes.txt) — the whatsNew field only. Changes every release; see that folder's README (#95).
 #   • attach_build       — attach the tested VALID build to the editable version, leaving a DRAFT WITH THE
 #     BUILD attached, ready for the manual App-Review-info + Submit (both stay a human click; #257). Uses
 #     the newest VALID build for MARKETING_VERSION, or the one pinned in the `build_number` input (the
@@ -34,6 +36,9 @@ name: Upload to App Store
 #     every image, aborts on a missing set, and self-dedups — it never pushes a partial/empty set silently.
 #   • Metadata: edit fastlane/metadata/<locale>/*.txt (the lane refuses empty files — an empty file wipes
 #     the ASC field — and enforces the char limits).
+#   • Release notes: edit fastlane/release_notes/<locale>/release_notes.txt from the CHANGELOG's
+#     ## [<version>] section (native-signed Finnish); the lane refuses empty files. Invalid on a first
+#     version. Run it during a release, after the build is attached + before Submit.
 #   • attach_build: the build must already be uploaded + VALID (run `beta` on the testflight workflow and
 #     smoke-test it first). Put its build number (the `beta` run number, in that run's summary) in the
 #     `build_number` input to attach the exact build you tested; leave blank to take the newest VALID one.
@@ -50,7 +55,7 @@ on:
   workflow_dispatch:
     inputs:
       lane:
-        description: "lane: ensure_version (draft) | upload_screenshots (+dedup) | dedup_screenshots | upload_metadata (text) | attach_build (tested build → draft)"
+        description: "lane: ensure_version | upload_screenshots (+dedup) | dedup_screenshots | upload_metadata | upload_release_notes | attach_build"
         type: choice
         default: upload_screenshots
         options:
@@ -58,6 +63,7 @@ on:
           - upload_screenshots
           - dedup_screenshots
           - upload_metadata
+          - upload_release_notes
           - attach_build
       build_number:
         description: "attach_build only: the build number to attach (from the beta run's summary). Blank = newest VALID build for MARKETING_VERSION."
