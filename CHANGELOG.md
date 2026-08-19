@@ -7,6 +7,8 @@ worth telling users about, in plain language (not a commit log). The format foll
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-08-19
+
 ### Added
 - A "What's New" screen that highlights what changed after you update the app.
 
