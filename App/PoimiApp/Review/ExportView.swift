@@ -16,6 +16,7 @@
 
 import SwiftUI
 import UIKit
+import StoreKit
 import Curation
 
 /// The finish/export action's label. **Photos-qualified** so it reads as the boundary to the Photos
@@ -93,13 +94,20 @@ struct ExportView: View {
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
     @Environment(\.openURL) private var openURL
+    @Environment(\.requestReview) private var requestReview
+    @Environment(AppReviewPrompt.self) private var appReviewPrompt
     @State private var store: ExportStore?
+
+    /// True when a pre-run store was injected (the screenshot harness) — never ask for a review then, so a
+    /// captured completion screen can't get a system review sheet over it (D30, #269).
+    private let isInjectedStore: Bool
 
     /// Production callers pass no `store` (the `.task` creates + runs one). The screenshot harness may
     /// inject a pre-run store so a settled state (completion / error) renders deterministically.
     init(project: CurationProject, store: ExportStore? = nil) {
         self.project = project
         _store = State(initialValue: store)
+        isInjectedStore = store != nil
     }
     /// Grace-gate the working spinner so an instant export never flashes it.
     @State private var spinnerVisible = false
@@ -122,6 +130,21 @@ struct ExportView: View {
                     await resolved.run(project: project, picks: selection.selected)
                 }
             }
+            .onChange(of: exportSucceeded) { _, succeeded in
+                // The moment of accomplishment (#269): a successful export just landed. Ask StoreKit for a
+                // review — gated to once per app version; the system decides whether to actually show it.
+                // `onChange` fires only on the exporting→done transition, so an injected already-done store
+                // never triggers it (belt-and-braces with `isInjectedStore`).
+                guard succeeded, !isInjectedStore, appReviewPrompt.shouldRequest else { return }
+                appReviewPrompt.markRequested()
+                requestReview()
+            }
+    }
+
+    /// Whether the export has reached its success state — drives the #269 review ask on transition.
+    private var exportSucceeded: Bool {
+        if case .done = store?.phase { return true }
+        return false
     }
 
     @ViewBuilder

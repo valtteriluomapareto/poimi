@@ -31,6 +31,7 @@ struct PoimiApp: App {
     @State private var doneStore: DoneStore
     @State private var coordinator: AppCoordinator
     @State private var whatsNewState: WhatsNewState
+    @State private var appReviewPrompt: AppReviewPrompt
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -54,6 +55,10 @@ struct PoimiApp: App {
         // UserDefaults and decides whether to present on this launch. Owned once here (above the layout
         // swap) so it survives the iPad size-class re-init and its silent-mark persist is lifecycle-free.
         _whatsNewState = State(initialValue: WhatsNewState())
+        // App Store review prompt (#269): reads the current app version + the last-prompted version from
+        // UserDefaults and gates the ask to once per version. Owned here (like whatsNewState) so it survives
+        // the iPad size-class re-init; the actual requestReview() fires from ExportView on a successful export.
+        _appReviewPrompt = State(initialValue: AppReviewPrompt())
         Log.app.notice("Poimi launched")
     }
 
@@ -68,6 +73,7 @@ struct PoimiApp: App {
                 .environment(doneStore)
                 .environment(coordinator)
                 .environment(whatsNewState)
+                .environment(appReviewPrompt)
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active {
                         // Durability point (D15/§12): persist the live selection as soon as we
