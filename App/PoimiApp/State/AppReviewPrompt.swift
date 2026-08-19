@@ -11,6 +11,12 @@
 //  The gating decision lives HERE (unit-testable, no StoreKit); the actual `requestReview()` call stays at
 //  the view edge (`ExportView`), so StoreKit never leaks into the pure `Curation` domain (D14/D21).
 //
+//  Behavior by build type (so a wrong test conclusion isn't drawn): Debug/simulator shows the sheet on
+//  EVERY `requestReview()` call — no system throttle — but our per-version gate still limits it to once
+//  per install (reset with `defaults delete com.valtteriluoma.poimi AppReview.lastPromptedVersion`).
+//  TestFlight is a NO-OP: the sheet never appears — don't read that as broken. The App Store applies the
+//  ≤3×/yr, skip-already-reviewed throttle and may decline entirely. Validate in Debug; trust production.
+//
 
 import Foundation
 import Observation
@@ -39,9 +45,11 @@ final class AppReviewPrompt {
     /// The app version we most recently asked for a review on, if any.
     var lastPromptedVersion: String? { userDefaults.string(forKey: Self.lastPromptedVersionKey) }
 
-    /// Whether to ask StoreKit for a review now. Eligible when we haven't asked on this app version yet —
-    /// a fresh install or an update re-arms it; a repeat within the same version does not. Independent of
-    /// Apple's own throttle, which applies on top.
+    /// Whether to ask StoreKit for a review now. Eligible when we haven't asked on THIS exact app-version
+    /// string yet — a fresh install or an update re-arms it; a repeat within the same version does not.
+    /// String equality, NOT semantic ordering (unlike `WhatsNewState`): we track "asked on this version,"
+    /// so a dev/TestFlight downgrade harmlessly re-asks and a corrupt stored value falls to the safe
+    /// re-ask direction. Apple's own throttle applies on top.
     var shouldRequest: Bool { lastPromptedVersion != currentVersion }
 
     /// Record that we asked on this version. Call it whether or not the system actually shows the sheet —

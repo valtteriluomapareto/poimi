@@ -33,6 +33,15 @@ func finishActionLabel(isReExport: Bool) -> String {
                  comment: "Finish action: first export creates the album in Photos")
 }
 
+/// Whether `ExportView` should ask for an App Store review now: only for a real (non-screenshot-harness)
+/// export, and only when the once-per-app-version gate allows. Extracted like `finishActionLabel` so the
+/// decision is unit-tested, not eyeballed (#269). Whether the sheet actually shows — and the ≤3×/yr,
+/// skip-already-reviewed throttle — is Apple's call; this only decides whether we *ask*.
+@MainActor
+func shouldRequestReview(isInjectedStore: Bool, prompt: AppReviewPrompt) -> Bool {
+    !isInjectedStore && prompt.shouldRequest
+}
+
 /// Drives the export: one `run` per attempt, publishing the phase the screen renders.
 @MainActor
 @Observable
@@ -130,21 +139,6 @@ struct ExportView: View {
                     await resolved.run(project: project, picks: selection.selected)
                 }
             }
-            .onChange(of: exportSucceeded) { _, succeeded in
-                // The moment of accomplishment (#269): a successful export just landed. Ask StoreKit for a
-                // review — gated to once per app version; the system decides whether to actually show it.
-                // `onChange` fires only on the exporting→done transition, so an injected already-done store
-                // never triggers it (belt-and-braces with `isInjectedStore`).
-                guard succeeded, !isInjectedStore, appReviewPrompt.shouldRequest else { return }
-                appReviewPrompt.markRequested()
-                requestReview()
-            }
-    }
-
-    /// Whether the export has reached its success state — drives the #269 review ask on transition.
-    private var exportSucceeded: Bool {
-        if case .done = store?.phase { return true }
-        return false
     }
 
     @ViewBuilder
@@ -231,6 +225,19 @@ struct ExportView: View {
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
+        .task {
+            // The moment of accomplishment (#269): the album is finished. Ask StoreKit for a review after a
+            // short beat so the user registers the completion first (HIG: never ask mid-transition). As a
+            // `.task` it auto-cancels if they tap "Back to albums" during the delay, so the sheet can't land
+            // on the albums screen (and we don't mark it asked, so a later export this version still can).
+            // Gated to once per app version — the system throttle applies on top; the injected screenshot
+            // store is excluded so a captured completion can't get a sheet over it (D30).
+            guard shouldRequestReview(isInjectedStore: isInjectedStore, prompt: appReviewPrompt) else { return }
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            appReviewPrompt.markRequested()
+            requestReview()
+        }
     }
 
     private func completionSubtitle(result: ExportResult, wasReExport: Bool, stats: CompletionStats) -> String {
