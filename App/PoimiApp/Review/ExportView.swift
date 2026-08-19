@@ -16,6 +16,7 @@
 
 import SwiftUI
 import UIKit
+import StoreKit
 import Curation
 
 /// The finish/export action's label. **Photos-qualified** so it reads as the boundary to the Photos
@@ -30,6 +31,15 @@ func finishActionLabel(isReExport: Bool) -> String {
                  comment: "Finish action: re-export to the album already created in Photos")
         : String(localized: "Save to Photos",
                  comment: "Finish action: first export creates the album in Photos")
+}
+
+/// Whether `ExportView` should ask for an App Store review now: only for a real (non-screenshot-harness)
+/// export, and only when the once-per-app-version gate allows. Extracted like `finishActionLabel` so the
+/// decision is unit-tested, not eyeballed (#269). Whether the sheet actually shows — and the ≤3×/yr,
+/// skip-already-reviewed throttle — is Apple's call; this only decides whether we *ask*.
+@MainActor
+func shouldRequestReview(isInjectedStore: Bool, prompt: AppReviewPrompt) -> Bool {
+    !isInjectedStore && prompt.shouldRequest
 }
 
 /// Drives the export: one `run` per attempt, publishing the phase the screen renders.
@@ -93,13 +103,20 @@ struct ExportView: View {
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
     @Environment(\.openURL) private var openURL
+    @Environment(\.requestReview) private var requestReview
+    @Environment(AppReviewPrompt.self) private var appReviewPrompt
     @State private var store: ExportStore?
+
+    /// True when a pre-run store was injected (the screenshot harness) — never ask for a review then, so a
+    /// captured completion screen can't get a system review sheet over it (D30, #269).
+    private let isInjectedStore: Bool
 
     /// Production callers pass no `store` (the `.task` creates + runs one). The screenshot harness may
     /// inject a pre-run store so a settled state (completion / error) renders deterministically.
     init(project: CurationProject, store: ExportStore? = nil) {
         self.project = project
         _store = State(initialValue: store)
+        isInjectedStore = store != nil
     }
     /// Grace-gate the working spinner so an instant export never flashes it.
     @State private var spinnerVisible = false
@@ -208,6 +225,19 @@ struct ExportView: View {
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
+        .task {
+            // The moment of accomplishment (#269): the album is finished. Ask StoreKit for a review after a
+            // short beat so the user registers the completion first (HIG: never ask mid-transition). As a
+            // `.task` it auto-cancels if they tap "Back to albums" during the delay, so the sheet can't land
+            // on the albums screen (and we don't mark it asked, so a later export this version still can).
+            // Gated to once per app version — the system throttle applies on top; the injected screenshot
+            // store is excluded so a captured completion can't get a sheet over it (D30).
+            guard shouldRequestReview(isInjectedStore: isInjectedStore, prompt: appReviewPrompt) else { return }
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            appReviewPrompt.markRequested()
+            requestReview()
+        }
     }
 
     private func completionSubtitle(result: ExportResult, wasReExport: Bool, stats: CompletionStats) -> String {

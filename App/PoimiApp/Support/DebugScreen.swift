@@ -588,6 +588,7 @@ struct DebugExportHostView: View {
                     .environment(selectionStore)
                     .environment(doneStore)
                     .environment(coordinator)
+                    .environment(AppReviewPrompt())   // read by ExportView; the injected store guards the ask off (#269)
             } else {
                 ProgressView()
             }
