@@ -154,15 +154,16 @@ end
 # Fastfile's own folder — fastlane runs with CWD = fastlane/, so a bare relative path is fragile (same
 # reason pbxproj_path/framed_screenshots_path resolve absolutely).
 def metadata_dir
-  @metadata_dir ||= File.join(FastlaneCore::FastlaneFolder.path.to_s, "metadata")
+  @metadata_dir ||= File.expand_path(File.join(FastlaneCore::FastlaneFolder.path.to_s, "metadata"))
 end
 
 # The repo's App Store release-notes folder (fastlane/release_notes/<locale>/release_notes.txt) — a SIBLING
 # of metadata/ on purpose: those are stable store text, these change every release. deliver reads it as a
 # metadata_path (it holds only release_notes.txt per locale, so only the whatsNew field is written). Anchored
-# to the Fastfile's own folder, same fragility as metadata_dir.
+# to the Fastfile's own folder via File.expand_path (a bare relative path resolves against deliver's
+# shifted CWD and silently finds no files — the same fragility pbxproj_path/framed_screenshots_path guard).
 def release_notes_dir
-  @release_notes_dir ||= File.join(FastlaneCore::FastlaneFolder.path.to_s, "release_notes")
+  @release_notes_dir ||= File.expand_path(File.join(FastlaneCore::FastlaneFolder.path.to_s, "release_notes"))
 end
 
 # Fail fast (with a hint) if the App Store Connect API key env is missing — shared by the upload lane
