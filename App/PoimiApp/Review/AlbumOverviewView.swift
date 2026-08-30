@@ -917,15 +917,10 @@ private struct PacingCard: View {
             }
             if !typeSize.isAccessibilitySize {
                 miniBar(projected: projected, target: target)
-                HStack {
-                    Text("Target \(target)", comment: "Pacing mini-bar: target label")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("projected ~\(projected)", comment: "Pacing mini-bar: projected label")
-                        .foregroundStyle(ahead ? Color.brandWarning : .secondary)
-                }
-                .font(.caption)
-                .monospacedDigit()
+                Text("Target \(target)", comment: "Pacing mini-bar: target label")
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
             }
             subline(frontier: frontier, ahead: ahead)
         }
