@@ -51,3 +51,46 @@ struct PrefetchWindow {
         return Array(orderedIDs[lower...upper])
     }
 }
+
+// MARK: - Warming the neighbouring pages (#277)
+
+extension PrefetchWindow {
+    /// The ids worth warming for the pages either side of the current one — the paged grid's
+    /// "don't arrive on a screen of placeholders" prime (#277).
+    ///
+    /// The live window's universe is the CURRENT cluster only (`ReviewGridView.rebuildWindow`), so a
+    /// swipe lands on a page PhotoKit has never been asked about. This names a bounded head for each
+    /// neighbour: the same first screenful the empty-visible path of `slice` primes
+    /// (`columnCount * (rowMargin + 1) * 2` ids), taken from the next page first (the likelier swipe
+    /// direction) and then the previous one.
+    ///
+    /// Deliberately pure `[String]`/`Int` math, so the "which ids" decision is unit-tested rather than
+    /// inferred from the grid, and bounded by construction — one head per neighbour, never a whole
+    /// cluster — which is what keeps the memory cost flat and lets `updateCachingWindow`'s add/remove
+    /// diff release the head you page away from.
+    ///
+    /// - Parameters:
+    ///   - clusters: each page's ids, in page order (the review timeline).
+    ///   - currentIndex: the page the user is on; out of range yields no warm set.
+    ///   - columnCount: the grid's current column count.
+    ///   - rowMargin: the window's row margin — the same value `slice` is called with.
+    /// - Returns: the next page's head followed by the previous page's, deduped, with the current
+    ///   page's own ids removed (those are the live window's job and must not be appended after it).
+    static func adjacentHeadIDs(clusters: [[String]],
+                                currentIndex: Int,
+                                columnCount: Int,
+                                rowMargin: Int) -> [String] {
+        guard clusters.indices.contains(currentIndex) else { return [] }
+        let headCount = max(1, columnCount) * (max(0, rowMargin) + 1) * 2
+        var seen = Set(clusters[currentIndex])
+        var heads: [String] = []
+        for neighbour in [currentIndex + 1, currentIndex - 1] {
+            guard clusters.indices.contains(neighbour) else { continue }
+            for id in clusters[neighbour].prefix(headCount) {
+                guard seen.insert(id).inserted else { continue }
+                heads.append(id)
+            }
+        }
+        return heads
+    }
+}
