@@ -8,6 +8,9 @@ worth telling users about, in plain language (not a commit log). The format foll
 ## [Unreleased]
 
 ### Changed
+- Swiping to the next or previous day in the review grid lands on its photos
+  instead of a screen of loading spinners: while you work on one day, the start
+  of the days either side is loaded ahead of you.
 - The Overview's pacing card no longer repeats its estimate twice: the small
   "projected ~N" label under the bar is gone, since the headline above it already
   says "At this pace: ~N photos".
