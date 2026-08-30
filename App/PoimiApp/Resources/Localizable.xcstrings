@@ -2916,17 +2916,6 @@
         }
       }
     },
-    "projected ~%lld": {
-      "comment": "Pacing mini-bar: projected label",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "arvio ~%lld"
-          }
-        }
-      }
-    },
     "~%lld est.": {
       "comment": "Compact pace projection: estimated final count",
       "localizations": {

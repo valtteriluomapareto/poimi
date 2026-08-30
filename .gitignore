@@ -88,3 +88,7 @@ fastlane/test_output
 # Local fastlane/bundler install artifacts (see docs/deploy/testflight-setup.md — the match seed runs `bundle install`)
 /vendor/
 /.bundle/
+
+# Ephemeral git worktrees created for parallel AI-agent runs. Each is a full checkout of this
+# repo; the work itself lands on a real branch, so these are scratch and must never be committed.
+/.claude/worktrees/
