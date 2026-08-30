@@ -224,6 +224,17 @@ is **"album", never "yearbook"**; there is no print/export-to-print anywhere.
   grid → export). The photo viewer stays a sheet over the detail (no 3rd column). The grid's column
   count derives from the detail width (dense on iPad, reflows on Split View / Stage Manager). Compact
   (iPhone) stays the single-column `NavigationStack`.
+- **Viewer sheet size at regular width (#274).** Detents are a compact-width mechanism, so the viewer's
+  sheet on iPad is sized by **`.presentationSizing`** with a small custom `PresentationSizing` that asks
+  for more room than any iPad container — the presentation clamps it to the largest sheet it allows, so
+  the photo uses the screen instead of sitting in a small centred card with a wide dimmed margin. It stays
+  a **sheet**, not a full-screen cover: the grabber and the pull-down dismiss the pager forwards (an
+  un-zoomed downward drag) are the viewer's dismiss model. Inside it, the **meta + transport rows are
+  capped to a centred ~600pt band** so they don't stretch to opposite edges; the **filmstrip stays full
+  width** (a scrolling strip — more visible thumbnails is a win), and the photo card's paddings are
+  unchanged, so a wider sheet spends its extra width on the photo. No size-class branch anywhere: the
+  detent still governs compact width (iPhone / Slide Over / narrow Stage Manager are unchanged), and a
+  compact↔regular flip therefore can't tear the presentation down.
 
 ## Deferred (tracked)
 

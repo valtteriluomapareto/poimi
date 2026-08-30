@@ -7,6 +7,10 @@ worth telling users about, in plain language (not a commit log). The format foll
 
 ## [Unreleased]
 
+### Changed
+- iPad: the photo viewer now opens much larger, filling the screen instead of a small
+  centred window with a wide empty margin around it.
+
 ## [1.0.2] — 2026-08-19
 
 ### Added
