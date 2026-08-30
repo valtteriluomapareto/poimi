@@ -7,6 +7,11 @@ worth telling users about, in plain language (not a commit log). The format foll
 
 ## [Unreleased]
 
+### Changed
+- The Overview's pacing card no longer repeats its estimate twice: the small
+  "projected ~N" label under the bar is gone, since the headline above it already
+  says "At this pace: ~N photos".
+
 ## [1.0.2] — 2026-08-19
 
 ### Added
