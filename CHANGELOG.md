@@ -7,6 +7,11 @@ worth telling users about, in plain language (not a commit log). The format foll
 
 ## [Unreleased]
 
+### Changed
+- Swiping to the next or previous day in the review grid lands on its photos
+  instead of a screen of loading spinners: while you work on one day, the start
+  of the days either side is loaded ahead of you.
+
 ## [1.0.2] — 2026-08-19
 
 ### Added

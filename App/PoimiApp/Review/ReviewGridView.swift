@@ -15,7 +15,9 @@
 //  Selection lives in the shared `SelectionStore` (in-memory `Set`, D15); the cells + header observe it
 //  themselves, so this parent body does NOT depend on `selected` — a toggle re-renders only the cell.
 //  Thumbnails flow through the injected seam with a scroll-driven prefetch window SCOPED TO THE CURRENT
-//  cluster, so only its cells load at full cell size (the perf bound the accordion also relied on).
+//  cluster, so only its cells load at full cell size (the perf bound the accordion also relied on), plus
+//  a bounded head of each NEIGHBOURING page (#277) — warmed on page settle so a swipe lands on photos
+//  rather than a screen of placeholders. Visibility reporting still comes only from the active page.
 //
 
 import SwiftUI
@@ -83,10 +85,22 @@ struct ReviewGridView: View {
     @State private var windowUpdating = false
     /// The last slice actually pushed to the cache, so an unchanged recompute skips the actor hop.
     @State private var lastAppliedSlice: [String] = []
+    /// Every cluster's ids in page order — the input to BOTH the pace denominator (`orderedIDs`) and
+    /// the adjacent-page warm set (#277). `ReviewCluster.assetIDs` is a computed flatMap, so this is
+    /// materialised ONCE per album (appear / album switch) and merely indexed on a page change.
+    @State private var clusterAssetIDs: [[String]] = []
+    /// The bounded heads of the pages either side of the current one (#277) — recomputed only on the
+    /// inputs that move it (page, album, column count), then reused by every window recompute.
+    @State private var warmIDs: [String] = []
+    /// The in-flight settle-debounced warm pass (#277), cancelled and replaced on the next page change
+    /// so flicking through ten clusters issues one pass, not ten.
+    @State private var warmTask: Task<Void, Never>?
 
     private let spacing: CGFloat = 3   // small inter-cell gap, Apple-Photos-style
     private let minColumns = 2
     private let windowRowMargin = 2
+    /// How long a page must sit still before its neighbours' heads are actually fetched (#277).
+    private let warmSettleDelay = Duration.milliseconds(250)
     /// Oversized vs the on-screen point size on purpose (Retina + density headroom).
     private let thumbnailTarget = CGSize(width: 400, height: 400)
 
@@ -243,9 +257,10 @@ struct ReviewGridView: View {
                 didInitialOpen = true
                 currentPageID = entryPageID()
             }
-            if orderedIDs.isEmpty { orderedIDs = clusters.flatMap(\.assetIDs) }   // pace-projection denominator, once
+            if clusterAssetIDs.isEmpty { rebuildClusterIDs() }   // pace denominator + warm input, once
             refreshCompletion()   // #187 forward-path state, off-body
             rebuildWindow()
+            refreshWarmAdjacent()   // warm the entry page's neighbours too (#277)
             scheduleRecomputeWindow()
         }
         // Recompute the forward-path state off-body (#187): a done toggle (mark/un-mark) is the only
@@ -259,18 +274,23 @@ struct ReviewGridView: View {
             // its first screenful pre-decodes on the flick (no "move to start loading").
             visibleIDs = []
             rebuildWindow()
+            refreshWarmAdjacent()   // the page settled somewhere new → warm ITS neighbours (#277)
             scheduleRecomputeWindow()
         }
         .onChange(of: visibleIDs) { scheduleRecomputeWindow() }
-        .onChange(of: columnCount) { scheduleRecomputeWindow() }
+        .onChange(of: columnCount) {
+            refreshWarmAdjacent()   // a reflow (Split View / Stage Manager) moves the head bound
+            scheduleRecomputeWindow()
+        }
         .onChange(of: maxColumns) { columnCount = min(columnCount, maxColumns) }
         .onChange(of: groupIdentity) {
             visibleIDs = []
             lastAppliedSlice = []      // new album → re-cache from scratch, don't skip on a stale match
-            orderedIDs = clusters.flatMap(\.assetIDs)   // new album → refresh the pace denominator
+            rebuildClusterIDs()        // new album → refresh the pace denominator + the warm input
             currentPageID = entryPageID()
             refreshCompletion()        // new clusters → recompute completion + total off-body (#187)
             rebuildWindow()
+            refreshWarmAdjacent()
             scheduleRecomputeWindow()
         }
         // Restore where you ended when the viewer closes (#126): page to the cluster holding the last-
@@ -367,6 +387,58 @@ struct ReviewGridView: View {
         window = PrefetchWindow(orderedIDs: currentCluster?.assetIDs ?? [])
     }
 
+    /// Materialise each cluster's ids once per album. `ReviewCluster.assetIDs` is a computed flatMap
+    /// over its day-groups, so this is O(all candidates) — paid on appear / album switch only (never
+    /// per page change, and never in a `body`), then indexed cheaply by the warm set.
+    private func rebuildClusterIDs() {
+        clusterAssetIDs = clusters.map(\.assetIDs)
+        orderedIDs = clusterAssetIDs.flatMap { $0 }   // the pace-projection denominator
+    }
+
+    // MARK: Warming the adjacent pages (#277)
+
+    /// Recompute the bounded warm set for the pages either side of the current one and (re)arm the
+    /// settle-debounced prime. Called ONLY on the inputs that move it — first appear, page settle,
+    /// album switch, column reflow — never per scroll tick: `scheduleRecomputeWindow` just reuses
+    /// the stored `warmIDs`.
+    private func refreshWarmAdjacent() {
+        warmIDs = PrefetchWindow.adjacentHeadIDs(clusters: clusterAssetIDs,
+                                                 currentIndex: currentIndex,
+                                                 columnCount: columnCount,
+                                                 rowMargin: windowRowMargin)
+        scheduleWarmAdjacent()
+    }
+
+    /// Actually fetch the neighbours' heads, once the page has sat still for `warmSettleDelay`.
+    ///
+    /// Appending the warm ids to the caching window (below) is not enough on its own:
+    /// `ThumbnailMemoryCache.store` happens only in `thumbnail(for:)`'s callback, so
+    /// `startCachingImages` primes PhotoKit's decode but leaves the synchronous cache empty — the
+    /// arriving cell would still take the async hop and paint one placeholder frame. Issuing the real
+    /// requests here is what makes the next page's first screenful a synchronous `cachedImage` hit.
+    ///
+    /// Bounded (one head per neighbour), deduped against what is already cached, cancelled and replaced
+    /// on the next page change, and it NEVER touches `visibleIDs` — only the active page reports
+    /// visibility (the paged-grid rule); this is a separate head-prime, not visibility-driven.
+    private func scheduleWarmAdjacent() {
+        warmTask?.cancel()
+        let ids = warmIDs
+        guard !ids.isEmpty else { warmTask = nil; return }
+        warmTask = Task { @MainActor in
+            try? await Task.sleep(for: warmSettleDelay)
+            guard !Task.isCancelled else { return }
+            // Already-cached ids (a revisited neighbour) cost nothing — NSCache survives page changes.
+            let cold = ids.filter { thumbnails.cachedThumbnail(for: $0, targetSize: thumbnailTarget) == nil }
+            guard !cold.isEmpty else { return }
+            let started = Perf.begin()
+            for id in cold {
+                guard !Task.isCancelled else { return }
+                _ = await thumbnails.thumbnail(for: id, targetSize: thumbnailTarget)
+            }
+            Perf.endIO("grid.warmAdjacent n=\(cold.count)", since: started)
+        }
+    }
+
     private func scheduleRecomputeWindow() {
         windowGeneration += 1
         guard !windowUpdating else { return }   // one updater in flight; it loops to the latest gen
@@ -375,7 +447,12 @@ struct ReviewGridView: View {
             var applied = -1
             while applied != windowGeneration {
                 applied = windowGeneration
-                let slice = window.slice(visibleIDs: visibleIDs, columnCount: columnCount, rowMargin: windowRowMargin)
+                // The visible screenful first, then the neighbours' heads (#277) — order is priority to
+                // PhotoKit, and the warm ids are disjoint from the current cluster by construction, so
+                // this appends without re-listing anything. The existing add/remove diff then releases
+                // the head you page away from, keeping the window bounded.
+                let slice = window.slice(visibleIDs: visibleIDs, columnCount: columnCount,
+                                         rowMargin: windowRowMargin) + warmIDs
                 guard slice != lastAppliedSlice else { continue }   // unchanged → no redundant actor hop
                 lastAppliedSlice = slice
                 let started = Perf.begin()
