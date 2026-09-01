@@ -185,6 +185,13 @@ struct ReviewGridView: View {
             .scrollTargetLayout()
         }
         .scrollTargetBehavior(.paging)
+        // Clip the pager to its own bounds (#283). On the iPad split view the glass sidebar FLOATS over
+        // a full-width detail, and each page is sized by `containerRelativeFrame` to the safe (visible)
+        // width — so a scrolled-away page comes to rest in the strip beneath the sidebar and the glass
+        // samples it, showing the previous day's photos ghosted through the sidebar. Clipping means there
+        // is nothing there to sample. Horizontal-only concern; the grid still draws edge-to-edge under
+        // the home indicator (#232) because that is the resting content inset, not the clip.
+        .clipped()
         // Nil-filtered on purpose (D36 rider): the scroll can write nil mid-gesture (rubber-band past
         // the ends, a re-layout with no resolvable page) and every consumer of `currentPageID` falls
         // back to `clusters.first` — the top bar would show CLUSTER 1's identity and its tappable done
