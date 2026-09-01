@@ -20,6 +20,10 @@ worth telling users about, in plain language (not a commit log). The format foll
   "projected ~N" label under the bar is gone, since the headline above it already
   says "At this pace: ~N photos".
 
+### Fixed
+- iPad: swiping between days no longer leaves the previous day's photos
+  faintly showing through the sidebar.
+
 ## [1.0.2] — 2026-08-19
 
 ### Added
