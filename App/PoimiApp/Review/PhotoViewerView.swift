@@ -96,6 +96,12 @@ struct PhotoViewerView: View {
         // the detent + drag-indicator below, which are no-ops outside a sheet.
         .background { ambientBackground }
         .presentationDetents([.large])
+        // Detents are a COMPACT-width mechanism — at regular width (iPad) iPadOS sizes the sheet from
+        // `.presentationSizing` instead, and its default leaves a wide dimmed margin around the photo
+        // (#274). Sizing it here governs iPad only; the detent above still governs compact width, so
+        // iPhone / Slide Over / a narrow Stage Manager window are untouched and there is no size-class
+        // branch that a compact↔regular flip could tear the presentation down on.
+        .presentationSizing(ViewerSheetSizing())
         .presentationDragIndicator(.visible)
         // The ambient wash follows the photo (cache-first; auto-cancels on a further page turn).
         .task(id: currentID) {
@@ -290,10 +296,18 @@ struct PhotoViewerView: View {
 
     // MARK: The control band beneath the photo (date · info · counts · the Pick hero · the filmstrip)
 
+    /// The meta + transport rows are capped to this width and centred, so at iPad width the band stays
+    /// composed instead of flinging the date and the tally to opposite edges and the chevrons far away from
+    /// Pick (#274). A plain cap, not a size-class branch: it is inert wherever the sheet is narrower than
+    /// this (iPhone, Slide Over), so it adapts by width like the rest of the app's iPad work (#42).
+    private static let chromeBandMaxWidth: CGFloat = 600
+
     private var chrome: some View {
         VStack(spacing: 16) {
-            metaHeader
-            transportControls
+            metaHeader.frame(maxWidth: Self.chromeBandMaxWidth)
+            transportControls.frame(maxWidth: Self.chromeBandMaxWidth)
+            // The filmstrip stays FULL width — it's a scrolling strip, so more visible thumbnails at iPad
+            // width is a pure win rather than a stretch.
             Filmstrip(pages: filmstripPages, currentID: $currentID)
         }
         .padding(.horizontal, 20)
@@ -453,6 +467,29 @@ struct PhotoViewerView: View {
             }
         }
         .ignoresSafeArea()
+    }
+}
+
+// MARK: - The viewer sheet's size at regular width (#274)
+
+/// How big the viewer's sheet asks to be on **regular width** (iPad), where `.presentationDetents` don't
+/// apply: the default page sheet leaves a wide dimmed margin around the photo — the "wasted area" reported
+/// for iPad — so ask for the biggest sheet the presentation will give.
+///
+/// SwiftUI hands a custom `PresentationSizing` **no container geometry**: `PresentationSizingContext` has no
+/// public members, and `PresentationSizingRoot` only asks the presented *content* how big it wants to be. So
+/// a literal "95% of the container" can't be written here; proposing a size past any iPad container and
+/// letting the presentation clamp it to its own maximum is the deterministic equivalent. The sheet keeps its
+/// system inset, and the viewer's photo stays a rounded, shadowed card inside it, so this reads as a much
+/// bigger card — not an edge-to-edge photo (the report explicitly valued the framing for judging composition).
+private struct ViewerSheetSizing: PresentationSizing {
+    /// Comfortably past the largest iPad container (13" landscape is 1366×1024pt), so the value itself never
+    /// decides the size — the presentation clamps it down to the largest sheet it allows.
+    private static let beyondAnyContainer: CGFloat = 4000
+
+    func proposedSize(for root: PresentationSizingRoot,
+                      context: PresentationSizingContext) -> ProposedViewSize {
+        ProposedViewSize(width: Self.beyondAnyContainer, height: Self.beyondAnyContainer)
     }
 }
 

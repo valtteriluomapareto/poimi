@@ -8,6 +8,8 @@ worth telling users about, in plain language (not a commit log). The format foll
 ## [Unreleased]
 
 ### Changed
+- iPad: the photo viewer now opens much larger, filling the screen instead of a small
+  centred window with a wide empty margin around it.
 - Swiping to the next or previous day in the review grid lands on its photos
   instead of a screen of loading spinners: while you work on one day, the start
   of the days either side is loaded ahead of you.
