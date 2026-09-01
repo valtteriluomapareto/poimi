@@ -20,8 +20,20 @@ struct NewAlbumDraft: Equatable {
     /// `PHAssetCollection` localIdentifiers to drop from the source pool (WhatsApp, Downloads, …).
     var excludedAlbumIDs: Set<String>
     /// Include videos in the candidate set (#125). Opt-in — defaults `false` (images-only), matching
-    /// `CurationProject.includeVideos`.
+    /// `CurationProject.includeVideos`. Written only via `media`, never bound directly (#273).
     var includeVideos: Bool
+    /// Include stills (#273). Defaults `true`. Written only via `media`, never bound directly.
+    var includePhotos: Bool = true
+
+    /// The 3-way media lens (#273) — the ONLY thing UI binds to; it is the single writer of the two
+    /// bools above, so the degenerate "neither" is unrepresentable in the setup form.
+    var media: MediaSelection {
+        get { MediaSelection(includePhotos: includePhotos, includeVideos: includeVideos) }
+        set {
+            includePhotos = newValue.includePhotos
+            includeVideos = newValue.includeVideos
+        }
+    }
     /// The export target: `nil` → create a new album on first export (D19); set → add to this
     /// existing album.
     var targetAlbumID: String?
@@ -42,6 +54,7 @@ struct NewAlbumDraft: Equatable {
             excludeScreenshots: true,
             excludedAlbumIDs: [],
             includeVideos: false,
+            includePhotos: true,
             targetAlbumID: nil)
     }
 

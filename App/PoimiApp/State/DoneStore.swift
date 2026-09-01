@@ -100,7 +100,22 @@ final class DoneStore {
     /// is built by the caller from `CandidateStore.dayByID` (invert id→day to day→ids).
     func reconcile(currentIDsByDay current: [DayKey: Set<String>]) {
         guard let project = activeProject, project.persistentModelID == activeProjectID else { return }
-        let previous = project.reviewedIDsByDay.flatMap(Self.decodeIDsByDay)
+        // The baseline is kept PER MEDIA LENS (#273 §6b). Switching Photos only ↔ Photos & videos ↔
+        // Videos only changes the candidate set for reasons that have nothing to do with the library
+        // changing, so a single shared baseline would either mass-reopen every done day on the way
+        // back from a narrower lens, or (if suppressed) silently swallow genuinely-new photos. Keyed,
+        // an unseen lens simply has no baseline → reopens nothing (the existing first-load path), and
+        // a revisited lens still diffs against its own history, so D32(d)/D34 holds within a lens.
+        let lens = project.media.rawValue
+        var baselines = project.reviewedIDsByDay.flatMap(Self.decodeBaselines) ?? [:]
+        // A pre-#273 blob is the flat day→ids shape. It was recorded under whatever lens the album was
+        // using then — which is the lens it still has — so adopt it as this lens's baseline rather than
+        // discarding it, or every existing album would lose its D34 protection on first launch.
+        if baselines.isEmpty,
+           let legacy = project.reviewedIDsByDay.flatMap(Self.decodeIDsByDay), !legacy.isEmpty {
+            baselines[lens] = legacy
+        }
+        let previous = baselines[lens]
         var dirty = false
         // Reopen only against a REAL baseline. An absent (first load) OR an empty-dict baseline must
         // reopen NOTHING: an empty `previous` makes every current id look "new" and would un-mark the
@@ -119,7 +134,8 @@ final class DoneStore {
         // Record this load as the new baseline — but skip the rewrite when the candidate set is
         // unchanged (a benign re-open of the same album) so we don't re-encode the same blob each time.
         if previous != current {
-            project.reviewedIDsByDay = Self.encodeIDsByDay(current)
+            baselines[lens] = current
+            project.reviewedIDsByDay = Self.encodeBaselines(baselines)
             dirty = true
         }
         // A once-per-load reconcile saves DIRECTLY (not via the debounce) so the reopen is durable at
@@ -184,5 +200,32 @@ final class DoneStore {
             if let day = DayKey(key) { out[day] = Set(ids) }
         }
         return out
+    }
+
+    // MARK: Per-lens baselines (#273 §6b)
+    //
+    // Shape: `[MediaSelection.rawValue: [DayKey string: sorted ids]]`. A nested dictionary rather
+    // than a new stored property, so nothing about the SwiftData schema changes — the same
+    // `reviewedIDsByDay` blob carries it, and a legacy flat blob is detected by decode failure here
+    // (the two shapes are unambiguous: `[String: [String]]` vs `[String: [String: [String]]]`).
+
+    private static func encodeBaselines(_ baselines: [String: [DayKey: Set<String>]]) -> Data? {
+        let nested = baselines.mapValues { map in
+            Dictionary(uniqueKeysWithValues: map.map { ($0.key.description, $0.value.sorted()) })
+        }
+        return try? JSONEncoder().encode(nested)
+    }
+
+    private static func decodeBaselines(_ data: Data) -> [String: [DayKey: Set<String>]]? {
+        guard let nested = try? JSONDecoder().decode([String: [String: [String]]].self, from: data) else {
+            return nil
+        }
+        return nested.mapValues { dict in
+            var out: [DayKey: Set<String>] = [:]
+            for (key, ids) in dict where DayKey(key) != nil {
+                out[DayKey(key)!] = Set(ids)
+            }
+            return out
+        }
     }
 }

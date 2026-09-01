@@ -60,6 +60,7 @@ final class ProjectStore {
         excludeScreenshots: Bool = true,
         excludedAlbumIDs: [String] = [],
         includeVideos: Bool = false,
+        includePhotos: Bool = true,
         targetAlbumID: String? = nil
     ) -> CurationProject {
         let timestamp = now()
@@ -71,6 +72,7 @@ final class ProjectStore {
             excludeScreenshots: excludeScreenshots,
             excludedAlbumIDs: excludedAlbumIDs,
             includeVideos: includeVideos,
+            includePhotos: includePhotos,
             targetAlbumID: targetAlbumID,
             selectionSnapshot: Self.emptySnapshot,
             createdAt: timestamp,
@@ -93,6 +95,7 @@ final class ProjectStore {
             excludeScreenshots: draft.excludeScreenshots,
             excludedAlbumIDs: draft.excludedAlbumIDs.sorted(),
             includeVideos: draft.includeVideos,
+            includePhotos: draft.includePhotos,
             targetAlbumID: draft.targetAlbumID)
     }
 
@@ -117,6 +120,7 @@ final class ProjectStore {
             excludedAlbumIDs: project.excludedAlbumIDs,
             locationEnabled: project.locationEnabled,
             includeVideos: project.includeVideos,
+            includePhotos: project.includePhotos,
             targetAlbumID: nil,
             selectionSnapshot: Self.emptySnapshot,
             createdAt: timestamp,
@@ -133,6 +137,10 @@ final class ProjectStore {
     func reset(_ project: CurationProject) {
         project.selectionSnapshot = Self.emptySnapshot
         project.doneDays = []
+        // Drop the reconcile baselines too. Harmless while nothing is marked done, but once the
+        // baseline is keyed per media lens (#273 §6b) a stale one would diff the next scan against a
+        // pre-reset library — so a reset album genuinely starts from no baseline.
+        project.reviewedIDsByDay = nil
         project.resumeDayKey = nil
         project.lastViewedAssetID = nil
         project.markedDoneAt = nil

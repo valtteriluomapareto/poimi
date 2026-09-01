@@ -87,7 +87,7 @@ final class AppCoordinator {
     /// Identity of a scanned store — a change in any field means a genuinely different candidate set,
     /// so the store is rebuilt (and every `.task(id:)` mirror re-fires). Covers the fetch inputs
     /// (`start`/`end`), the clustering setting (`locationEnabled`), AND the source filters
-    /// (`excludeScreenshots` / `excludedAlbumIDs` / `includeVideos`) — a Settings edit to any filter must
+    /// (`excludeScreenshots` / `excludedAlbumIDs` / `includeVideos` / `includePhotos`) — a Settings edit to any filter must
     /// re-scan too, else the grid keeps showing the old candidate set. `excludedAlbumIDs` is sorted so the
     /// picker's unordered `Set` edits don't churn the key spuriously.
     struct CandidateStoreKey: Equatable {
@@ -98,6 +98,7 @@ final class AppCoordinator {
         let excludeScreenshots: Bool
         let excludedAlbumIDs: [String]
         let includeVideos: Bool
+        let includePhotos: Bool
         init(_ project: CurationProject) {
             id = project.id
             start = project.rangeStart
@@ -106,6 +107,7 @@ final class AppCoordinator {
             excludeScreenshots = project.excludeScreenshots
             excludedAlbumIDs = project.excludedAlbumIDs.sorted()
             includeVideos = project.includeVideos
+            includePhotos = project.includePhotos
         }
     }
 

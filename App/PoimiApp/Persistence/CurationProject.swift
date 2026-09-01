@@ -42,6 +42,14 @@ final class CurationProject {
     /// re-runs the scan (it feeds `Filtering.included(includeVideos:)`), so the candidate set changes.
     var includeVideos: Bool = false
 
+    /// Include still assets in the candidate set (#273). Defaults **`true`** — the default MUST stay
+    /// `true` or every existing album silently becomes videos-only on upgrade. Paired with
+    /// `includeVideos`, this expresses the three reachable lenses (photos only / both / videos only);
+    /// `MediaSelection` is their single writer, so the degenerate "neither" can't be constructed.
+    /// Additive attribute with a default → SwiftData AUTOMATIC lightweight migration, still
+    /// `AppSchemaV2` (same class as `locationEnabled`/`includeVideos`, no version bump).
+    var includePhotos: Bool = true
+
     /// The exported Photos album's id — `nil` until first export creates-or-finds it (D19).
     var targetAlbumID: String?
 
@@ -100,6 +108,7 @@ final class CurationProject {
         excludedAlbumIDs: [String] = [],
         locationEnabled: Bool = true,
         includeVideos: Bool = false,
+        includePhotos: Bool = true,
         targetAlbumID: String? = nil,
         selectionSnapshot: Data,
         doneDays: [String] = [],
@@ -122,6 +131,7 @@ final class CurationProject {
         self.excludedAlbumIDs = excludedAlbumIDs
         self.locationEnabled = locationEnabled
         self.includeVideos = includeVideos
+        self.includePhotos = includePhotos
         self.targetAlbumID = targetAlbumID
         self.selectionSnapshot = selectionSnapshot
         self.doneDays = doneDays
@@ -134,6 +144,67 @@ final class CurationProject {
         self.lastExportedAt = lastExportedAt
         self.createdAt = createdAt
         self.lastOpenedAt = lastOpenedAt
+    }
+}
+
+// MARK: - The media lens (#273)
+
+/// Which media an album REVIEWS — the 3-way lens behind `includePhotos` / `includeVideos`.
+///
+/// It is the **single writer** of those two bools: controls bind to a `MediaSelection`, never to a
+/// bool directly, so the degenerate `(false, false)` — nothing to review — cannot be constructed.
+/// The bools stay as the storage shape (additive, lightweight migration); this is the type the app
+/// reasons in. Lives beside them rather than in `Curation`, which stays string-free and
+/// presentation-free (D14/D21).
+///
+/// **It is a lens, not a mutation:** switching never clears picks and never re-opens done days
+/// (#273 §6/§6b). It scopes what the grid *shows*, not what you have already chosen, and export
+/// still writes every pick regardless of the current lens.
+enum MediaSelection: String, CaseIterable, Identifiable, Sendable {
+    case photosOnly
+    case photosAndVideos
+    case videosOnly
+
+    var id: String { rawValue }
+
+    /// Total decode from storage: the unreachable `(false, false)` maps to `.photosOnly` rather
+    /// than trapping, so a hand-edited or future-written store can never crash the app.
+    init(includePhotos: Bool, includeVideos: Bool) {
+        switch (includePhotos, includeVideos) {
+        case (true, false): self = .photosOnly
+        case (true, true): self = .photosAndVideos
+        case (false, true): self = .videosOnly
+        case (false, false): self = .photosOnly
+        }
+    }
+
+    var includePhotos: Bool { self != .videosOnly }
+    var includeVideos: Bool { self != .photosOnly }
+
+    /// The segmented control's label (design `604-0` variant A — short, so all three fit at 358pt
+    /// in English and Finnish; "Kuvat ja videot" is the widest and still fits).
+    var label: String {
+        switch self {
+        case .photosOnly:
+            String(localized: "Photos", comment: "Media filter segment: review photos only")
+        case .photosAndVideos:
+            String(localized: "Photos & videos", comment: "Media filter segment: review both photos and videos")
+        case .videosOnly:
+            String(localized: "Videos", comment: "Media filter segment: review videos only")
+        }
+    }
+}
+
+extension CurationProject {
+    /// The album's media lens — the ONLY thing settings UI binds to (#273). A computed property over
+    /// the two stored bools, so it is not itself persisted and cannot drift from them. Setting it is
+    /// the single write path, which is what makes `(false, false)` unrepresentable.
+    var media: MediaSelection {
+        get { MediaSelection(includePhotos: includePhotos, includeVideos: includeVideos) }
+        set {
+            includePhotos = newValue.includePhotos
+            includeVideos = newValue.includeVideos
+        }
     }
 }
 

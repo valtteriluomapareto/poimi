@@ -155,7 +155,10 @@ struct ScanningView: View {
             ReviewEmptyView(
                 reason: reason, rangeStart: project.rangeStart, rangeEnd: project.rangeEnd,
                 onChangeRange: { coordinator.openSettings(project.id) },
-                onReviewExclusions: { coordinator.openSettings(project.id) })
+                onReviewExclusions: { coordinator.openSettings(project.id) },
+                // Fix the lens in place — no settings round-trip for a one-switch problem (#273).
+                // The scan re-runs because `CandidateStoreKey` tracks the media filter.
+                onIncludePhotos: { project.media = .photosAndVideos })
 
         case .failed(.loadError):
             ReviewLoadFailedView(onRetry: { Task { await scan() } })

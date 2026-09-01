@@ -164,6 +164,52 @@ struct ProjectStoreTests {
         #expect(copy.locationEnabled == false)
     }
 
+    // MARK: The 3-way media lens (#273)
+
+    @Test("includePhotos defaults TRUE — an upgraded album must not silently become videos-only")
+    func includePhotosDefaultsTrue() throws {
+        let store = try makeStore()
+        let plain = makeProject(store, title: "Plain")
+        // The silent-flip guard: if this default were false, every album existing before #273 would
+        // come back from migration reviewing nothing but videos.
+        #expect(plain.includePhotos == true)
+        #expect(plain.media == .photosOnly)
+
+        // Copy carries the lens forward with the rest of the config.
+        plain.media = .videosOnly
+        let copy = store.duplicate(plain)
+        #expect(copy.includePhotos == false)
+        #expect(copy.includeVideos == true)
+        #expect(copy.media == .videosOnly)
+    }
+
+    @Test("MediaSelection is the single writer: every case round-trips, and neither maps to photosOnly")
+    func mediaSelectionRoundTrip() {
+        for lens in MediaSelection.allCases {
+            let decoded = MediaSelection(includePhotos: lens.includePhotos, includeVideos: lens.includeVideos)
+            #expect(decoded == lens)
+        }
+        // Exhaustive decode of the storage shape, including the combination the UI can't produce.
+        #expect(MediaSelection(includePhotos: true, includeVideos: false) == .photosOnly)
+        #expect(MediaSelection(includePhotos: true, includeVideos: true) == .photosAndVideos)
+        #expect(MediaSelection(includePhotos: false, includeVideos: true) == .videosOnly)
+        // Degenerate (nothing to review) decodes to a defined case rather than trapping.
+        #expect(MediaSelection(includePhotos: false, includeVideos: false) == .photosOnly)
+        // …and no case ever ENCODES that combination.
+        #expect(MediaSelection.allCases.allSatisfy { $0.includePhotos || $0.includeVideos })
+    }
+
+    @Test("reset clears the reconcile baselines, so a reset album starts with no stale history")
+    func resetClearsReviewedBaseline() throws {
+        let store = try makeStore()
+        let project = makeProject(store, title: "A")
+        project.doneDays = ["2025-07-05"]
+        project.reviewedIDsByDay = Data("{}".utf8)
+        store.reset(project)
+        #expect(project.doneDays.isEmpty)
+        #expect(project.reviewedIDsByDay == nil)
+    }
+
     @Test("status derives from persisted state: empty → inProgress → exported")
     func statusDerivation() throws {
         let store = try makeStore()

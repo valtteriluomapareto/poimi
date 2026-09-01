@@ -101,16 +101,28 @@ struct AlbumSettingsView: View {
                 Text("Picks are copied to this Photos album — your library and originals aren’t changed.")
             }
 
+            // Same 3-way lens as setup (#273, design 604-0 variant A) — bound to `project.media`, the
+            // single writer of the two stored bools.
             Section {
-                Toggle("Include videos", isOn: $project.includeVideos)
+                Picker("Media", selection: $project.media) {
+                    ForEach(MediaSelection.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("settings.media")
+            } header: {
+                Text("Media")
             } footer: {
-                Text("Off by default. Turn on to pick from videos too — they’re copied to the album like photos.")
+                Text("Sets what you review — not what’s already in the album. Switching keeps every pick and day mark.")
             }
 
             // Source exclusions grouped together (matching setup) — both levers the "all excluded"
             // empty state points at, so "Review exclusions" lands somewhere it can actually fix.
             Section {
+                // Inert under the videos-only lens (see setup) — a screenshot is a still.
                 Toggle("Exclude screenshots", isOn: $project.excludeScreenshots)
+                    .disabled(project.media == .videosOnly)
                 NavigationLink {
                     AlbumPickerView(selection: excludedSelection, allowsMultiple: true)
                 } label: {
@@ -119,7 +131,11 @@ struct AlbumSettingsView: View {
             } header: {
                 Text("Exclude from source")
             } footer: {
-                Text("Screenshots and photos in these albums won’t appear while you pick.")
+                if project.media == .videosOnly {
+                    Text("Screenshots are stills, so that switch has no effect while you’re reviewing videos only.")
+                } else {
+                    Text("Screenshots and photos in these albums won’t appear while you pick.")
+                }
             }
 
             Section {
