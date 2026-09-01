@@ -199,6 +199,50 @@ struct ProjectStoreTests {
         #expect(MediaSelection.allCases.allSatisfy { $0.includePhotos || $0.includeVideos })
     }
 
+    // MARK: Reset day marks without discarding picks (#285)
+
+    /// The whole point of the action: progress goes, picks stay. If this ever regresses, the only way
+    /// to re-review an album costs the user every pick they made.
+    @Test("resetDoneMarks clears progress and KEEPS the picks (#285)")
+    func resetDoneMarksKeepsPicks() throws {
+        let store = try makeStore()
+        let project = makeProject(store, title: "A")
+        let picks = try SelectionSnapshot(assetIDs: ["p1", "p2", "p3"]).encoded()
+        project.selectionSnapshot = picks
+        project.doneDays = ["2025-07-05", "2025-07-06"]
+        project.resumeDayKey = "2025-07-06"
+        project.markedDoneAt = Date(timeIntervalSince1970: 1_000)
+
+        store.resetDoneMarks(project)
+
+        #expect(project.doneDays.isEmpty)
+        #expect(project.resumeDayKey == nil)
+        #expect(project.markedDoneAt == nil)
+        // Byte-identical: the picks are not merely non-empty, they are untouched.
+        #expect(project.selectionSnapshot == picks)
+        #expect(SelectionSnapshot.decode(project.selectionSnapshot).assetIDs == ["p1", "p2", "p3"])
+    }
+
+    /// An already-exported album must keep its post-export status — clearing day marks is not an
+    /// export event, so the drift baseline (#191) must survive or the row silently reverts to `.empty`.
+    @Test("resetDoneMarks leaves the export drift baseline alone (#285/#191)")
+    func resetDoneMarksKeepsExportBaseline() throws {
+        let store = try makeStore()
+        let project = makeProject(store, title: "A")
+        let exported = try SelectionSnapshot(assetIDs: ["p1"]).encoded()
+        project.exportedSelectionSnapshot = exported
+        project.exportedPhotoCount = 1
+        project.lastExportedAt = Date(timeIntervalSince1970: 2_000)
+        project.doneDays = ["2025-07-05"]
+
+        store.resetDoneMarks(project)
+
+        #expect(project.doneDays.isEmpty)
+        #expect(project.exportedSelectionSnapshot == exported)
+        #expect(project.exportedPhotoCount == 1)
+        #expect(project.lastExportedAt == Date(timeIntervalSince1970: 2_000))
+    }
+
     @Test("reset clears the reconcile baselines, so a reset album starts with no stale history")
     func resetClearsReviewedBaseline() throws {
         let store = try makeStore()

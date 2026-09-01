@@ -349,4 +349,59 @@ struct DoneStoreTests {
         #expect(!done.isDone(group("g", [july])))
     }
 
+    // MARK: Mark all days unreviewed (#285)
+
+    /// The ordering trap: `DoneStore` holds `doneDays` in memory and flushes on a debounce, so clearing
+    /// the model alone is not enough — a later flush writes the old set straight back. This pins the
+    /// deactivate → mutate → activate sequence by letting the debounce actually fire afterwards.
+    @Test("marking all days unreviewed survives a later debounced flush (#285)")
+    func markAllUnreviewedSurvivesFlush() async throws {
+        // A short debounce so the pending flush really lands during the test (no fixed-sleep assert:
+        // we drive the store's own flush, then check the durable state).
+        let (projects, done) = try makeStores(debounce: .milliseconds(1))
+        let album = project(projects, "A")
+        let july = DayKey.day(year: 2025, month: 7, day: 5)
+        done.activate(album)
+        done.toggle(group("g", [july]))
+        done.flushNow()
+        #expect(album.doneDays == ["2025-07-05"])
+
+        // Mark another day so a flush is PENDING at the moment we clear — the exact race.
+        done.toggle(group("h", [.day(year: 2025, month: 7, day: 6)]))
+
+        // The action, in the order AlbumSettingsView uses.
+        done.deactivate()
+        projects.resetDoneMarks(album)
+        done.activate(album)
+
+        // Let any stale debounce fire, then force a durable write of the live state.
+        done.flushNow()
+        #expect(album.doneDays.isEmpty)
+        #expect(!done.isDone(group("g", [july])))
+    }
+
+    /// Reactivation must leave the store genuinely empty, not merely stale-in-memory: a freshly built
+    /// store reading the same container sees no done days either.
+    @Test("cleared day marks are durable, not just in-memory (#285)")
+    func markAllUnreviewedIsDurable() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let projects = ProjectStore(container: container, now: monotonicClock())
+        let done = DoneStore(container: container, debounce: .seconds(60))
+        let album = projects.create(title: "A", rangeStart: TestDates.year2025Start,
+                                    rangeEnd: TestDates.year2025End, targetCount: 50)
+        let july = DayKey.day(year: 2025, month: 7, day: 5)
+        done.activate(album)
+        done.toggle(group("g", [july]))
+        done.flushNow()
+
+        done.deactivate()
+        projects.resetDoneMarks(album)
+        done.activate(album)
+
+        // A second store over the same container — durability, not the first store's memory.
+        let reread = DoneStore(container: container, debounce: .seconds(60))
+        reread.activate(album)
+        #expect(!reread.isDone(group("g", [july])))
+    }
+
 }

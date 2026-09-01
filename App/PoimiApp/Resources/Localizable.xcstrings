@@ -3143,6 +3143,126 @@
           }
         }
       }
+    },
+    "Mark all days unreviewed": {
+      "comment": "Album settings: clear day marks, keeping picks",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitse kaikki päivät käymättömiksi"
+          }
+        }
+      }
+    },
+    "Clears which days you’ve marked done so you can walk the album again. Your picks are kept.": {
+      "comment": "Footer for the mark-all-unreviewed action",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tyhjentää merkinnät valmiista päivistä, jotta voit käydä albumin uudelleen läpi. Poiminnat säilyvät."
+          }
+        }
+      }
+    },
+    "Mark all days unreviewed?": {
+      "comment": "Confirmation title for clearing day marks",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitäänkö kaikki päivät käymättömiksi?"
+          }
+        }
+      }
+    },
+    "Mark all unreviewed": {
+      "comment": "Confirmation button: clear day marks (not destructive — picks are kept)",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitse käymättömiksi"
+          }
+        }
+      }
+    },
+    "Reset all progress": {
+      "comment": "Album settings: destructive reset of picks, day marks and export history",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nollaa kaikki edistyminen"
+          }
+        }
+      }
+    },
+    "Reset all progress?": {
+      "comment": "Confirmation title for the destructive reset",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nollataanko kaikki edistyminen?"
+          }
+        }
+      }
+    },
+    "Discard %lld picks": {
+      "comment": "Destructive confirmation button: names the count it discards",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hylkää %lld poimintaa"
+          }
+        }
+      }
+    },
+    "Reset clears your picks, your day marks and the export history — everything except the album’s settings. Delete removes this album from Poimi; the Photos album it created and your originals are never touched.": {
+      "comment": "Footer for the destructive album actions",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nollaus tyhjentää poiminnat, päivämerkinnät ja vientihistorian — kaiken paitsi albumin asetukset. Poistaminen poistaa albumin Poimista; sen luomaan Kuvat-albumiin ja alkuperäisiin kuviin ei kosketa."
+          }
+        }
+      }
+    },
+    "Every day in “%@” becomes unreviewed. Your %lld picks are kept.": {
+      "comment": "Confirmation message: %1$@ is the album name, %2$lld the pick count that survives",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jokainen päivä albumissa ”%1$@” muuttuu käymättömäksi. %2$lld poimintaasi säilyvät."
+          }
+        }
+      }
+    },
+    "Discards all %lld picks, every day mark and the export history for “%@”. The Photos album it created is not touched.": {
+      "comment": "Confirmation message: %1$lld pick count, %2$@ album name",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hylkää kaikki %1$lld poimintaa, jokaisen päivämerkinnän ja vientihistorian albumista ”%2$@”. Sen luomaan Kuvat-albumiin ei kosketa."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

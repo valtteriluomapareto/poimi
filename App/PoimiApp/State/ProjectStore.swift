@@ -151,6 +151,31 @@ final class ProjectStore {
         refresh()
     }
 
+    /// Clear only the REVIEW PROGRESS — which days are marked done, the resume pointer, and the
+    /// finalized stamp — while keeping every pick (#285). The counterpart to `reset`, which discards
+    /// picks too.
+    ///
+    /// Why it exists: since #273, switching the media lens no longer re-opens days automatically, so
+    /// this is the only way to walk an album again — and doing that through `reset` would cost the
+    /// user every pick they have made.
+    ///
+    /// `selectionSnapshot` and the export drift baseline (`exportedSelectionSnapshot` /
+    /// `exportedPhotoCount` / `lastExportedAt`, #191) are deliberately untouched: the picks survive,
+    /// and an already-exported album keeps its post-export status rather than silently reverting to
+    /// `.empty`. `reviewedIDsByDay` is left alone too — with nothing marked done there is nothing to
+    /// re-open, and the next scan rewrites that lens's baseline anyway.
+    ///
+    /// Callers MUST `DoneStore.deactivate()` first and re-activate after, or a later debounced flush
+    /// writes the old done-set straight back over this (the trap `AlbumSettingsView.resetPicks`
+    /// already documents).
+    func resetDoneMarks(_ project: CurationProject) {
+        project.doneDays = []
+        project.resumeDayKey = nil
+        project.markedDoneAt = nil
+        save("resetDoneMarks")
+        refresh()
+    }
+
     /// Persist edits made to `project` in-place from the settings screen — title, period, target,
     /// exclusions, destination. The fields are mutated on the model directly (it's `@Observable`, so
     /// bound controls update it live); this forces an immediate durable save (rather than leaning on
