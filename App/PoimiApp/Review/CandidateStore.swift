@@ -40,6 +40,33 @@ final class CandidateStore {
         /// Photos existed in range, but every one was filtered out (screenshots / excluded albums).
         /// Fix: relax the exclusions.
         case allExcluded
+        /// The album is on the **videos-only** lens and the range holds no videos at all (#273).
+        /// Distinct from `.allExcluded`, which would otherwise claim "every photo is a screenshot or
+        /// excluded" — untrue and unactionable when the real answer is "there are photos, just no
+        /// videos". Carries how many stills ARE in range so the message can be honest. Fix: switch
+        /// the media lens (not the range).
+        case noVideosInRange(photosInRange: Int)
+    }
+
+    /// Why a settled pass came back empty — pure so the media-aware derivation is unit-tested rather
+    /// than eyeballed through a scan (#273). Order matters: an empty fetch is about the *range*; a
+    /// videos-only lens over a range with no videos at all is about the *lens*; anything else really
+    /// was filtered out.
+    /// `nonisolated` because it is pure — it reads only its arguments, so it needs none of the
+    /// class's main-actor isolation and can be exercised directly from a test.
+    nonisolated static func emptyReason(fetched: [AssetRef], includePhotos: Bool,
+                                        includeVideos: Bool) -> EmptyReason {
+        if fetched.isEmpty { return .noPhotosInRange }
+        if !includePhotos, includeVideos, !fetched.contains(where: \.isVideo) {
+            return .noVideosInRange(photosInRange: fetched.count { !$0.isVideo })
+        }
+        return .allExcluded
+    }
+
+    private static func emptyReason(fetched: [AssetRef], project: CurationProject) -> EmptyReason {
+        emptyReason(fetched: fetched,
+                    includePhotos: project.includePhotos,
+                    includeVideos: project.includeVideos)
     }
 
     /// Why a pass failed — a transient load error (retry) vs photo access lost mid-session (recover).
@@ -188,6 +215,7 @@ final class CandidateStore {
             let candidates = Filtering.included(
                 fetched,
                 excludeScreenshots: project.excludeScreenshots,
+                includePhotos: project.includePhotos,
                 includeVideos: project.includeVideos,
                 excludedAssetIDs: excludedAssetIDs)
             let fetchMillis = Date().timeIntervalSince(fetchStart) * 1000
@@ -209,7 +237,7 @@ final class CandidateStore {
             if clusters.isEmpty {
                 // Distinguish WHY it's empty so the state is actionable (#40): the range yielded
                 // nothing (widen it) vs photos existed but were all filtered out (relax exclusions).
-                phase = .empty(fetched.isEmpty ? .noPhotosInRange : .allExcluded)
+                phase = .empty(Self.emptyReason(fetched: fetched, project: project))
             } else {
                 phase = .ready(clusters)
                 scanReport = ScanReport(

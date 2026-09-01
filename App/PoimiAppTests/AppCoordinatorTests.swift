@@ -235,13 +235,15 @@ struct AppCoordinatorTests {
     @Test("CandidateStoreKey tracks every source filter — a Settings filter edit forces a re-scan (#125)")
     func candidateStoreKeyTracksFilters() {
         let fixedID = UUID()   // same album id, so only the filter under test differs
-        func project(includeVideos: Bool = false, excludeScreenshots: Bool = true,
+        func project(includeVideos: Bool = false, includePhotos: Bool = true,
+                     excludeScreenshots: Bool = true,
                      excludedAlbumIDs: [String] = []) -> CurationProject {
             CurationProject(
                 id: fixedID, title: "A",
                 rangeStart: Date(timeIntervalSince1970: 0), rangeEnd: Date(timeIntervalSince1970: 86_400),
                 targetCount: 100, excludeScreenshots: excludeScreenshots,
                 excludedAlbumIDs: excludedAlbumIDs, includeVideos: includeVideos,
+                includePhotos: includePhotos,
                 selectionSnapshot: Data(),
                 createdAt: Date(timeIntervalSince1970: 0), lastOpenedAt: Date(timeIntervalSince1970: 0))
         }
@@ -251,6 +253,7 @@ struct AppCoordinatorTests {
         #expect(base != Key(project(includeVideos: true)))               // videos toggled → re-scan (#125)
         #expect(base != Key(project(excludeScreenshots: false)))         // screenshots toggled → re-scan
         #expect(base != Key(project(excludedAlbumIDs: ["x"])))           // an excluded album added → re-scan
+        #expect(base != Key(project(includePhotos: false)))              // videos-only lens → re-scan (#273)
         // Excluded-album ORDER must not matter — the picker's Set is unordered, so the key sorts it; an
         // order-only difference must NOT spuriously invalidate the scan.
         #expect(Key(project(excludedAlbumIDs: ["a", "b"])) == Key(project(excludedAlbumIDs: ["b", "a"])))

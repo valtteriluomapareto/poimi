@@ -59,14 +59,28 @@ struct NewAlbumSetupView: View {
                     Text("A goal, not a limit — you can pick past it.")
                 }
 
+                // The 3-way media lens (#273, design 604-0 variant A). Segmented so all three options
+                // are visible at once — it reads as a lens you switch, not a setting you edit. Bound to
+                // `draft.media`, never to the two bools, so "neither" can't be selected.
                 Section {
-                    Toggle("Include videos", isOn: $draft.includeVideos)
+                    Picker("Media", selection: $draft.media) {
+                        ForEach(MediaSelection.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("setup.media")
+                } header: {
+                    Text("Media")
                 } footer: {
-                    Text("Off by default. Turn on to pick from videos too — they’re copied to the album like photos.")
+                    Text("Sets what you review — not what’s already in the album. Switching keeps every pick and day mark.")
                 }
 
                 Section {
+                    // Inert under the videos-only lens: a screenshot is a still, so it is already
+                    // dropped by the media filter whatever this says (#273, design 61N-0).
                     Toggle("Exclude screenshots", isOn: $draft.excludeScreenshots)
+                        .disabled(draft.media == .videosOnly)
                     NavigationLink {
                         AlbumPickerView(selection: $draft.excludedAlbumIDs, allowsMultiple: true)
                     } label: {
@@ -75,7 +89,11 @@ struct NewAlbumSetupView: View {
                 } header: {
                     Text("Exclude from source")
                 } footer: {
-                    Text("Screenshots and photos in these albums won’t appear while you pick.")
+                    if draft.media == .videosOnly {
+                        Text("Screenshots are stills, so that switch has no effect while you’re reviewing videos only.")
+                    } else {
+                        Text("Screenshots and photos in these albums won’t appear while you pick.")
+                    }
                 }
 
                 Section {

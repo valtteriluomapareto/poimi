@@ -8,6 +8,9 @@ worth telling users about, in plain language (not a commit log). The format foll
 ## [Unreleased]
 
 ### Changed
+- You can now choose what an album reviews: photos only, photos and videos, or
+  videos only. Switching is just a lens — it never changes the picks or the days
+  you've marked done.
 - iPad: the photo viewer now opens much larger, filling the screen instead of a small
   centred window with a wide empty margin around it.
 - Swiping to the next or previous day in the review grid lands on its photos

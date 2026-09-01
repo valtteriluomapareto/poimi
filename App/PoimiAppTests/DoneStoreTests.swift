@@ -282,4 +282,71 @@ struct DoneStoreTests {
         #expect(!done.isDone(run))                                  // one day reopened → whole group not done
         done.deactivate()
     }
+    // MARK: Per-lens reconcile baselines (#273 §6b)
+
+    /// Switching the media lens changes the candidate set for reasons unrelated to the library, so it
+    /// must never re-open a day. The baseline is keyed per lens, so a round-trip through a narrower
+    /// lens restores rather than destroys — the failure this pins is a mass un-marking on the way back.
+    @Test("a media-lens round-trip never re-opens done days (#273)")
+    func lensRoundTripKeepsDoneDays() throws {
+        let (projects, done) = try makeStores()
+        let album = project(projects, "A")
+        let july = DayKey.day(year: 2025, month: 7, day: 5)
+        done.activate(album)
+        done.toggle(group("g", [july]))
+        #expect(done.isDone(group("g", [july])))
+
+        // Reviewed under "photos & videos": the day holds a still and a video.
+        album.media = .photosAndVideos
+        done.reconcile(currentIDsByDay: [july: ["photo-1", "video-1"]])
+        #expect(done.isDone(group("g", [july])))
+
+        // Switch to videos only — the day LOSES the still. Nothing re-opens (a loss never did).
+        album.media = .videosOnly
+        done.reconcile(currentIDsByDay: [july: ["video-1"]])
+        #expect(done.isDone(group("g", [july])))
+
+        // Switch back. Under a single shared baseline the still would now look brand new and the day
+        // would re-open; keyed per lens it diffs against its own history and stays done.
+        album.media = .photosAndVideos
+        done.reconcile(currentIDsByDay: [july: ["photo-1", "video-1"]])
+        #expect(done.isDone(group("g", [july])))
+    }
+
+    /// The D34 guarantee must survive the per-lens change: a genuinely new photo still re-opens its
+    /// day WITHIN a lens. If this regresses, a newly-imported photo hides inside a collapsed done day.
+    @Test("a genuinely new photo still re-opens its day within a lens (D32(d)/D34 intact, #273)")
+    func newPhotoStillReopensWithinLens() throws {
+        let (projects, done) = try makeStores()
+        let album = project(projects, "A")
+        let july = DayKey.day(year: 2025, month: 7, day: 5)
+        done.activate(album)
+        album.media = .photosOnly
+        done.reconcile(currentIDsByDay: [july: ["photo-1"]])   // records the baseline
+        done.toggle(group("g", [july]))
+        #expect(done.isDone(group("g", [july])))
+
+        // Same lens, but the day GAINED an id — that is a real library change, so it re-opens.
+        done.reconcile(currentIDsByDay: [july: ["photo-1", "photo-2"]])
+        #expect(!done.isDone(group("g", [july])))
+    }
+
+    /// A pre-#273 album carries a flat day→ids blob. It must be adopted as the current lens's
+    /// baseline, not discarded — otherwise every existing album silently loses D34 on first launch.
+    @Test("a legacy flat baseline is adopted for the current lens, not dropped (#273)")
+    func legacyBaselineAdopted() throws {
+        let (projects, done) = try makeStores()
+        let album = project(projects, "A")
+        let july = DayKey.day(year: 2025, month: 7, day: 5)
+        // Hand-write the OLD shape: [DayKey string: [ids]].
+        album.reviewedIDsByDay = try JSONEncoder().encode(["2025-07-05": ["photo-1"]])
+        done.activate(album)
+        done.toggle(group("g", [july]))
+
+        // A gain against that legacy baseline must still re-open — proving it was read, not ignored
+        // (if it were dropped, this would look like a first load and reopen nothing).
+        done.reconcile(currentIDsByDay: [july: ["photo-1", "photo-2"]])
+        #expect(!done.isDone(group("g", [july])))
+    }
+
 }

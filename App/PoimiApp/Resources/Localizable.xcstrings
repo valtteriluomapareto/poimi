@@ -3035,6 +3035,114 @@
           }
         }
       }
+    },
+    "Photos": {
+      "comment": "Media filter segment: review photos only",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuvat"
+          }
+        }
+      }
+    },
+    "Photos & videos": {
+      "comment": "Media filter segment: review both photos and videos",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuvat ja videot"
+          }
+        }
+      }
+    },
+    "Videos": {
+      "comment": "Media filter segment: review videos only",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Videot"
+          }
+        }
+      }
+    },
+    "Media": {
+      "comment": "Media filter section header",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media"
+          }
+        }
+      }
+    },
+    "Sets what you review — not what’s already in the album. Switching keeps every pick and day mark.": {
+      "comment": "Media filter footer: the lens scopes review only, never picks or day marks",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Määrittää mitä käyt läpi — ei sitä mitä albumissa jo on. Vaihtaminen säilyttää kaikki poiminnat ja päivämerkinnät."
+          }
+        }
+      }
+    },
+    "Screenshots are stills, so that switch has no effect while you’re reviewing videos only.": {
+      "comment": "Exclusions footer when the videos-only lens makes the screenshots toggle inert",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuvakaappaukset ovat still-kuvia, joten valinnalla ei ole vaikutusta kun käyt läpi vain videoita."
+          }
+        }
+      }
+    },
+    "No videos in this range": {
+      "comment": "Empty scan title: videos-only lens, no videos in range",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tällä aikavälillä ei ole videoita"
+          }
+        }
+      }
+    },
+    "Include photos": {
+      "comment": "Empty state action: switch the media lens back to include photos",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ota kuvat mukaan"
+          }
+        }
+      }
+    },
+    "There are %lld photos between %@ — but no videos. Switch the media filter to see them.": {
+      "comment": "Empty scan message: the photo count and the date range. The Finnish value reorders them, hence positional specifiers in the translation only.",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aikavälillä %2$@ on %1$lld kuvaa — mutta ei videoita. Vaihda mediasuodatinta nähdäksesi ne."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

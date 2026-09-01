@@ -41,6 +41,15 @@ struct ReviewEmptyCopy: Equatable {
                     Every photo between \(range) is a screenshot or in an excluded album. \
                     Try fewer exclusions.
                     """, comment: "Empty scan message: %@ is the date range"))
+        case .noVideosInRange(let photosInRange):
+            // Honest about what IS there: the range isn't the problem, the lens is (#273, design 64V-0).
+            return ReviewEmptyCopy(
+                title: String(localized: "No videos in this range",
+                              comment: "Empty scan title: videos-only lens, no videos in range"),
+                message: String(localized: """
+                    There are \(photosInRange) photos between \(range) — but no videos. \
+                    Switch the media filter to see them.
+                    """, comment: "Empty scan message: %1$lld is a photo count, %2$@ is the date range"))
         }
     }
 }
@@ -53,11 +62,15 @@ struct ReviewEmptyView: View {
     let rangeEnd: Date
     let onChangeRange: () -> Void
     let onReviewExclusions: () -> Void
+    /// Switch the album's media lens back to include photos — the primary fix for
+    /// `.noVideosInRange`, where the range is fine and only the lens is wrong (#273). Optional so
+    /// call sites that can't reach the project (none today) degrade to the range action.
+    var onIncludePhotos: (() -> Void)?
 
     var body: some View {
         let copy = ReviewEmptyCopy.forReason(reason, rangeStart: rangeStart, rangeEnd: rangeEnd)
         ContentUnavailableView {
-            Label(copy.title, systemImage: "photo.on.rectangle.angled")
+            Label(copy.title, systemImage: symbol)
         } description: {
             Text(copy.message)
         } actions: {
@@ -69,8 +82,25 @@ struct ReviewEmptyView: View {
                 Button("Review exclusions", action: onReviewExclusions)
                     .buttonStyle(.borderedProminent)
                 Button("Change range", action: onChangeRange)
+            case .noVideosInRange:
+                // The lens is the fix, not the range — so that's the prominent action (design 64V-0).
+                if let onIncludePhotos {
+                    Button("Include photos", action: onIncludePhotos)
+                        .buttonStyle(.borderedProminent)
+                    Button("Change range", action: onChangeRange)
+                } else {
+                    Button("Change range", action: onChangeRange)
+                        .buttonStyle(.borderedProminent)
+                }
             }
         }
+    }
+
+    /// A struck-through VIDEO glyph for the videos-only miss — the photo glyph would misname what's
+    /// missing (design 64V-0).
+    private var symbol: String {
+        if case .noVideosInRange = reason { return "video.slash" }
+        return "photo.on.rectangle.angled"
     }
 }
 

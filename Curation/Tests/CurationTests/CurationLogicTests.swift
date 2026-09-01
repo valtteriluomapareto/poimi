@@ -51,6 +51,59 @@ struct FilteringTests {
                                       includeVideos: true, excludedAssetIDs: ["v"])
         #expect(kept.map(\.id) == ["p"])
     }
+
+    // MARK: The videos-only lens (#273) — the symmetric photo filter
+
+    @Test("videos only drops stills and keeps videos")
+    func videosOnly() {
+        let photo = AssetRef(id: "p", captureDate: nil)
+        let video = AssetRef(id: "v", captureDate: nil, isVideo: true, duration: 14)
+        let kept = Filtering.included([photo, video], excludeScreenshots: false,
+                                      includePhotos: false, includeVideos: true)
+        #expect(kept.map(\.id) == ["v"])
+    }
+
+    @Test("includePhotos defaults to true, so the photos-only and both lenses are unchanged")
+    func includePhotosDefault() {
+        let photo = AssetRef(id: "p", captureDate: nil)
+        let video = AssetRef(id: "v", captureDate: nil, isVideo: true, duration: 3)
+        // Photos only (the existing default).
+        #expect(Filtering.included([photo, video], excludeScreenshots: false).map(\.id) == ["p"])
+        // Both.
+        #expect(Filtering.included([photo, video], excludeScreenshots: false,
+                                   includePhotos: true, includeVideos: true).map(\.id) == ["p", "v"])
+    }
+
+    @Test("the degenerate neither-lens yields nothing (unrepresentable in the app, exact here)")
+    func neitherMedia() {
+        let photo = AssetRef(id: "p", captureDate: nil)
+        let video = AssetRef(id: "v", captureDate: nil, isVideo: true, duration: 3)
+        let kept = Filtering.included([photo, video], excludeScreenshots: false,
+                                      includePhotos: false, includeVideos: false)
+        #expect(kept.isEmpty)
+    }
+
+    @Test("an excluded-album video is still dropped under videos only (symmetric to #125)")
+    func excludedAlbumVideoUnderVideosOnly() {
+        let keeper = AssetRef(id: "keep", captureDate: nil, isVideo: true, duration: 5)
+        let excluded = AssetRef(id: "drop", captureDate: nil, isVideo: true, duration: 5)
+        let kept = Filtering.included([keeper, excluded], excludeScreenshots: false,
+                                      includePhotos: false, includeVideos: true,
+                                      excludedAssetIDs: ["drop"])
+        #expect(kept.map(\.id) == ["keep"])
+    }
+
+    @Test("a screenshot is dropped under videos only whether or not excludeScreenshots is set")
+    func screenshotUnderVideosOnly() {
+        let shot = AssetRef(id: "s", captureDate: nil, isScreenshot: true)
+        let video = AssetRef(id: "v", captureDate: nil, isVideo: true, duration: 5)
+        // A screenshot is a still, so the !includePhotos clause drops it either way.
+        for excludeScreenshots in [true, false] {
+            let kept = Filtering.included([shot, video], excludeScreenshots: excludeScreenshots,
+                                          includePhotos: false, includeVideos: true)
+            #expect(kept.map(\.id) == ["v"])
+        }
+    }
 }
 
 // MARK: - Target math

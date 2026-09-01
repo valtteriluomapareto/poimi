@@ -32,6 +32,7 @@ struct CandidateStoreTests {
         excludeScreenshots: Bool = true,
         excludedAlbumIDs: [String] = [],
         includeVideos: Bool = false,
+        includePhotos: Bool = true,
         rangeStart: Date = TestDates.year2025Start,
         rangeEnd: Date = TestDates.year2025End
     ) -> CurationProject {
@@ -41,7 +42,8 @@ struct CandidateStoreTests {
             targetCount: 100,
             excludeScreenshots: excludeScreenshots,
             excludedAlbumIDs: excludedAlbumIDs,
-            includeVideos: includeVideos)
+            includeVideos: includeVideos,
+            includePhotos: includePhotos)
     }
 
     /// Unwrap `.ready`'s underlying day-groups (a trip cluster's `dayGroups` recover them, so this holds
@@ -497,6 +499,20 @@ extension CandidateStoreTests {
         #expect(ids.contains("fake/video/1"))    // the free-standing video survives
         #expect(!ids.contains("fake/video/2"))   // the WhatsApp video is dropped despite videos being on
     }
+    // MARK: The videos-only lens (#273)
+
+    @Test("videos only drops the stills and keeps the videos")
+    func videosOnlyLens() async throws {
+        let seed = FakePhotoLibrary.videoMixedSeed()
+        let store = CandidateStore(library: FakePhotoLibrary(assets: seed), calendar: utcCalendar())
+        await store.load(makeProject(excludeScreenshots: false, includeVideos: true, includePhotos: false))
+        let ids = Set(readyIDs(store, "videos only"))
+        #expect(ids == ["fake/video/1", "fake/video/2"])
+    }
+
+    /// The reason derivation is pure, so the three branches are pinned here rather than through a scan.
+    /// The one that matters: a videos-only lens over a range full of photos must NOT claim everything
+    /// was excluded — that message is both false and unactionable.
 }
 
 /// A library whose range fetch always throws — to exercise the `.failed` phase.
@@ -594,4 +610,48 @@ struct ReviewEmptyCopyTests {
         #expect(!noPhotos.message.contains("2026"))
         #expect(!allExcluded.message.contains("2026"))
     }
+
+    @Test("the videos-only reason names videos, counts the photos that ARE there, and never claims exclusion")
+    func noVideosCopy() {
+        let cal = utcCalendar()
+        let copy = ReviewEmptyCopy.forReason(.noVideosInRange(photosInRange: 1_847),
+                                             rangeStart: TestDates.year2025Start,
+                                             rangeEnd: TestDates.year2025End, calendar: cal)
+        #expect(copy.title == "No videos in this range")
+        // Honest about what IS in range — the whole point of splitting this out of .allExcluded.
+        // Locale-agnostic: a count SHOULD group by locale ("1,847" / "1 847" / "1.847"), unlike a
+        // year, so compare the digits rather than a formatted form.
+        #expect(copy.message.filter(\.isNumber).contains("1847"))
+        // Must NOT reuse the misleading exclusion story.
+        #expect(!copy.message.contains("excluded album"))
+        #expect(!copy.message.contains("screenshot"))
+        // Distinct from both existing reasons.
+        let allExcluded = ReviewEmptyCopy.forReason(.allExcluded, rangeStart: TestDates.year2025Start,
+                                                    rangeEnd: TestDates.year2025End, calendar: cal)
+        #expect(copy.title != allExcluded.title)
+        #expect(!copy.message.contains("2026"))
+    }
+    // MARK: The videos-only empty reason (#273) — pure, so it lives with the copy suite
+
+    @Test("empty reason distinguishes no-range / no-videos / all-excluded (#273)")
+    func emptyReasonDerivation() {
+        let photo = AssetRef(id: "p", captureDate: nil)
+        let video = AssetRef(id: "v", captureDate: nil, isVideo: true, duration: 3)
+        typealias Reason = CandidateStore.EmptyReason
+
+        // Nothing fetched at all → the range is the problem, whatever the lens.
+        #expect(CandidateStore.emptyReason(fetched: [], includePhotos: false, includeVideos: true)
+            == .noPhotosInRange)
+        // Videos-only over a range holding only stills → the LENS is the problem, and the message is
+        // honest about how many photos are actually there.
+        #expect(CandidateStore.emptyReason(fetched: [photo, photo], includePhotos: false, includeVideos: true)
+            == .noVideosInRange(photosInRange: 2))
+        // Videos-only over a range that DOES hold a video → something really did filter them out.
+        #expect(CandidateStore.emptyReason(fetched: [photo, video], includePhotos: false, includeVideos: true)
+            == .allExcluded)
+        // A photos-inclusive lens never reports the videos reason.
+        #expect(CandidateStore.emptyReason(fetched: [photo], includePhotos: true, includeVideos: false)
+            == .allExcluded)
+    }
+
 }
