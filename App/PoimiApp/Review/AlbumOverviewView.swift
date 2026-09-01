@@ -77,7 +77,7 @@ struct AlbumOverviewView: View {
             // Settings + Export at the album level. The Overview is the album's landing screen and shows
             // the running tally, so it's the natural "I'm done → make the album" spot; the gear reaches
             // per-album settings (#41). Export is here ONLY now (design 4AB removed it from the review
-            // grid, which is purely picking); clearing all picks lives in Settings as "Reset picks".
+            // grid, which is purely picking); clearing all picks lives in Settings as "Reset all progress".
             // TWO separate trailing items, not one HStack in a single item: iOS 26 then lays them out in
             // its own Liquid Glass group with standard insets, instead of the glass hugging a hand-rolled
             // HStack tightly against the capsule edges (the icon + "Export" looked cramped otherwise).

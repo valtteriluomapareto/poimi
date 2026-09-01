@@ -154,6 +154,7 @@ struct AlbumSettingsView: View {
             // picks to a mis-tap.
             Section {
                 Button("Mark all days unreviewed") { confirmingUnreview = true }
+                    .disabled(doneStore.doneDays.isEmpty)
             } footer: {
                 Text("Clears which days you’ve marked done so you can walk the album again. Your picks are kept.")
             }
@@ -221,19 +222,24 @@ struct AlbumSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("""
-                Every day in “\(project.title)” becomes unreviewed. \
-                Your \(selection.progress.picked) picks are kept.
+                Clears the ^[\(doneStore.doneDays.count) day](inflect: true) you've marked done in \
+                “\(project.title)”. Your picks are kept.
                 """)
         }
         .confirmationDialog("Reset all progress?", isPresented: $confirmingReset, titleVisibility: .visible) {
             // The confirm button counts what it destroys, so the cost is in the tap target rather than
             // only the prose above it.
-            Button("Discard \(selection.progress.picked) picks", role: .destructive) { resetPicks() }
+            Button(pickedCount == 0
+                   ? String(localized: "Reset everything",
+                            comment: "Destructive confirm when there are no picks to name")
+                   : String(localized: "Discard ^[\(pickedCount) pick](inflect: true)",
+                            comment: "Destructive confirm button: names the pick count it discards"),
+                   role: .destructive) { resetPicks() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("""
-                Discards all \(selection.progress.picked) picks, every day mark and the export history for \
-                “\(project.title)”. The Photos album it created is not touched.
+                Discards ^[\(pickedCount) pick](inflect: true), every day mark and the export history \
+                for “\(project.title)”. The Photos album it created is not touched.
                 """)
         }
         .confirmationDialog("Delete this album?", isPresented: $confirmingDelete, titleVisibility: .visible) {
@@ -274,15 +280,22 @@ struct AlbumSettingsView: View {
         doneStore.activate(project)
     }
 
-    /// Clear the day marks only, keeping every pick (#285). Same ordering trap as `resetPicks`:
-    /// `DoneStore` holds `doneDays` in memory and flushes on a debounce, so it must be deactivated
-    /// BEFORE the model is zeroed and re-activated after — otherwise a later flush writes the old
-    /// done-set straight back over the reset. `SelectionStore` is deliberately left alone: the picks
-    /// are the whole point of this action, so nothing should touch them.
+    /// The pick count to quote in the destructive dialogs. Prefers the LIVE count while this album is
+    /// the hydrated one (so it reflects taps not yet flushed), and falls back to the persisted set
+    /// otherwise — a dialog whose whole job is to state the cost honestly shouldn't depend on an
+    /// invariant held by whoever pushed this screen.
+    private var pickedCount: Int {
+        selection.activeProjectID == project.persistentModelID
+            ? selection.progress.picked
+            : project.persistedPickedCount
+    }
+
+    /// Clear the day marks only, keeping every pick (#285). The ordering that makes this safe lives
+    /// inside `DoneStore.markAllUnreviewed` — the store that owns the in-memory done set — rather than
+    /// being a sequence this view has to remember. `SelectionStore` is deliberately untouched: the
+    /// picks are the whole point of the action.
     private func markAllUnreviewed() {
-        doneStore.deactivate()
-        store.resetDoneMarks(project)
-        doneStore.activate(project)
+        doneStore.markAllUnreviewed(project, in: store)
     }
 
     /// Delete the project record and return to the album library. Deactivates the live stores first

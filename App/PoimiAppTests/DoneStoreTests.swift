@@ -351,57 +351,80 @@ struct DoneStoreTests {
 
     // MARK: Mark all days unreviewed (#285)
 
-    /// The ordering trap: `DoneStore` holds `doneDays` in memory and flushes on a debounce, so clearing
-    /// the model alone is not enough — a later flush writes the old set straight back. This pins the
-    /// deactivate → mutate → activate sequence by letting the debounce actually fire afterwards.
-    @Test("marking all days unreviewed survives a later debounced flush (#285)")
-    func markAllUnreviewedSurvivesFlush() async throws {
-        // A short debounce so the pending flush really lands during the test (no fixed-sleep assert:
-        // we drive the store's own flush, then check the durable state).
-        let (projects, done) = try makeStores(debounce: .milliseconds(1))
-        let album = project(projects, "A")
-        let july = DayKey.day(year: 2025, month: 7, day: 5)
-        done.activate(album)
-        done.toggle(group("g", [july]))
-        done.flushNow()
-        #expect(album.doneDays == ["2025-07-05"])
-
-        // Mark another day so a flush is PENDING at the moment we clear — the exact race.
-        done.toggle(group("h", [.day(year: 2025, month: 7, day: 6)]))
-
-        // The action, in the order AlbumSettingsView uses.
-        done.deactivate()
-        projects.resetDoneMarks(album)
-        done.activate(album)
-
-        // Let any stale debounce fire, then force a durable write of the live state.
-        done.flushNow()
-        #expect(album.doneDays.isEmpty)
-        #expect(!done.isDone(group("g", [july])))
-    }
-
-    /// Reactivation must leave the store genuinely empty, not merely stale-in-memory: a freshly built
-    /// store reading the same container sees no done days either.
-    @Test("cleared day marks are durable, not just in-memory (#285)")
-    func markAllUnreviewedIsDurable() throws {
+    /// Drives the SEAM the settings screen actually calls, not a hand-written copy of the right order.
+    /// The regression this pins: if the ordering inside `markAllUnreviewed` is dropped, the store's live
+    /// `doneDays` survives (`activate` early-returns for the same project id) and the next flush writes
+    /// it straight back over the cleared model.
+    @Test("markAllUnreviewed clears the marks through the seam, and no later flush resurrects them (#285)")
+    func markAllUnreviewedClearsAndStaysCleared() async throws {
         let container = try AppModelContainer.make(inMemory: true)
         let projects = ProjectStore(container: container, now: monotonicClock())
-        let done = DoneStore(container: container, debounce: .seconds(60))
+        let done = DoneStore(container: container, debounce: .milliseconds(1))
         let album = projects.create(title: "A", rangeStart: TestDates.year2025Start,
                                     rangeEnd: TestDates.year2025End, targetCount: 50)
         let july = DayKey.day(year: 2025, month: 7, day: 5)
         done.activate(album)
         done.toggle(group("g", [july]))
-        done.flushNow()
+        done.toggle(group("h", [.day(year: 2025, month: 7, day: 6)]))
 
-        done.deactivate()
-        projects.resetDoneMarks(album)
+        done.markAllUnreviewed(album, in: projects)
+
+        // Live state gone…
+        #expect(done.doneDays.isEmpty)
+        #expect(!done.isDone(group("g", [july])))
+        // …and let any debounce that was in flight actually run, rather than assuming it can't.
+        await done.awaitPendingFlush()
+        #expect(done.doneDays.isEmpty)
+
+        // Durability through an INDEPENDENT context — the same-object reads above would pass even if
+        // nothing was ever saved (the pattern AlbumSettingsTests documents).
+        let other = ModelContext(container)
+        let fetched = try #require(try other.fetch(FetchDescriptor<CurationProject>()).first { $0.id == album.id })
+        #expect(fetched.doneDays.isEmpty)
+    }
+
+    /// The picks are the whole point: clearing day marks must not touch them, durably.
+    @Test("markAllUnreviewed keeps the picks, and the album keeps its exported status (#285)")
+    func markAllUnreviewedKeepsPicksAndExportStatus() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let projects = ProjectStore(container: container, now: monotonicClock())
+        let done = DoneStore(container: container, debounce: .seconds(60))
+        let album = projects.create(title: "A", rangeStart: TestDates.year2025Start,
+                                    rangeEnd: TestDates.year2025End, targetCount: 50)
+        album.selectionSnapshot = try SelectionSnapshot(assetIDs: ["p1", "p2"]).encoded()
+        album.exportedSelectionSnapshot = try SelectionSnapshot(assetIDs: ["p1", "p2"]).encoded()
+        album.exportedPhotoCount = 2
+        album.markedDoneAt = Date(timeIntervalSince1970: 2_000)   // what ExportView stamps
         done.activate(album)
+        done.toggle(group("g", [.day(year: 2025, month: 7, day: 5)]))
+        #expect(album.status == .exported)
 
-        // A second store over the same container — durability, not the first store's memory.
-        let reread = DoneStore(container: container, debounce: .seconds(60))
-        reread.activate(album)
-        #expect(!reread.isDone(group("g", [july])))
+        done.markAllUnreviewed(album, in: projects)
+
+        let other = ModelContext(container)
+        let fetched = try #require(try other.fetch(FetchDescriptor<CurationProject>()).first { $0.id == album.id })
+        #expect(fetched.doneDays.isEmpty)
+        #expect(fetched.persistedPickedCount == 2)
+        // The regression the first version of this shipped: clearing day marks demoted an exported
+        // album to .inProgress and stranded #191's drift baseline behind an unreachable gate.
+        #expect(fetched.status == .exported)
+        #expect(fetched.markedDoneAt == Date(timeIntervalSince1970: 2_000))
+    }
+
+    /// Running it for a project that is NOT the hydrated one must not steal the live store from
+    /// whichever album the user actually has open.
+    @Test("markAllUnreviewed on a non-active album leaves the active one hydrated (#285)")
+    func markAllUnreviewedLeavesOtherAlbumActive() throws {
+        let (projects, done) = try makeStores()
+        let open = project(projects, "Open")
+        let other = project(projects, "Other")
+        other.doneDays = ["2025-07-05"]
+        done.activate(open)
+
+        done.markAllUnreviewed(other, in: projects)
+
+        #expect(other.doneDays.isEmpty)
+        #expect(done.activeProjectID == open.persistentModelID)   // still hydrated on the open album
     }
 
 }

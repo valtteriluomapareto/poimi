@@ -900,26 +900,6 @@
         }
       }
     },
-    "Clears all picks and marked-done days. The album’s settings are kept, and your Photos library isn’t touched.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tyhjentää kaikki poiminnat ja valmiiksi merkityt päivät. Albumin asetukset säilytetään, eikä Kuvat-kirjastoosi kosketa."
-          }
-        }
-      }
-    },
-    "Clears all picks and progress. The album’s settings are kept.": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tyhjentää kaikki poiminnat ja edistymisen. Albumin asetukset säilytetään."
-          }
-        }
-      }
-    },
     "Cluster %lld of %lld": {
       "comment": "Page-indicator a11y: current cluster of total",
       "localizations": {
@@ -2220,26 +2200,6 @@
         }
       }
     },
-    "Reset picks": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nollaa poiminnat"
-          }
-        }
-      }
-    },
-    "Reset picks?": {
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nollataanko poiminnat?"
-          }
-        }
-      }
-    },
     "Reset “%@”": {
       "localizations": {
         "fi": {
@@ -3151,7 +3111,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Merkitse kaikki päivät käymättömiksi"
+            "value": "Merkitse kaikki päivät keskeneräisiksi"
           }
         }
       }
@@ -3163,7 +3123,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tyhjentää merkinnät valmiista päivistä, jotta voit käydä albumin uudelleen läpi. Poiminnat säilyvät."
+            "value": "Poistaa valmis-merkinnät kaikilta päiviltä, jotta voit käydä albumin uudelleen läpi. Poimintasi säilyvät."
           }
         }
       }
@@ -3175,7 +3135,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Merkitäänkö kaikki päivät käymättömiksi?"
+            "value": "Merkitäänkö kaikki päivät keskeneräisiksi?"
           }
         }
       }
@@ -3187,7 +3147,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Merkitse käymättömiksi"
+            "value": "Merkitse keskeneräisiksi"
           }
         }
       }
@@ -3199,7 +3159,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nollaa kaikki edistyminen"
+            "value": "Nollaa edistyminen"
           }
         }
       }
@@ -3211,19 +3171,7 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nollataanko kaikki edistyminen?"
-          }
-        }
-      }
-    },
-    "Discard %lld picks": {
-      "comment": "Destructive confirmation button: names the count it discards",
-      "extractionState": "manual",
-      "localizations": {
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hylkää %lld poimintaa"
+            "value": "Nollataanko edistyminen?"
           }
         }
       }
@@ -3235,31 +3183,91 @@
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nollaus tyhjentää poiminnat, päivämerkinnät ja vientihistorian — kaiken paitsi albumin asetukset. Poistaminen poistaa albumin Poimista; sen luomaan Kuvat-albumiin ja alkuperäisiin kuviin ei kosketa."
+            "value": "Nollaus tyhjentää poiminnat, päivämerkinnät ja vientihistorian — kaiken paitsi albumin asetukset. ”Poista albumi” poistaa albumin vain Poimista; sen luomaan Kuvat-albumiin ja alkuperäisiin kuviin ei kosketa."
           }
         }
       }
     },
-    "Every day in “%@” becomes unreviewed. Your %lld picks are kept.": {
-      "comment": "Confirmation message: %1$@ is the album name, %2$lld the pick count that survives",
+    "Clears the ^[%lld day](inflect: true) you've marked done in “%@”. Your picks are kept.": {
+      "comment": "Confirmation message: %1$lld is the number of done days cleared, %2$@ the album name",
       "extractionState": "manual",
       "localizations": {
         "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jokainen päivä albumissa ”%1$@” muuttuu käymättömäksi. %2$lld poimintaasi säilyvät."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Poistaa valmis-merkinnän %1$lld päivältä albumissa ”%2$@”. Poimintasi säilyvät."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Poistaa valmis-merkinnät %1$lld päivältä albumissa ”%2$@”. Poimintasi säilyvät."
+                }
+              }
+            }
           }
         }
       }
     },
-    "Discards all %lld picks, every day mark and the export history for “%@”. The Photos album it created is not touched.": {
+    "Discard ^[%lld pick](inflect: true)": {
+      "comment": "Destructive confirm button: names the pick count it discards",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Hylkää %lld poiminta"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Hylkää %lld poimintaa"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Discards ^[%lld pick](inflect: true), every day mark and the export history for “%@”. The Photos album it created is not touched.": {
       "comment": "Confirmation message: %1$lld pick count, %2$@ album name",
       "extractionState": "manual",
       "localizations": {
         "fi": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Hylkää %1$lld poiminnan, jokaisen päivämerkinnän ja vientihistorian albumista ”%2$@”. Sen luomaan Kuvat-albumiin ei kosketa."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Hylkää %1$lld poimintaa, jokaisen päivämerkinnän ja vientihistorian albumista ”%2$@”. Sen luomaan Kuvat-albumiin ei kosketa."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Reset everything": {
+      "comment": "Destructive confirm when there are no picks to name",
+      "extractionState": "manual",
+      "localizations": {
+        "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hylkää kaikki %1$lld poimintaa, jokaisen päivämerkinnän ja vientihistorian albumista ”%2$@”. Sen luomaan Kuvat-albumiin ei kosketa."
+            "value": "Nollaa kaikki"
           }
         }
       }
