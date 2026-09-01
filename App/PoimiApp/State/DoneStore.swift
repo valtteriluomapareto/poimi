@@ -92,6 +92,24 @@ final class DoneStore {
         scheduleFlush()
     }
 
+    /// Clear every day mark for `project`, keeping its picks (#285) — the whole action in ONE call,
+    /// so no call site can get the ordering wrong.
+    ///
+    /// The ordering matters because this store owns `doneDays` in memory and flushes it on a debounce:
+    /// zeroing the model alone leaves the live set intact, and the next flush writes it straight back.
+    /// `deactivateIfActive` flushes and clears that live set first, so there is nothing stale left to
+    /// resurrect. Making it a method rather than a documented sequence is deliberate — the doc-only
+    /// "callers MUST deactivate" contract on `ProjectStore.delete` is exactly what #59 was.
+    ///
+    /// Re-activates only if this project was the hydrated one, so running it for a non-active album
+    /// can't steal the live store from whichever album the user actually has open.
+    func markAllUnreviewed(_ project: CurationProject, in projects: ProjectStore) {
+        let wasActive = activeProjectID == project.persistentModelID
+        deactivateIfActive(project)
+        projects.resetDoneMarks(project)
+        if wasActive { activate(project) }
+    }
+
     /// Reconcile the active project's done-days against a freshly-loaded candidate set (call once,
     /// after a load settles). A done day that **gained** an id since the last load re-opens, so a
     /// newly-added photo is never silently hidden inside a collapsed peek (D32(d)/D34 — the decided

@@ -7,6 +7,10 @@ worth telling users about, in plain language (not a commit log). The format foll
 
 ## [Unreleased]
 
+### Added
+- Album settings can now clear which days you've marked done without discarding
+  your picks — so you can walk an album again from the start.
+
 ### Changed
 - You can now choose what an album reviews: photos only, photos and videos, or
   videos only. Switching is just a lens — it never changes the picks or the days
@@ -21,6 +25,9 @@ worth telling users about, in plain language (not a commit log). The format foll
   says "At this pace: ~N photos".
 
 ### Fixed
+- Album settings no longer under-states what “Reset” does: it is now “Reset all
+  progress”, and both it and the new day-marks action say exactly what they
+  clear before you confirm.
 - iPad: swiping between days no longer leaves the previous day's photos
   faintly showing through the sidebar.
 

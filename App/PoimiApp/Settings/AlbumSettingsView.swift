@@ -35,6 +35,7 @@ struct AlbumSettingsView: View {
     /// calendar (matches `NewAlbumSetupView`).
     private let calendar: Calendar
 
+    @State private var confirmingUnreview = false
     @State private var confirmingReset = false
     @State private var confirmingDelete = false
     /// Set just before a delete pops the screen, so the teardown save doesn't touch a project that's
@@ -147,13 +148,27 @@ struct AlbumSettingsView: View {
                     """)
             }
 
+            // Review progress on its own, ABOVE the red block (#285, design 65Z-0). Not `.destructive`:
+            // nothing the user chose is lost, and the accent tint is what separates "walk the album
+            // again" from "throw things away" — three identical red rows is how someone loses a year of
+            // picks to a mis-tap.
             Section {
-                Button("Reset picks", role: .destructive) { confirmingReset = true }
+                Button("Mark all days unreviewed") { confirmingUnreview = true }
+                    .disabled(doneStore.doneDays.isEmpty)
+            } footer: {
+                Text("Clears which days you’ve marked done so you can walk the album again. Your picks are kept.")
+            }
+
+            Section {
+                // Relabelled (#285): this always cleared day marks, the resume point and the export
+                // history too — "Reset picks" named a fraction of what it does.
+                Button("Reset all progress", role: .destructive) { confirmingReset = true }
                 Button("Delete album", role: .destructive) { confirmingDelete = true }
             } footer: {
                 Text("""
-                    Reset clears your picks and progress but keeps the album’s settings. Delete removes \
-                    this album from Poimi — the Photos album it created and your originals are never touched.
+                    Reset clears your picks, your day marks and the export history — everything except the \
+                    album’s settings. Delete removes this album from Poimi; the Photos album it created and \
+                    your originals are never touched.
                     """)
             }
 
@@ -199,13 +214,32 @@ struct AlbumSettingsView: View {
         .onChange(of: scenePhase) { _, phase in if phase != .active { persistEdits() } }
         // Keep the tally correct the instant the stepper moves (the target is cached in SelectionStore).
         .onChange(of: project.targetCount) { selection.retarget(project) }
-        .confirmationDialog("Reset picks?", isPresented: $confirmingReset, titleVisibility: .visible) {
-            Button("Reset “\(project.title)”", role: .destructive) { resetPicks() }
+        // Not `.destructive`, and the button says what it does — never a bare "Reset" (#285). It sits
+        // next to the red one, so reading alike is the failure mode.
+        .confirmationDialog("Mark all days unreviewed?", isPresented: $confirmingUnreview,
+                            titleVisibility: .visible) {
+            Button("Mark all unreviewed") { markAllUnreviewed() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("""
-                Clears all picks and marked-done days. The album’s settings are kept, \
-                and your Photos library isn’t touched.
+                Clears the ^[\(doneStore.doneDays.count) day](inflect: true) you've marked done in \
+                “\(project.title)”. Your picks are kept.
+                """)
+        }
+        .confirmationDialog("Reset all progress?", isPresented: $confirmingReset, titleVisibility: .visible) {
+            // The confirm button counts what it destroys, so the cost is in the tap target rather than
+            // only the prose above it.
+            Button(pickedCount == 0
+                   ? String(localized: "Reset everything",
+                            comment: "Destructive confirm when there are no picks to name")
+                   : String(localized: "Discard ^[\(pickedCount) pick](inflect: true)",
+                            comment: "Destructive confirm button: names the pick count it discards"),
+                   role: .destructive) { resetPicks() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("""
+                Discards ^[\(pickedCount) pick](inflect: true), every day mark and the export history \
+                for “\(project.title)”. The Photos album it created is not touched.
                 """)
         }
         .confirmationDialog("Delete this album?", isPresented: $confirmingDelete, titleVisibility: .visible) {
@@ -244,6 +278,24 @@ struct AlbumSettingsView: View {
         store.reset(project)
         selection.activate(project)
         doneStore.activate(project)
+    }
+
+    /// The pick count to quote in the destructive dialogs. Prefers the LIVE count while this album is
+    /// the hydrated one (so it reflects taps not yet flushed), and falls back to the persisted set
+    /// otherwise — a dialog whose whole job is to state the cost honestly shouldn't depend on an
+    /// invariant held by whoever pushed this screen.
+    private var pickedCount: Int {
+        selection.activeProjectID == project.persistentModelID
+            ? selection.progress.picked
+            : project.persistedPickedCount
+    }
+
+    /// Clear the day marks only, keeping every pick (#285). The ordering that makes this safe lives
+    /// inside `DoneStore.markAllUnreviewed` — the store that owns the in-memory done set — rather than
+    /// being a sequence this view has to remember. `SelectionStore` is deliberately untouched: the
+    /// picks are the whole point of the action.
+    private func markAllUnreviewed() {
+        doneStore.markAllUnreviewed(project, in: store)
     }
 
     /// Delete the project record and return to the album library. Deactivates the live stores first
