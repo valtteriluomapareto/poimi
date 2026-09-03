@@ -158,6 +158,14 @@ jobs:
         # an identical semver (no Debug/Release/app/test drift). Bump with Scripts/bump-version.sh.
         run: ./Scripts/check-version.sh
 
+      - name: Check migration-backfill defaults
+        # Upgrade safety (#273 review): the stored-property defaults on CurationProject are what
+        # SwiftData backfills into PRE-EXISTING rows during lightweight migration. Flipping
+        # `includePhotos` to false would make every album created before #273 come back reviewing
+        # videos only. A unit test can't cover this (AppSchema.swift: in-place upgrade is verified on
+        # device), so this is the tripwire for the one-token edit.
+        run: ./Scripts/check-migration-defaults.sh
+
       - name: Check changelog
         # Release record (#182): the current MARKETING_VERSION must have a matching `## [x.y.z]`
         # section in CHANGELOG.md — the section the in-app What's New (#248) and App Store release

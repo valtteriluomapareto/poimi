@@ -108,6 +108,20 @@ rm -f "${d}/App/PoimiApp/BadRemove.swift"
 printf 'import Photos\nfunc bad() { PHAssetChangeRequest.deleteAssets([] as NSArray) }\n' > "${d}/App/PoimiApp/BadDelete.swift"
 assert "deleteAssets fails" "${d}" check-photos-sacrosanct.sh nonzero
 
+echo "== check-migration-defaults.sh =="
+# The stored defaults SwiftData backfills into pre-existing rows (#273 review). Fixture is a minimal
+# CurationProject.swift carrying just the three guarded declarations.
+d="$(skeleton check-migration-defaults.sh)"; mkdir -p "${d}/App/PoimiApp/Persistence"
+model="${d}/App/PoimiApp/Persistence/CurationProject.swift"
+printf 'var includePhotos: Bool = true\nvar includeVideos: Bool = false\nvar locationEnabled: Bool = true\n' > "${model}"
+assert "shipped defaults pass" "${d}" check-migration-defaults.sh zero
+printf 'var includePhotos: Bool = false\nvar includeVideos: Bool = false\nvar locationEnabled: Bool = true\n' > "${model}"
+assert "includePhotos flipped to false fails" "${d}" check-migration-defaults.sh nonzero
+printf 'var includePhotos: Bool = true\nvar includeVideos: Bool = true\nvar locationEnabled: Bool = true\n' > "${model}"
+assert "includeVideos flipped to true fails" "${d}" check-migration-defaults.sh nonzero
+printf 'var includePhotos: Bool { true }\nvar includeVideos: Bool = false\nvar locationEnabled: Bool = true\n' > "${model}"
+assert "stored property turned computed fails" "${d}" check-migration-defaults.sh nonzero
+
 echo "== check-changelog.sh =="
 # The guard reads TWO inputs: MARKETING_VERSION from project.pbxproj + the CHANGELOG.md section.
 # So each fixture is a PAIR — a synthetic pbxproj (one MARKETING_VERSION line, matching the
