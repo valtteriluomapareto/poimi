@@ -47,6 +47,41 @@ final class DoneStore {
         activeProject = project
         activeProjectID = project.persistentModelID
         doneDays = Set(project.doneDays.compactMap(DayKey.init))
+        migrateLegacyBaselineIfNeeded(project)
+    }
+
+    /// Stamp a pre-#273 flat `reviewedIDsByDay` blob with the lens that actually wrote it, once, at
+    /// activation — and persist it immediately.
+    ///
+    /// This MUST happen here rather than in `reconcile` (where #286 first put it). `activate` runs from
+    /// every entry into an album (`AlbumOverviewView`, `ScanningView`) and therefore strictly before the
+    /// media picker in Settings is reachable, so the lens read here is necessarily the one the blob was
+    /// recorded under. `reconcile` gave no such guarantee: the Overview never calls it, so a user could
+    /// open an upgraded album, switch the lens, and have the FIRST reconcile adopt a photos-only
+    /// baseline as the new lens's — after which every done day holding a video looked "new" and
+    /// `Completion.reopening` silently un-marked it. Persisting here also closes the second hole: the
+    /// old adoption lived behind reconcile's `previous != current` write gate, so for an unchanged
+    /// library it was never written down at all and simply happened again later, under whatever lens
+    /// was current by then.
+    private func migrateLegacyBaselineIfNeeded(_ project: CurationProject) {
+        guard let data = project.reviewedIDsByDay,
+              Self.decodeBaselines(data) == nil,                       // already keyed → nothing to do
+              let legacy = Self.decodeIDsByDay(data), !legacy.isEmpty  // corrupt/empty → first-load path
+        else { return }
+        // A pre-#273 blob cannot be a videos-only baseline: `includePhotos` did not exist, so migration
+        // backfills it `true`. A videos-only lens here means the pair is contradictory — refuse rather
+        // than stamp a photo baseline onto a video lens.
+        let lens = project.media
+        guard lens != .videosOnly else {
+            Log.persistence.notice("done baseline: legacy blob on a videos-only lens — not adopted")
+            return
+        }
+        project.reviewedIDsByDay = Self.encodeBaselines([lens.rawValue: legacy])
+        do {
+            try context.save()
+        } catch {
+            Log.persistence.error("legacy baseline migration failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     func deactivate() {
@@ -107,14 +142,9 @@ final class DoneStore {
         // an unseen lens simply has no baseline → reopens nothing (the existing first-load path), and
         // a revisited lens still diffs against its own history, so D32(d)/D34 holds within a lens.
         let lens = project.media.rawValue
+        // Keyed shape only — a legacy flat blob was already stamped at `activate` (see
+        // `migrateLegacyBaselineIfNeeded`), so nothing here has to guess which lens wrote it.
         var baselines = project.reviewedIDsByDay.flatMap(Self.decodeBaselines) ?? [:]
-        // A pre-#273 blob is the flat day→ids shape. It was recorded under whatever lens the album was
-        // using then — which is the lens it still has — so adopt it as this lens's baseline rather than
-        // discarding it, or every existing album would lose its D34 protection on first launch.
-        if baselines.isEmpty,
-           let legacy = project.reviewedIDsByDay.flatMap(Self.decodeIDsByDay), !legacy.isEmpty {
-            baselines[lens] = legacy
-        }
         let previous = baselines[lens]
         var dirty = false
         // Reopen only against a REAL baseline. An absent (first load) OR an empty-dict baseline must
