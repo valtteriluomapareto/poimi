@@ -140,9 +140,12 @@ Full old-build/install/upgrade automation is a separate follow-up. For now:
 3. Install the candidate **over** that app without uninstalling or clearing its data. Prefer the exact
    signed/TestFlight build intended for release. Launch and confirm both albums and their settings,
    picks, done marks, export status, destination, and resume state survived.
-4. Open an upgraded album, change media before scanning, and enter review. Done days must survive.
-   Switch back and verify again. With a separately seeded prior-build install, also test an unchanged
-   first scan before changing media. Force-quit/relaunch to confirm durability.
+4. Open an upgraded album's Overview, change media in Settings **before entering review**, then enter
+   the review grid. Done days must survive. Switch back and enter review again to verify preservation.
+   With a separately seeded prior-build install, first enter the review grid with unchanged media,
+   return to Settings, change media, and enter review again. The Overview scans automatically but does
+   not reconcile done days; entering review is what distinguishes these two sequences.
+   Force-quit/relaunch to confirm durability.
 5. Add a genuinely new photo within a previously reviewed lens and confirm only the affected done day
    reopens. Verify export status using the app, not just database fields: status is derived behavior.
 6. Record device/OS, old/new builds, scenarios, and results with the release check. The fixture suite
@@ -157,7 +160,7 @@ replace them. Rebuilding historical apps belongs at release time, not in every P
 ## Initial validation (2026-09-14)
 
 Fixture generation passed on iOS 26.2 (23C54), using Xcode 26.6 (17F113), SDK 26.5. The current app
-opened it on iOS 26.5. The two external blobs and SQLite store total 3,586,670 bytes; all manifest
+opened it on iOS 26.5. The two external blobs and SQLite store total 3,553,902 bytes; all manifest
 checksums were verified after testing.
 
 - New suites: 10 test declarations (25 individual cases), approximately 4.9 seconds in a focused run.
