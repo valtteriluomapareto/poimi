@@ -1,0 +1,2 @@
+# Historical stores are immutable bytes, including JSON stored as external binary data.
+App/PoimiAppTests/Fixtures/**/Store/** binary

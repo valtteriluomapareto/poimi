@@ -5,20 +5,11 @@
 # Tripwire for the stored-property defaults that SwiftData uses to BACKFILL existing rows during
 # automatic lightweight migration (#273 review follow-up).
 #
-# Why a grep and not a test. `AppSchema.swift` records the standing decision: the app uses one shared
-# model class per entity, integration tests run `inMemory` (fresh stores, opened directly at the current
-# schema — they never migrate anything), and the in-place upgrade of an existing on-disk store is
-# verified by installing OVER a prior build on device. A unit test would need two entities with the SAME
-# name (an old and a new `CurationProject`) in one target, which SwiftData keys by entity name and Swift
-# won't express — an attempt using a differently-named legacy model just writes rows of a different
-# entity, finds nothing on reopen, and proves the opposite of what it claims.
-#
-# What this guards instead. A default flipped in the source is a one-token change with a silent,
-# catastrophic effect: `includePhotos = false` would make EVERY album that existed before #273 come back
-# reviewing videos only — the user opens a year of hand-picked work and finds it empty. The review that
-# prompted this script proved the existing "guard" could not catch it: flipping that token passed all
-# 331 tests, because the test exercised `ProjectStore.create`'s parameter default rather than the stored
-# one. This is a placeholder for a real test, not a substitute — it catches the edit, not the behaviour.
+# Historical fixtures now test includePhotos backfill directly (MigrationFixtureTests, #290).
+# The 1.0.2 fixture already contains includeVideos and locationEnabled, so it cannot exercise their
+# original column backfill. Keep these remaining tripwires until equivalent behavioral coverage exists
+# (for example, fixtures predating those attributes). Pure baseline-decoder tests do not cover this.
+# See docs/deploy/migration-testing.md for fixture generation and the install-over-prior-build check.
 #
 # Pure-bash, no toolchain dependency, mirroring the other Scripts/check-*.sh.
 #
@@ -39,7 +30,6 @@ fail() {
 # Each entry: "<property>=<required default>|<what breaks if it changes>".
 # Only stored properties whose default is what migration backfills into PRE-EXISTING rows belong here.
 EXPECTED=(
-    "includePhotos=true|every pre-#273 album would migrate to VIDEOS-ONLY and look empty (#273)"
     "includeVideos=false|every pre-#125 album would silently start including videos (#125)"
     "locationEnabled=true|every pre-#130 album would lose trip/place grouping (#130)"
 )
@@ -50,7 +40,7 @@ for entry in "${EXPECTED[@]}"; do
     prop="${spec%%=*}"
     want="${spec##*=}"
 
-    # The stored declaration, e.g. `var includePhotos: Bool = true` (ignores computed vars, which have
+    # The stored declaration, e.g. `var includeVideos: Bool = false` (ignores computed vars, which have
     # no `=` initializer, and the `MediaSelection` accessors of the same name).
     line="$(grep -E "^[[:space:]]*var ${prop}: Bool = " "${MODEL}" || true)"
     [ -n "${line}" ] || fail "CurationProject.${prop} is no longer a stored Bool with a default — migration backfill is undefined. ${consequence}"

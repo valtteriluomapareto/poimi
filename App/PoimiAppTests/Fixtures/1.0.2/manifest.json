@@ -1,0 +1,108 @@
+{
+  "albums": [
+    {
+      "baselineIDCount": 20003,
+      "baselineSHA256": "f7da9dee673ce4e303cc87b07bb5dc7d92528b804ad5d27c75ccf9e4b05f1026",
+      "createdAt": 1735689600,
+      "doneDays": [
+        "2025-07-05",
+        "2025-07-06",
+        "undated"
+      ],
+      "excludeScreenshots": true,
+      "excludedAlbumIDs": [
+        "excluded-0"
+      ],
+      "exportedPhotoCount": 2,
+      "exportedSelectionSnapshot": "eyJhc3NldElEcyI6WyJwaG90by0xIiwicGhvdG8tbmV4dCJdLCJ2ZXJzaW9uIjoxfQ==",
+      "externalBaselineFile": "Store/.default_SUPPORT/_EXTERNAL_DATA/E7A4D2AE-0125-4415-BD1C-EB5CF109F7ED",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "includeVideos": false,
+      "lastExportedAt": 1750000060,
+      "lastOpenedAt": 1750000000,
+      "lastViewedAssetID": "photo-next",
+      "locationEnabled": false,
+      "markedDoneAt": 1750000000,
+      "picks": [
+        "photo-1",
+        "photo-next"
+      ],
+      "rangeEnd": 1767225600,
+      "rangeStart": 1735689600,
+      "resumeDayKey": "2025-07-06",
+      "selectionSnapshot": "eyJhc3NldElEcyI6WyJwaG90by0xIiwicGhvdG8tbmV4dCJdLCJ2ZXJzaW9uIjoxfQ==",
+      "targetAlbumID": "exported-album-0",
+      "targetCount": 50,
+      "title": "Historical photos"
+    },
+    {
+      "baselineIDCount": 20004,
+      "baselineSHA256": "ff2988bb7412a42c504ad4f6522ec23b67198b7bc4574cc926a7590062f42449",
+      "createdAt": 1735689600,
+      "doneDays": [
+        "2025-07-05",
+        "2025-07-06",
+        "undated"
+      ],
+      "excludeScreenshots": false,
+      "excludedAlbumIDs": [
+        "excluded-1"
+      ],
+      "exportedPhotoCount": 2,
+      "exportedSelectionSnapshot": "eyJhc3NldElEcyI6WyJwaG90by0xIiwidmlkZW8tMSJdLCJ2ZXJzaW9uIjoxfQ==",
+      "externalBaselineFile": "Store/.default_SUPPORT/_EXTERNAL_DATA/CFD46D99-6F9B-43AA-80DD-76A69FA69BF8",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "includeVideos": true,
+      "lastExportedAt": 1750000060,
+      "lastOpenedAt": 1750000000,
+      "lastViewedAssetID": "photo-next",
+      "locationEnabled": true,
+      "markedDoneAt": 1750000000,
+      "picks": [
+        "photo-1",
+        "video-1"
+      ],
+      "rangeEnd": 1767225600,
+      "rangeStart": 1735689600,
+      "resumeDayKey": "2025-07-06",
+      "selectionSnapshot": "eyJhc3NldElEcyI6WyJwaG90by0xIiwidmlkZW8tMSJdLCJ2ZXJzaW9uIjoxfQ==",
+      "targetAlbumID": "exported-album-1",
+      "targetCount": 51,
+      "title": "Historical photos and videos"
+    }
+  ],
+  "baselineRecipe": {
+    "day": "2025-07-05",
+    "otherDays": [
+      "2025-07-06",
+      "undated"
+    ],
+    "paddingCount": 20000,
+    "paddingSuffixLength": 64
+  },
+  "filesSHA256": {
+    "Store/.default_SUPPORT/_EXTERNAL_DATA/CFD46D99-6F9B-43AA-80DD-76A69FA69BF8": "ff2988bb7412a42c504ad4f6522ec23b67198b7bc4574cc926a7590062f42449",
+    "Store/.default_SUPPORT/_EXTERNAL_DATA/E7A4D2AE-0125-4415-BD1C-EB5CF109F7ED": "f7da9dee673ce4e303cc87b07bb5dc7d92528b804ad5d27c75ccf9e4b05f1026",
+    "Store/default.store": "3f8ff166c87da50159e14f33fd15019235520f101602233314b22d46f41afba0"
+  },
+  "places": [
+    {
+      "cellKey": "60.170,24.940",
+      "fetchedAt": 1750000000,
+      "name": "Fixture Helsinki"
+    }
+  ],
+  "provenance": {
+    "harnessSHA256": "1139d06f7b0731b56e97013f1d78250a4174ef6b084ad39f8c2e53c533ef75ea",
+    "historicalChanges": [
+      "Append Scripts/migration/FixtureSeed.swift to test-only TestSupport.swift"
+    ],
+    "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+    "runtimeBuild": "23C54",
+    "runtimeVersion": "26.2",
+    "sdk": "26.5",
+    "sourceCommit": "411846193f779590f8b30e5979703afafc25c055",
+    "testFlightRun": "https://github.com/valtteriluomapareto/poimi/actions/runs/32235061172",
+    "xcode": "Xcode 26.6\nBuild version 17F113"
+  }
+}
