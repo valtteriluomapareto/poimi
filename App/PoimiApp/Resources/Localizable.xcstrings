@@ -3271,6 +3271,72 @@
           }
         }
       }
+    },
+    "Choose photos, videos, or both": {
+      "comment": "What's New 1.1.0 highlight, authored from CHANGELOG.md.",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valitse kuvat, videot tai molemmat"
+          }
+        }
+      }
+    },
+    "Mark all days unreviewed in album settings to start another pass without losing your picks. Reset all progress now clearly explains what it clears.": {
+      "comment": "What's New 1.1.0 highlight, authored from CHANGELOG.md.",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkitse albumin asetuksista kaikki päivät keskeneräisiksi ja käy albumi uudelleen läpi menettämättä poimintojasi. Edistymisen nollaus kertoo nyt selvästi, mitä se tyhjentää."
+          }
+        }
+      }
+    },
+    "Review again, keep your picks": {
+      "comment": "What's New 1.1.0 highlight, authored from CHANGELOG.md.",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uusi kierros, samat poiminnat"
+          }
+        }
+      }
+    },
+    "Set an album to review photos only, photos and videos, or videos only. Switching keeps your picks and marked-done days.": {
+      "comment": "What's New 1.1.0 highlight, authored from CHANGELOG.md.",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voit tarkastella albumissa vain kuvia, kuvia ja videoita tai vain videoita. Vaihtaminen säilyttää poimintasi ja valmiiksi merkityt päivät."
+          }
+        }
+      }
+    },
+    "Smoother reviewing on iPad": {
+      "comment": "What's New 1.1.0 highlight, authored from CHANGELOG.md.",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sujuvampi tarkastelu iPadilla"
+          }
+        }
+      }
+    },
+    "The photo viewer opens larger on iPad, and day swipes no longer leave photos showing through the sidebar. Nearby days load ahead for faster switching.": {
+      "comment": "What's New 1.1.0 highlight, authored from CHANGELOG.md.",
+      "localizations": {
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuvanäkymä avautuu iPadilla suurempana, eivätkä edellisen päivän kuvat enää näy sivupalkin läpi. Viereisten päivien kuvia ladataan etukäteen, jotta vaihtaminen olisi nopeampaa."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
