@@ -28,6 +28,10 @@ worth telling users about, in plain language (not a commit log). The format foll
 - Album settings no longer under-states what “Reset” does: it is now “Reset all
   progress”, and both it and the new day-marks action say exactly what they
   clear before you confirm.
+- Switching an album's media filter no longer un-marks days you'd already
+  finished — a bug that could clear a whole album's progress after updating.
+- The pacing estimate no longer reports a wildly inflated number (and an amber
+  warning) when an album is set to review only photos or only videos.
 - iPad: swiping between days no longer leaves the previous day's photos
   faintly showing through the sidebar.
 

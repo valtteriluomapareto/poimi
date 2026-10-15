@@ -158,6 +158,12 @@ jobs:
         # an identical semver (no Debug/Release/app/test drift). Bump with Scripts/bump-version.sh.
         run: ./Scripts/check-version.sh
 
+      - name: Check remaining migration-backfill defaults
+        # The 1.0.2 fixture tests includePhotos backfill and upgrade behavior in the integration tier.
+        # includeVideos/locationEnabled already exist in that fixture, so retain their source guards
+        # until equivalent behavioral coverage exists for stores predating those attributes (#290).
+        run: ./Scripts/check-migration-defaults.sh
+
       - name: Check changelog
         # Release record (#182): the current MARKETING_VERSION must have a matching `## [x.y.z]`
         # section in CHANGELOG.md — the section the in-app What's New (#248) and App Store release

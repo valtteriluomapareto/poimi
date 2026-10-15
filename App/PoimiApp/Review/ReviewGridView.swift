@@ -258,6 +258,14 @@ struct ReviewGridView: View {
 
     var body: some View {
         decoratedPager
+        // Speculative warming is scoped to this screen: `warmTask` is otherwise only cancelled by the
+        // NEXT page settle, so leaving review (to the Overview or export) left up to 12 × columns
+        // sequential thumbnail requests — 96 on an 8-column iPad — running against whatever screen the
+        // user moved to, competing with the viewer's full-res load through the same provider actor.
+        .onDisappear {
+            warmTask?.cancel()
+            warmTask = nil
+        }
         .onAppear {
             Perf.event("grid.onAppear (paged)")
             if !didInitialOpen {

@@ -166,12 +166,11 @@ struct ProjectStoreTests {
 
     // MARK: The 3-way media lens (#273)
 
-    @Test("includePhotos defaults TRUE — an upgraded album must not silently become videos-only")
+    @Test("new projects default to photos only, and duplicates preserve the media selection")
     func includePhotosDefaultsTrue() throws {
         let store = try makeStore()
         let plain = makeProject(store, title: "Plain")
-        // The silent-flip guard: if this default were false, every album existing before #273 would
-        // come back from migration reviewing nothing but videos.
+        // Creation defaults only. Historical-store backfill is covered by MigrationFixtureTests.
         #expect(plain.includePhotos == true)
         #expect(plain.media == .photosOnly)
 

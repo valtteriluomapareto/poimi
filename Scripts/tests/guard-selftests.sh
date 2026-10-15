@@ -108,6 +108,19 @@ rm -f "${d}/App/PoimiApp/BadRemove.swift"
 printf 'import Photos\nfunc bad() { PHAssetChangeRequest.deleteAssets([] as NSArray) }\n' > "${d}/App/PoimiApp/BadDelete.swift"
 assert "deleteAssets fails" "${d}" check-photos-sacrosanct.sh nonzero
 
+echo "== check-migration-defaults.sh =="
+# Defaults whose original backfill predates the 1.0.2 migration fixture (#290).
+d="$(skeleton check-migration-defaults.sh)"; mkdir -p "${d}/App/PoimiApp/Persistence"
+model="${d}/App/PoimiApp/Persistence/CurationProject.swift"
+printf 'var includeVideos: Bool = false\nvar locationEnabled: Bool = true\n' > "${model}"
+assert "remaining shipped defaults pass" "${d}" check-migration-defaults.sh zero
+printf 'var includeVideos: Bool = true\nvar locationEnabled: Bool = true\n' > "${model}"
+assert "includeVideos flipped to true fails" "${d}" check-migration-defaults.sh nonzero
+printf 'var includeVideos: Bool = false\nvar locationEnabled: Bool = false\n' > "${model}"
+assert "locationEnabled flipped to false fails" "${d}" check-migration-defaults.sh nonzero
+printf 'var includeVideos: Bool { false }\nvar locationEnabled: Bool = true\n' > "${model}"
+assert "stored property turned computed fails" "${d}" check-migration-defaults.sh nonzero
+
 echo "== check-changelog.sh =="
 # The guard reads TWO inputs: MARKETING_VERSION from project.pbxproj + the CHANGELOG.md section.
 # So each fixture is a PAIR — a synthetic pbxproj (one MARKETING_VERSION line, matching the

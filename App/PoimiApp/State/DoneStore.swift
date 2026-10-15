@@ -47,6 +47,37 @@ final class DoneStore {
         activeProject = project
         activeProjectID = project.persistentModelID
         doneDays = Set(project.doneDays.compactMap(DayKey.init))
+        migrateLegacyBaselineIfNeeded(project)
+    }
+
+    /// Stamp a pre-#273 flat `reviewedIDsByDay` blob with the lens that actually wrote it, once, at
+    /// activation — and persist it immediately.
+    ///
+    /// This MUST happen here rather than in `reconcile` (where #286 first put it). `activate` runs from
+    /// every entry into an album (`AlbumOverviewView`, `ScanningView`) and therefore strictly before the
+    /// media picker in Settings is reachable, so the lens read here is necessarily the one the blob was
+    /// recorded under. `reconcile` gave no such guarantee: the Overview never calls it, so a user could
+    /// open an upgraded album, switch the lens, and have the FIRST reconcile adopt a photos-only
+    /// baseline as the new lens's — after which every done day holding a video looked "new" and
+    /// `Completion.reopening` silently un-marked it. Persisting here also closes the second hole: the
+    /// old adoption lived behind reconcile's `previous != current` write gate, so for an unchanged
+    /// library it was never written down at all and simply happened again later, under whatever lens
+    /// was current by then.
+    private func migrateLegacyBaselineIfNeeded(_ project: CurationProject) {
+        switch ReviewBaseline.interpret(project.reviewedIDsByDay, lens: project.media) {
+        case .legacy(let baselines):
+            project.reviewedIDsByDay = ReviewBaseline.encode(baselines)
+        case .incompatibleLegacyLens:
+            Log.persistence.notice("done baseline: legacy blob on a videos-only lens — not adopted")
+            return
+        case .keyed, .unavailable:
+            return
+        }
+        do {
+            try context.save()
+        } catch {
+            Log.persistence.error("legacy baseline migration failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     func deactivate() {
@@ -125,14 +156,9 @@ final class DoneStore {
         // an unseen lens simply has no baseline → reopens nothing (the existing first-load path), and
         // a revisited lens still diffs against its own history, so D32(d)/D34 holds within a lens.
         let lens = project.media.rawValue
-        var baselines = project.reviewedIDsByDay.flatMap(Self.decodeBaselines) ?? [:]
-        // A pre-#273 blob is the flat day→ids shape. It was recorded under whatever lens the album was
-        // using then — which is the lens it still has — so adopt it as this lens's baseline rather than
-        // discarding it, or every existing album would lose its D34 protection on first launch.
-        if baselines.isEmpty,
-           let legacy = project.reviewedIDsByDay.flatMap(Self.decodeIDsByDay), !legacy.isEmpty {
-            baselines[lens] = legacy
-        }
+        // Keyed shape only — a legacy flat blob was already stamped at `activate` (see
+        // `migrateLegacyBaselineIfNeeded`), so nothing here has to guess which lens wrote it.
+        var baselines = project.reviewedIDsByDay.flatMap(ReviewBaseline.decodeKeyed) ?? [:]
         let previous = baselines[lens]
         var dirty = false
         // Reopen only against a REAL baseline. An absent (first load) OR an empty-dict baseline must
@@ -153,7 +179,7 @@ final class DoneStore {
         // unchanged (a benign re-open of the same album) so we don't re-encode the same blob each time.
         if previous != current {
             baselines[lens] = current
-            project.reviewedIDsByDay = Self.encodeBaselines(baselines)
+            project.reviewedIDsByDay = ReviewBaseline.encode(baselines)
             dirty = true
         }
         // A once-per-load reconcile saves DIRECTLY (not via the debounce) so the reopen is durable at
@@ -204,46 +230,4 @@ final class DoneStore {
     /// `write` and `reconcile` so the two persistence paths can't drift.
     private var encodedDoneDays: [String] { doneDays.map(\.description).sorted() }
 
-    // The reconcile baseline persists as `[DayKey string: sorted ids]` JSON — the same string
-    // round-trip `doneDays` uses (DayKey ⇄ its description), so `.undated` survives too.
-    private static func encodeIDsByDay(_ map: [DayKey: Set<String>]) -> Data? {
-        let dict = Dictionary(uniqueKeysWithValues: map.map { ($0.key.description, $0.value.sorted()) })
-        return try? JSONEncoder().encode(dict)
-    }
-
-    private static func decodeIDsByDay(_ data: Data) -> [DayKey: Set<String>]? {
-        guard let dict = try? JSONDecoder().decode([String: [String]].self, from: data) else { return nil }
-        var out: [DayKey: Set<String>] = [:]
-        for (key, ids) in dict {
-            if let day = DayKey(key) { out[day] = Set(ids) }
-        }
-        return out
-    }
-
-    // MARK: Per-lens baselines (#273 §6b)
-    //
-    // Shape: `[MediaSelection.rawValue: [DayKey string: sorted ids]]`. A nested dictionary rather
-    // than a new stored property, so nothing about the SwiftData schema changes — the same
-    // `reviewedIDsByDay` blob carries it, and a legacy flat blob is detected by decode failure here
-    // (the two shapes are unambiguous: `[String: [String]]` vs `[String: [String: [String]]]`).
-
-    private static func encodeBaselines(_ baselines: [String: [DayKey: Set<String>]]) -> Data? {
-        let nested = baselines.mapValues { map in
-            Dictionary(uniqueKeysWithValues: map.map { ($0.key.description, $0.value.sorted()) })
-        }
-        return try? JSONEncoder().encode(nested)
-    }
-
-    private static func decodeBaselines(_ data: Data) -> [String: [DayKey: Set<String>]]? {
-        guard let nested = try? JSONDecoder().decode([String: [String: [String]]].self, from: data) else {
-            return nil
-        }
-        return nested.mapValues { dict in
-            var out: [DayKey: Set<String>] = [:]
-            for (key, ids) in dict where DayKey(key) != nil {
-                out[DayKey(key)!] = Set(ids)
-            }
-            return out
-        }
-    }
 }

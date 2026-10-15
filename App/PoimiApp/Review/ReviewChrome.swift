@@ -163,9 +163,21 @@ func pacingTint(_ progress: TargetProgress) -> Color {
 func resolvePacing(orderedIDs: [String], selection: SelectionStore) -> Pacing {
     let progress = selection.progress
     let frontier = pickFrontierFraction(orderedIDs: orderedIDs, selected: selection.selected)
-    assert(orderedIDs.isEmpty || selection.selected.isSubset(of: Set(orderedIDs)),
-           "pacing: every pick must be within orderedIDs (same candidate universe)")
-    return Pacing(picked: progress.picked, frontier: frontier, target: progress.target)
+    // SCOPE THE NUMERATOR TO THE LENS (#273/#285-review). `selection.selected` is lens-blind by design
+    // — a media lens scopes what you review, never what you have already picked — but the projection
+    // divides picks by a frontier measured over `orderedIDs`, which IS lens-scoped. Feeding it the
+    // whole pick set mixes universes: 300 photo picks on a videos-only album with one video picked
+    // mid-year projected "~600 photos" in warning amber against a target of 300, and tripped the
+    // same-universe assert below in every Debug build. Counting only picks inside the current universe
+    // makes the projection honest and the invariant true by construction.
+    //
+    // Only `Pacing.picked` is scoped here; the DISPLAYED tally still comes from `progress.picked`, so
+    // the user's total pick count is unaffected (`Pacing.picked` feeds `projectedTotal` alone).
+    let universe = Set(orderedIDs)
+    let pickedInUniverse = universe.isEmpty
+        ? progress.picked
+        : selection.selected.count { universe.contains($0) }
+    return Pacing(picked: pickedInUniverse, frontier: frontier, target: progress.target)
 }
 
 /// The album's compact running progress + projection: the tally "147 / 200" ("+N over" in amber past
