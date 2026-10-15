@@ -64,19 +64,15 @@ final class DoneStore {
     /// library it was never written down at all and simply happened again later, under whatever lens
     /// was current by then.
     private func migrateLegacyBaselineIfNeeded(_ project: CurationProject) {
-        guard let data = project.reviewedIDsByDay,
-              Self.decodeBaselines(data) == nil,                       // already keyed → nothing to do
-              let legacy = Self.decodeIDsByDay(data), !legacy.isEmpty  // corrupt/empty → first-load path
-        else { return }
-        // A pre-#273 blob cannot be a videos-only baseline: `includePhotos` did not exist, so migration
-        // backfills it `true`. A videos-only lens here means the pair is contradictory — refuse rather
-        // than stamp a photo baseline onto a video lens.
-        let lens = project.media
-        guard lens != .videosOnly else {
+        switch ReviewBaseline.interpret(project.reviewedIDsByDay, lens: project.media) {
+        case .legacy(let baselines):
+            project.reviewedIDsByDay = ReviewBaseline.encode(baselines)
+        case .incompatibleLegacyLens:
             Log.persistence.notice("done baseline: legacy blob on a videos-only lens — not adopted")
             return
+        case .keyed, .unavailable:
+            return
         }
-        project.reviewedIDsByDay = Self.encodeBaselines([lens.rawValue: legacy])
         do {
             try context.save()
         } catch {
@@ -144,7 +140,7 @@ final class DoneStore {
         let lens = project.media.rawValue
         // Keyed shape only — a legacy flat blob was already stamped at `activate` (see
         // `migrateLegacyBaselineIfNeeded`), so nothing here has to guess which lens wrote it.
-        var baselines = project.reviewedIDsByDay.flatMap(Self.decodeBaselines) ?? [:]
+        var baselines = project.reviewedIDsByDay.flatMap(ReviewBaseline.decodeKeyed) ?? [:]
         let previous = baselines[lens]
         var dirty = false
         // Reopen only against a REAL baseline. An absent (first load) OR an empty-dict baseline must
@@ -165,7 +161,7 @@ final class DoneStore {
         // unchanged (a benign re-open of the same album) so we don't re-encode the same blob each time.
         if previous != current {
             baselines[lens] = current
-            project.reviewedIDsByDay = Self.encodeBaselines(baselines)
+            project.reviewedIDsByDay = ReviewBaseline.encode(baselines)
             dirty = true
         }
         // A once-per-load reconcile saves DIRECTLY (not via the debounce) so the reopen is durable at
@@ -216,46 +212,4 @@ final class DoneStore {
     /// `write` and `reconcile` so the two persistence paths can't drift.
     private var encodedDoneDays: [String] { doneDays.map(\.description).sorted() }
 
-    // The reconcile baseline persists as `[DayKey string: sorted ids]` JSON — the same string
-    // round-trip `doneDays` uses (DayKey ⇄ its description), so `.undated` survives too.
-    private static func encodeIDsByDay(_ map: [DayKey: Set<String>]) -> Data? {
-        let dict = Dictionary(uniqueKeysWithValues: map.map { ($0.key.description, $0.value.sorted()) })
-        return try? JSONEncoder().encode(dict)
-    }
-
-    private static func decodeIDsByDay(_ data: Data) -> [DayKey: Set<String>]? {
-        guard let dict = try? JSONDecoder().decode([String: [String]].self, from: data) else { return nil }
-        var out: [DayKey: Set<String>] = [:]
-        for (key, ids) in dict {
-            if let day = DayKey(key) { out[day] = Set(ids) }
-        }
-        return out
-    }
-
-    // MARK: Per-lens baselines (#273 §6b)
-    //
-    // Shape: `[MediaSelection.rawValue: [DayKey string: sorted ids]]`. A nested dictionary rather
-    // than a new stored property, so nothing about the SwiftData schema changes — the same
-    // `reviewedIDsByDay` blob carries it, and a legacy flat blob is detected by decode failure here
-    // (the two shapes are unambiguous: `[String: [String]]` vs `[String: [String: [String]]]`).
-
-    private static func encodeBaselines(_ baselines: [String: [DayKey: Set<String>]]) -> Data? {
-        let nested = baselines.mapValues { map in
-            Dictionary(uniqueKeysWithValues: map.map { ($0.key.description, $0.value.sorted()) })
-        }
-        return try? JSONEncoder().encode(nested)
-    }
-
-    private static func decodeBaselines(_ data: Data) -> [String: [DayKey: Set<String>]]? {
-        guard let nested = try? JSONDecoder().decode([String: [String: [String]]].self, from: data) else {
-            return nil
-        }
-        return nested.mapValues { dict in
-            var out: [DayKey: Set<String>] = [:]
-            for (key, ids) in dict where DayKey(key) != nil {
-                out[DayKey(key)!] = Set(ids)
-            }
-            return out
-        }
-    }
 }

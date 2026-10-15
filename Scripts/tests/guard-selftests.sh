@@ -109,17 +109,16 @@ printf 'import Photos\nfunc bad() { PHAssetChangeRequest.deleteAssets([] as NSAr
 assert "deleteAssets fails" "${d}" check-photos-sacrosanct.sh nonzero
 
 echo "== check-migration-defaults.sh =="
-# The stored defaults SwiftData backfills into pre-existing rows (#273 review). Fixture is a minimal
-# CurationProject.swift carrying just the three guarded declarations.
+# Defaults whose original backfill predates the 1.0.2 migration fixture (#290).
 d="$(skeleton check-migration-defaults.sh)"; mkdir -p "${d}/App/PoimiApp/Persistence"
 model="${d}/App/PoimiApp/Persistence/CurationProject.swift"
-printf 'var includePhotos: Bool = true\nvar includeVideos: Bool = false\nvar locationEnabled: Bool = true\n' > "${model}"
-assert "shipped defaults pass" "${d}" check-migration-defaults.sh zero
-printf 'var includePhotos: Bool = false\nvar includeVideos: Bool = false\nvar locationEnabled: Bool = true\n' > "${model}"
-assert "includePhotos flipped to false fails" "${d}" check-migration-defaults.sh nonzero
-printf 'var includePhotos: Bool = true\nvar includeVideos: Bool = true\nvar locationEnabled: Bool = true\n' > "${model}"
+printf 'var includeVideos: Bool = false\nvar locationEnabled: Bool = true\n' > "${model}"
+assert "remaining shipped defaults pass" "${d}" check-migration-defaults.sh zero
+printf 'var includeVideos: Bool = true\nvar locationEnabled: Bool = true\n' > "${model}"
 assert "includeVideos flipped to true fails" "${d}" check-migration-defaults.sh nonzero
-printf 'var includePhotos: Bool { true }\nvar includeVideos: Bool = false\nvar locationEnabled: Bool = true\n' > "${model}"
+printf 'var includeVideos: Bool = false\nvar locationEnabled: Bool = false\n' > "${model}"
+assert "locationEnabled flipped to false fails" "${d}" check-migration-defaults.sh nonzero
+printf 'var includeVideos: Bool { false }\nvar locationEnabled: Bool = true\n' > "${model}"
 assert "stored property turned computed fails" "${d}" check-migration-defaults.sh nonzero
 
 echo "== check-changelog.sh =="

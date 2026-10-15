@@ -15,9 +15,10 @@
 //  not staged. The FIRST non-additive change (a rename / type change / data transform) is what will
 //  finally require a real versioned plan — and only then must the models be frozen per version.
 //
-//  NB: integration tests are `inMemory` (fresh stores → open directly at the current schema). The
-//  in-place upgrade of an existing on-disk store is verified by installing OVER a prior build on device,
-//  not by a unit test.
+//  MigrationFixtureTests opens copies of real historical stores from PoimiAppTests/Fixtures using
+//  this schema, then checks preservation, activation, media switches, reconciliation and disk durability.
+//  Other store tests use fresh in-memory containers. Fixture provenance/generation and the remaining
+//  install-over-prior-build release check are documented in docs/deploy/migration-testing.md (#290).
 //
 
 import Foundation
@@ -34,8 +35,8 @@ enum AppModelContainer {
     /// The active schema (the latest `VersionedSchema`).
     static let schema = Schema(versionedSchema: AppSchemaV2.self)
 
-    /// Build the app's `ModelContainer`. `inMemory` backs the integration tests (a fresh, disposable
-    /// store per test) and is never used in the running app. No migration plan — additive changes ride
+    /// Build the app's `ModelContainer`. `inMemory` backs fresh-store tests and the DEBUG screenshot
+    /// harness. Historical-fixture tests configure their own temporary URL. No migration plan — additive changes ride
     /// SwiftData automatic lightweight migration (file note).
     static func make(inMemory: Bool = false) throws -> ModelContainer {
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
