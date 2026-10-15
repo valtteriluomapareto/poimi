@@ -52,7 +52,7 @@ struct AlbumsView: View {
                             }
                             // Reset + Delete are destructive (hand-curated picks are lost) → confirm
                             // first; "no destructive surprises" (design-language).
-                            Button("Reset picks", systemImage: "arrow.counterclockwise", role: .destructive) {
+                            Button("Reset all progress", systemImage: "arrow.counterclockwise", role: .destructive) {
                                 albumToReset = project
                             }
                             Button("Delete album", systemImage: "trash", role: .destructive) {
@@ -106,15 +106,26 @@ struct AlbumsView: View {
                 Your Photos library isn’t touched.
                 """)
         }
-        .confirmationDialog("Reset picks?", isPresented: resetConfirmation,
+        // Same wording as Album settings (#285): this is the SAME operation, and it is the more
+        // mis-tappable route (a row context menu, with no album context on screen). The confirm button
+        // counts what it discards rather than saying a bare "Reset".
+        .confirmationDialog("Reset all progress?", isPresented: resetConfirmation,
                             titleVisibility: .visible, presenting: albumToReset) { project in
-            Button("Reset “\(project.title)”", role: .destructive) {
+            Button(project.persistedPickedCount == 0
+                   ? String(localized: "Reset everything",
+                            comment: "Destructive confirm when there are no picks to name")
+                   : String(localized: "Discard ^[\(project.persistedPickedCount) pick](inflect: true)",
+                            comment: "Destructive confirm button: names the pick count it discards"),
+                   role: .destructive) {
                 resetAlbum(project)
                 albumToReset = nil
             }
             Button("Cancel", role: .cancel) { albumToReset = nil }
-        } message: { _ in
-            Text("Clears all picks and progress. The album’s settings are kept.")
+        } message: { project in
+            Text("""
+                Discards ^[\(project.persistedPickedCount) pick](inflect: true), every day mark and the \
+                export history for “\(project.title)”. The Photos album it created is not touched.
+                """)
         }
     }
 

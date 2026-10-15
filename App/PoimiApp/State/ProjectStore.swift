@@ -151,6 +151,35 @@ final class ProjectStore {
         refresh()
     }
 
+    /// Clear only the REVIEW PROGRESS — which days are marked done, and the resume pointer — while
+    /// keeping every pick (#285). The counterpart to `reset`, which discards picks too.
+    ///
+    /// Why it exists: since #273, switching the media lens no longer re-opens days automatically, so
+    /// this is the only way to walk an album again — and doing that through `reset` would cost the
+    /// user every pick they have made.
+    ///
+    /// Deliberately untouched, and each for a reason:
+    /// - `selectionSnapshot` — the picks are the entire point of this action.
+    /// - **`markedDoneAt`** — despite the name, this is EXPORT state, not review state: it is stamped
+    ///   at the first export and is the sole gate in `CurationProject.status` for `.exported` /
+    ///   `.editedSinceExport`. Clearing it would demote an exported album back to `.inProgress`,
+    ///   strand the drift baseline behind an unreachable gate, and let the next export re-stamp the
+    ///   "first finalized" date. The field's own doc comment warns that the name is a legacy trap.
+    /// - the export drift baseline (`exportedSelectionSnapshot` / `exportedPhotoCount` /
+    ///   `lastExportedAt`, #191) — clearing day marks is not an export event.
+    /// - `reviewedIDsByDay` — with nothing marked done there is nothing to re-open, and keeping the
+    ///   per-lens baseline preserves D32(d)/D34 protection for the re-review pass that follows.
+    ///
+    /// Callers MUST `DoneStore.deactivate()` first and re-activate after, or a later debounced flush
+    /// writes the old done-set straight back over this (the trap `AlbumSettingsView.resetPicks`
+    /// already documents).
+    func resetDoneMarks(_ project: CurationProject) {
+        project.doneDays = []
+        project.resumeDayKey = nil
+        save("resetDoneMarks")
+        refresh()
+    }
+
     /// Persist edits made to `project` in-place from the settings screen — title, period, target,
     /// exclusions, destination. The fields are mutated on the model directly (it's `@Observable`, so
     /// bound controls update it live); this forces an immediate durable save (rather than leaning on
