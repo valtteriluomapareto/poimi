@@ -1,5 +1,6 @@
-This update smooths out a couple of rough edges:
+More ways to review your albums:
 
-• Setting an album's date range no longer gets stuck — you can choose a start date later than the default without the calendar greying out.
-• On iPad, opening app settings no longer stacks a new screen each time you tap.
-• New: a What's New screen recaps what changed each time you update.
+• Review photos only, photos and videos, or videos only. Switching keeps your picks and marked-done days.
+• Mark all days unreviewed to go through an album again while keeping every pick. Reset all progress now clearly explains what it clears.
+• The photo viewer opens larger on iPad, and swiping between days no longer leaves photos showing through the sidebar.
+• Nearby days load ahead for faster switching, and pacing estimates stay accurate with every media filter.

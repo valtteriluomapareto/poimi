@@ -18,8 +18,8 @@ enum ReleaseNotesCatalog {
     /// a real shipped `CFBundleShortVersionString`.
     static let all: [ReleaseNote] = [
         // 1.0.2 — the two fixes shipped in this patch, authored from CHANGELOG.md's section (#182).
-        // Per release: add a new entry (keyed off WhatsNewState.debutVersion), ≤3 highlights, each detail
-        // ≤2 sentences, and add the `fi` copy (§5.7 checklist).
+        // Per release: append an entry with its own version, ≤3 highlights, each detail ≤2 sentences,
+        // and add the `fi` copy (§5.7 checklist). Keep historical entries keyed to their shipped version.
         ReleaseNote(
             version: WhatsNewState.debutVersion,   // 1.0.2 — the version this What's New debuts in
             highlights: [
@@ -29,6 +29,28 @@ enum ReleaseNotesCatalog {
                 .init(symbol: "ipad",
                       headline: "Smoother on iPad",
                       detail: "App settings no longer opens a new screen each time you tap the button.")
+            ]),
+        ReleaseNote(
+            version: "1.1.0",
+            highlights: [
+                .init(symbol: "photo.on.rectangle",
+                      headline: "Choose photos, videos, or both",
+                      detail: """
+                        Set an album to review photos only, photos and videos, or videos only. \
+                        Switching keeps your picks and marked-done days.
+                        """),
+                .init(symbol: "arrow.counterclockwise",
+                      headline: "Review again, keep your picks",
+                      detail: """
+                        Mark all days unreviewed in album settings to start another pass without losing your picks. \
+                        Reset all progress now clearly explains what it clears.
+                        """),
+                .init(symbol: "ipad",
+                      headline: "Smoother reviewing on iPad",
+                      detail: """
+                        The photo viewer opens larger on iPad, and day swipes no longer leave photos showing \
+                        through the sidebar. Nearby days load ahead for faster switching.
+                        """)
             ])
     ]
 

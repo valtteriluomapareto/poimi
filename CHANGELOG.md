@@ -7,6 +7,8 @@ worth telling users about, in plain language (not a commit log). The format foll
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-10-15
+
 ### Added
 - Album settings can now clear which days you've marked done without discarding
   your picks — so you can walk an album again from the start.

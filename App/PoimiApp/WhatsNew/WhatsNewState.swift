@@ -25,9 +25,8 @@ import Observation
 final class WhatsNewState {
     /// The version that first ships What's New. The debut carve-out shows the notes once to existing
     /// users (no stored version) on THIS version, then reverts to silent on every later release.
-    /// The version this What's New debuts in — the self-expiring carve-out reaches existing users once on
-    /// THIS version. **Bump it in lockstep with the release** (its `ReleaseNotesCatalog` entry is keyed off
-    /// this constant), per the §5.7 release checklist — or the sheet ships invisible. (#248)
+    /// Keep this at the original debut version. Later releases append their own catalog entries;
+    /// moving the debut would make fresh installs show update notes again and relabel the old entry.
     ///
     /// `nonisolated` so the (nonisolated) `ReleaseNotesCatalog.all` can reference it — an immutable
     /// `String`, so it's safe to read from any isolation.

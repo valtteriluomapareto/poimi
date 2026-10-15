@@ -1,5 +1,6 @@
-Tämä päivitys hioo paria karkeaa reunaa:
+Lisää tapoja käydä albumit läpi:
 
-• Albumin päivämäärävälin asettaminen ei enää jää jumiin — voit valita oletusarvoa myöhemmän aloituspäivän ilman, että kalenteri harmaantuu.
-• iPadilla sovellusasetukset eivät enää avaa uutta näkymää joka kerta painiketta painettaessa.
-• Uutta: Mitä uutta -näkymä kokoaa muutokset aina kun päivität sovelluksen.
+• Tarkastele vain kuvia, kuvia ja videoita tai vain videoita. Vaihtaminen säilyttää poimintasi ja valmiiksi merkityt päivät.
+• Merkitse kaikki päivät keskeneräisiksi ja käy albumi uudelleen läpi menettämättä poimintojasi. Edistymisen nollaus kertoo nyt selvästi, mitä se tyhjentää.
+• Kuvanäkymä avautuu iPadilla suurempana, eivätkä edellisen päivän kuvat enää näy sivupalkin läpi.
+• Viereisten päivien kuvia ladataan etukäteen, jotta vaihtaminen olisi nopeampaa. Tahtiarvio pysyy oikeana kaikilla mediasuodattimilla.

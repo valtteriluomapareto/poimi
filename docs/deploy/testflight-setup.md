@@ -228,7 +228,7 @@ it. `Scripts/check-changelog.sh` (in CI) fails the bump if `MARKETING_VERSION` h
 complete — that's on you).
 
 Also reconcile the in-app **What's New** (#248) in that same PR, or the sheet ships invisible / English-only:
-- set **`WhatsNewState.debutVersion`** to `<version>` (the carve-out + catalog entry are keyed off it);
+- keep **`WhatsNewState.debutVersion`** at `1.0.2`, when the feature first shipped (the one-time carve-out and historical catalog entry are keyed off it);
 - add its **`ReleaseNotesCatalog`** entry, authored from the new CHANGELOG section (≤3 highlights);
 - add the **`fi`** translations for the new String Catalog keys (fi is a live locale — the manual Settings → About open is reachable on any version).
 `WhatsNewStateTests.productionCatalogInvariants` fails the build if the catalog is behind the bundle version or missing the debut entry.
