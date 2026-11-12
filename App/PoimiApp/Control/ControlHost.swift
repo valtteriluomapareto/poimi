@@ -66,8 +66,11 @@ final class ControlHost {
     let progress: ControlProgress
     private let run: String
     private let fixture: ControlFixture
-    private let assets: ControlAssetAliases
+    /// The asset aliases: the fixture's library, grown by `library.addPhotos` (#300).
+    private(set) var assets: ControlAssetAliases
     private let albums: ControlAlbumAliases
+    /// The fake library's export gate (the export levers, #300), or `nil` when the library has none.
+    private let exportGate: FakeExportGate?
     /// Whether the album list is always on screen (the iPad split view's sidebar) — otherwise only at the
     /// root of the path (the iPhone stack).
     private let listAlwaysShown: Bool
@@ -82,6 +85,7 @@ final class ControlHost {
 
     init(graph: AppGraph, run: String, fixture: ControlFixture, assets: ControlAssetAliases,
          albums: ControlAlbumAliases, progress: ControlProgress, listAlwaysShown: Bool = false,
+         exportGate: FakeExportGate? = nil,
          state: @escaping () -> ControlJSON, rev: @escaping () -> Int,
          syncState: @escaping () async -> Void = {}) {
         self.graph = graph
@@ -89,6 +93,7 @@ final class ControlHost {
         self.fixture = fixture
         self.assets = assets
         self.albums = albums
+        self.exportGate = exportGate
         self.progress = progress
         self.listAlwaysShown = listAlwaysShown
         self.state = state
@@ -259,6 +264,11 @@ final class ControlHost {
             try requireAlbumsPhase()
             try requireNoViewer()
             guard !coordinator.path.isEmpty else { return .noop("already at the album list") }
+            // The export screen hides the navigation bar and its back button (no swipe back mid-write).
+            if case .export? = coordinator.path.last {
+                throw refuse(.notShown, "the export screen has no back button: Back to albums (nav.root) "
+                    + "once the export settles")
+            }
             coordinator.pop()
             return accept()
 
@@ -266,6 +276,15 @@ final class ControlHost {
             try requireAlbumsPhase()
             guard !coordinator.path.isEmpty || coordinator.presentedPhotoID != nil else {
                 return .noop("already at the album list")
+            }
+            // On the export screen, the way out is its Back to albums — shown only once the export settled.
+            if case .export? = coordinator.path.last {
+                switch session.export.phase {
+                case .done, .failed: break
+                case .idle, .exporting:
+                    throw refuse(.notShown, "Back to albums shows once the export settles (the export screen "
+                        + "has no other way out)")
+                }
             }
             coordinator.popToRoot()
             return accept()
@@ -376,8 +395,11 @@ final class ControlHost {
         }
     }
 
-    // MARK: - Fixture ops
+}
 
+// MARK: - Fixture ops + the screens' own tasks
+
+extension ControlHost {
     func perform(_ op: ControlFixtureOp) async -> ControlOutcome {
         switch op {
         case .flush:
@@ -420,8 +442,44 @@ final class ControlHost {
             }
             selection.clear()
             return accept()
+        case .libraryHoldExports, .libraryReleaseExports, .libraryFailExport, .libraryAddPhotos:
+            return await performLibrary(op)
         case .reset(let name):
             return .refused(.unavailable, "a reset is a relaunch: Scripts/poimi.sh reset \(name)")
+        }
+    }
+
+    /// The fake library's levers (#300): the export gate, and new photos taken mid-session.
+    private func performLibrary(_ op: ControlFixtureOp) async -> ControlOutcome {
+        switch op {
+        case .libraryHoldExports:
+            guard let exportGate else { return .refused(.unavailable, "the library has no export gate") }
+            if exportGate.holding { return .noop("exports are already held") }
+            exportGate.hold()
+            return accept()
+        case .libraryReleaseExports:
+            guard let exportGate else { return .refused(.unavailable, "the library has no export gate") }
+            guard exportGate.holding else { return .noop("the export gate is open") }
+            exportGate.release()
+            return accept()
+        case .libraryFailExport(let error):
+            guard let exportGate else { return .refused(.unavailable, "the library has no export gate") }
+            if exportGate.failure == error { return .noop("already so") }
+            exportGate.fail(error)
+            return accept()
+        case .libraryAddPhotos(let day, let count):
+            guard let fake = graph.photoLibrary as? FakePhotoLibrary else {
+                return .refused(.unavailable, "not the fake library")
+            }
+            guard let start = day.anchorDate(in: ControlFixture.utc).map(ControlFixture.utc.startOfDay(for:)) else {
+                return .refused(.invalidState, "not a calendar day")
+            }
+            let added = await fake.addPhotos(onDayStarting: start, count: count)
+            assets = assets.appending(added)
+            let aliases = added.compactMap { assets.alias(for: $0.id) }
+            return accept(extra: [.init(key: "photos", value: .array(aliases.map(ControlJSON.string)))])
+        default:
+            preconditionFailure("performLibrary handles the library levers only")
         }
     }
 

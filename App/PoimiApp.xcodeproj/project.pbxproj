@@ -22,6 +22,7 @@
 		000000004000000000000099 /* ControlMachineryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000098 /* ControlMachineryTests.swift */; };
 		00000000400000000000009B /* ControlUIStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000009A /* ControlUIStateTests.swift */; };
 		00000000400000000000009D /* ReviewScreenStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000009C /* ReviewScreenStateTests.swift */; };
+		00000000400000000000009F /* ControlBreakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000009E /* ControlBreakTests.swift */; };
 		00000000100000000000B107 /* ControlEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A107 /* ControlEnvironment.swift */; };
 		0000000010000000000000B2 /* AppGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000010000000000000B1 /* AppGraph.swift */; };
 		000000001000000000000010 /* PoimiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000001000000000000001 /* PoimiApp.swift */; };
@@ -163,6 +164,7 @@
 		000000004000000000000098 /* ControlMachineryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlMachineryTests.swift; sourceTree = "<group>"; };
 		00000000400000000000009A /* ControlUIStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlUIStateTests.swift; sourceTree = "<group>"; };
 		00000000400000000000009C /* ReviewScreenStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewScreenStateTests.swift; sourceTree = "<group>"; };
+		00000000400000000000009E /* ControlBreakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlBreakTests.swift; sourceTree = "<group>"; };
 		00000000100000000000A107 /* ControlEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlEnvironment.swift; sourceTree = "<group>"; };
 		0000000010000000000000B1 /* AppGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGraph.swift; sourceTree = "<group>"; };
 		000000001000000000000001 /* PoimiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoimiApp.swift; sourceTree = "<group>"; };
@@ -542,6 +544,7 @@
 				000000004000000000000098 /* ControlMachineryTests.swift */,
 				00000000400000000000009A /* ControlUIStateTests.swift */,
 				00000000400000000000009C /* ReviewScreenStateTests.swift */,
+				00000000400000000000009E /* ControlBreakTests.swift */,
 				000000004000000000000090 /* AlbumSessionTests.swift */,
 				000000004000000000000094 /* AlbumActionsTests.swift */,
 				000000004000000000000092 /* AlbumSessionExportTests.swift */,
@@ -777,6 +780,7 @@
 				000000004000000000000099 /* ControlMachineryTests.swift in Sources */,
 				00000000400000000000009B /* ControlUIStateTests.swift in Sources */,
 				00000000400000000000009D /* ReviewScreenStateTests.swift in Sources */,
+				00000000400000000000009F /* ControlBreakTests.swift in Sources */,
 				000000004000000000000091 /* AlbumSessionTests.swift in Sources */,
 				000000004000000000000095 /* AlbumActionsTests.swift in Sources */,
 				000000004000000000000093 /* AlbumSessionExportTests.swift in Sources */,

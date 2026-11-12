@@ -24,6 +24,7 @@ enum ControlArgType: String {
     case string
     case media = "photosOnly | photosAndVideos | videosOnly"
     case fetchFailure = "fetchFailed | null"
+    case exportFailure = "albumMissing | writeFailed | noAssetsResolved | null"
     case authorization = "notDetermined | authorized | limited | denied | restricted"
     case fixture = "fixture name"
     case filter = "toReview | done | all"
@@ -411,14 +412,20 @@ enum ControlFixtureOpKind: String, CaseIterable {
     case libraryAuthorization = "library.authorization"
     case selectionSelect = "selection.select"
     case selectionClear = "selection.clear"
+    case libraryHoldExports = "library.holdExports"
+    case libraryReleaseExports = "library.releaseExports"
+    case libraryFailExport = "library.failExport"
+    case libraryAddPhotos = "library.addPhotos"
     case reset
 
     var args: [ControlArgSpec] {
         switch self {
-        case .flush, .lifecycleResume, .selectionClear: []
+        case .flush, .lifecycleResume, .selectionClear, .libraryHoldExports, .libraryReleaseExports: []
         case .libraryFailFetch: [.opt("kind", .fetchFailure)]
         case .libraryAuthorization: [.req("status", .authorization)]
         case .selectionSelect: [.req("photos", .assetAliases)]
+        case .libraryFailExport: [.opt("error", .exportFailure)]
+        case .libraryAddPhotos: [.req("day", .day), .req("count", .int)]
         case .reset: [.req("fixture", .fixture)]
         }
     }
@@ -428,9 +435,18 @@ enum ControlFixtureOpKind: String, CaseIterable {
         case .flush: "persist the debounced picks + day marks now (both stores' flushNow), as backgrounding does"
         case .lifecycleResume: "the app becoming active: re-read photo authorization"
         case .libraryFailFetch: "make the fake's fetches fail (or recover with null / no kind)"
-        case .libraryAuthorization: "what the fake reports from now on (then lifecycle.resume / auth.request)"
+        case .libraryAuthorization:
+            "what the fake reports from now on (then lifecycle.resume / auth.request); persisted"
         case .selectionSelect: "pick these photos of the open review directly (no single control does this)"
         case .selectionClear: "unpick everything in the open album (no control does this)"
+        case .libraryHoldExports:
+            "close the fake's export gate: exports park mid-flight (library.heldExports) until releaseExports"
+        case .libraryReleaseExports: "open the export gate: parked exports go on"
+        case .libraryFailExport:
+            "make the fake's exports fail with this error from now on (a parked one once released); null clears"
+        case .libraryAddPhotos:
+            "add count (1–100) new photos on day (from 21:00 UTC) to the fake library — new photos taken mid-session; "
+                + "persisted; an open album sees them on its next scan (re-open it)"
         case .reset: "refused here — a reset is a relaunch: Scripts/poimi.sh reset <fixture>"
         }
     }
@@ -451,6 +467,14 @@ enum ControlFixtureOp: Equatable {
     case selectionSelect(photos: [String])
     /// Unpick everything in the open album.
     case selectionClear
+    /// Close the fake library's export gate: exports park until released (#300).
+    case libraryHoldExports
+    /// Open the export gate.
+    case libraryReleaseExports
+    /// Make every export fail with this error from now on (`nil` clears).
+    case libraryFailExport(ExportError?)
+    /// Add `count` photos taken on `day` to the fake library (#191 drift).
+    case libraryAddPhotos(day: DayKey, count: Int)
     /// Refused in place: a reset is a relaunch.
     case reset(fixture: String)
 }
@@ -484,8 +508,41 @@ extension ControlFixtureOp: Decodable {
             self = .libraryAuthorization(value)
         case .selectionSelect: self = .selectionSelect(photos: try keys.photos(name))
         case .selectionClear: self = .selectionClear
+        case .libraryHoldExports: self = .libraryHoldExports
+        case .libraryReleaseExports: self = .libraryReleaseExports
+        case .libraryFailExport: self = .libraryFailExport(try keys.exportFailure())
+        case .libraryAddPhotos:
+            let (day, count) = try keys.addedPhotos()
+            self = .libraryAddPhotos(day: day, count: count)
         case .reset: self = .reset(fixture: try keys.required(String.self, "fixture"))
         }
+    }
+}
+
+extension KeyedDecodingContainer where Key == ControlKey {
+    /// `library.failExport`'s `error` (absent / null clears it).
+    func exportFailure() throws -> ExportError? {
+        let failures: [String: ExportError] = [
+            "albumMissing": .albumMissing, "writeFailed": .writeFailed, "noAssetsResolved": .noAssetsResolved
+        ]
+        guard let raw = try optional(String.self, "error") else { return nil }
+        guard let error = failures[raw] else {
+            throw ControlRequestError.bad("library.failExport: error must be "
+                + "\(ControlArgType.exportFailure.rawValue), got '\(raw)'")
+        }
+        return error
+    }
+
+    /// `library.addPhotos`'s calendar `day` and `count` (1…100).
+    func addedPhotos() throws -> (day: DayKey, count: Int) {
+        guard let day = try day("day"), day.anchorDate(in: ControlFixture.utc) != nil else {
+            throw ControlRequestError.bad("library.addPhotos: 'day' must be a calendar day (yyyy-mm-dd)")
+        }
+        let count = try required(Int.self, "count")
+        guard (1...100).contains(count) else {
+            throw ControlRequestError.bad("library.addPhotos: 'count' must be 1…100, got \(count)")
+        }
+        return (day, count)
     }
 }
 

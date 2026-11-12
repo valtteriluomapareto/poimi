@@ -459,6 +459,38 @@ vocabulary is `poimi.sh schema`. Decisions and deviations:
   delivers no scenePhase change, so it doesn't flush.
 - Library-change drift for #191.
 
+**As built (#300).** Decisions and deviations:
+
+- **The export gate is the fake's own.** `FakeExportGate` (main-actor, observable) is injected into
+  `FakePhotoLibrary`; `library.holdExports` / `releaseExports` / `failExport{error}` are fixture ops. The
+  snapshot gains `library.{heldExports, exportCalls, albumsCreated}` (`null` without a gate), so a held export
+  is visible the moment it parks and "one export, one Photos album" is checkable.
+- **Live `busy` is honest now.** `pending.export` and `idle` cover every export in flight, including one whose
+  screen left (iPad), not only the current screen's.
+- **The export screen has no way out until it settles**: `nav.back` is `notShown` there, and `nav.root` (Back
+  to albums) only once it's `done` / `failed`. The host used to pop it mid-export, which no user can do.
+- **Persistence lives in `Application Support/control/`, not `Documents/control/`.** Every control run now
+  uses a file store there (a fixture launch might be relaunched), next to the fake library's state
+  (`FakeLibraryState`: added photos, exported albums, the created-album count, authorization), the run record
+  (fixture + album aliases) and the timeline cache. `Documents/control/` stays per run (state files, mailbox)
+  and is cleared by every launch. `AppModelContainer.make(url:)` is the one product seam this needed.
+- **`poimi.sh relaunch`** = `simctl terminate` + `-PoimiControl -PoimiRelaunch` (no fixture flag: the record's
+  is kept; optional `--route` / `--viewer`). Nothing is wiped or seeded; screen state, held exports and the
+  fail levers don't survive, as in a real relaunch. `ControlEnvironment.makeRuntime` is the one wiring both
+  the launch and the in-process relaunch tests use.
+- **`library.addPhotos{day, count}`** adds photos (aliases numbered after every existing one, persisted). The
+  app doesn't observe the library, so an open album sees them on its next scan only; the journey re-opens it.
+- **Snapshot additions** that project what the UI shows: `albums.*.inPhotos` (the row's "N in Photos") and
+  `active.export.added` / `total` (the completion subtitle).
+- **Found on the way** (both reach the shipping app; each with a failing-then-passing test):
+  - iPad: re-opening an album from the sidebar mid-export and saving again started a second run beside the
+    first; both saw no `targetAlbumID`, so each created a Photos album. `startExport` now joins the album's
+    run in flight (`AlbumSession.runningExports`).
+  - An export saved its record of the exported picks at once but left the picks themselves to the debounce:
+    a kill in that window brought an un-pick back as "1 to add". The export now flushes the selection first.
+- **The D15 window, measured:** `simctl terminate` delivers no scene-phase change, so every pick since the last
+  flush is lost; flushed picks survive (`ControlRelaunchTests`, and on the simulator).
+
 ### Later and optional
 
 - **Converge the `DebugScreen` hosts** on fixture + route as each host gets touched. The App

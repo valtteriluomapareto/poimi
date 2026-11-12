@@ -36,7 +36,7 @@ enum ControlRefusal: String, CaseIterable {
         case .unknownAlias: "the alias names nothing in this run"
         case .invalidState: "the app isn't in a state the action applies to"
         case .busy: "something must finish first (the album's export is running)"
-        case .unavailable: "not available in this run (e.g. reset is a relaunch)"
+        case .unavailable: "not available in this run (e.g. reset is a relaunch; a lever the library lacks)"
         }
     }
 }
@@ -78,6 +78,7 @@ enum ControlSchema {
         ("albums", "object"), ("albums.*", "object"),
         ("albums.*.status", "string"), ("albums.*.toAdd", "int|null"), ("albums.*.target", "int"),
         ("albums.*.picked", "int"), ("albums.*.titleLength", "int"), ("albums.*.exported", "bool"),
+        ("albums.*.inPhotos", "int|null"),
         ("active", "object"),
         ("active.album", "string|null"),
         ("active.scan", "object|null"),
@@ -90,8 +91,11 @@ enum ControlSchema {
         ("active.done.active", "bool"),
         ("active.export", "object|null"),
         ("active.export.phase", "string"), ("active.export.wasReExport", "bool|null"),
+        ("active.export.added", "int|null"), ("active.export.total", "int|null"),
         ("active.overview", "object|null"), ("active.overview.filter", "string"),
         ("active.grid", "object|null"), ("active.grid.cluster", "string|null"),
+        ("library", "object|null"),
+        ("library.heldExports", "int"), ("library.exportCalls", "int"), ("library.albumsCreated", "int"),
         ("pending", "object"),
         ("pending.selectionFlush", "bool"), ("pending.doneFlush", "bool"), ("pending.scan", "bool"),
         ("pending.naming", "bool"), ("pending.export", "bool"), ("pending.thumbnails", "int"),

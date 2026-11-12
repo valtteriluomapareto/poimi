@@ -15,12 +15,16 @@
 #if DEBUG
 
 import Foundation
+import Observation
 import Curation
 
 /// In-memory fake. An `actor`, like `SystemPhotoLibrary`, so it honors the same isolation
 /// the real implementation does (D25) and is trivially `Sendable`.
 actor FakePhotoLibrary: PhotoLibraryProviding {
-    private let seededAssets: [AssetRef]
+    /// The library's assets: the seed, plus any added mid-session (`addPhotos`, #300).
+    private var seededAssets: [AssetRef]
+    /// The assets added since the seed, in the order added (persisted, so a relaunch finds them again).
+    private var addedAssets: [AssetRef]
     private let seededAlbums: [AlbumRef]
     /// Album id → the asset ids it contains, so the exclude-album filter can be exercised (D25).
     private let membership: [String: Set<String>]
@@ -35,19 +39,37 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     /// dupe-guard so the export flow is deterministic for tests + screenshots (#39).
     private var exportedAlbums: [String: (name: String, ids: Set<String>)] = [:]
     private var exportSeq = 0
+    /// Holds / releases / fails exports mid-flight and counts them (the control plane's export levers,
+    /// #300); `nil` = exports run straight through.
+    private let exportGate: FakeExportGate?
+    /// Where the library keeps what a relaunch must find again (`FakeLibraryState`), or `nil` (in
+    /// memory only). Set by DEBUG control runs only (#300).
+    private let persistence: URL?
 
+    /// `state` restores what an earlier run of the same library persisted (added photos, exported
+    /// albums, authorization) over the seed.
     init(
         assets: [AssetRef] = FakePhotoLibrary.yearMixedSeed(),
         albums: [AlbumRef] = FakePhotoLibrary.defaultAlbums,
         membership: [String: Set<String>] = FakePhotoLibrary.defaultMembership,
         status: LibraryAuthorization = .authorized,
-        fetchError: (any Error)? = nil
+        fetchError: (any Error)? = nil,
+        exportGate: FakeExportGate? = nil,
+        restoring state: FakeLibraryState? = nil,
+        persistence: URL? = nil
     ) {
-        self.seededAssets = assets
+        self.seededAssets = assets + (state?.added ?? [])
+        self.addedAssets = state?.added ?? []
         self.seededAlbums = albums
         self.membership = membership
-        self.status = status
+        self.status = state?.authorization.flatMap(FakeLibraryState.authorization(named:)) ?? status
         self.fetchError = fetchError
+        self.exportGate = exportGate
+        self.persistence = persistence
+        if let state {
+            exportSeq = state.exportSeq
+            for album in state.albums { exportedAlbums[album.id] = (album.name, Set(album.ids)) }
+        }
     }
 
     /// A generic fetch failure the fake can be seeded to throw (transient load error / lost access).
@@ -58,15 +80,33 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     func requestAuthorization() async -> LibraryAuthorization { status }
 
     /// Change the reported authorization mid-test — to exercise a transition (e.g. the user
-    /// granting access at the system prompt: `.notDetermined` → `.authorized`).
+    /// granting access at the system prompt: `.notDetermined` → `.authorized`). Persisted: a relaunch
+    /// keeps the answer, as the system does.
     func setAuthorization(_ newStatus: LibraryAuthorization) {
         status = newStatus
+        save()
     }
 
     /// Make every later `fetchAssets` throw `error` (or succeed again with `nil`) — the scan-failure
     /// path mid-session, without rebuilding the library.
     func setFetchError(_ error: (any Error)?) {
         fetchError = error
+    }
+
+    /// Add `count` photos captured on the UTC day starting at `day` (from 21:00, a minute apart — after
+    /// every seed's shooting hours): the user taking new photos mid-session (#300, the #191 drift lever).
+    /// Returns them in order; persisted. Nobody is told: as in the app, a change shows on the next scan.
+    func addPhotos(onDayStarting day: Date, count: Int) -> [AssetRef] {
+        let start = day.addingTimeInterval(21 * 3600)
+        let new = (0..<count).map { index in
+            AssetRef(id: "fake/added/\(addedAssets.count + index)",
+                     captureDate: start.addingTimeInterval(Double(index) * 60),
+                     pixelSize: PixelSize(width: 4032, height: 3024))
+        }
+        addedAssets += new
+        seededAssets += new
+        save()
+        return new
     }
 
     func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {
@@ -92,6 +132,8 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
 
     func export(assetIDs: Set<String>, toAlbumNamed name: String,
                 existingAlbumID: String?) async throws -> ExportResult {
+        // The control plane's gate (#300): counted, parked while held, then thrown if a failure is set.
+        if let exportGate, let failure = await exportGate.enter() { throw failure }
         // Match SystemPhotoLibrary: creating/modifying an album needs FULL access (`.limited` can't).
         guard status == .authorized else { throw ExportError.notAuthorized }
         // Resolve against the seed (mirrors SystemPhotoLibrary fetching live PHAssets by id).
@@ -115,9 +157,11 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
             exportSeq += 1
             albumID = "album/exported/\(exportSeq)"
             exportedAlbums[albumID] = (name, [])   // created with `name` → that's its title
+            await exportGate?.didCreateAlbum()
         }
         let added = resolved.subtracting(exportedAlbums[albumID]!.ids)   // dupe guard
         exportedAlbums[albumID]!.ids.formUnion(added)
+        save()
         return ExportResult(albumID: albumID, added: added.count,
                             total: exportedAlbums[albumID]!.ids.count, title: exportedAlbums[albumID]!.name)
     }
@@ -126,6 +170,111 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     func exportedAssetIDs(inAlbum albumID: String) -> Set<String> {
         exportedAlbums[albumID]?.ids ?? []
     }
+
+    /// Write what a relaunch must find again (a no-op without `persistence`). Atomic: a kill mid-write
+    /// leaves the previous state, never half a file.
+    private func save() {
+        guard let persistence else { return }
+        let state = FakeLibraryState(
+            added: addedAssets,
+            albums: exportedAlbums.keys.sorted().map { id in
+                let album = exportedAlbums[id]!
+                return FakeLibraryState.Album(id: id, name: album.name, ids: album.ids.sorted())
+            },
+            exportSeq: exportSeq,
+            authorization: FakeLibraryState.name(of: status))
+        do {
+            try JSONEncoder().encode(state).write(to: persistence, options: .atomic)
+        } catch {
+            Log.app.error("fake library: couldn't persist: \(String(describing: error), privacy: .public)")
+        }
+    }
+}
+
+/// What a `FakePhotoLibrary` keeps across a relaunch (#300): the photos added mid-session, the albums
+/// export created or filled (so a relaunched re-export finds its album instead of `.albumMissing`), the
+/// created-album counter and the authorization. Not the levers (`fetchError`, the export gate), which —
+/// like the process — don't survive a relaunch.
+struct FakeLibraryState: Codable, Equatable, Sendable {
+    struct Album: Codable, Equatable, Sendable {
+        let id: String
+        let name: String
+        let ids: [String]
+    }
+
+    var added: [AssetRef] = []
+    var albums: [Album] = []
+    var exportSeq = 0
+    var authorization: String?
+
+    /// The state saved at `url`, or `nil` (none yet, or unreadable: a fresh library).
+    static func load(from url: URL) -> FakeLibraryState? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(FakeLibraryState.self, from: data)
+    }
+
+    private static let authorizations: [(name: String, status: LibraryAuthorization)] = [
+        ("notDetermined", .notDetermined), ("authorized", .authorized), ("limited", .limited),
+        ("denied", .denied), ("restricted", .restricted)
+    ]
+
+    static func name(of status: LibraryAuthorization) -> String {
+        authorizations.first { $0.status == status }?.name ?? "notDetermined"
+    }
+
+    static func authorization(named name: String) -> LibraryAuthorization? {
+        authorizations.first { $0.name == name }?.status
+    }
+}
+
+/// The fake library's export gate (#300): exports can be held mid-flight, released, or made to fail — the
+/// control plane's export levers. Main-actor and observable, so `state.json` (and `wait`) see an export
+/// park the moment it does, and every export call and created album is counted.
+@MainActor
+@Observable
+final class FakeExportGate {
+    /// `export(…)` calls so far, held or not.
+    private(set) var calls = 0
+    /// Albums export created (finding an existing album isn't one) — from the persisted count on.
+    private(set) var created: Int
+    /// Exports parked at the closed gate.
+    private(set) var held = 0
+    /// Whether exports park until `release()`.
+    private(set) var holding = false
+    /// What every export throws from now on (once past the gate), until cleared.
+    private(set) var failure: ExportError?
+    @ObservationIgnored private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(created: Int = 0) {
+        self.created = created
+    }
+
+    /// Close the gate: every export from now parks until `release()`.
+    func hold() { holding = true }
+
+    /// Open the gate and let every parked export go on.
+    func release() {
+        holding = false
+        let parked = waiters
+        waiters = []
+        if held != 0 { held = 0 }
+        parked.forEach { $0.resume() }
+    }
+
+    /// Make every export from now throw `error` (`nil` = succeed again). A parked one throws it once released.
+    func fail(_ error: ExportError?) { failure = error }
+
+    /// An export enters: counted, parked while the gate is closed; returns the failure to throw, if any.
+    func enter() async -> ExportError? {
+        calls += 1
+        if holding {
+            held += 1
+            await withCheckedContinuation { waiters.append($0) }
+        }
+        return failure
+    }
+
+    func didCreateAlbum() { created += 1 }
 }
 
 extension FakePhotoLibrary {

@@ -36,6 +36,8 @@ struct ControlSnapshotInputs {
     var progress: ControlProgress?
     /// The fake thumbnail provider's loads in flight, or `nil` when nothing counts them.
     var thumbnails: ThumbnailLoadCounter?
+    /// The fake library's export gate (`library.*`, #300), or `nil` when the library has none.
+    var exportGate: FakeExportGate?
     /// No UI: `ControlHeadlessView` instead of `AppRootView` (`app.host`).
     var headless = false
     /// A launch/route problem to surface (`app.launchError`), or `nil`.
@@ -70,12 +72,14 @@ enum ControlSnapshot {
             ("nav", nav(inputs)),
             ("albums", albums(inputs)),
             ("active", active(inputs, project: activeProject, store: store, export: export)),
+            ("library", library(inputs.exportGate)),
             ("pending", .object(
                 ("selectionFlush", .bool(inputs.selection.hasPendingFlush)),
                 ("doneFlush", .bool(inputs.done.hasPendingFlush)),
                 ("scan", .bool(store?.phase == .scanning)),
                 ("naming", .bool(store?.isNaming ?? false)),
-                ("export", .bool(export.isRunning)),
+                // Any album's export in flight — also one whose screen left (iPad, #300): still live work.
+                ("export", .bool(export.isRunning || !inputs.session.exportingAlbums.isEmpty)),
                 ("thumbnails", .int(inputs.thumbnails?.inFlight ?? 0)))),
             ("idle", isIdle(inputs, store: store, export: export).map(ControlJSON.bool) ?? .null))
     }
@@ -95,7 +99,7 @@ enum ControlSnapshot {
 
     /// Whether the app has settled — `true`, `false`, or `nil` for "unknown" (never a silent `true`):
     /// - `false` until the launch bootstrap finished; while an accepted action hasn't settled
-    ///   (`settledSeq < lastSeq`); while a review scan or its trip-name pass runs, an export runs, or a
+    ///   (`settledSeq < lastSeq`); while a review scan or its trip-name pass runs, any export runs, or a
     ///   fake thumbnail load is in flight — including "the screen on top needs a scan / an export that
     ///   hasn't started yet" (the screen's `.task` runs after the route lands, so a missing or `.idle`
     ///   store there is pending, not idle).
@@ -111,6 +115,7 @@ enum ControlSnapshot {
         if let progress = inputs.progress, progress.settledSeq < progress.lastSeq { return false }
         if (inputs.thumbnails?.inFlight ?? 0) > 0 { return false }
         if store?.phase == .scanning || store?.isNaming == true || export.isRunning { return false }
+        if !inputs.session.exportingAlbums.isEmpty { return false }   // an export whose screen left (#300)
         let coordinator = inputs.coordinator
         guard coordinator.rootPhase == .albums else { return true }
         switch coordinator.path.last {
@@ -191,7 +196,10 @@ enum ControlSnapshot {
                 ("target", .int(project.targetCount)),
                 ("picked", .int(picks.count)),
                 ("titleLength", .int(project.title.count)),
-                ("exported", .bool(project.markedDoneAt != nil))))
+                ("exported", .bool(project.markedDoneAt != nil)),
+                // The row's "N in Photos": the Photos album's membership recorded at the last export (#191),
+                // never the live pick count; `null` before any export.
+                ("inPhotos", .int(project.exportedPhotoCount))))
         }
         return .object(pairs: rows
             .sorted { ControlAlbumAliases.number(of: $0.alias) < ControlAlbumAliases.number(of: $1.alias) }
@@ -231,7 +239,10 @@ enum ControlSnapshot {
                 ("active", .bool(doneActive)))),
             ("export", .object(
                 ("phase", .string(exportPhase(export))),
-                ("wasReExport", wasReExport(export).map(ControlJSON.bool) ?? .null))),
+                ("wasReExport", wasReExport(export).map(ControlJSON.bool) ?? .null),
+                // The completion screen's "Added N · … now holds M" (`done` only).
+                ("added", .int(exportResult(export)?.added)),
+                ("total", .int(exportResult(export)?.total)))),
             ("overview", .object(
                 ("filter", .string((session?.overviewFilter ?? .all).controlName)))),
             ("grid", .object(
@@ -347,6 +358,24 @@ enum ControlSnapshot {
     private static func wasReExport(_ phase: ExportStore.Phase) -> Bool? {
         if case .done(_, let wasReExport) = phase { return wasReExport }
         return nil
+    }
+
+    @MainActor
+    private static func exportResult(_ phase: ExportStore.Phase) -> ExportResult? {
+        if case .done(let result, _) = phase { return result }
+        return nil
+    }
+
+    /// The fake library's side of exports (#300) — what the user would see in Photos, as counts: exports
+    /// parked at the gate, export calls so far, and Photos albums export created (a re-export that finds
+    /// its album doesn't create one). `null` when the library has no gate.
+    @MainActor
+    private static func library(_ gate: FakeExportGate?) -> ControlJSON {
+        guard let gate else { return .null }
+        return .object(
+            ("heldExports", .int(gate.held)),
+            ("exportCalls", .int(gate.calls)),
+            ("albumsCreated", .int(gate.created)))
     }
 
     @MainActor

@@ -15,6 +15,9 @@ worth telling users about, in plain language (not a commit log). The format foll
 - Deleting your only album after opening it no longer crashes the app.
 - The "Reset all progress" confirmation now says how many picks it discards ("Discard 34
   picks") instead of showing raw formatting codes on the button.
+- On iPad, opening an album again from the sidebar while it's still being saved to Photos,
+  then saving it again, no longer creates a second Photos album: the screen shows the save
+  already in progress.
 
 ## [1.1.0] — 2026-10-15
 

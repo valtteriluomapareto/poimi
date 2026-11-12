@@ -139,9 +139,18 @@ final class AlbumSession {
     /// runs it once, the error screen's buttons re-run it. Retired (a fresh `.idle` store) when the export
     /// screen leaves the path or the album closes — a run still in flight finishes on the retired store.
     private(set) var export: ExportStore
-    /// Albums with an export run in flight (on the current store or a retired one). `AlbumActions` refuses
-    /// to delete or reset these, so a run never writes into a deleted or just-zeroed album.
-    private(set) var exportingAlbums: Set<UUID> = []
+    /// The export runs in flight, by album — on the current store or a retired one. `AlbumActions` refuses
+    /// to delete or reset these albums, so a run never writes into a deleted or just-zeroed album; and a
+    /// new visit to an album's export screen joins its run instead of starting a second (#300).
+    private var runningExports: [UUID: RunningExport] = [:]
+
+    private struct RunningExport {
+        let store: ExportStore
+        let task: Task<Void, Never>
+    }
+
+    /// Albums with an export run in flight (on the current store or a retired one).
+    var exportingAlbums: Set<UUID> { Set(runningExports.keys) }
 
     init(library: any PhotoLibraryProviding,
          naming: (any PlaceNaming)?,
@@ -345,10 +354,20 @@ final class AlbumSession {
     /// Run the export for `project` with the live picks — once per visit to the export screen: a no-op
     /// unless the export is `.idle`, so a re-appearing export screen or a second caller can never export
     /// twice. Re-runs after a failure go through `retryExport`.
+    ///
+    /// If the album's export is still running from an earlier visit (iPad: the sidebar re-opened the album
+    /// mid-export, then Save to Photos again), this visit shows THAT run and finishes with it, rather than
+    /// starting a second one beside it — both would see no `targetAlbumID` yet, so each would create a
+    /// Photos album (#300).
     func startExport(_ project: CurationProject) async {
         adopt(project)
         selection.activate(project)
         done.activate(project)
+        if let running = runningExports[project.id] {
+            if export !== running.store, export.phase == .idle { export = running.store }
+            await running.task.value
+            return
+        }
         guard export.phase == .idle else { return }
         await run(export, project, forceNewAlbum: false)
     }
@@ -357,18 +376,23 @@ final class AlbumSession {
     /// run is in flight, so a double-tap can't create two albums.
     func retryExport(_ project: CurationProject, forceNewAlbum: Bool = false) async {
         adopt(project)
-        guard !export.phase.isRunning else { return }
+        guard runningExports[project.id] == nil, !export.phase.isRunning else { return }
         await run(export, project, forceNewAlbum: forceNewAlbum)
     }
 
     /// Whether an export for `project` is in flight (on the current store or a retired one).
-    func isExporting(_ project: CurationProject) -> Bool { exportingAlbums.contains(project.id) }
+    func isExporting(_ project: CurationProject) -> Bool { runningExports[project.id] != nil }
 
     private func run(_ store: ExportStore, _ project: CurationProject, forceNewAlbum: Bool) async {
         let id = project.id
-        exportingAlbums.insert(id)
-        defer { exportingAlbums.remove(id) }
-        await store.run(project: project, picks: selection.selected, forceNewAlbum: forceNewAlbum)
+        let picks = selection.selected
+        // The export saves its record of these picks (`exportedSelectionSnapshot`) at once; the picks must
+        // be as durable, or a kill inside the debounce leaves the store behind its own export record (#300).
+        selection.flushNow()
+        let task = Task { await store.run(project: project, picks: picks, forceNewAlbum: forceNewAlbum) }
+        runningExports[id] = RunningExport(store: store, task: task)
+        await task.value
+        if runningExports[id]?.store === store { runningExports[id] = nil }
     }
 
     /// The export screen left the path: the next visit starts a fresh run (a later "Save to Photos" after

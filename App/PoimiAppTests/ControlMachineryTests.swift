@@ -588,7 +588,7 @@ struct ControlReviewFixTests {
     func fixtureOpParity() throws {
         let sample: [ControlArgType: String] = [
             .fetchFailure: #""fetchFailed""#, .authorization: #""denied""#, .assetAliases: #"["a-0001"]"#,
-            .fixture: #""one-album""#
+            .fixture: #""one-album""#, .day: #""2025-07-05""#, .int: "3", .exportFailure: #""writeFailed""#
         ]
         for kind in ControlFixtureOpKind.allCases {
             let args = kind.args.filter(\.required).map { #""\#($0.name)":\#(sample[$0.type] ?? "null")"# }

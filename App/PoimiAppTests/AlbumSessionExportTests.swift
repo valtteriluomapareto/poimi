@@ -134,6 +134,54 @@ struct AlbumSessionExportTests {
         #expect(harness.graph.projectStore.projects.isEmpty)
     }
 
+    /// iPad (#300, found with the control plane's export gate): the sidebar stays tappable while the export
+    /// screen shows. Re-opening the SAME album mid-export and tapping Save to Photos again used to start a
+    /// second run beside the first — both saw no `targetAlbumID` yet, so each CREATED a Photos album.
+    @Test("re-opening the album mid-export and saving again joins the run in flight (one Photos album)")
+    func reopenMidExportJoinsTheRun() async throws {
+        let ready = try await exportReady()
+        let (harness, project, picks) = (ready.harness, ready.project, ready.picks)
+        await harness.gate.hold(exports: true)
+        let first = Task { await harness.session.startExport(project) }
+        await harness.gate.waitUntilHeld()
+
+        harness.actions.open(project)                       // the sidebar row: back to the overview
+        #expect(harness.session.isExporting(project))
+        harness.coordinator.finishToExport()               // … Save to Photos again
+        let second = Task { await harness.session.startExport(project) }
+        for _ in 0..<10 { await Task.yield() }             // let it reach the library, if it would
+        #expect(await harness.gate.exportCount == 1)
+        #expect(harness.session.export.phase == .exporting(isReExport: false))   // the run in flight, shown
+
+        await harness.gate.release()
+        _ = (await first.value, await second.value)
+        #expect(await harness.gate.exportCount == 1)
+        guard case .done(let result, false) = harness.session.export.phase else {
+            Issue.record("the joined run didn't land on the screen: \(harness.session.export.phase)")
+            return
+        }
+        #expect(result.added == picks.count)
+        #expect(await harness.library.exportedAssetIDs(inAlbum: "album/exported/2").isEmpty)   // no 2nd album
+    }
+
+    /// The export saves its record of what it exported (`exportedSelectionSnapshot`) at once; the picks it
+    /// recorded must be as durable. They used to wait for the debounce: a kill in that window (#300's relaunch
+    /// journey) left the persisted picks behind the export record — an un-pick came back as "1 to add".
+    @Test("an export persists the picks it exported, not only its record of them")
+    func exportPersistsItsPicks() async throws {
+        let ready = try await exportReady()
+        let (harness, project, picks) = (ready.harness, ready.project, ready.picks)
+        #expect(harness.selection.hasPendingFlush)   // the debounce (60 s here) hasn't fired
+        await harness.session.startExport(project)
+        guard case .done = harness.session.export.phase else {
+            Issue.record("export did not land: \(harness.session.export.phase)")
+            return
+        }
+        let saved = try #require(try harness.persisted(project))
+        #expect(saved.persistedPicks == picks)
+        #expect(saved.status(currentPicks: saved.persistedPicks) == .exported)
+    }
+
     @Test("an album switch mid-export retires the run to its own store; the next album starts idle")
     func switchMidExport() async throws {
         let ready = try await exportReady()

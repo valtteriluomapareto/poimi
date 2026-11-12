@@ -82,9 +82,12 @@ enum ControlFixture: String, CaseIterable, Sendable {
         }
     }
 
-    /// A fresh fake library for this fixture.
-    func makeLibrary() -> FakePhotoLibrary {
-        FakePhotoLibrary(assets: assets, albums: photosAlbums, membership: membership, status: authorization)
+    /// A fake library for this fixture: fresh, or restoring what an earlier run of it persisted (a
+    /// relaunch, #300). `exportGate` holds / fails its exports; `persistence` is where it saves its state.
+    func makeLibrary(exportGate: FakeExportGate? = nil, restoring state: FakeLibraryState? = nil,
+                     persistence: URL? = nil) -> FakePhotoLibrary {
+        FakePhotoLibrary(assets: assets, albums: photosAlbums, membership: membership, status: authorization,
+                         exportGate: exportGate, restoring: state, persistence: persistence)
     }
 
     // MARK: - Seeding

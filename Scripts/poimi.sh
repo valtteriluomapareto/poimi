@@ -4,8 +4,8 @@
 #
 # Launch Poimi on a simulator straight into a named fixture + route, drive it with the same actions as
 # the user, read its state as JSON, wait on predicates over that state, and screenshot it. DEBUG-only
-# and fake-only: the app runs on an isolated in-memory store and the deterministic fake library, never
-# your photos.
+# and fake-only: the app runs on an isolated control store and the deterministic fake library, never
+# your photos or your albums.
 #
 #   Scripts/poimi.sh launch [--fixture NAME] [--route ROUTE] [--viewer ALIAS] [--ipad] [--headless]
 #                           [--no-build] [--fresh]
@@ -13,6 +13,7 @@
 #   Scripts/poimi.sh wait PREDICATE... [--timeout S]   # e.g. 'active.scan.phase == ready' 'idle == true'
 #   Scripts/poimi.sh fixture OP [ARGS-JSON]             # test levers: flush, lifecycle.resume, library.*
 #   Scripts/poimi.sh reset FIXTURE [LAUNCH-OPTIONS]     # relaunch on a fixture (same device/host, no build)
+#   Scripts/poimi.sh relaunch [--route R] [--viewer A]  # kill + launch over the SAME data (no reseed)
 #   Scripts/poimi.sh state [JQ-EXPR]                    # print state.json (current as of the last reply)
 #   Scripts/poimi.sh detail [JQ-EXPR]                   # print state-detail.json (active album, per day)
 #   Scripts/poimi.sh schema                             # actions, fixture ops, refusals, state paths, …
@@ -47,7 +48,7 @@ REPLY_TIMEOUT="${REPLY_TIMEOUT:-30}"
 die() { echo "poimi: $*" >&2; exit 1; }
 log() { printf '\033[1;34m▸\033[0m %s\n' "$*" >&2; }
 
-usage() { sed -n '3,27p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,28p' "$0" | sed 's/^# \{0,1\}//'; }
 
 require_jq() {
     command -v jq >/dev/null 2>&1 \
@@ -178,19 +179,28 @@ cmd_launch() {
     install_if_changed "${sim}" "${app}"
     poimi_grant_privacy "${sim}"
 
+    local args=(-PoimiControl -PoimiFixture "${fixture}")
+    [ -n "${route}" ] && args+=(-PoimiRoute "${route}")
+    [ -n "${viewer}" ] && args+=(-PoimiViewer "${viewer}")
+    [ "${headless}" = "1" ] && args+=(-PoimiHeadless)
+    start_app "${sim}" "$( { [ "${ipad}" = "1" ] && echo --ipad; [ "${headless}" = "1" ] && echo --headless; true; } )" \
+        "${args[@]}"
+}
+
+# Terminate the app on $1 and launch it with the remaining arguments; returns once its first state.json
+# is written (route and viewer applied) and records the session ($2 = the mode lines for MODE_FILE).
+start_app() {
+    local sim="$1" mode="$2"
+    shift 2
     xcrun simctl terminate "${sim}" "${POIMI_BUNDLE_ID}" >/dev/null 2>&1 || true
     local file
     file="$(container "${sim}")/Documents/control/state.json"
     rm -f "${file}"
 
-    local args=(-PoimiControl -PoimiFixture "${fixture}")
-    [ -n "${route}" ] && args+=(-PoimiRoute "${route}")
-    [ -n "${viewer}" ] && args+=(-PoimiViewer "${viewer}")
-    [ "${headless}" = "1" ] && args+=(-PoimiHeadless)
-    log "Launching: ${args[*]}"
+    log "Launching: $*"
     date '+%Y-%m-%d %H:%M:%S' > "${WORK_DIR}/launched-${sim}"
     # TZ pins the process time zone to UTC from the first instruction (the app also sets it).
-    SIMCTL_CHILD_TZ=UTC xcrun simctl launch "${sim}" "${POIMI_BUNDLE_ID}" "${args[@]}" >/dev/null
+    SIMCTL_CHILD_TZ=UTC xcrun simctl launch "${sim}" "${POIMI_BUNDLE_ID}" "$@" >/dev/null
 
     # The app writes its first state.json only once the route (and viewer) are applied, so this
     # returns with the launch done — or with its launchError.
@@ -203,11 +213,37 @@ cmd_launch() {
     done
     printf '%s\n' "${sim}" > "${SIM_FILE}"
     jq -r '.run' "${file}" > "${RUN_FILE}"
-    { [ "${ipad}" = "1" ] && echo --ipad; [ "${headless}" = "1" ] && echo --headless; true; } > "${MODE_FILE}"
+    printf '%s\n' "${mode}" > "${MODE_FILE}"
     local error
     error="$(jq -r '.app.launchError // empty' "${file}")"
     [ -z "${error}" ] || die "launch refused: ${error}"
     jq -c '{run, fixture: .app.fixture, host: .app.host, idiom: .app.idiom, screen: .nav.screen}' "${file}"
+}
+
+# `relaunch [--route R] [--viewer A]`: kill the app (`simctl terminate` — no scene-phase change, so nothing
+# flushes on the way down: the D15 loss window) and launch it again over the SAME data — the store, the
+# fake library's added photos + exported albums, the album aliases. No build, no reseed; same device and
+# host as the last launch.
+cmd_relaunch() {
+    require_jq
+    local extra=()
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --route)  extra+=(-PoimiRoute "${2:?--route needs a route}"); shift 2 ;;
+            --viewer) extra+=(-PoimiViewer "${2:?--viewer needs an asset alias}"); shift 2 ;;
+            *) die "relaunch: unknown option '$1' (only --route / --viewer; the device and host are the last launch's)" ;;
+        esac
+    done
+    [ -s "${SIM_FILE}" ] || die "no launch yet — run 'Scripts/poimi.sh launch' first."
+    local sim mode
+    sim="$(cat "${SIM_FILE}")"
+    [ "$(sim_state "${sim}")" = "Booted" ] || die "the simulator (${sim}) isn't booted — 'Scripts/poimi.sh launch'."
+    mode="$(cat "${MODE_FILE}" 2>/dev/null || true)"
+    local args=(-PoimiControl -PoimiRelaunch)
+    [[ "${mode}" == *--headless* ]] && args+=(-PoimiHeadless)
+    rm -f "${RUN_FILE}"
+    echo 1 > "${ID_FILE}"   # the app clears Documents/control/ (state + mailbox) on a relaunch too
+    start_app "${sim}" "${mode}" "${args[@]}" ${extra[@]+"${extra[@]}"}
 }
 
 # `reset FIXTURE [launch options]`: a reset is a RELAUNCH (the app builds its store and library once per
@@ -430,6 +466,7 @@ command="${1:-}"
 case "${command}" in
     launch)   cmd_launch "$@" ;;
     reset)    cmd_reset "$@" ;;
+    relaunch) cmd_relaunch "$@" ;;
     send)     cmd_send "$@" ;;
     fixture)  cmd_fixture "$@" ;;
     schema)   cmd_schema ;;

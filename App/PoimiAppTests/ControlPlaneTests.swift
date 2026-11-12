@@ -45,15 +45,38 @@ struct ControlHarness {
     init(_ fixture: ControlFixture, parsed: ControlLaunch.Parsed, library: (any PhotoLibraryProviding)? = nil,
          iPad: Bool = false) {
         self.fixture = fixture
+        // The fixture's own library carries the export gate, as a launch's does (#300).
+        let gate = library == nil ? FakeExportGate() : nil
         let graph = ControlEnvironment.makeGraph(
             fixture: fixture,
             timelineCacheDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent("control-tests-\(UUID().uuidString)", isDirectory: true),
             defaults: ControlEnvironment.isolatedDefaults(suiteName: "control.test.\(UUID().uuidString)"),
-            thumbnailLoads: thumbnailLoads, library: library)
+            thumbnailLoads: thumbnailLoads, library: library ?? fixture.makeLibrary(exportGate: gate))
         runtime = ControlRuntime(parsed: parsed, graph: graph, sink: sink, run: "r-test",
                                  writeDelay: .milliseconds(10), thumbnailLoads: thumbnailLoads,
-                                 listAlwaysShown: iPad)
+                                 listAlwaysShown: iPad, exportGate: gate)
+    }
+
+    /// A launch over `paths`, exactly as `ControlEnvironment.boot` makes one (`makeRuntime`): a fixture
+    /// launch wipes `paths` and seeds; `relaunch` continues whatever the last run over `paths` left (#300).
+    init(_ fixture: ControlFixture, paths: ControlPaths, relaunch: Bool = false, headless: Bool = false,
+         iPad: Bool = false) {
+        self.fixture = fixture
+        let recorded = ControlRunRecord.load(from: paths.record).flatMap { ControlFixture(rawValue: $0.fixture) }
+        let arguments = ["-PoimiControl"] + (relaunch ? ["-PoimiRelaunch"] : ["-PoimiFixture", fixture.rawValue])
+            + (headless ? ["-PoimiHeadless"] : [])
+        runtime = ControlEnvironment.makeRuntime(
+            ControlLaunch.parse(arguments, recorded: recorded), paths: paths,
+            defaults: ControlEnvironment.isolatedDefaults(suiteName: "control.test.\(UUID().uuidString)"),
+            sink: sink, run: "r-test-\(relaunch ? "relaunch" : "launch")", writeDelay: .milliseconds(10),
+            listAlwaysShown: iPad)
+    }
+
+    /// Fresh control directories for one test (both under the temporary directory).
+    static func temporaryPaths() -> ControlPaths {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("control-\(UUID().uuidString)")
+        return ControlPaths(support: root.appendingPathComponent("support"), output: root.appendingPathComponent("output"))
     }
 
     var graph: AppGraph { runtime.graph }
@@ -352,7 +375,7 @@ struct ControlSnapshotTests {
         let snapshots = harness.serializedSnapshots()
         let state = try #require(try Self.parse(snapshots[0]) as? [String: Any])
         #expect(Set(state.keys) == ["snapshotVersion", "run", "rev", "settledSeq", "lastSeq", "app", "nav",
-                                    "albums", "active", "pending", "idle"])
+                                    "albums", "active", "library", "pending", "idle"])
         #expect(state["settledSeq"] as? Int == state["lastSeq"] as? Int)
         #expect(state["snapshotVersion"] as? Int == 1)
         #expect(state["idle"] as? Bool == true)
@@ -424,9 +447,10 @@ struct ControlSnapshotTests {
         harness.coordinator.finishToExport()
         #expect(harness.snapshot().content["idle"] == .bool(false))
         #expect(harness.snapshot().content["active"]?["export"]?["phase"] == .string("idle"))
-        harness.selection.select(harness.graph.session.reviewOrderedIDs.prefix(2))   // a debounce is pending …
-        await harness.graph.session.startExport(project)
+        harness.selection.select(harness.graph.session.reviewOrderedIDs.prefix(2))
+        await harness.graph.session.startExport(project)   // (an export flushes the picks it exports, #300)
         #expect(harness.snapshot().content["active"]?["export"]?["phase"] == .string("done"))
+        harness.selection.toggle(harness.graph.session.reviewOrderedIDs[2])   // a debounce is pending …
         #expect(harness.snapshot().content["pending"]?["selectionFlush"] == .bool(true))
         // … and `idle` doesn't wait on it: under control the debounce is a day long (no flush action
         // until slice C), so the flush is reported under `pending` only.

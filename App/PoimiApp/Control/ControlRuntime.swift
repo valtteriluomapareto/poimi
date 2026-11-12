@@ -23,8 +23,15 @@ final class ControlRuntime {
     /// Why the launch was refused (malformed flags) — shown in place of the UI. `nil` when valid.
     let refusal: String?
     let fixture: ControlFixture
-    let assetAliases: ControlAssetAliases
-    let albumAliases = ControlAlbumAliases()
+    /// The asset aliases — the fixture's library, plus any photos added mid-run (the host grows them).
+    var assetAliases: ControlAssetAliases { host.assets }
+    private let initialAssetAliases: ControlAssetAliases
+    let albumAliases: ControlAlbumAliases
+    /// The fake library's export gate (#300): `library.*` in the snapshot, the export levers. `nil` when
+    /// the run's library has none (a test's own wrapper).
+    let exportGate: FakeExportGate?
+    /// Where the run record is kept for a relaunch (#300), or `nil` (in-process runs that never relaunch).
+    private let recordURL: URL?
     /// The action bookkeeping behind `settledSeq` / `lastSeq` (#298).
     let progress = ControlProgress()
     /// The fake thumbnail loads in flight (`pending.thumbnails`), when the graph counts them.
@@ -34,8 +41,8 @@ final class ControlRuntime {
     }
     /// The one action handler (#298) — what the mailbox, and the in-process tests, talk to.
     private(set) lazy var host = ControlHost(
-        graph: graph, run: run, fixture: fixture, assets: assetAliases, albums: albumAliases,
-        progress: progress, listAlwaysShown: listAlwaysShown,
+        graph: graph, run: run, fixture: fixture, assets: initialAssetAliases, albums: albumAliases,
+        progress: progress, listAlwaysShown: listAlwaysShown, exportGate: exportGate,
         state: { [unowned self] in stateJSON() },
         rev: { [unowned self] in writer.rev },
         syncState: { [unowned self] in await syncState() })
@@ -55,12 +62,17 @@ final class ControlRuntime {
     /// is written before this, so a run's first `state.json` already shows the applied route.
     private(set) var bootstrapped = false
 
-    /// Seeds the fixture (a refused launch seeds nothing) — no I/O, no global effects.
+    /// Seeds the fixture (a refused launch or a relaunch seeds nothing) — no global effects. With a
+    /// `record` URL the album aliases are kept there for a relaunch, which restores them from it (#300);
+    /// `addedAssets` are the photos an earlier run added to the library (a relaunch's alias table).
     init(parsed: ControlLaunch.Parsed, graph: AppGraph, sink: any ControlStateSink,
          run: String = "r-" + String(UInt32.random(in: 0...UInt32.max), radix: 16),
          writeDelay: Duration = .milliseconds(100),
-         thumbnailLoads: ThumbnailLoadCounter? = nil, mailbox: URL? = nil, listAlwaysShown: Bool? = nil) {
+         thumbnailLoads: ThumbnailLoadCounter? = nil, mailbox: URL? = nil, listAlwaysShown: Bool? = nil,
+         exportGate: FakeExportGate? = nil, record: URL? = nil, addedAssets: [AssetRef] = []) {
         self.graph = graph
+        self.exportGate = exportGate
+        recordURL = record
         // The iPad's split view keeps the album list on screen; the tests can pick either layout.
         self.listAlwaysShown = listAlwaysShown ?? (UIDevice.current.userInterfaceIdiom == .pad)
         self.thumbnailLoads = thumbnailLoads
@@ -81,17 +93,30 @@ final class ControlRuntime {
         }
         fixture = launch?.fixture ?? .fresh
         launchError = refusal
-        assetAliases = ControlAssetAliases(assets: fixture.assets)
-        if launch != nil {
-            let seeded = fixture.seed(projects: graph.projectStore, selection: graph.selectionStore,
-                                      done: graph.doneStore)
-            for project in seeded { albumAliases.assign(project.id) }
+        initialAssetAliases = ControlAssetAliases(assets: fixture.assets).appending(addedAssets)
+        if let launch, launch.relaunch {
+            // A relaunch continues the run on record: nothing is seeded, the aliases are its own.
+            albumAliases = record.flatMap(ControlRunRecord.load(from:)).map(ControlAlbumAliases.init(restoring:))
+                ?? ControlAlbumAliases()
+        } else {
+            albumAliases = ControlAlbumAliases()
+            if launch != nil {
+                let seeded = fixture.seed(projects: graph.projectStore, selection: graph.selectionStore,
+                                          done: graph.doneStore)
+                for project in seeded { albumAliases.assign(project.id) }
+            }
+        }
+        if let record, refusal == nil {
+            let aliases = albumAliases
+            let fixture = fixture
+            aliases.didAssign = { [unowned aliases] in aliases.record(fixture: fixture).save(to: record) }
+            aliases.record(fixture: fixture).save(to: record)
         }
         if let refusal {
             Log.app.fault("control: launch refused — \(refusal, privacy: .public)")
         } else {
-            let fixtureName = fixture.rawValue
-            Log.app.notice("control: fixture \(fixtureName, privacy: .public), run \(run, privacy: .public)")
+            let what = (launch?.relaunch == true ? "relaunch of " : "fixture ") + fixture.rawValue
+            Log.app.notice("control: \(what, privacy: .public), run \(run, privacy: .public)")
         }
     }
 
@@ -154,7 +179,7 @@ final class ControlRuntime {
             projects: graph.projectStore,
             selection: graph.selectionStore, done: graph.doneStore,
             assetAliases: assetAliases, albumAliases: albumAliases,
-            progress: progress, thumbnails: thumbnailLoads, headless: isHeadless,
+            progress: progress, thumbnails: thumbnailLoads, exportGate: exportGate, headless: isHeadless,
             launchError: launchError, bootstrapped: bootstrapped,
             idiom: UIDevice.current.userInterfaceIdiom == .pad ? "pad" : "phone",
             timeZone: Self.timeZoneName(Calendar.current.timeZone))
