@@ -13,6 +13,8 @@ worth telling users about, in plain language (not a commit log). The format foll
 - Deleting an album while it's still loading its photos (for example from the iPad
   sidebar) no longer crashes the app.
 - Deleting your only album after opening it no longer crashes the app.
+- The "Reset all progress" confirmation now says how many picks it discards ("Discard 34
+  picks") instead of showing raw formatting codes on the button.
 
 ## [1.1.0] — 2026-10-15
 

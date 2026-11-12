@@ -107,7 +107,6 @@ struct ReviewScreenStateTests {
         #expect(harness.session.markDoneAndAdvance(clusters[0]) == false)
         #expect(harness.done.isDone(clusters[0]))
         #expect(harness.session.reviewClusterID == clusters[1].id)
-        #expect(harness.session.lastClusterMoveWasAdvance)
 
         harness.session.markDoneAndAdvance(clusters[1])
         #expect(harness.session.reviewClusterID == clusters[3].id)   // skipped the done cluster 2
@@ -122,13 +121,12 @@ struct ReviewScreenStateTests {
         #expect(harness.session.reviewClusterID == clusters[3].id)
     }
 
-    @Test("a swipe / goTo moves the page without the advance flag; an unknown id or day is ignored")
+    @Test("a swipe / goTo moves the page; an unknown id or day is ignored")
     func showAndGoTo() async throws {
         let harness = try GridHarness()
         await harness.openGrid()
         harness.session.showCluster(harness.clusters[3].id)
         #expect(harness.session.reviewClusterID == harness.clusters[3].id)
-        #expect(!harness.session.lastClusterMoveWasAdvance)
         harness.session.showCluster("no-such-cluster")
         #expect(harness.session.reviewClusterID == harness.clusters[3].id)
         #expect(!harness.session.goTo(day: .day(year: 2025, month: 12, day: 24)))
@@ -145,7 +143,24 @@ struct ReviewScreenStateTests {
         #expect(harness.session.reviewClusterID == harness.clusters[0].id)   // only on dismiss
         harness.coordinator.dismissPhoto()
         #expect(harness.session.reviewClusterID == harness.clusters[2].id)
-        #expect(!harness.session.lastClusterMoveWasAdvance)
+    }
+
+    @Test("a new scan under an open grid re-enters it; with the viewer up, its dismissal restores the page")
+    func reentryUnderOpenGrid() async throws {
+        let harness = try GridHarness()
+        await harness.openGrid()
+        harness.session.goTo(day: fourDays[3])
+        await harness.session.rescanReview(harness.project)   // the grid's "Try again" / access recovered
+        #expect(harness.session.reviewClusterID == harness.clusters[0].id)   // the entry cluster again
+
+        // The viewer is up while the scan lands: the page moves under the sheet, then follows the photo.
+        harness.coordinator.openPhoto("d2/3")
+        harness.session.goTo(day: fourDays[2])
+        await harness.session.rescanReview(harness.project)
+        #expect(harness.session.reviewClusterID == harness.clusters[0].id)
+        #expect(harness.viewer.currentID == "d2/3")
+        harness.coordinator.dismissPhoto()
+        #expect(harness.session.reviewClusterID == harness.clusters[2].id)
     }
 
     // MARK: - The Overview's filter
@@ -168,15 +183,25 @@ struct ReviewScreenStateTests {
 
     // MARK: - The viewer
 
-    @Test("each opening starts on the tapped photo with no card and no toast")
-    func viewerStartsOver() async throws {
+    /// Regression (#299 review): the dismissal cleared the viewer's state while the sheet was still sliding
+    /// down, so it snapped to its start photo as a black "1 of 1" card and the card / toast blanked mid-slide.
+    @Test("a dismissal leaves the viewer as it was (the sheet slides down showing it); the next opening starts over")
+    func viewerSurvivesDismissal() async throws {
         let harness = try GridHarness()
         await harness.openGrid()
-        harness.coordinator.openPhoto("d3/11")
-        harness.viewer.step(1)   // past the last photo → the card
+        harness.coordinator.openPhoto("d2/11")
+        harness.viewer.step(1)                    // across d2's end → d3/0, toast up
+        harness.viewer.show("d3/11")
+        harness.viewer.step(1)                    // past the last photo → the card
+        let pages = harness.viewer.filmstripPages
         #expect(harness.viewer.endReached)
         harness.coordinator.dismissPhoto()
-        #expect(harness.viewer.currentID == nil)
+        #expect(harness.viewer.currentID == "d3/11")
+        #expect(harness.viewer.orderedIDs.count == 48)
+        #expect(harness.viewer.filmstripPages == pages)
+        #expect(harness.viewer.endReached)
+        #expect(harness.viewer.autoDoneCluster == harness.clusters[2])
+
         harness.coordinator.openPhoto("d1/2")
         #expect(harness.viewer.currentID == "d1/2")
         #expect(!harness.viewer.endReached)
@@ -242,17 +267,26 @@ struct ReviewScreenStateTests {
         #expect(!harness.viewer.endReached)
     }
 
-    @Test("the filmstrip reaches the window around the current photo, not beyond")
+    @Test("the filmstrip's window: ±25 around the opened photo, sliding once the photo nears its edge")
     func filmstripWindow() async throws {
         let harness = try GridHarness()
         await harness.openGrid()
         harness.coordinator.openPhoto("d0/0")
-        #expect(harness.viewer.filmstripReaches("d2/1"))    // index 25: the window's forward edge
-        #expect(!harness.viewer.filmstripReaches("d2/2"))   // index 26: past it
+        #expect(harness.viewer.filmstripPages.first == "d0/0")
+        #expect(harness.viewer.filmstripPages.last == "d2/1")    // index 25
         #expect(!harness.viewer.hasPrevious)
+        harness.viewer.show("d1/8")                               // index 20: 5 from the edge — stays
+        #expect(harness.viewer.filmstripPages.last == "d2/1")
+        harness.viewer.show("d1/9")                               // index 21: inside the margin — slides
+        #expect(harness.viewer.filmstripPages.first == "d0/0")
+        #expect(harness.viewer.filmstripPages.last == "d3/10")   // index 46 = 21 + 25
     }
 
-    // MARK: - Modals
+}
+
+@MainActor
+@Suite("Modals + confirmations on the coordinator / AlbumActions (#299)")
+struct ModalStateTests {
 
     @Test("a modal is dismissed only by its own dismissal; opening an album clears it")
     func modalLifecycle() throws {
@@ -296,5 +330,43 @@ struct ReviewScreenStateTests {
         #expect(harness.coordinator.path.isEmpty)
         #expect(!harness.base.graph.projectStore.projects.contains { $0.id == project.id })
         #expect(!actions.confirm(delete))   // the album is gone: nothing runs
+    }
+
+    @Test("a refused confirm changes nothing: the dialog stays up while the album exports")
+    func refusedConfirmLeavesDialog() async throws {
+        let harness = try GridHarness()
+        await harness.openGrid()
+        let project = harness.project
+        harness.base.selection.toggle("d0/0")
+        await harness.base.gate.hold(exports: true)
+        let export = Task { await harness.session.startExport(project) }
+        await harness.base.gate.waitUntilHeld()
+
+        for kind in [AlbumConfirmation.Kind.delete, .reset] {
+            let confirmation = AlbumConfirmation(kind: kind, album: project.id, origin: .albumList)
+            harness.coordinator.present(.confirm(confirmation))
+            #expect(!harness.base.actions.confirm(confirmation))
+            #expect(harness.coordinator.modal == .confirm(confirmation))
+            harness.coordinator.dismiss(.confirm(confirmation))
+        }
+        #expect(harness.base.graph.projectStore.projects.contains { $0.id == project.id })
+        #expect(harness.base.selection.contains("d0/0"))
+        await harness.base.gate.release()
+        await export.value
+    }
+
+    @Test("deleting an album dismisses a confirmation still naming it")
+    func deleteClearsStaleConfirmation() async throws {
+        let harness = try GridHarness()
+        let other = harness.base.album("Other")
+        let listReset = AlbumConfirmation(kind: .reset, album: other.id, origin: .albumList)
+        harness.coordinator.present(.confirm(listReset))
+        #expect(harness.base.actions.delete(other))
+        #expect(harness.coordinator.modal == nil)
+        // One naming a different album stays.
+        let mine = AlbumConfirmation(kind: .reset, album: harness.project.id, origin: .albumList)
+        harness.coordinator.present(.confirm(mine))
+        #expect(harness.base.actions.delete(harness.base.album("Third")))
+        #expect(harness.coordinator.modal == .confirm(mine))
     }
 }

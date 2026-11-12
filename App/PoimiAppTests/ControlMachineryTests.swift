@@ -378,6 +378,10 @@ struct ControlHostMachineryTests {
         try await send(harness, #"{"type":"viewer.page","photo":"\#(photos[0])"}"#)
         try await send(harness, #"{"type":"viewer.pick"}"#)   // un-picks photos[0] and stays
         try await send(harness, #"{"type":"viewer.dismiss"}"#)
+        try await send(harness, #"{"type":"viewer.open","photo":"\#(try #require(photos.last))"}"#)
+        try await send(harness, #"{"type":"viewer.page","direction":"next"}"#)   // across the day's end
+        try await send(harness, #"{"type":"viewer.undoAutoDone"}"#)
+        try await send(harness, #"{"type":"viewer.dismiss"}"#)
         let lastPhoto = try #require(harness.graph.session.reviewOrderedIDs.last
             .flatMap(harness.runtime.assetAliases.alias(for:)))
         try await send(harness, #"{"type":"viewer.open","photo":"\#(lastPhoto)"}"#)
@@ -458,6 +462,12 @@ struct ControlSchemaTests {
         // States the fixtures alone don't reach: the viewer, a finished export, a refused launch.
         let viewer = ControlHarness(.midReview, route: .review(album: "album-1", day: nil), viewer: "a-0002")
         await viewer.runtime.bootstrap()
+        record(viewer)
+        // …and its auto-done toast: from the open cluster's last photo, across its end.
+        try await viewer.send(#"{"type":"viewer.dismiss"}"#)
+        let open = try #require(viewer.clusters.first { !viewer.graph.doneStore.isDone($0) })
+        try await viewer.send(#"{"type":"viewer.open","photo":"\#(viewer.alias(try #require(open.assetIDs.last)))"}"#)
+        try await viewer.send(#"{"type":"viewer.page","direction":"next"}"#)
         record(viewer)
         let exported = ControlHarness(.exported)
         await exported.runtime.bootstrap()

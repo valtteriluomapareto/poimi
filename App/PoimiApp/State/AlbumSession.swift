@@ -124,9 +124,6 @@ final class AlbumSession {
     /// The pager keeps its own scroll position and follows this both ways: a swipe settles here
     /// (`showCluster`), and a move made here (`goTo`, `markDoneAndAdvance`, the viewer's return) scrolls it.
     private(set) var reviewClusterID: String?
-    /// Whether the last move of `reviewClusterID` was the end-cap's advance — the one move the pager
-    /// animates (and only to an adjacent page); every other move jumps, as it always has.
-    @ObservationIgnored private(set) var lastClusterMoveWasAdvance = false
     /// Where the grid is in its entry: not open, waiting for a published scan to pick its entry cluster
     /// (the drill target `day`, else the first unreviewed one), or entered (from that `day`).
     private enum GridEntry: Equatable {
@@ -443,12 +440,6 @@ extension AlbumSession {
         if overviewFilter != filter { overviewFilter = filter }
     }
 
-    /// The grid's current cluster, from `reviewClusterID` (`nil` before the grid's entry).
-    var currentReviewCluster: ReviewCluster? {
-        guard let id = reviewClusterID else { return nil }
-        return reviewClusters.first { $0.id == id }
-    }
-
     /// The pager settled on the cluster `id` (a swipe). Ignores an id that isn't a published cluster.
     func showCluster(_ id: String) {
         guard reviewClusters.contains(where: { $0.id == id }) else { return }
@@ -483,7 +474,7 @@ extension AlbumSession {
         let clusters = reviewClusters
         let current = reviewClusterID.flatMap { id in clusters.firstIndex { $0.id == id } } ?? 0
         let next = nextUnreviewedPage(after: current, count: clusters.count, isDone: { done.isDone(clusters[$0]) })
-        if clusters.indices.contains(next) { moveCluster(to: clusters[next].id, advance: true) }
+        if clusters.indices.contains(next) { moveCluster(to: clusters[next].id) }
         return wasDone
     }
 
@@ -493,11 +484,9 @@ extension AlbumSession {
         moveCluster(to: nil)
     }
 
-    private func moveCluster(to id: String?, advance: Bool = false) {
-        lastClusterMoveWasAdvance = advance
+    private func moveCluster(to id: String?) {
         if reviewClusterID != id { reviewClusterID = id }
     }
-
 }
 
 extension ExportStore.Phase {

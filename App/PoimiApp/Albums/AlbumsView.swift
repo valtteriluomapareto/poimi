@@ -120,14 +120,10 @@ struct AlbumsView: View {
         // counts what it discards rather than saying a bare "Reset".
         .confirmationDialog("Reset all progress?", isPresented: pendingBinding(.reset),
                             titleVisibility: .visible, presenting: pending(.reset)) { pending in
-            let project = pending.project
-            Button(project.persistedPickedCount == 0
-                   ? String(localized: "Reset everything",
-                            comment: "Destructive confirm when there are no picks to name")
-                   : String(localized: "Discard ^[\(project.persistedPickedCount) pick](inflect: true)",
-                            comment: "Destructive confirm button: names the pick count it discards"),
-                   role: .destructive) {
+            Button(role: .destructive) {
                 actions.confirm(pending.confirmation)
+            } label: {
+                Text(ResetConfirmTitle.text(picks: pending.project.persistedPickedCount))
             }
             Button("Cancel", role: .cancel) {}
         } message: { pending in
@@ -180,6 +176,20 @@ struct AlbumsView: View {
     private func pendingBinding(_ kind: AlbumConfirmation.Kind) -> Binding<Bool> {
         Binding(get: { pending(kind) != nil },
                 set: { if !$0, let pending = pending(kind) { coordinator.dismiss(.confirm(pending.confirmation)) } })
+    }
+}
+
+/// The Reset confirmation's destructive button title, shared by the album list and album settings: it
+/// counts what it discards ("Discard 34 picks"), or says "Reset everything" with nothing to name.
+/// `AttributedString(localized:)`, not `String(localized:)`: only the attributed form applies the
+/// `^[…](inflect: true)` grammar agreement — the plain string showed the markup verbatim.
+enum ResetConfirmTitle {
+    static func text(picks: Int) -> AttributedString {
+        picks == 0
+            ? AttributedString(localized: "Reset everything",
+                               comment: "Destructive confirm when there are no picks to name")
+            : AttributedString(localized: "Discard ^[\(picks) pick](inflect: true)",
+                               comment: "Destructive confirm button: names the pick count it discards")
     }
 }
 

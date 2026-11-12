@@ -31,19 +31,15 @@ final class AppCoordinator {
         didSet { pathDidChange(from: oldValue) }
     }
 
-    /// The asset last viewed in the grid / viewer. The grid restores its scroll to it on return
-    /// from the viewer (D22); set on cell tap and updated as the viewer swipes. Shared so scroll
-    /// position survives the round-trip.
+    /// The viewer's last `currentID`, outliving it: the grid restores its scroll to it on return from the
+    /// viewer (D22). Set on cell tap and as the viewer pages.
     var lastViewedID: String?
 
     /// The photo viewer, presented as a `.sheet` (a Now-Playing-style modal card) rather than a path
     /// push — you pull it DOWN to dismiss (the sheet owns the interactive drag), never a sideways
     /// nav-pop (#36). `nil` when closed; the grid stays mounted underneath, exactly where you left it.
-    /// The photo it OPENED on: the photo on screen as you page is the `ViewerStore`'s (#299), which starts
-    /// over on every change (`onPresentedPhotoChange`).
-    var presentedPhotoID: String? {
-        didSet { if presentedPhotoID != oldValue { onPresentedPhotoChange?(presentedPhotoID) } }
-    }
+    /// The photo it OPENED on: the photo on screen as you page is the `ViewerStore`'s (#299).
+    var presentedPhotoID: String?
 
     /// The modal over the albums phase (#299): the New album sheet, What's New (from App settings), or a
     /// destructive confirmation — or `nil`. Navigation state like the path, so it can be read and set as
@@ -70,12 +66,14 @@ final class AppCoordinator {
     /// (the drill target or the first unreviewed one), as a freshly pushed grid always has. Wired by
     /// `AppGraph`.
     @ObservationIgnored var onLeaveReview: (@MainActor () -> Void)?
-    /// Called whenever `presentedPhotoID` changes (open, dismiss, finish, album switch), so the viewer's
-    /// own state starts over on the photo it opens on (#299). Wired by `AppGraph`.
-    @ObservationIgnored var onPresentedPhotoChange: (@MainActor (String?) -> Void)?
-    /// Called when the viewer is dismissed back to the grid, with the photo it ended on: the grid's
-    /// current cluster follows it (#126, #299). Wired by `AppGraph`.
-    @ObservationIgnored var onDismissPhoto: (@MainActor (String?) -> Void)?
+    /// Called when the viewer opens (its state starts over on that photo) and when it's dismissed back to
+    /// the grid (the grid's current cluster follows the photo it ended on, #126) — #299. Wired by `AppGraph`.
+    @ObservationIgnored var onPhotoViewer: (@MainActor (PhotoViewerEvent) -> Void)?
+
+    enum PhotoViewerEvent {
+        case opened(String)
+        case dismissed(lastViewed: String?)
+    }
 
     init(library: any PhotoLibraryProviding) {
         self.library = library
@@ -146,6 +144,7 @@ final class AppCoordinator {
     func openPhoto(_ assetID: String) {
         Perf.event("openPhoto \(assetID.suffix(8))")   // start of the open span (→ viewer.onAppear)
         lastViewedID = assetID
+        onPhotoViewer?(.opened(assetID))   // before the sheet reads it: the viewer starts on this photo
         presentedPhotoID = assetID
     }
 
@@ -155,7 +154,7 @@ final class AppCoordinator {
     func dismissPhoto() {
         Perf.event("dismissPhoto (→ grid revealed)")
         presentedPhotoID = nil
-        onDismissPhoto?(lastViewedID)   // the grid's current cluster follows the photo you ended on
+        onPhotoViewer?(.dismissed(lastViewed: lastViewedID))   // the grid's page follows that photo
         viewerReturnTick &+= 1   // signal the grid to restore its position to `lastViewedID` (#126)
     }
 

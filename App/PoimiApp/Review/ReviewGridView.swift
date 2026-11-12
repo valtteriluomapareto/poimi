@@ -115,23 +115,16 @@ struct ReviewGridView: View {
         clusters.first { $0.id == currentPageID } ?? clusters.first
     }
 
-    /// 0-based position of the current page — for the indicator + the follow animation. 0 if unresolved.
+    /// 0-based position of the current page — for the indicator + the advance animation. 0 if unresolved.
     private var currentIndex: Int {
         clusters.firstIndex { $0.id == currentPageID } ?? 0
     }
 
-    /// Follow a move of the session's current cluster (#299). Only the end-cap's advance animates, and only
-    /// to an adjacent page: an animated `scrollPosition` write travels the content offset across every page
-    /// in between — a far target (the next unreviewed cluster can be dozens of done days away) would
-    /// materialise each passing `ClusterPage` and fire its cell loads mid-flight. Everything else jumps.
+    /// Follow a move of the session's current cluster made elsewhere (#299: entry, the viewer's return, the
+    /// control plane): jump. The end-cap's own advance animates in `markDoneAndAdvance` instead.
     private func follow(_ id: String?) {
         guard let id, id != currentPageID else { return }
-        let target = clusters.firstIndex { $0.id == id } ?? currentIndex
-        if session.lastClusterMoveWasAdvance, !reduceMotion, abs(target - currentIndex) <= 1 {
-            withAnimation(.snappy) { currentPageID = id }
-        } else {
-            currentPageID = id
-        }
+        currentPageID = id
     }
 
     /// The pinned header title for a cluster: a trip's resolved location sentence ("Week in Salo"), or
@@ -328,14 +321,15 @@ struct ReviewGridView: View {
         // dismiss), not `presentedPhotoID` — while the full-screen sheet covers the grid it may not re-
         // evaluate on the open, so a nil-transition `.onChange` can silently miss. `pendingScrollID` is
         // handed to the active `ClusterPage`, which scrolls to it (then clears it, one-shot).
-        // The session already moved the page to that photo's cluster on dismiss (`followViewer`); this
-        // jumps there (whichever of the two `onChange`s runs first) and hands over the scroll target.
+        // The session already moved the page to that photo's cluster on dismiss (`followViewer`), and the
+        // `reviewClusterID` follow below jumps there too: both write the page because SwiftUI doesn't order
+        // the two `onChange`s, and the scroll target must land on the page that holds it either way.
         .onChange(of: coordinator.viewerReturnTick) {
             guard let id = coordinator.lastViewedID, session.reviewDayByID[id] != nil else { return }
             if let target = session.reviewClusterID, target != currentPageID { currentPageID = target }
             pendingScrollID = id
         }
-        // The session's current cluster moved (entry, advance, viewer return, the control plane): follow.
+        // The session's current cluster moved (entry, viewer return, the control plane): follow by jumping.
         .onChange(of: session.reviewClusterID) { _, id in follow(id) }
     }
 
@@ -343,10 +337,21 @@ struct ReviewGridView: View {
 
     /// The end-cap's "Mark day done": the session toggles it and, if that marked it done, advances to the
     /// next unreviewed cluster (`AlbumSession.markDoneAndAdvance` — one implementation, shared with the
-    /// control plane); the pager follows (`follow`), animated only to an adjacent page.
+    /// control plane). The pager follows here, animated ONLY to an adjacent page: an animated
+    /// `scrollPosition` write travels the content offset across every page in between — a far target (the
+    /// next unreviewed cluster can be dozens of done days away) would materialise each passing
+    /// `ClusterPage` and fire its cell loads mid-flight. A far move jumps.
     private func markDoneAndAdvance(_ cluster: ReviewCluster) {
+        let from = currentIndex
         let wasDone = session.markDoneAndAdvance(cluster)
         announceDone(wasDone: wasDone)   // announce BOTH directions (mark + un-mark), like the top-bar seal
+        guard let next = session.reviewClusterID, next != currentPageID else { return }
+        let to = clusters.firstIndex { $0.id == next } ?? from
+        if reduceMotion || abs(to - from) > 1 {
+            currentPageID = next
+        } else {
+            withAnimation(.snappy) { currentPageID = next }
+        }
     }
 
     /// Toggle the CURRENT cluster's done-state from the top-bar seal (#202) — a status toggle that stays

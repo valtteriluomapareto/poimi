@@ -130,6 +130,7 @@ enum ControlActionKind: String, CaseIterable {
     case viewerPage = "viewer.page"
     case viewerPick = "viewer.pick"
     case viewerKeepReviewing = "viewer.keepReviewing"
+    case viewerUndoAutoDone = "viewer.undoAutoDone"
     case uiPresent = "ui.present"
     case uiConfirm = "ui.confirm"
     case uiDismiss = "ui.dismiss"
@@ -141,7 +142,8 @@ enum ControlActionKind: String, CaseIterable {
             [.req("album", .albumAlias)]
         case .navOpenReview: [.req("album", .albumAlias), .opt("day", .day)]
         case .navOpenExport, .navOpenAppSettings, .navBack, .navRoot, .viewerDismiss, .authRequest,
-             .reviewMarkDoneAndAdvance, .viewerPick, .viewerKeepReviewing, .uiConfirm, .uiDismiss: []
+             .reviewMarkDoneAndAdvance, .viewerPick, .viewerKeepReviewing, .viewerUndoAutoDone, .uiConfirm,
+             .uiDismiss: []
         case .viewerOpen, .selectionToggle: [.req("photo", .assetAlias)]
         case .reviewSetFilter: [.req("filter", .filter)]
         case .reviewGoTo: [.req("day", .day)]
@@ -194,6 +196,7 @@ enum ControlActionKind: String, CaseIterable {
                 + "next on the last photo opens the end-of-set card); photo = a filmstrip tap (never marks)"
         case .viewerPick: "the viewer's Pick: toggle; a pick advances (the end-of-set card after the last photo)"
         case .viewerKeepReviewing: "the end-of-set card's Keep reviewing"
+        case .viewerUndoAutoDone: "the auto-done toast's Undo (#128): reopens the cluster the viewer just marked"
         case .uiPresent:
             "the button that opens it: New album (album list), What's New (app settings), Delete / Reset all "
                 + "progress (album list or that album's settings; album), Mark all days unreviewed (settings; album)"
@@ -232,6 +235,7 @@ enum ControlAction: Equatable {
     case viewerPage(ControlPageTarget)
     case viewerPick
     case viewerKeepReviewing
+    case viewerUndoAutoDone
     case uiPresent(ControlModal, album: String?)
     case uiConfirm
     case uiDismiss
@@ -264,6 +268,7 @@ enum ControlAction: Equatable {
         case .viewerPage: .viewerPage
         case .viewerPick: .viewerPick
         case .viewerKeepReviewing: .viewerKeepReviewing
+        case .viewerUndoAutoDone: .viewerUndoAutoDone
         case .uiPresent: .uiPresent
         case .uiConfirm: .uiConfirm
         case .uiDismiss: .uiDismiss
@@ -357,6 +362,7 @@ extension ControlAction: Decodable {
         case .viewerPage: return .viewerPage(try keys.pageTarget())
         case .viewerPick: return .viewerPick
         case .viewerKeepReviewing: return .viewerKeepReviewing
+        case .viewerUndoAutoDone: return .viewerUndoAutoDone
         case .uiPresent:
             let raw = try keys.required(String.self, "modal")
             guard let modal = ControlModal(rawValue: raw) else {

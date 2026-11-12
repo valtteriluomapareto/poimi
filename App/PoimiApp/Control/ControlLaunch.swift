@@ -7,7 +7,6 @@
 //  (D30). The composition root only calls `ControlLaunch.bootGraph()`.
 //
 //      -PoimiControl -PoimiFixture <name> [-PoimiRoute <route>] [-PoimiViewer <asset alias>] [-PoimiHeadless]
-//                    [-PoimiFilter toReview|done|all] [-PoimiModal <modal>[:<album>]]
 //
 //  The route grammar is `ControlRoute.parse` (its error text is the usage); fixtures are
 //  `ControlFixture`. Albums and assets are the snapshot's aliases, never real ids. User-facing docs:
@@ -27,10 +26,6 @@ struct ControlLaunch: Equatable {
     /// Run the graph, album session and control host behind a static view instead of `AppRootView`
     /// (#298) — no screen is mounted, so everything the run does goes through the stores.
     static let headlessFlag = "-PoimiHeadless"
-    /// Set the Overview's filter at launch (#299): `-PoimiFilter toReview|done|all`, with an overview route.
-    static let filterFlag = "-PoimiFilter"
-    /// Present a sheet / dialog at launch (#299): `-PoimiModal newAlbum | whatsNew | confirmDelete:album-1 …`.
-    static let modalFlag = "-PoimiModal"
     /// The screenshot harness flag — refused alongside `-PoimiControl` (two hosts in one launch would
     /// make it ambiguous which state you're looking at).
     static let screenFlag = "-PoimiScreen"
@@ -41,10 +36,6 @@ struct ControlLaunch: Equatable {
     let viewer: String?
     /// No UI: a static `ControlHeadlessView` instead of `AppRootView` (#298).
     var headless = false
-    /// The Overview's filter to set once its scan settles (`-PoimiFilter`, needs an `overview:` route).
-    var filter: ReviewFilter?
-    /// A sheet / dialog to present once the route has settled (`-PoimiModal`).
-    var modal: ControlLaunchModal?
 
     /// The outcome of reading the launch arguments.
     enum Parsed: Equatable {
@@ -65,10 +56,10 @@ struct ControlLaunch: Equatable {
 
     /// Parse `arguments` (pure, so tests drive it directly).
     static func parse(_ arguments: [String]) -> Parsed {
-        let controlFlags = [controlFlag, fixtureFlag, routeFlag, viewerFlag, headlessFlag, filterFlag, modalFlag]
+        let controlFlags = [controlFlag, fixtureFlag, routeFlag, viewerFlag, headlessFlag]
         guard arguments.contains(where: controlFlags.contains) else { return .off }
         guard arguments.contains(controlFlag) else {
-            return .invalid("\(controlFlags.dropFirst().joined(separator: ", ")) need \(controlFlag)")
+            return .invalid("\(fixtureFlag), \(routeFlag), \(viewerFlag) and \(headlessFlag) need \(controlFlag)")
         }
         if arguments.contains(screenFlag) {
             return .invalid("\(controlFlag) refuses \(screenFlag) in the same launch")
@@ -94,27 +85,11 @@ struct ControlLaunch: Equatable {
                     return .invalid("\(viewerFlag) needs a review route (\(routeFlag) review:<album>[:<day>])")
                 }
             }
-            let lens = try filter(in: arguments, route: route)
-            var modal: ControlLaunchModal?
-            if let raw = try value(of: modalFlag, in: arguments) { modal = try ControlLaunchModal.parse(raw) }
             return .on(ControlLaunch(fixture: fixture, route: route, viewer: viewer,
-                                     headless: arguments.contains(headlessFlag), filter: lens, modal: modal))
+                                     headless: arguments.contains(headlessFlag)))
         } catch {
             return .invalid(error.message)
         }
-    }
-
-    /// `-PoimiFilter`'s lens, `nil` if absent — it needs an overview route (the menu is on the Overview).
-    private static func filter(in arguments: [String],
-                               route: ControlRoute?) throws(ControlLaunchError) -> ReviewFilter? {
-        guard let raw = try value(of: filterFlag, in: arguments) else { return nil }
-        guard let filter = ReviewFilter(controlName: raw) else {
-            throw ControlLaunchError("\(filterFlag) takes \(ControlArgType.filter.rawValue), got '\(raw)'")
-        }
-        guard case .overview = route else {
-            throw ControlLaunchError("\(filterFlag) needs an overview route (\(routeFlag) overview:<album>)")
-        }
-        return filter
     }
 
     /// The value following `flag`, `nil` if the flag is absent. A flag with no value (end of the list,
@@ -126,30 +101,6 @@ struct ControlLaunch: Equatable {
             throw ControlLaunchError("\(flag) needs a value")
         }
         return arguments[next]
-    }
-}
-
-/// `-PoimiModal`'s value: a modal name, with `:<album>` for a confirmation (`confirmDelete:album-1`). Applied
-/// after the route as `ui.present` — the same reachability rules, so it fails with the action's refusal.
-struct ControlLaunchModal: Equatable {
-    let modal: ControlModal
-    let album: String?
-
-    static let grammar = "newAlbum | whatsNew | confirmDelete:<album> | confirmReset:<album> | confirmUnreview:<album>"
-
-    static func parse(_ raw: String) throws(ControlLaunchError) -> ControlLaunchModal {
-        let parts = raw.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
-        guard let modal = ControlModal(rawValue: parts[0]), parts.count <= 2 else {
-            throw ControlLaunchError("unknown modal '\(raw)'; modals: \(grammar)")
-        }
-        let album = parts.count == 2 ? parts[1] : nil
-        guard (modal.confirmation != nil) == (album != nil) else {
-            throw ControlLaunchError("modal '\(raw)': \(modal.confirmation != nil ? "needs" : "takes no") :<album>")
-        }
-        if let album, !ControlAlbumAliases.isAlias(album) {
-            throw ControlLaunchError("modal album must be an alias like album-1, got '\(album)'")
-        }
-        return ControlLaunchModal(modal: modal, album: album)
     }
 }
 

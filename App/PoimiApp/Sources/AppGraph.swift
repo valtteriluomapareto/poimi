@@ -65,9 +65,14 @@ struct AppGraph {
         coordinator.onLeaveExport = { [weak session] in session?.exportScreenClosed() }
         coordinator.onLeaveReview = { [weak session] in session?.reviewScreenClosed() }
         let viewer = ViewerStore(coordinator: coordinator, session: session, selection: selection, done: done)
-        // The viewer starts over on each opening; on its dismissal the grid's page follows the last photo.
-        coordinator.onPresentedPhotoChange = { [weak viewer] id in viewer?.present(id) }
-        coordinator.onDismissPhoto = { [weak session] id in session?.followViewer(to: id) }
+        // The viewer starts over on each opening; on its dismissal the grid's page follows the last photo
+        // (the viewer itself keeps its state: the sheet is still sliding down, showing it).
+        coordinator.onPhotoViewer = { [weak viewer, weak session] event in
+            switch event {
+            case .opened(let id): viewer?.open(id)
+            case .dismissed(let lastViewed): session?.followViewer(to: lastViewed)
+            }
+        }
         return AppGraph(
             photoLibrary: library,
             thumbnailProvider: thumbnails,

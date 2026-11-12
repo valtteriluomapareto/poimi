@@ -158,13 +158,22 @@ enum ControlSnapshot {
             sheetAlbum = inputs.albumAliases.alias(for: confirmation.album)
         }
         let photo = viewerUp ? (inputs.viewer.currentID ?? coordinator.presentedPhotoID) : nil
+        // The auto-done toast (#128): the day it marked + how many auto-marks so far (a new toast for the
+        // same day still bumps it). In the UI it hides after a few seconds (a view timer); headless it
+        // stays until Undo or the next opening.
+        let toast: ControlJSON = if viewerUp, let cluster = inputs.viewer.autoDoneCluster {
+            .object(("day", .string(cluster.firstDay?.description)), ("marks", .int(inputs.viewer.autoDoneCount)))
+        } else {
+            .null
+        }
         return .object(
             ("screen", .string(screen)),
             ("path", .array(coordinator.path.map { route(for: $0, albums: inputs.albumAliases) })),
             ("sheet", .string(sheet)),
             ("sheetAlbum", .string(sheetAlbum)),
             ("viewerPhoto", .string(photo.flatMap(inputs.assetAliases.alias(for:)))),
-            ("viewerEndOfSet", viewerUp ? .bool(inputs.viewer.endReached) : .null))
+            ("viewerEndOfSet", viewerUp ? .bool(inputs.viewer.endReached) : .null),
+            ("viewerToast", toast))
     }
 
     @MainActor

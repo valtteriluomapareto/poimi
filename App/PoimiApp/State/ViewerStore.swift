@@ -3,16 +3,17 @@
 //  PoimiApp — the photo viewer's state, lifted out of `PhotoViewerView` (#299, control plane slice D;
 //  docs/plans/control-plane.md §4 D).
 //
-//  The photo on screen, the end-of-set card (#180) and the paged-past auto-mark-done (#128) used to be the
-//  viewer's `@State`, so nothing without a mounted viewer could page it, and a run with no UI couldn't
-//  reach the card's Save to Photos. This `@MainActor @Observable` store holds them; the viewer binds its
-//  pager, filmstrip, chevrons, Pick and the card to it, and the control plane calls the same methods.
+//  The photo on screen, the filmstrip's window, the end-of-set card (#180) and the paged-past
+//  auto-mark-done (#128) used to be the viewer's `@State`, so nothing without a mounted viewer could page
+//  it, and a run with no UI couldn't reach the card's Save to Photos. This `@MainActor @Observable` store
+//  holds them; the viewer binds its pager, filmstrip, chevrons, Pick and the card to it, and the control
+//  plane calls the same methods.
 //
 //  What stays in the view: the haptics, the VoiceOver announcement, the toast's auto-hide timer, the
-//  Pick bounce guard, the filmstrip window, the ambient wash and the info labels — presentation only.
+//  Pick bounce guard, the thumbnail prefetch, the ambient wash and the info labels — presentation only.
 //
-//  The coordinator starts it over whenever `presentedPhotoID` changes (`present`), so each opening starts
-//  on the tapped photo with no card and no toast, exactly as a freshly presented viewer did.
+//  Each opening (`open`) starts over on the tapped photo with no card and no toast, exactly as a freshly
+//  presented viewer did. A dismissal leaves the state alone: the sheet is still sliding down, showing it.
 //
 
 import Foundation
@@ -27,18 +28,27 @@ final class ViewerStore {
     @ObservationIgnored private let selection: SelectionStore
     @ObservationIgnored private let done: DoneStore
 
-    /// The photo on screen, or `nil` with no viewer up.
+    /// The photo on screen — kept after a dismissal (the sheet slides down showing it) until the next
+    /// opening; `nil` before the first.
     private(set) var currentID: String?
+    /// The filmstrip's window of photos around the current one (#80): rebuilt around it when it nears an
+    /// edge. What the strip shows, so it's also exactly what a filmstrip tap can reach.
+    private(set) var filmstripPages: [String] = []
     /// The end-of-set card is up (#180): Pick / Next went past the last photo.
     private(set) var endReached = false
     /// The cluster the last paged-past auto-mark marked done (#128) — the undoable toast; `nil` hides it.
     private(set) var autoDoneCluster: ReviewCluster?
     /// Bumped on every auto-mark, so the view fires its haptic + VoiceOver announcement once per mark.
     private(set) var autoDoneCount = 0
+    /// Whether this opening pages through the open review (decided once per opening, so `orderedIDs` is
+    /// O(1) per body read) or just the photo it opened on.
+    @ObservationIgnored private var pagesReview = false
 
-    /// The filmstrip's window around the current photo — how far a filmstrip tap can jump (#80).
+    /// The filmstrip window's reach either side of the current photo, and how close to its edge the
+    /// current photo may get before the window slides.
     static let filmstripBack = 25
     static let filmstripForward = 25
+    static let filmstripRebuildMargin = 5
 
     init(coordinator: AppCoordinator, session: AlbumSession, selection: SelectionStore, done: DoneStore) {
         self.coordinator = coordinator
@@ -51,16 +61,18 @@ final class ViewerStore {
     /// it isn't in the review (the screenshot harness's hand-picked list falls back the same way).
     var orderedIDs: [String] {
         guard let currentID else { return [] }
-        return session.reviewOrderedIDs.contains(currentID) ? session.reviewOrderedIDs : [currentID]
+        return pagesReview ? session.reviewOrderedIDs : [currentID]
     }
 
     // MARK: - Lifecycle
 
-    /// The viewer opened on `id` (or closed, `nil`): start over — no card, no toast.
-    func present(_ id: String?) {
+    /// The viewer opened on `id`: start over — on that photo, no card, no toast.
+    func open(_ id: String) {
+        pagesReview = session.reviewOrderedIDs.contains(id)
         if currentID != id { currentID = id }
         if endReached { endReached = false }
         if autoDoneCluster != nil { autoDoneCluster = nil }
+        rebuildFilmstrip()
     }
 
     // MARK: - Paging
@@ -71,6 +83,7 @@ final class ViewerStore {
         guard currentID != id else { return }
         currentID = id
         coordinator.lastViewedID = id
+        slideFilmstripIfNeeded()
     }
 
     /// A real swipe settled from `previous` to `current` (already shown): forward past a cluster's last
@@ -94,16 +107,6 @@ final class ViewerStore {
     var hasPrevious: Bool {
         guard let currentID else { return false }
         return viewerStep(from: currentID, in: orderedIDs, offset: -1) != nil
-    }
-
-    /// The photos a filmstrip tap can reach from here: the window it shows around the current photo.
-    func filmstripReaches(_ id: String) -> Bool {
-        let ids = orderedIDs
-        guard let current = currentID, let index = ids.firstIndex(of: current),
-              let target = ids.firstIndex(of: id) else { return false }
-        let window = viewerWindow(count: ids.count, around: index, back: Self.filmstripBack,
-                                  forward: Self.filmstripForward)
-        return window.contains(target)
     }
 
     // MARK: - Pick (#180)
@@ -162,5 +165,33 @@ final class ViewerStore {
         done.toggle(finished)
         autoDoneCluster = finished
         autoDoneCount &+= 1
+    }
+
+    // MARK: - Filmstrip window
+
+    /// A bounded window around the current photo — the pager windows itself, but the filmstrip is a SwiftUI
+    /// `LazyHStack` whose `.scrollPosition` to a mid-list id would materialise its whole prefix, so it gets a
+    /// few dozen thumbs that slide as you page.
+    private func rebuildFilmstrip() {
+        guard let currentID else { return }
+        let ids = orderedIDs
+        guard let index = ids.firstIndex(of: currentID) else {
+            if filmstripPages != [currentID] { filmstripPages = [currentID] }
+            return
+        }
+        let range = viewerWindow(count: ids.count, around: index, back: Self.filmstripBack,
+                                 forward: Self.filmstripForward)
+        let next = Array(ids[range])
+        if next != filmstripPages { filmstripPages = next }
+    }
+
+    /// Slide the window once the current photo is within `filmstripRebuildMargin` of its edge (or off it).
+    private func slideFilmstripIfNeeded() {
+        guard let currentID, let local = filmstripPages.firstIndex(of: currentID) else {
+            rebuildFilmstrip()
+            return
+        }
+        let margin = Self.filmstripRebuildMargin
+        if local < margin || local > filmstripPages.count - 1 - margin { rebuildFilmstrip() }
     }
 }

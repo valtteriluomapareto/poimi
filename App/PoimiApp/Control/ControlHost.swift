@@ -371,7 +371,7 @@ final class ControlHost {
             return accept { [coordinator] in await coordinator.requestAuthorization() }
 
         case .reviewSetFilter, .reviewGoTo, .reviewMarkDoneAndAdvance, .viewerPage, .viewerPick,
-             .viewerKeepReviewing, .uiPresent, .uiConfirm, .uiDismiss:
+             .viewerKeepReviewing, .viewerUndoAutoDone, .uiPresent, .uiConfirm, .uiDismiss:
             return try dispatchScreenState(action)
         }
     }
@@ -514,8 +514,8 @@ extension ControlHost {
             case .photo(let alias):
                 let id = try assetID(alias)
                 if viewer.currentID == id { return .noop("the viewer already shows \(alias)") }
-                guard viewer.filmstripReaches(id) else {
-                    throw refuse(.notShown, "\(alias) isn't in the viewer's filmstrip around the current photo")
+                guard viewer.filmstripPages.contains(id) else {   // exactly what the strip shows
+                    throw refuse(.notShown, "\(alias) isn't in the viewer's filmstrip")
                 }
                 viewer.show(id)
             }
@@ -532,6 +532,14 @@ extension ControlHost {
                 throw refuse(.notShown, "Keep reviewing is on the viewer's end-of-set card")
             }
             viewer.keepReviewing()
+            return accept()
+
+        case .viewerUndoAutoDone:
+            // The toast sits under the end-of-set card's scrim, so the card covers it too.
+            guard coordinator.presentedPhotoID != nil, !viewer.endReached, viewer.autoDoneCluster != nil else {
+                throw refuse(.notShown, "Undo is on the viewer's auto-done toast, which isn't showing")
+            }
+            viewer.undoAutoDone()
             return accept()
 
         case .uiPresent(let modal, let alias):
@@ -605,6 +613,15 @@ extension ControlHost {
         }
     }
 
+}
+
+extension AlbumSession {
+    /// The grid's current cluster (`reviewClusterID`'s), or `nil` before the grid's entry — for the host and
+    /// the snapshot only (DEBUG).
+    var currentReviewCluster: ReviewCluster? {
+        guard let id = reviewClusterID else { return nil }
+        return reviewClusters.first { $0.id == id }
+    }
 }
 
 // MARK: - Lookups + reachability

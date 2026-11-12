@@ -240,12 +240,11 @@ struct AlbumSettingsView: View {
                             titleVisibility: .visible) {
             // The confirm button counts what it destroys, so the cost is in the tap target rather than
             // only the prose above it.
-            Button(pickedCount == 0
-                   ? String(localized: "Reset everything",
-                            comment: "Destructive confirm when there are no picks to name")
-                   : String(localized: "Discard ^[\(pickedCount) pick](inflect: true)",
-                            comment: "Destructive confirm button: names the pick count it discards"),
-                   role: .destructive) { actions.confirm(confirmation(.reset)) }
+            Button(role: .destructive) {
+                actions.confirm(confirmation(.reset))
+            } label: {
+                Text(ResetConfirmTitle.text(picks: pickedCount))
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("""
@@ -298,8 +297,9 @@ struct AlbumSettingsView: View {
     /// re-save it (a delete that didn't come from this button is caught by `applyEdits`' `isGone` guard).
     /// NEVER deletes the exported Photos album (D31).
     private func deleteAlbum() {
-        isDeleting = true
-        actions.confirm(confirmation(.delete))   // pops to the library, drops the model + cached timeline
+        // Only once it ran (it pops to the library, drops the model + cached timeline): a refused delete
+        // (the album is exporting) leaves this screen up, and its edits must still be saved on leave.
+        isDeleting = actions.confirm(confirmation(.delete))
     }
 
     // MARK: - Derived display

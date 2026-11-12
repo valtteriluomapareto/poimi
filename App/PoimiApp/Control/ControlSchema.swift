@@ -74,6 +74,7 @@ enum ControlSchema {
         ("nav", "object"),
         ("nav.screen", "string"), ("nav.path", "array"), ("nav.sheet", "string|null"),
         ("nav.sheetAlbum", "string|null"), ("nav.viewerPhoto", "string|null"), ("nav.viewerEndOfSet", "bool|null"),
+        ("nav.viewerToast", "object|null"), ("nav.viewerToast.day", "string"), ("nav.viewerToast.marks", "int"),
         ("albums", "object"), ("albums.*", "object"),
         ("albums.*.status", "string"), ("albums.*.toAdd", "int|null"), ("albums.*.target", "int"),
         ("albums.*.picked", "int"), ("albums.*.titleLength", "int"), ("albums.*.exported", "bool"),
@@ -146,10 +147,7 @@ enum ControlSchema {
                 ("exists", .string("present and not null; value false inverts")))),
             ("statePaths", .object(pairs: statePaths.map { ($0.path, .string($0.type)) })),
             ("fixtures", .array(ControlFixture.allCases.map { .string($0.rawValue) })),
-            ("routes", .array(ControlRoute.grammar.map(ControlJSON.string))),
-            ("launchFlags", .object(
-                ("-PoimiFilter", .string(ControlArgType.filter.rawValue + " (with an overview: route)")),
-                ("-PoimiModal", .string(ControlLaunchModal.grammar + " (as ui.present, after the route)")))))
+            ("routes", .array(ControlRoute.grammar.map(ControlJSON.string))))
     }
 }
 

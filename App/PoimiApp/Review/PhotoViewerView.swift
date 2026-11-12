@@ -37,10 +37,6 @@ struct PhotoViewerView: View {
     /// RT we swap the chrome text to the adaptive `.primary`, which is guaranteed legible on the RT solid
     /// in both modes; without RT it stays `.white` over the glass-atop-photo.
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    /// A bounded window of candidates around the current photo — for the FILMSTRIP only. The pager
-    /// windows itself; the filmstrip is a SwiftUI `LazyHStack` whose `.scrollPosition` to a mid-list id
-    /// would materialise its whole prefix, so this keeps it to a few dozen thumbs and slides as you swipe.
-    @State private var filmstripPages: [String] = []
     /// A copy of the current photo painting the sheet's ambient background (the Now-Playing colour
     /// wash). Loaded cache-first at the grid's 400² key, so it's usually instant.
     @State private var ambientImage: UIImage?
@@ -55,10 +51,6 @@ struct PhotoViewerView: View {
     /// also pick the photo that just slid in. Navigation isn't guarded — programmatic turns are instant, so
     /// rapid Next is immediate (#180).
     @State private var pickBounce = false
-
-    private let windowBack = ViewerStore.filmstripBack
-    private let windowForward = ViewerStore.filmstripForward
-    private let rebuildMargin = 5
 
     /// The grid's quantized thumbnail size — the primary instant-paint cache for a viewer page.
     private var gridThumbSize: CGSize { CGSize(width: 400, height: 400) }
@@ -119,18 +111,16 @@ struct PhotoViewerView: View {
                 ambientImage = loaded
             }
         }
-        // Slide + warm the filmstrip with the on-screen photo (the store records it as the grid's restore
-        // anchor). This fires for ANY currentID change (swipe, filmstrip tap, open); auto-done is
-        // deliberately NOT here — it's driven off the pager's swipe delegate so a filmstrip tap can't mark
+        // Warm the filmstrip around the on-screen photo (the store slides the strip's window and records the
+        // grid's restore anchor). This fires for ANY currentID change (swipe, filmstrip tap, open); auto-done
+        // is deliberately NOT here — it's driven off the pager's swipe delegate so a filmstrip tap can't mark
         // a cluster done (#128).
         .onChange(of: currentID) { _, current in
             refreshInfo(for: current)
-            slideFilmstripIfNeeded()
             prefetchFilmstrip(around: current)
         }
         .onAppear {
             refreshInfo(for: currentID)
-            rebuildFilmstrip(around: currentID)
             prefetchFilmstrip(around: currentID)
         }
         .sensoryFeedback(.success, trigger: viewer.autoDoneCount)
@@ -303,7 +293,7 @@ struct PhotoViewerView: View {
             transportControls.frame(maxWidth: Self.chromeBandMaxWidth)
             // The filmstrip stays FULL width — it's a scrolling strip, so more visible thumbnails at iPad
             // width is a pure win rather than a stretch.
-            Filmstrip(pages: filmstripPages, currentID: currentBinding)
+            Filmstrip(pages: viewer.filmstripPages, currentID: currentBinding)
         }
         .padding(.horizontal, 20)
         .padding(.top, 18)
@@ -516,28 +506,7 @@ extension PhotoViewerView {
         Task { @MainActor in try? await Task.sleep(for: .milliseconds(150)); pickBounce = false }
     }
 
-    // MARK: Filmstrip window (the pager windows itself; this is just for the SwiftUI strip)
-
-    private func rebuildFilmstrip(around id: String) {
-        let ids = allIDs
-        guard let idx = ids.firstIndex(of: id) else {
-            if filmstripPages != [id] { filmstripPages = [id] }
-            return
-        }
-        let range = viewerWindow(count: ids.count, around: idx, back: windowBack, forward: windowForward)
-        let next = Array(ids[range])
-        if next != filmstripPages { filmstripPages = next }
-    }
-
-    private func slideFilmstripIfNeeded() {
-        guard let local = filmstripPages.firstIndex(of: currentID) else {
-            rebuildFilmstrip(around: currentID)
-            return
-        }
-        if local < rebuildMargin || local > filmstripPages.count - 1 - rebuildMargin {
-            rebuildFilmstrip(around: currentID)
-        }
-    }
+    // MARK: Filmstrip prefetch (the strip's window is `ViewerStore.filmstripPages`)
 
     /// Warm the filmstrip's lead thumbs at the STRIP's ~56pt size, ahead of appearance. The grid's
     /// 400² caching window doesn't serve these small requests, so without this each thumb pops in

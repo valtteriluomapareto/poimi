@@ -68,6 +68,10 @@ final class AlbumActions {
         guard !session.isExporting(project) else { return false }
         selection.deactivateIfActive(project)
         done.deactivateIfActive(project)
+        // A confirmation still naming it (e.g. the list's, while it went from settings) would be for nothing.
+        if case .confirm(let pending)? = coordinator.modal, pending.album == project.id {
+            coordinator.dismiss(.confirm(pending))
+        }
         if coordinator.activeAlbumID == project.id { coordinator.popToRoot() }
         if session.projectID == project.id { session.close() }
         projects.delete(project)   // also drops the album's cached timeline (#130)
@@ -96,14 +100,16 @@ final class AlbumActions {
         done.markAllUnreviewed(project, in: projects)
     }
 
-    /// A confirmation dialog's confirm button (#299): dismiss it, then run what it confirms through the
-    /// same path as everywhere else (`delete` / `reset` / `markAllUnreviewed`). The album list's and album
-    /// settings' dialogs both call this, and so does the control plane — one path from a confirm tap to
-    /// the store. `false` when nothing ran: the album is gone, or its export is running.
+    /// A confirmation dialog's confirm button (#299): run what it confirms through the same path as
+    /// everywhere else (`delete` / `reset` / `markAllUnreviewed`) and dismiss the dialog. The album list's
+    /// and album settings' dialogs both call this, and so does the control plane — one path from a confirm
+    /// tap to the store. `false` when nothing can run — the album is gone, or a delete / reset while its
+    /// export runs — and then nothing changes: the dialog stays up.
     @discardableResult
     func confirm(_ confirmation: AlbumConfirmation) -> Bool {
-        coordinator.dismiss(.confirm(confirmation))
         guard let project = projects.projects.first(where: { $0.id == confirmation.album }) else { return false }
+        if confirmation.kind != .markAllUnreviewed, session.isExporting(project) { return false }
+        coordinator.dismiss(.confirm(confirmation))
         switch confirmation.kind {
         case .delete: return delete(project)
         case .reset: return reset(project)

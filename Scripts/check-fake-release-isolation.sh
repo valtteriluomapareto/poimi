@@ -61,7 +61,9 @@ control_count=0
 while IFS= read -r file; do
     [ -z "${file}" ] && continue
     control_count=$((control_count + 1))
-    first="$(grep -vE '^[[:space:]]*(//.*)?$' "${file}" | head -1 | sed -E 's/[[:space:]]+$//')"
+    # `grep -m1`, not `grep | head -1`: under `pipefail`, head closing the pipe early SIGPIPEs grep on a
+    # long file (exit 141), which failed the guard with no message.
+    first="$(grep -m1 -vE '^[[:space:]]*(//.*)?$' "${file}" | sed -E 's/[[:space:]]+$//')"
     last="$(grep -vE '^[[:space:]]*$' "${file}" | tail -1 | sed -E 's/[[:space:]]+$//')"
     if [ "${first}" != "#if DEBUG" ] || [ "${last}" != "#endif" ]; then
         echo "::error file=${file}::control-plane source must be wrapped WHOLE in '#if DEBUG' … '#endif' (first code line / last line) so none of it ships in Release (D30)."

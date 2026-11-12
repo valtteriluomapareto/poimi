@@ -427,53 +427,27 @@ Lift a piece of state only when a real task needs it, verifying each on device:
 **Out of scope:** vertical scroll offset, column pinch, split-view column visibility, form
 drafts and focus. Size class comes only from the launch device (`--ipad`).
 
-**As built (#299).** All four pieces were lifted, each with an action, a snapshot path, a schema entry
-and tests (`ReviewScreenStateTests` on the stores, `ControlUIStateTests` through the host). 29 actions.
+**As built (#299).** All four pieces were lifted, each with an action, a snapshot path and tests; the
+vocabulary is `poimi.sh schema`. Decisions and deviations:
 
-- **Overview filter** → `AlbumSession.overviewFilter` (`setOverviewFilter`), reset by `close()`, so it
-  lasts while the album is open, as the view's `@State` did (it now also survives an iPad size-class
-  rebuild). `review.setFilter{filter}` needs the overview on top with more than one cluster (the menu's
-  own condition). Snapshot: `active.overview.filter`.
-- **Modals** → `AppCoordinator.modal: AppModal?` (`newAlbum`, `whatsNew` — App settings' manual open;
-  the once-per-version sheet stays `WhatsNewState`'s — and `confirm(AlbumConfirmation)` with kind
-  delete / reset / mark-all-unreviewed, the album and its **origin**: the album list or the album's
-  settings. On iPad both are on screen, so the origin decides which view presents the dialog.)
-  - The views bind through `coordinator.presenting(_:)`; `dismiss(_:)` clears only the modal named, so a
-    late dismissal can't close a newer one. `openProject` / `popToRoot` / `restore` clear it.
-  - Every confirm button calls **`AlbumActions.confirm(_:)`** (dismiss, then `delete` / `reset` /
-    `markAllUnreviewed`), and so does `ui.confirm`.
-  - `ui.present{modal, album?}` is the button that opens it, where it is (Mark all unreviewed is
-    settings-only and disabled with no done day; Delete / Reset are disabled while the album exports).
-    While a modal is up **every other action is `notShown`** (it covers the iPad split view too), except
-    the New album sheet's `albums.create`; `albums.create` still also works from the album list.
-  - Snapshot: `nav.sheet` (`viewer` or the modal's name) + `nav.sheetAlbum`.
-- **Viewer** → a new `ViewerStore` (`State/`): the photo on screen, the end-of-set card, the auto-done
-  toast's cluster, `step` (chevrons; forward across a cluster's end auto-marks it, #128), `show`
-  (filmstrip / the pager's settled page), `swiped` (the pager's swipe delegate → auto-mark), `pick`,
-  `keepReviewing`, `undoAutoDone`. The coordinator resets it on every `presentedPhotoID` change
-  (`onPresentedPhotoChange`); `show` records `lastViewedID`. The view keeps only presentation: haptics,
-  the VoiceOver announcement (now on `autoDoneCount`), the toast timer, the Pick bounce guard, the
-  filmstrip window, the wash. Actions: `viewer.page{direction|photo}` (a photo must be in the
-  filmstrip's ±25 window), `viewer.pick`, `viewer.keepReviewing`; `nav.openExport` now also works from
-  the card (its Save to Photos), and `viewer.dismiss` is its Back to grid. Snapshot: `nav.viewerPhoto` is
-  now the photo **on screen** (it was the one opened on) + `nav.viewerEndOfSet`.
-- **Grid page** → `AlbumSession.reviewClusterID`. `appear(.review(day))` (the `Screen` case now carries
-  the route's day) picks the entry cluster once per visit, in `settle` after the reconcile; a new publish
-  under an open grid re-enters (as a remounted grid did); the coordinator's `onLeaveReview` resets it.
-  `markDoneAndAdvance(_:)` is the end-cap's one implementation (the view calls it, `review.markDoneAndAdvance`
-  calls it on the current cluster); `goTo(day:)` / `showCluster` are a swipe; `followViewer` is the
-  viewer's return (#126, via `onDismissPhoto`). The pager keeps its own `@State` page + scroll and follows
-  both ways: the scroll binding writes the session in the same update; `onChange(of: reviewClusterID)`
-  scrolls, animated only for the end-cap's advance to an adjacent page (`lastClusterMoveWasAdvance`), as
-  before. Snapshot: `active.grid.cluster` (the cluster's first day).
-- **Launch flags**: `-PoimiFilter` (with an `overview:` route) and `-PoimiModal <modal>[:<album>]`, applied
-  after the route settles through the host (`poimi.sh launch --filter / --modal`); a refusal is the
-  launch's error.
-- **Found on the way:** `albums.create` / `albums.update` built periods on `DayKey.anchorDate` (noon), so
-  a one-day album ran noon to noon and held the next morning's photos. They now use the start of the day,
-  like the date pickers (regression test `periodsStartAtMidnight`).
-- **Not lifted:** the toast's Undo has no action; a filmstrip tap's reach is the store's ±25 window around
-  the current photo, which can differ by a few photos from the strip's lazily-slid window.
+- **Where the state lives.** The filter and the grid's current cluster are on `AlbumSession`; the modal is
+  `AppCoordinator.modal`; the viewer's photo, filmstrip window, end-of-set card and toast are a new
+  `ViewerStore`. The views keep only presentation (scroll position, haptics, timers, prefetch).
+- **A modal knows its origin** (album list or album settings): on iPad both are on screen, so the origin
+  picks which view presents the dialog. Every confirm button goes through `AlbumActions.confirm`, which
+  refuses (and leaves the dialog up) for a gone album or one that's exporting.
+- **While a modal is up every other action is `notShown`**, the iPad split view included — except the New
+  album sheet's own `albums.create`.
+- **The grid enters once per visit** (the drill day's cluster, else the first unreviewed one) after the
+  reconcile, and again on a new scan under an open grid. The pager keeps its own scroll position and
+  follows the session both ways; only the end-cap's own advance animates (in the view), so a control-plane
+  advance jumps.
+- **A viewer dismissal keeps the viewer's state** (the sheet is still sliding down, showing it); an opening
+  starts over. A filmstrip tap (`viewer.page{photo}`) reaches exactly what the strip shows.
+- **The toast timer is the view's**: in a headless run the toast stays until Undo or the next opening.
+- **Found on the way:** `albums.create` / `update` built periods on noon anchors (`DayKey.anchorDate`), so
+  a one-day album held the next morning's photos; they now start at midnight.
+- **Not lifted:** no launch flags for the filter or modals (after `launch`, a `send` does the same).
 
 ### Slice E — Break on purpose (only when tied to a specific bug)
 
