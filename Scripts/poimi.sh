@@ -8,7 +8,7 @@
 # your photos.
 #
 #   Scripts/poimi.sh launch [--fixture NAME] [--route ROUTE] [--viewer ALIAS] [--ipad] [--headless]
-#                           [--no-build] [--fresh]
+#                           [--filter LENS] [--modal MODAL[:ALBUM]] [--no-build] [--fresh]
 #   Scripts/poimi.sh send ACTION-JSON [--allow-refused] # e.g. '{"type":"nav.openAlbum","album":"album-1"}'
 #   Scripts/poimi.sh wait PREDICATE... [--timeout S]   # e.g. 'active.scan.phase == ready' 'idle == true'
 #   Scripts/poimi.sh fixture OP [ARGS-JSON]             # test levers: flush, lifecycle.resume, library.*
@@ -133,12 +133,14 @@ install_if_changed() {
 }
 
 cmd_launch() {
-    local fixture="one-album" route="" viewer="" ipad=0 headless=0 build=1 fresh=0
+    local fixture="one-album" route="" viewer="" filter="" modal="" ipad=0 headless=0 build=1 fresh=0
     while [ "$#" -gt 0 ]; do
         case "$1" in
             --fixture)  fixture="${2:?--fixture needs a name}"; shift 2 ;;
             --route)    route="${2:?--route needs a route}"; shift 2 ;;
             --viewer)   viewer="${2:?--viewer needs an asset alias}"; shift 2 ;;
+            --filter)   filter="${2:?--filter needs toReview, done or all}"; shift 2 ;;
+            --modal)    modal="${2:?--modal needs a modal (schema: launchFlags)}"; shift 2 ;;
             --ipad)     ipad=1; shift ;;
             --headless) headless=1; shift ;;
             --no-build) build=0; shift ;;
@@ -186,6 +188,8 @@ cmd_launch() {
     local args=(-PoimiControl -PoimiFixture "${fixture}")
     [ -n "${route}" ] && args+=(-PoimiRoute "${route}")
     [ -n "${viewer}" ] && args+=(-PoimiViewer "${viewer}")
+    [ -n "${filter}" ] && args+=(-PoimiFilter "${filter}")
+    [ -n "${modal}" ] && args+=(-PoimiModal "${modal}")
     [ "${headless}" = "1" ] && args+=(-PoimiHeadless)
     log "Launching: ${args[*]}"
     date '+%Y-%m-%d %H:%M:%S' > "${WORK_DIR}/launched-${sim}"

@@ -63,7 +63,10 @@ $P state '.albums["album-1"].status'               # "exported"
 
 - **`launch`** builds (incremental), installs only if the build differs, and returns once the route
   (and viewer) are applied. It exits 1 with the reason on a bad fixture/route/viewer or a route that
-  can't apply. `--no-build` relaunches the last build; `--ipad` uses `iPad Pro 13-inch (M5)` (the split
+  can't apply. `--filter toReview|done|all` (with an `overview:` route) and `--modal newAlbum |
+  whatsNew | confirmDelete:album-N | confirmReset:album-N | confirmUnreview:album-N` are applied after
+  the route settles, as the `review.setFilter` / `ui.present` actions — a modal the screen doesn't offer
+  fails the launch with that action's refusal. `--no-build` relaunches the last build; `--ipad` uses `iPad Pro 13-inch (M5)` (the split
   view, where the album list stays on screen); `--headless` shows a static host view instead of the UI.
   Override the devices with `SIM_NAME` / `IPAD_SIM_NAME`.
 - **`send ACTION`** prints the outcome and exits 1 on `refused` (unless `--allow-refused`) or a bad
@@ -93,6 +96,27 @@ $P state '.albums["album-1"].status'               # "exported"
 - **`shot`** waits for `idle == true`, settles briefly, captures. **Always look at the PNG.** If a system
   alert covers the app, relaunch with `--fresh`. Headless runs have nothing to look at.
 - To tap/swipe the real controls, use the **iOS Simulator MCP** on the booted device, then re-read state.
+
+## Screen state beyond routes
+
+A route says which screen; these say where on it (each read back from `state.json`):
+
+- **Overview filter** — `review.setFilter{filter}` → `active.overview.filter`. Kept while the album is
+  open; `.all` again on the next open.
+- **Grid page** — `active.grid.cluster` is the current cluster's first day (`null` with no grid).
+  `review.goTo{day}` swipes to the cluster holding that day; `review.markDoneAndAdvance` is the current
+  cluster's end-cap (done → the next unreviewed cluster; on a done cluster it reopens it and stays).
+  The grid enters on the route's day, else the first unreviewed cluster, once per visit.
+- **Viewer** — `nav.viewerPhoto` is the photo on screen, `nav.viewerEndOfSet` the end-of-set card.
+  `viewer.page{direction:next|previous}` is the chevrons / a swipe (forward past a cluster's last photo
+  marks it done, #128; next on the last photo opens the card); `viewer.page{photo}` is a filmstrip tap
+  (never marks; only photos in the strip's window). `viewer.pick` is Pick. With the card up only
+  `viewer.keepReviewing`, `viewer.dismiss` (Back to grid) and `nav.openExport` (its Save to Photos)
+  work. Dismissing moves the grid to the photo's cluster.
+- **Modals** — `ui.present{modal, album?}` → `nav.sheet` (+ `nav.sheetAlbum` for a confirmation);
+  `ui.confirm` is a confirmation's confirm button, `ui.dismiss` Cancel / swipe-down / Continue. A sheet
+  or dialog covers everything (iPad too): other actions are `notShown` until it's dismissed — except
+  the New album sheet's `albums.create`.
 
 ## Reading state
 

@@ -96,6 +96,23 @@ final class AlbumActions {
         done.markAllUnreviewed(project, in: projects)
     }
 
+    /// A confirmation dialog's confirm button (#299): dismiss it, then run what it confirms through the
+    /// same path as everywhere else (`delete` / `reset` / `markAllUnreviewed`). The album list's and album
+    /// settings' dialogs both call this, and so does the control plane — one path from a confirm tap to
+    /// the store. `false` when nothing ran: the album is gone, or its export is running.
+    @discardableResult
+    func confirm(_ confirmation: AlbumConfirmation) -> Bool {
+        coordinator.dismiss(.confirm(confirmation))
+        guard let project = projects.projects.first(where: { $0.id == confirmation.album }) else { return false }
+        switch confirmation.kind {
+        case .delete: return delete(project)
+        case .reset: return reset(project)
+        case .markAllUnreviewed:
+            markAllUnreviewed(project)
+            return true
+        }
+    }
+
     /// Copy an album's configuration (none of its progress) — the album list's "Duplicate".
     @discardableResult
     func duplicate(_ project: CurationProject) -> CurationProject {

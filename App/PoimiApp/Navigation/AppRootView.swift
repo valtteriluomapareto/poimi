@@ -119,6 +119,15 @@ struct AppRootView: View {
     }
 }
 
+extension AppCoordinator {
+    /// The `isPresented` binding for a `.sheet` / `.confirmationDialog` bound to `modal` (#299): shown while
+    /// it's the modal up; a dismissal (swipe-down, Cancel, the write SwiftUI makes after a dialog's button)
+    /// clears it.
+    func presenting(_ modal: AppModal) -> Binding<Bool> {
+        Binding(get: { self.modal == modal }, set: { if !$0 { self.dismiss(modal) } })
+    }
+}
+
 /// A clearly-labeled placeholder for a not-yet-built screen — names the screen and its issue so a
 /// screenshot of the shell is self-documenting, never mistaken for a finished screen.
 struct RoutePlaceholder: View {

@@ -101,6 +101,7 @@ final class ControlHost {
     fileprivate var actions: AlbumActions { graph.actions }
     fileprivate var selection: SelectionStore { graph.selectionStore }
     fileprivate var done: DoneStore { graph.doneStore }
+    fileprivate var viewer: ViewerStore { graph.viewer }
 
     // MARK: - Requests
 
@@ -207,6 +208,7 @@ final class ControlHost {
     // One case per action, each a guard or two and the one call — a switch is the clearest shape.
     // swiftlint:disable:next cyclomatic_complexity function_body_length
     private func dispatch(_ action: ControlAction) throws(Refused) -> ControlOutcome {
+        try requireNoModal(over: action)
         switch action {
         case .navOpenAlbum(let alias):
             let project = try album(alias)
@@ -223,13 +225,14 @@ final class ControlHost {
         case .navOpenExport:
             let project = try openAlbum()
             if coordinator.path.last == .export(project.id) { return .noop("export is already on top") }
-            // The overview's Save to Photos, or the fully-reviewed grid's (the viewer's end-of-set card is
-            // view state — slice D).
+            // The overview's Save to Photos, the fully-reviewed grid's, or the viewer's end-of-set card's.
             let onTop = coordinator.path.last
             let gridDone = onTop.map(isReview) == true
                 && isReviewComplete(clusters: session.reviewClusters, isDone: { done.isDone($0) })
-            guard coordinator.presentedPhotoID == nil, onTop == .albumOverview(project.id) || gridDone else {
-                throw refuse(.notShown, "Save to Photos is on the album's overview, or the grid once every day is done")
+            let viewerUp = coordinator.presentedPhotoID != nil
+            guard viewerUp ? viewer.endReached : onTop == .albumOverview(project.id) || gridDone else {
+                throw refuse(.notShown, "Save to Photos is on the album's overview, the grid once every day is "
+                    + "done, or the viewer's end-of-set card")
             }
             guard selection.progress.picked > 0 else {
                 throw refuse(.invalidState, "nothing is picked (Save to Photos is disabled)")
@@ -284,7 +287,8 @@ final class ControlHost {
 
         case .albumsCreate(let new):
             try requireAlbumsPhase()
-            try requireList("New album is on the album list")
+            // The sheet's Create — from the open sheet, or the album list (its New album button, then Create).
+            if coordinator.modal != .newAlbum { try requireList("New album is on the album list") }
             guard let project = actions.create(validated: draft(new)) else {
                 throw refuse(.invalidState, "not a valid album (a name and a non-empty period are required)")
             }
@@ -365,6 +369,10 @@ final class ControlHost {
                 throw refuse(.notShown, "the access request is on onboarding; the app is at \(coordinator.rootPhase)")
             }
             return accept { [coordinator] in await coordinator.requestAuthorization() }
+
+        case .reviewSetFilter, .reviewGoTo, .reviewMarkDoneAndAdvance, .viewerPage, .viewerPick,
+             .viewerKeepReviewing, .uiPresent, .uiConfirm, .uiDismiss:
+            return try dispatchScreenState(action)
         }
     }
 
@@ -460,6 +468,145 @@ final class ControlHost {
     }
 }
 
+// MARK: - Screen state beyond routes (#299)
+
+extension ControlHost {
+    // The slice-D actions (#299): state a route can't express — the Overview's filter, the grid's current
+    // cluster, the viewer's page and end-of-set card, and the modals. One case per action, like `dispatch`.
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
+    private func dispatchScreenState(_ action: ControlAction) throws(Refused) -> ControlOutcome {
+        switch action {
+        case .reviewSetFilter(let filter):
+            let project = try openAlbum()
+            try requireOnTop(.albumOverview(project.id), "the filter is on the album's overview")
+            guard case .ready? = session.candidateStore?.phase, session.reviewClusters.count > 1 else {
+                throw refuse(.notShown, "the filter shows once the overview lists more than one cluster")
+            }
+            if session.overviewFilter == filter { return .noop("the filter is already \(filter.controlName)") }
+            session.setOverviewFilter(filter)
+            return accept()
+
+        case .reviewGoTo(let day):
+            try requireGrid()
+            let target = try cluster(day)
+            guard session.reviewClusterID != nil else { throw refuse(.invalidState, "the grid hasn't entered yet") }
+            if session.reviewClusterID == target.id { return .noop("the grid already shows \(day)'s cluster") }
+            session.showCluster(target.id)
+            return accept()
+
+        case .reviewMarkDoneAndAdvance:
+            guard done.isActive else { throw refuse(.invalidState, "no album is open (the done store is inactive)") }
+            try requireGrid()
+            guard let current = session.currentReviewCluster else {
+                throw refuse(.invalidState, "the grid has no current cluster yet")
+            }
+            session.markDoneAndAdvance(current)
+            return accept()
+
+        case .viewerPage(let target):
+            try requireViewerControls()
+            switch target {
+            case .next:
+                viewer.step(1)
+            case .previous:
+                guard viewer.hasPrevious else { throw refuse(.invalidState, "‹ is disabled on the first photo") }
+                viewer.step(-1)
+            case .photo(let alias):
+                let id = try assetID(alias)
+                if viewer.currentID == id { return .noop("the viewer already shows \(alias)") }
+                guard viewer.filmstripReaches(id) else {
+                    throw refuse(.notShown, "\(alias) isn't in the viewer's filmstrip around the current photo")
+                }
+                viewer.show(id)
+            }
+            return accept()
+
+        case .viewerPick:
+            try requireSelectionActive()
+            try requireViewerControls()
+            viewer.pick()
+            return accept()
+
+        case .viewerKeepReviewing:
+            guard coordinator.presentedPhotoID != nil, viewer.endReached else {
+                throw refuse(.notShown, "Keep reviewing is on the viewer's end-of-set card")
+            }
+            viewer.keepReviewing()
+            return accept()
+
+        case .uiPresent(let modal, let alias):
+            return try present(modal, album: alias)
+
+        case .uiConfirm:
+            guard case .confirm(let confirmation)? = coordinator.modal else {
+                throw refuse(.notShown, "no confirmation is open (the New album sheet's button is albums.create)")
+            }
+            guard actions.confirm(confirmation) else { throw refuse(.busy, "that album is exporting") }
+            return accept()
+
+        case .uiDismiss:
+            guard let modal = coordinator.modal else {
+                let hint = coordinator.presentedPhotoID == nil ? "" : " (viewer.dismiss closes the viewer)"
+                return .noop("no sheet or dialog is open" + hint)
+            }
+            coordinator.dismiss(modal)
+            return accept()
+
+        default:
+            preconditionFailure("dispatch handles \(action.kind.rawValue)")
+        }
+    }
+
+    /// `ui.present`: the button that opens `modal`, where it is on screen.
+    private func present(_ modal: ControlModal, album alias: String?) throws(Refused) -> ControlOutcome {
+        try requireAlbumsPhase()
+        let target = try appModal(modal, album: alias)
+        if coordinator.modal == target { return .noop("\(modal.rawValue) is already open") }
+        if coordinator.modal != nil { throw refuse(.notShown, "another sheet or dialog is open (ui.dismiss first)") }
+        try requireButton(for: target, alias: alias ?? "")
+        coordinator.present(target)
+        return accept()
+    }
+
+    /// The coordinator modal `modal` names. A confirmation comes from the album's settings when they're on
+    /// top (on iPad the album list is on screen too, and the settings' dialog is the one in front), else
+    /// from the album list.
+    private func appModal(_ modal: ControlModal, album alias: String?) throws(Refused) -> AppModal {
+        guard let kind = modal.confirmation else { return modal == .newAlbum ? .newAlbum : .whatsNew }
+        guard let alias else { throw refuse(.invalidState, "no album given") }
+        let project = try album(alias)
+        let onSettings = coordinator.path.last == .settings(project.id) && coordinator.presentedPhotoID == nil
+        return .confirm(AlbumConfirmation(kind: kind, album: project.id,
+                                          origin: onSettings ? .albumSettings : .albumList))
+    }
+
+    /// The button that presents `target` is on screen, and enabled.
+    private func requireButton(for target: AppModal, alias: String) throws(Refused) {
+        switch target {
+        case .newAlbum:
+            try requireList("New album is on the album list")
+        case .whatsNew:
+            try requireOnTop(.appSettings, "What's New is on app settings")
+        case .confirm(let confirmation) where confirmation.kind == .markAllUnreviewed:
+            guard confirmation.origin == .albumSettings else {
+                throw refuse(.notShown, "Mark all days unreviewed is on \(alias)'s settings, which isn't on top")
+            }
+            guard !done.doneDays.isEmpty else {
+                throw refuse(.invalidState, "no day is marked done (the button is disabled)")
+            }
+        case .confirm(let confirmation):
+            if confirmation.origin == .albumList {
+                try requireList("Delete / Reset all progress are on the album list or its settings")
+            }
+            // The list disables them while the album exports.
+            if session.exportingAlbums.contains(confirmation.album) || queuedExports.contains(confirmation.album) {
+                throw refuse(.busy, "\(alias) is exporting")
+            }
+        }
+    }
+
+}
+
 // MARK: - Lookups + reachability
 
 extension ControlHost {
@@ -467,6 +614,28 @@ extension ControlHost {
     fileprivate func requireAlbumsPhase() throws(Refused) {
         guard coordinator.rootPhase == .albums else {
             throw refuse(.notShown, "the album library isn't shown (the app is at \(coordinator.rootPhase))")
+        }
+    }
+
+    /// A sheet or dialog covers the whole screen (on iPad the split view too): nothing behind it is
+    /// reachable — only its own controls (`ui.confirm` / `ui.dismiss`, the New album sheet's Create).
+    fileprivate func requireNoModal(over action: ControlAction) throws(Refused) {
+        guard let modal = coordinator.modal else { return }
+        switch action {
+        case .uiPresent, .uiConfirm, .uiDismiss: return
+        case .albumsCreate where modal == .newAlbum: return
+        default:
+            let kind = modal == .newAlbum || modal == .whatsNew ? "sheet" : "dialog"
+            throw refuse(.notShown, "the \(ControlModal(modal).rawValue) \(kind) covers the screen (ui.dismiss first)")
+        }
+    }
+
+    /// The viewer's transport (chevrons, Pick, filmstrip) is on screen: the viewer is up, without the
+    /// end-of-set card's scrim over it.
+    fileprivate func requireViewerControls() throws(Refused) {
+        guard coordinator.presentedPhotoID != nil else { throw refuse(.notShown, "the viewer isn't open") }
+        guard !viewer.endReached else {
+            throw refuse(.notShown, "the end-of-set card covers the viewer (viewer.keepReviewing first)")
         }
     }
 
@@ -478,7 +647,7 @@ extension ControlHost {
 
     /// The album list is on screen: the iPhone stack's root, or always the iPad sidebar — not under the viewer.
     private var listShown: Bool {
-        coordinator.rootPhase == .albums && coordinator.presentedPhotoID == nil
+        coordinator.rootPhase == .albums && coordinator.presentedPhotoID == nil && coordinator.modal == nil
             && (listAlwaysShown || coordinator.path.isEmpty)
     }
 
@@ -487,7 +656,7 @@ extension ControlHost {
     }
 
     fileprivate func requireOnTop(_ route: Route, _ what: String) throws(Refused) {
-        guard coordinator.path.last == route, coordinator.presentedPhotoID == nil else {
+        guard coordinator.path.last == route, coordinator.presentedPhotoID == nil, coordinator.modal == nil else {
             throw refuse(.notShown, "\(what), which isn't on top")
         }
     }
@@ -562,8 +731,8 @@ extension ControlHost {
         let calendar = graph.calendar
         var draft = NewAlbumDraft.priorCalendarYear(now: ControlFixture.rangeEnd, calendar: calendar)
         if let title = new.title { draft.title = title }
-        draft.rangeStart = new.start.anchorDate(in: calendar) ?? draft.rangeStart
-        if let end = new.end.anchorDate(in: calendar) {
+        draft.rangeStart = dayStart(new.start) ?? draft.rangeStart
+        if let end = dayStart(new.end) {
             draft.rangeEnd = NewAlbumDraft.exclusiveEnd(forInclusiveDay: end, calendar: calendar)
         }
         draft.targetCount = new.target
@@ -576,12 +745,19 @@ extension ControlHost {
         let calendar = graph.calendar
         return AlbumEdits(
             title: edit.title,
-            rangeStart: edit.start?.anchorDate(in: calendar),
-            rangeEnd: edit.end?.anchorDate(in: calendar).map {
+            rangeStart: edit.start.flatMap(dayStart),
+            rangeEnd: edit.end.flatMap(dayStart).map {
                 NewAlbumDraft.exclusiveEnd(forInclusiveDay: $0, calendar: calendar)
             },
             targetCount: edit.target, media: edit.media,
             excludeScreenshots: edit.excludeScreenshots, locationEnabled: edit.locationEnabled)
+    }
+
+    /// The start of `day` (midnight) — the bound the date pickers give a range, which starts at the
+    /// draft's midnight and keeps that time of day. (`anchorDate` is noon: a period built on it ran noon
+    /// to noon, so a one-day album held the next morning's photos — #299.)
+    fileprivate func dayStart(_ day: DayKey) -> Date? {
+        day.anchorDate(in: graph.calendar).map(graph.calendar.startOfDay(for:))
     }
 }
 

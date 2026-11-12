@@ -39,7 +39,17 @@ final class AppCoordinator {
     /// The photo viewer, presented as a `.sheet` (a Now-Playing-style modal card) rather than a path
     /// push — you pull it DOWN to dismiss (the sheet owns the interactive drag), never a sideways
     /// nav-pop (#36). `nil` when closed; the grid stays mounted underneath, exactly where you left it.
-    var presentedPhotoID: String?
+    /// The photo it OPENED on: the photo on screen as you page is the `ViewerStore`'s (#299), which starts
+    /// over on every change (`onPresentedPhotoChange`).
+    var presentedPhotoID: String? {
+        didSet { if presentedPhotoID != oldValue { onPresentedPhotoChange?(presentedPhotoID) } }
+    }
+
+    /// The modal over the albums phase (#299): the New album sheet, What's New (from App settings), or a
+    /// destructive confirmation — or `nil`. Navigation state like the path, so it can be read and set as
+    /// data (the control plane); the views bind their `.sheet` / `.confirmationDialog` to it. The photo
+    /// viewer is NOT one of these: it's `presentedPhotoID` (its own sheet, over the grid).
+    private(set) var modal: AppModal?
 
     /// Bumped each time the viewer is dismissed back to the grid (`dismissPhoto`). The grid observes THIS
     /// (a monotonic tick), not `presentedPhotoID`'s nil-transition, to restore its position (#126): while
@@ -56,6 +66,16 @@ final class AppCoordinator {
     /// Called when an export screen leaves the path, so the next visit runs a fresh export instead of
     /// showing the last result. Wired by `AppGraph`.
     @ObservationIgnored var onLeaveExport: (@MainActor () -> Void)?
+    /// Called when the review grid leaves the path, so the next visit opens on its entry cluster again
+    /// (the drill target or the first unreviewed one), as a freshly pushed grid always has. Wired by
+    /// `AppGraph`.
+    @ObservationIgnored var onLeaveReview: (@MainActor () -> Void)?
+    /// Called whenever `presentedPhotoID` changes (open, dismiss, finish, album switch), so the viewer's
+    /// own state starts over on the photo it opens on (#299). Wired by `AppGraph`.
+    @ObservationIgnored var onPresentedPhotoChange: (@MainActor (String?) -> Void)?
+    /// Called when the viewer is dismissed back to the grid, with the photo it ended on: the grid's
+    /// current cluster follows it (#126, #299). Wired by `AppGraph`.
+    @ObservationIgnored var onDismissPhoto: (@MainActor (String?) -> Void)?
 
     init(library: any PhotoLibraryProviding) {
         self.library = library
@@ -68,6 +88,7 @@ final class AppCoordinator {
 
     private func pathDidChange(from old: [Route]) {
         if old.contains(where: \.isExport), !path.contains(where: \.isExport) { onLeaveExport?() }
+        if old.contains(where: \.isReview), !path.contains(where: \.isReview) { onLeaveReview?() }
         if let oldAlbum = Self.albumID(of: old), oldAlbum != activeAlbumID { closeAlbum() }
     }
 
@@ -110,6 +131,7 @@ final class AppCoordinator {
     /// switching albums from the library starts a fresh stack.
     func openProject(_ id: UUID) {
         presentedPhotoID = nil          // dismiss any open viewer when switching albums
+        modal = nil                     // …and the sheet it came from (New album → Create opens it)
         closeAlbum()                    // re-opening (even the same album) scans fresh; frees the old one
         path = [.albumOverview(id)]
     }
@@ -133,6 +155,7 @@ final class AppCoordinator {
     func dismissPhoto() {
         Perf.event("dismissPhoto (→ grid revealed)")
         presentedPhotoID = nil
+        onDismissPhoto?(lastViewedID)   // the grid's current cluster follows the photo you ended on
         viewerReturnTick &+= 1   // signal the grid to restore its position to `lastViewedID` (#126)
     }
 
@@ -180,8 +203,23 @@ final class AppCoordinator {
     /// Back to the albums library root.
     func popToRoot() {
         presentedPhotoID = nil
+        modal = nil
         closeAlbum()
         path.removeAll()
+    }
+
+    // MARK: - Modals (#299)
+
+    /// Present `modal`: what the New album button, App settings' What's New row and the Delete / Reset /
+    /// Mark all unreviewed buttons do — the views bind their sheet / dialog to `modal`.
+    func present(_ modal: AppModal) {
+        if self.modal != modal { self.modal = modal }
+    }
+
+    /// Dismiss `modal` if it's the one up (Cancel, a swipe-down, Continue, or the binding SwiftUI writes
+    /// once a dialog's button ran) — never a different modal presented since.
+    func dismiss(_ modal: AppModal) {
+        if self.modal == modal { self.modal = nil }
     }
 
     // MARK: - Lifecycle restore (D20, §11)
@@ -190,6 +228,7 @@ final class AppCoordinator {
     /// (no prior project) lands on the library root.
     func restore(lastOpenedProjectID id: UUID?) {
         presentedPhotoID = nil
+        modal = nil
         closeAlbum()
         guard let id else {
             path.removeAll()

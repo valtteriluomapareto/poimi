@@ -18,9 +18,8 @@ struct AlbumsView: View {
     @Environment(AlbumSession.self) private var session
     @Environment(WhatsNewState.self) private var whatsNew
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @State private var showingSetup = false
-    @State private var albumToDelete: CurationProject?
-    @State private var albumToReset: CurationProject?
+    // The New album sheet and the Delete / Reset confirmations are the coordinator's `modal` (#299), not
+    // view state, so they can be read and set as data; this view binds to them.
 
     var body: some View {
         Group {
@@ -30,7 +29,7 @@ struct AlbumsView: View {
                 } description: {
                     Text("Create an album to hand-pick photos into.")
                 } actions: {
-                    Button("New album", systemImage: "plus") { showingSetup = true }
+                    Button("New album", systemImage: "plus") { coordinator.present(.newAlbum) }
                         .buttonStyle(.borderedProminent)
                         .accessibilityIdentifier("newAlbumButton")
                 }
@@ -57,17 +56,17 @@ struct AlbumsView: View {
                             Group {
                                 Button("Reset all progress", systemImage: "arrow.counterclockwise",
                                        role: .destructive) {
-                                    albumToReset = project
+                                    ask(.reset, project)
                                 }
                                 Button("Delete album", systemImage: "trash", role: .destructive) {
-                                    albumToDelete = project
+                                    ask(.delete, project)
                                 }
                             }
                             .disabled(session.isExporting(project))
                         }
                         .swipeActions(edge: .trailing) {
                             Button("Delete", systemImage: "trash", role: .destructive) {
-                                albumToDelete = project
+                                ask(.delete, project)
                             }
                             .disabled(session.isExporting(project))
                         }
@@ -83,11 +82,11 @@ struct AlbumsView: View {
                 Button("Settings", systemImage: "gearshape") { coordinator.openAppSettings() }
             }
             ToolbarItem(placement: .primaryAction) {
-                Button("New album", systemImage: "plus") { showingSetup = true }
+                Button("New album", systemImage: "plus") { coordinator.present(.newAlbum) }
                     .accessibilityIdentifier("newAlbumButton")
             }
         }
-        .sheet(isPresented: $showingSetup) {
+        .sheet(isPresented: coordinator.presenting(.newAlbum)) {
             NewAlbumSetupView(draft: .priorCalendarYear(now: Date(), calendar: .current))
         }
         // What's New (#248): auto-presents once per new version at the albums root — structurally in the
@@ -100,14 +99,17 @@ struct AlbumsView: View {
         )) {
             WhatsNewView(notes: whatsNew.notes) { whatsNew.markAsSeen() }
         }
-        .confirmationDialog("Delete this album?", isPresented: deleteConfirmation,
-                            titleVisibility: .visible, presenting: albumToDelete) { project in
-            Button("Delete “\(project.title)”", role: .destructive) {
-                deleteAlbum(project)
-                albumToDelete = nil
+        // The confirm buttons go through `AlbumActions.confirm` — the one path from a confirm tap to the
+        // store, shared with album settings and the control plane (#299). Cancel and a dismissal clear the
+        // coordinator's modal through the binding.
+        .confirmationDialog("Delete this album?", isPresented: pendingBinding(.delete),
+                            titleVisibility: .visible, presenting: pending(.delete)) { pending in
+            Button("Delete “\(pending.project.title)”", role: .destructive) {
+                actions.confirm(pending.confirmation)
             }
-            Button("Cancel", role: .cancel) { albumToDelete = nil }
-        } message: { project in
+            Button("Cancel", role: .cancel) {}
+        } message: { pending in
+            let project = pending.project
             Text("""
                 Removes the album and its ^[\(project.persistedPickedCount) pick](inflect: true). \
                 Your Photos library isn’t touched.
@@ -116,19 +118,20 @@ struct AlbumsView: View {
         // Same wording as Album settings (#285): this is the SAME operation, and it is the more
         // mis-tappable route (a row context menu, with no album context on screen). The confirm button
         // counts what it discards rather than saying a bare "Reset".
-        .confirmationDialog("Reset all progress?", isPresented: resetConfirmation,
-                            titleVisibility: .visible, presenting: albumToReset) { project in
+        .confirmationDialog("Reset all progress?", isPresented: pendingBinding(.reset),
+                            titleVisibility: .visible, presenting: pending(.reset)) { pending in
+            let project = pending.project
             Button(project.persistedPickedCount == 0
                    ? String(localized: "Reset everything",
                             comment: "Destructive confirm when there are no picks to name")
                    : String(localized: "Discard ^[\(project.persistedPickedCount) pick](inflect: true)",
                             comment: "Destructive confirm button: names the pick count it discards"),
                    role: .destructive) {
-                resetAlbum(project)
-                albumToReset = nil
+                actions.confirm(pending.confirmation)
             }
-            Button("Cancel", role: .cancel) { albumToReset = nil }
-        } message: { project in
+            Button("Cancel", role: .cancel) {}
+        } message: { pending in
+            let project = pending.project
             Text("""
                 Discards ^[\(project.persistedPickedCount) pick](inflect: true), every day mark and the \
                 export history for “\(project.title)”. The Photos album it created is not touched.
@@ -142,18 +145,27 @@ struct AlbumsView: View {
         actions.open(project)
     }
 
-    /// Delete from the library list — through the one ordering every delete shares (`AlbumActions`): the
-    /// live stores let go of it first (#59), and on iPad, where the sidebar shows while an album is open,
-    /// deleting the album on screen returns the detail to the library root.
-    private func deleteAlbum(_ project: CurationProject) {
-        actions.delete(project)
+    /// Ask to delete / reset `project` from its row: the coordinator presents the list's confirmation. The
+    /// confirm then runs through the one ordering every delete / reset shares (`AlbumActions`): the live
+    /// stores let go of it first (#59); on iPad, deleting the album on screen returns the detail to the
+    /// library root; a non-active album's reset never touches the live stores.
+    private func ask(_ kind: AlbumConfirmation.Kind, _ project: CurationProject) {
+        coordinator.present(.confirm(AlbumConfirmation(kind: kind, album: project.id, origin: .albumList)))
     }
 
-    /// Reset from the library list — through the one ordering every reset shares (`AlbumActions`): the
-    /// stores holding it flush + let go before the zeroing and re-hydrate after. A non-active album's
-    /// reset never touches the live stores.
-    private func resetAlbum(_ project: CurationProject) {
-        actions.reset(project)
+    /// The list's pending confirmation of `kind`, with its album (`nil` when none is up, or its album is
+    /// gone). A lookup over the album list — small, and read only while a dialog is up or appearing.
+    private struct Pending {
+        let confirmation: AlbumConfirmation
+        let project: CurationProject
+    }
+
+    private func pending(_ kind: AlbumConfirmation.Kind) -> Pending? {
+        guard case .confirm(let confirmation)? = coordinator.modal, confirmation.kind == kind,
+              confirmation.origin == .albumList,
+              let project = store.projects.first(where: { $0.id == confirmation.album }), !project.isGone
+        else { return nil }
+        return Pending(confirmation: confirmation, project: project)
     }
 
     /// The iPad sidebar's selection highlight (#42): tint the open album's row — regular width only, since
@@ -163,12 +175,11 @@ struct AlbumsView: View {
         (sizeClass != .compact && project.id == coordinator.activeAlbumID) ? Color(.systemGray5) : nil
     }
 
-    // Drive the confirmation dialogs off the pending-project optionals (cleared on dismiss).
-    private var deleteConfirmation: Binding<Bool> {
-        Binding(get: { albumToDelete != nil }, set: { if !$0 { albumToDelete = nil } })
-    }
-    private var resetConfirmation: Binding<Bool> {
-        Binding(get: { albumToReset != nil }, set: { if !$0 { albumToReset = nil } })
+    /// A dialog is up while the list's confirmation of `kind` is the coordinator's modal; Cancel or a
+    /// dismissal clears it (only that one — never a modal presented since).
+    private func pendingBinding(_ kind: AlbumConfirmation.Kind) -> Binding<Bool> {
+        Binding(get: { pending(kind) != nil },
+                set: { if !$0, let pending = pending(kind) { coordinator.dismiss(.confirm(pending.confirmation)) } })
     }
 }
 

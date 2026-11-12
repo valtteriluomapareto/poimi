@@ -119,6 +119,13 @@ final class ControlRuntime {
                     if let screenWork = host.screenTask() { _ = progress.begin(screenWork) }
                 }
                 if let viewer = launch.viewer { try await applier.openViewer(viewer) }
+                // The screen state a route can't express (#299), as the actions a user would take next —
+                // once the route's screen has settled (the filter shows only on a scanned overview).
+                if launch.filter != nil || launch.modal != nil { await progress.awaitSettled() }
+                if let filter = launch.filter { try launchAction(.reviewSetFilter(filter), "-PoimiFilter") }
+                if let modal = launch.modal {
+                    try launchAction(.uiPresent(modal.modal, album: modal.album), "-PoimiModal")
+                }
             } catch {
                 launchError = error.message
                 Log.app.error("control: \(error.message, privacy: .public)")
@@ -130,6 +137,13 @@ final class ControlRuntime {
             let mailbox = ControlMailbox(directory: mailboxDirectory, host: host)
             self.mailbox = mailbox
             mailbox.start()
+        }
+    }
+
+    /// Perform a launch flag's action through the host; a refusal is the launch's error.
+    private func launchAction(_ action: ControlAction, _ flag: String) throws(ControlLaunchError) {
+        if case .refused(let reason, let message) = host.perform(action) {
+            throw ControlLaunchError("\(flag): refused (\(reason.rawValue)) — \(message)")
         }
     }
 
@@ -150,7 +164,7 @@ final class ControlRuntime {
 
     var inputs: ControlSnapshotInputs {
         ControlSnapshotInputs(
-            fixture: fixture, coordinator: graph.coordinator, session: graph.session,
+            fixture: fixture, coordinator: graph.coordinator, session: graph.session, viewer: graph.viewer,
             projects: graph.projectStore,
             selection: graph.selectionStore, done: graph.doneStore,
             assetAliases: assetAliases, albumAliases: albumAliases,

@@ -24,7 +24,10 @@ struct PhotoViewerView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(AlbumSession.self) private var session   // the review context it pages through (#297)
     @Environment(SelectionStore.self) private var selection
-    @Environment(DoneStore.self) private var doneStore
+    /// The photo on screen, the end-of-set card and the paged-past auto-mark-done (#128/#180) — lifted
+    /// out of this view's `@State` (#299) so they're readable and drivable with no viewer mounted. This
+    /// view keeps only presentation: haptics, announcements, timers, the filmstrip window, the wash.
+    @Environment(ViewerStore.self) private var viewer
     @Environment(\.thumbnailProvider) private var thumbnails
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -34,12 +37,6 @@ struct PhotoViewerView: View {
     /// RT we swap the chrome text to the adaptive `.primary`, which is guaranteed legible on the RT solid
     /// in both modes; without RT it stays `.white` over the glass-atop-photo.
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @State private var currentID: String
-    /// The cluster just auto-marked done by paging past its end (#128) — drives the undoable toast. `nil`
-    /// hides it. Auto-done is opinionated, so it MUST be obviously reversible: a haptic + this toast.
-    @State private var autoDoneCluster: ReviewCluster?
-    /// Bumped on each auto-mark so `.sensoryFeedback` fires a success haptic.
-    @State private var autoDoneHaptic = 0
     /// A bounded window of candidates around the current photo — for the FILMSTRIP only. The pager
     /// windows itself; the filmstrip is a SwiftUI `LazyHStack` whose `.scrollPosition` to a mid-list id
     /// would materialise its whole prefix, so this keeps it to a few dozen thumbs and slides as you swipe.
@@ -58,11 +55,9 @@ struct PhotoViewerView: View {
     /// also pick the photo that just slid in. Navigation isn't guarded — programmatic turns are instant, so
     /// rapid Next is immediate (#180).
     @State private var pickBounce = false
-    /// True once you pick/Next past the LAST photo — shows the end-of-set card instead of a dead tap (#180).
-    @State private var endReached = false
 
-    private let windowBack = 25
-    private let windowForward = 25
+    private let windowBack = ViewerStore.filmstripBack
+    private let windowForward = ViewerStore.filmstripForward
     private let rebuildMargin = 5
 
     /// The grid's quantized thumbnail size — the primary instant-paint cache for a viewer page.
@@ -76,13 +71,22 @@ struct PhotoViewerView: View {
 
     init(startID: String) {
         self.startID = startID
-        _currentID = State(initialValue: startID)
     }
+
+    /// The photo on screen (the store's; `startID` until the store has one).
+    private var currentID: String { viewer.currentID ?? startID }
 
     /// Every candidate, in order — the pager's universe; falls back to just this photo with no live
     /// review context. (COW array, so passing it to the pager is cheap.)
     private var allIDs: [String] {
-        session.reviewOrderedIDs.contains(startID) ? session.reviewOrderedIDs : [startID]
+        let ids = viewer.orderedIDs
+        return ids.isEmpty ? [startID] : ids
+    }
+
+    /// The pager's / filmstrip's page binding: reads the store, and a page they settle on is shown there
+    /// (a swipe's auto-mark comes separately, from the pager's swipe delegate → `viewer.swiped`).
+    private var currentBinding: Binding<String> {
+        Binding(get: { currentID }, set: { viewer.show($0) })
     }
 
     var body: some View {
@@ -115,49 +119,42 @@ struct PhotoViewerView: View {
                 ambientImage = loaded
             }
         }
-        // Track the on-screen photo (grid restore anchor) and slide + warm the filmstrip with it. This
-        // fires for ANY currentID change (swipe, filmstrip tap, open); auto-done is deliberately NOT here
-        // — it's driven off the pager's swipe delegate so a filmstrip tap can't mark a cluster done (#128).
+        // Slide + warm the filmstrip with the on-screen photo (the store records it as the grid's restore
+        // anchor). This fires for ANY currentID change (swipe, filmstrip tap, open); auto-done is
+        // deliberately NOT here — it's driven off the pager's swipe delegate so a filmstrip tap can't mark
+        // a cluster done (#128).
         .onChange(of: currentID) { _, current in
-            coordinator.lastViewedID = current
             refreshInfo(for: current)
             slideFilmstripIfNeeded()
             prefetchFilmstrip(around: current)
         }
         .onAppear {
-            refreshInfo(for: startID)
-            rebuildFilmstrip(around: startID)
-            prefetchFilmstrip(around: startID)
+            refreshInfo(for: currentID)
+            rebuildFilmstrip(around: currentID)
+            prefetchFilmstrip(around: currentID)
         }
-        .sensoryFeedback(.success, trigger: autoDoneHaptic)
+        .sensoryFeedback(.success, trigger: viewer.autoDoneCount)
         .sensoryFeedback(.selection, trigger: pickHaptic)
+        .onChange(of: viewer.autoDoneCount) { announceAutoDone() }
         .overlay(alignment: .bottom) { autoDoneToast }
         .overlay { endOfSetCard }
         // Move VoiceOver focus to the end-of-set card when it appears (it's a modal takeover; otherwise a
         // VO user wouldn't notice the controls behind it went away).
-        .onChange(of: endReached) { _, reached in
+        .onChange(of: viewer.endReached) { _, reached in
             if reached { UIAccessibility.post(notification: .screenChanged, argument: nil) }
         }
     }
 
     // MARK: Auto-mark-done on paging past a cluster's end (#128)
 
-    /// Forward-paging past a cluster's last photo marks it done — once, forward-only (backward paging
-    /// never marks/un-marks), reconciling through the same `DoneStore`/`Completion` path as the grid's
-    /// button (so it reflects in the grid on return, #126). Opinionated, so it fires a success haptic +
-    /// an undoable toast. (Deferred to #128 follow-up: an end-of-album terminal affordance + an opt-out.)
-    private func autoMarkDoneIfPagedPastCluster(from previous: String, to current: String) {
-        guard let finished = clusterToAutoMarkDone(from: previous, to: current,
-                                                   clusters: session.reviewClusters,
-                                                   isDone: doneStore.isDone) else { return }
-        doneStore.toggle(finished)
-        autoDoneHaptic &+= 1
-        autoDoneCluster = finished
-        // The mark is otherwise SILENT to VoiceOver (a haptic + a visual toast only) — announce it, and
-        // that the toast's Undo is available, so a VO user knows what just happened and can reverse it.
-        // HIGH priority: this fires exactly as VoiceOver is mid-transition announcing the newly-paged
-        // photo, and a default-priority announcement posted during a focus change is routinely swallowed
-        // by iOS — which would silently defeat the whole point. `.high` interrupts + is delivered.
+    /// Forward-paging past a cluster's last photo marks it done (`ViewerStore`, once, forward-only, through
+    /// the same `DoneStore` toggle as the grid's seal). Opinionated, so it fires a success haptic (above) +
+    /// an undoable toast, and — since that's otherwise SILENT to VoiceOver — this announcement that the
+    /// toast's Undo is available. HIGH priority: it fires exactly as VoiceOver is mid-transition announcing
+    /// the newly-paged photo, and a default-priority announcement posted during a focus change is routinely
+    /// swallowed by iOS — which would silently defeat the whole point. `.high` interrupts + is delivered.
+    private func announceAutoDone() {
+        guard let finished = viewer.autoDoneCluster else { return }
         var announcement = AttributedString(String(localized: "\(toastTitle(for: finished)). Undo available.",
                                                    comment: "VoiceOver announcement when paging past a day auto-marks it done"))
         announcement.accessibilitySpeechAnnouncementPriority = .high
@@ -171,15 +168,12 @@ struct PhotoViewerView: View {
     /// A brief, undoable "Marked <day> done" toast — the reversibility affordance for the automatic mark.
     @ViewBuilder
     private var autoDoneToast: some View {
-        if let cluster = autoDoneCluster {
+        if let cluster = viewer.autoDoneCluster {
             HStack(spacing: 12) {
                 Label(toastTitle(for: cluster), systemImage: "checkmark.seal.fill")
                     .font(.subheadline.weight(.medium))
                     .lineLimit(1)
-                Button("Undo") {
-                    doneStore.toggle(cluster)      // reverse the auto-mark
-                    autoDoneCluster = nil
-                }
+                Button("Undo") { viewer.undoAutoDone() }   // reverse the auto-mark
                 .font(.subheadline.weight(.semibold))
                 .buttonStyle(.borderless)
                 // Gold over the dark glass, but the adaptive `.primary` under RT: the capsule then becomes a
@@ -195,7 +189,7 @@ struct PhotoViewerView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
             // NOT `.combine`: the status label and the "Undo" button stay SEPARATE VoiceOver elements so the
             // Undo is actually reachable + activatable (combining would fold the button's action away). The
-            // paged-past mark is announced (see `autoMarkDoneIfPagedPastCluster`), so a VO user hears it and
+            // paged-past mark is announced (see `announceAutoDone`), so a VO user hears it and
             // can swipe to Undo.
             .accessibilityElement(children: .contain)
             // Auto-dismiss after a few seconds (re-armed each time a new cluster is marked). Under VoiceOver
@@ -203,7 +197,7 @@ struct PhotoViewerView: View {
             .task(id: cluster.id) {
                 try? await Task.sleep(for: .seconds(UIAccessibility.isVoiceOverRunning ? 12 : 4))
                 guard !Task.isCancelled else { return }
-                withAnimation(reduceMotion ? nil : .easeOut) { autoDoneCluster = nil }
+                withAnimation(reduceMotion ? nil : .easeOut) { viewer.hideAutoDoneToast() }
             }
         }
     }
@@ -225,7 +219,7 @@ struct PhotoViewerView: View {
     /// to grid. A full-screen scrim blocks the controls behind it; the card is a11y-modal.
     @ViewBuilder
     private var endOfSetCard: some View {
-        if endReached {
+        if viewer.endReached {
             VStack(spacing: 14) {
                 Image(systemName: "checkmark")
                     .font(.system(size: 32, weight: .bold))
@@ -246,7 +240,7 @@ struct PhotoViewerView: View {
                     .buttonStyle(.glassProminent).tint(Color.accentColor).foregroundStyle(Color.onAccent)
                     .disabled(selection.progress.picked == 0)   // nothing to save with zero picks
                     .accessibilityIdentifier("endOfSetFinishButton")
-                    Button("Keep reviewing") { endReached = false }
+                    Button("Keep reviewing") { viewer.keepReviewing() }
                         .buttonStyle(.glass).foregroundStyle(chromeText)
                     Button("Back to grid") { coordinator.dismissPhoto() }
                         .font(.subheadline.weight(.medium))
@@ -269,7 +263,7 @@ struct PhotoViewerView: View {
     private var photoCard: some View {
         PhotoPagerView(
             allIDs: allIDs,
-            currentID: $currentID,
+            currentID: currentBinding,
             // Paint whatever thumbnail is ALREADY cached so a page is never a bare black rectangle while
             // its full-res loads (or if that fails): the grid's 400² first, else the filmstrip's small
             // thumb — which is often warm for the current photo even when the 400² isn't (#158).
@@ -287,7 +281,7 @@ struct PhotoViewerView: View {
             // accelerator (#180). The tapped page is always the current one, so `performPick` acts on it.
             onTapPhoto: { _ in performPick() },
             // Auto-done fires on a real SWIPE only (not a filmstrip tap), so browsing/jumping never marks (#128).
-            onSwipe: { autoMarkDoneIfPagedPastCluster(from: $0, to: $1) })
+            onSwipe: { viewer.swiped(from: $0, to: $1) })
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .shadow(color: .black.opacity(0.35), radius: 20, y: 8)
             .padding(.horizontal, 12)
@@ -309,7 +303,7 @@ struct PhotoViewerView: View {
             transportControls.frame(maxWidth: Self.chromeBandMaxWidth)
             // The filmstrip stays FULL width — it's a scrolling strip, so more visible thumbnails at iPad
             // width is a pure win rather than a stretch.
-            Filmstrip(pages: filmstripPages, currentID: $currentID)
+            Filmstrip(pages: filmstripPages, currentID: currentBinding)
         }
         .padding(.horizontal, 20)
         .padding(.top, 18)
@@ -385,19 +379,18 @@ struct PhotoViewerView: View {
     /// transport. Pick is the hero; the chevrons are pure navigation (‹ › + swipe never change a pick —
     /// "Skip" is honestly just Next, since the only per-photo decision the model has is *picked*).
     private var transportControls: some View {
-        let ids = allIDs
         let isPicked = selection.contains(currentID)
-        let hasPrev = viewerStep(from: currentID, in: ids, offset: -1) != nil
+        let hasPrev = viewer.hasPrevious
         // TOP-aligned so the chevrons line up with the Pick CIRCLE's centre, not the centre of the
         // circle-plus-label block (the label hangs below and would otherwise drag the chevrons down). The
         // chevron frames match the circle's 64pt height, so top-aligned their glyph centres coincide.
         return HStack(alignment: .top, spacing: 0) {
-            navButton(system: "chevron.backward", label: "Previous photo", enabled: hasPrev) { goToStep(-1) }
+            navButton(system: "chevron.backward", label: "Previous photo", enabled: hasPrev) { viewer.step(-1) }
             Spacer(minLength: 0)
             pickToggle(isPicked: isPicked)
             Spacer(minLength: 0)
             // Next stays enabled on the last photo — there it opens the end-of-set card rather than a dead tap.
-            navButton(system: "chevron.forward", label: "Next photo", enabled: true) { goToStep(1) }
+            navButton(system: "chevron.forward", label: "Next photo", enabled: true) { viewer.step(1) }
         }
         .padding(.horizontal, 24)
     }
@@ -504,41 +497,15 @@ extension PhotoViewerView {
     // In the extension (not the struct body) so they don't push the view over SwiftLint's type_body_length;
     // same-file `private` keeps them reachable from the control views.
 
-    /// Toggle the current photo's pick, then apply the pure `pickPlan`: adding advances (or opens the
-    /// end-of-set card if it was the last photo); removing stays put so you see what you dropped. Guarded by
-    /// `isPaging` so a fast double-tap can't act on the photo that just slid in.
+    /// Pick (`ViewerStore.pick`: toggle, then adding advances — or opens the end-of-set card on the last
+    /// photo — and removing stays put), plus the haptic and the bounce guard, so a fast double-tap can't
+    /// act on the photo that just slid in. The chevrons (`ViewerStore.step`) are NOT guarded: programmatic
+    /// turns are instant (pager `animated: false`), so rapid Next registers immediately.
     private func performPick() {
         guard !pickBounce else { return }   // swallow a fumbled double-tap, not deliberate picks
-        let plan = pickPlan(currentID: currentID, in: allIDs, currentlyPicked: selection.contains(currentID))
-        selection.toggle(plan.toggleID)
+        let advanced = viewer.pick()
         pickHaptic &+= 1
-        if let next = plan.advanceTo {
-            armPickBounce()
-            advance(to: next, from: plan.toggleID)
-        } else if plan.reachedEnd {
-            endReached = true
-        }
-        // else: a removal — stay on this photo.
-    }
-
-    /// A chevron step. Forward past the last photo opens the end-of-set card; otherwise a forward step seals
-    /// a crossed cluster done (matching swipe, #128). Pure navigation — never changes a pick. NOT guarded:
-    /// programmatic turns are instant (pager `animated: false`), so rapid Next registers immediately and
-    /// can't overlap/desync the pager.
-    private func goToStep(_ offset: Int) {
-        let from = currentID
-        guard let target = viewerStep(from: from, in: allIDs, offset: offset) else {
-            if offset > 0 { endReached = true }
-            return
-        }
-        if offset > 0 { advance(to: target, from: from) } else { currentID = target }
-    }
-
-    /// Apply a FORWARD programmatic advance: seal the cluster if this crossed its boundary (the pager's
-    /// swipe delegate doesn't fire for a programmatic set, #128), then turn the page instantly.
-    private func advance(to target: String, from: String) {
-        autoMarkDoneIfPagedPastCluster(from: from, to: target)
-        currentID = target   // instant (pager uses animated: false) — safe to fire back-to-back
+        if advanced { armPickBounce() }
     }
 
     /// A short guard so a *fumbled double-tap* on Pick can't pick the photo that just slid in — a

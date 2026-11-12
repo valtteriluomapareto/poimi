@@ -26,6 +26,7 @@ struct ControlSnapshotInputs {
     let fixture: ControlFixture
     let coordinator: AppCoordinator
     let session: AlbumSession
+    let viewer: ViewerStore
     let projects: ProjectStore
     let selection: SelectionStore
     let done: DoneStore
@@ -149,12 +150,21 @@ enum ControlSnapshot {
         case .recovery: "recovery"
         case .albums: coordinator.path.last.map(screenName) ?? "albums"
         }
-        let viewer = coordinator.presentedPhotoID
+        // The viewer is its own sheet over the grid; the coordinator's modal (#299) covers the rest.
+        let viewerUp = coordinator.presentedPhotoID != nil
+        let sheet: String? = viewerUp ? "viewer" : coordinator.modal.map { ControlModal($0).rawValue }
+        var sheetAlbum: String?
+        if !viewerUp, case .confirm(let confirmation)? = coordinator.modal {
+            sheetAlbum = inputs.albumAliases.alias(for: confirmation.album)
+        }
+        let photo = viewerUp ? (inputs.viewer.currentID ?? coordinator.presentedPhotoID) : nil
         return .object(
             ("screen", .string(screen)),
             ("path", .array(coordinator.path.map { route(for: $0, albums: inputs.albumAliases) })),
-            ("sheet", viewer == nil ? .null : .string("viewer")),
-            ("viewerPhoto", .string(viewer.flatMap(inputs.assetAliases.alias(for:)))))
+            ("sheet", .string(sheet)),
+            ("sheetAlbum", .string(sheetAlbum)),
+            ("viewerPhoto", .string(photo.flatMap(inputs.assetAliases.alias(for:)))),
+            ("viewerEndOfSet", viewerUp ? .bool(inputs.viewer.endReached) : .null))
     }
 
     @MainActor
@@ -184,8 +194,10 @@ enum ControlSnapshot {
                                store: CandidateStore?, export: ExportStore.Phase) -> ControlJSON {
         guard let project else {
             return .object(("album", .null), ("scan", .null), ("selection", .null), ("done", .null),
-                           ("export", .null))
+                           ("export", .null), ("overview", .null), ("grid", .null))
         }
+        // The session's screen state (#299) belongs to this album only when the session holds it.
+        let session = inputs.session.projectID == project.id ? inputs.session : nil
         let clusters: [ReviewCluster]
         if case .ready(let ready) = store?.phase { clusters = ready } else { clusters = [] }
         let selectionActive = inputs.selection.isActive
@@ -210,7 +222,13 @@ enum ControlSnapshot {
                 ("active", .bool(doneActive)))),
             ("export", .object(
                 ("phase", .string(exportPhase(export))),
-                ("wasReExport", wasReExport(export).map(ControlJSON.bool) ?? .null))))
+                ("wasReExport", wasReExport(export).map(ControlJSON.bool) ?? .null))),
+            ("overview", .object(
+                ("filter", .string((session?.overviewFilter ?? .all).controlName)))),
+            ("grid", .object(
+                // The current cluster by its first day (clusters are keyed by day, §5) — `null` until the
+                // grid is open and has entered.
+                ("cluster", .string(session?.currentReviewCluster?.firstDay?.description)))))
     }
 
     // MARK: - state-detail.json

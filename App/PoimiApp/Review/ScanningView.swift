@@ -65,9 +65,11 @@ struct ScanningView: View {
                 // The album session (#297) does the whole entry: hydrate selection + done, reuse the store
                 // the Overview scanned (or scan it — iPad-direct / debug host — with the shared timeline
                 // cache), reconcile done-state (the grid reconciles; the Overview doesn't, #289) and publish
-                // the review context the viewer pages through. Held first so `body` shows the scan phase.
+                // the review context the viewer pages through — and picks the grid's entry cluster (the
+                // drill day's, else the first unreviewed one) once per visit. Held first so `body` shows
+                // the scan phase.
                 store = session.candidateStore(for: project)
-                await session.appear(.review, project)
+                await session.appear(.review(scrollToDay), project)
             }
     }
 
@@ -114,8 +116,7 @@ struct ScanningView: View {
                 clusters: clusters,
                 tripNames: store?.tripNames ?? [:],
                 title: project.title,
-                openAsset: { coordinator.openPhoto($0) },
-                scrollToDay: scrollToDay)
+                openAsset: { coordinator.openPhoto($0) })   // its entry page is the session's (#299)
 
         case .empty(let reason):
             ReviewEmptyView(
