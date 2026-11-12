@@ -10,6 +10,7 @@
 
 import Foundation
 import SwiftData
+import SwiftUI
 import Curation
 
 @MainActor
@@ -18,18 +19,21 @@ struct AppGraph {
     let thumbnailProvider: any ThumbnailProviding
     let placeNaming: any PlaceNaming
     let modelContainer: ModelContainer
-    /// The shared per-album review-timeline cache (#130): the coordinator hands it to the review
-    /// screens' `CandidateStore`s, and `ProjectStore` drops an album's file on delete.
+    /// The shared per-album review-timeline cache (#130): the album session builds every
+    /// `CandidateStore` with it, and `ProjectStore` drops an album's file on delete.
     let timelineCache: TimelineCache
     /// The persistent geocoded-name cache (D18) over `modelContainer`.
     let nameCache: NameCacheStore
-    /// The calendar the timeline buckets by. Not yet consumed by the review views (they read
-    /// `Calendar.current`); slice B's album session takes it from here.
+    /// The calendar the timeline buckets by — the album session builds every `CandidateStore` with it.
     let calendar: Calendar
     let projectStore: ProjectStore
     let selectionStore: SelectionStore
     let doneStore: DoneStore
     let coordinator: AppCoordinator
+    /// The open album's scan, review context and export (#297) — no view has to be mounted for it.
+    let session: AlbumSession
+    /// Open / create / delete / reset / edit, sequenced once (#297).
+    let actions: AlbumActions
     let whatsNewState: WhatsNewState
     let appReviewPrompt: AppReviewPrompt
 
@@ -46,18 +50,31 @@ struct AppGraph {
         now: @escaping () -> Date = Date.init,
         calendar: Calendar = .current
     ) -> AppGraph {
-        AppGraph(
+        let nameCache = NameCacheStore(modelContainer: container)
+        let projects = ProjectStore(container: container, timelineCache: timelineCache, now: now)
+        let selection = SelectionStore(container: container, debounce: debounce)
+        let done = DoneStore(container: container, debounce: debounce)
+        let coordinator = AppCoordinator(library: library)
+        let session = AlbumSession(library: library, naming: naming, nameCache: nameCache,
+                                   timelineCache: timelineCache, calendar: calendar,
+                                   selection: selection, done: done)
+        // Navigation decides when the album changes; the session drops what it held for it.
+        coordinator.onCloseAlbum = { [weak session] in session?.close() }
+        return AppGraph(
             photoLibrary: library,
             thumbnailProvider: thumbnails,
             placeNaming: naming,
             modelContainer: container,
             timelineCache: timelineCache,
-            nameCache: NameCacheStore(modelContainer: container),
+            nameCache: nameCache,
             calendar: calendar,
-            projectStore: ProjectStore(container: container, timelineCache: timelineCache, now: now),
-            selectionStore: SelectionStore(container: container, debounce: debounce),
-            doneStore: DoneStore(container: container, debounce: debounce),
-            coordinator: AppCoordinator(library: library, timelineCache: timelineCache),
+            projectStore: projects,
+            selectionStore: selection,
+            doneStore: done,
+            coordinator: coordinator,
+            session: session,
+            actions: AlbumActions(projects: projects, selection: selection, done: done,
+                                  session: session, coordinator: coordinator),
             // What's New (#248) and the App Store review prompt (#269) read their last-seen /
             // last-prompted version from `defaults`. Owned at the root so they survive the iPad
             // size-class re-init.
@@ -83,5 +100,23 @@ struct AppGraph {
             // injection would silently show synthetic names instead of real places (#130).
             naming: PlaceNamingProvider.make(),
             timelineCache: TimelineCache())
+    }
+}
+
+extension View {
+    /// Inject the whole graph into the environment — the ONE place the app (and the DEBUG screenshot
+    /// hosts) put the stores, coordinator, session and façade where the views read them.
+    func environment(graph: AppGraph) -> some View {
+        environment(\.photoLibrary, graph.photoLibrary)
+            .environment(\.thumbnailProvider, graph.thumbnailProvider)
+            .environment(\.placeNaming, graph.placeNaming)
+            .environment(graph.projectStore)
+            .environment(graph.selectionStore)
+            .environment(graph.doneStore)
+            .environment(graph.coordinator)
+            .environment(graph.session)
+            .environment(graph.actions)
+            .environment(graph.whatsNewState)
+            .environment(graph.appReviewPrompt)
     }
 }

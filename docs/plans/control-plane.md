@@ -201,6 +201,35 @@ duplication.
 This slice is worth doing even without a control plane: it fixes the duplication and the
 timeline-cache gap.
 
+**As built (#297).** Where slice B landed differently from the text above:
+
+- `AlbumSession` and the `AlbumActions` façade are both `@MainActor @Observable` classes in `State/`,
+  built by `AppGraph.make` and injected by one `View.environment(graph:)` modifier, used by `PoimiApp`
+  **and** every `DebugScreen` host (each host now builds its own `AppGraph`, so a host can't wire the
+  session differently from the app).
+- The coordinator keeps navigation (and `lastViewedID` / the viewer sheet) and tells the session when the
+  album closes through an `onCloseAlbum` hook; the review context, the candidate store + key and the
+  `ExportStore` live only on the session.
+- `open(project, reconcile:)` takes the #289 difference as a parameter (Overview `false`, grid `true`),
+  and a second `open` while a load is in flight awaits that load and then settles with its own choice
+  (the old grid `.task` did nothing in that case). The Overview now also **publishes** the review
+  context, so the completion stats are right on the Overview → Export path even if the grid was never
+  opened.
+- Delete/reset ordering: the album list's conditional one (`deactivateIfActive`, re-hydrate only what
+  held the album) won over album settings' unconditional `deactivate()`/`activate()`; delete pops to the
+  library iff the album is on screen (the album list on iPad used to leave a "not found" detail).
+- `state.json`: `pending.selectionFlush` / `doneFlush` / `naming` / `export` and `active.export`
+  (`phase`, `wasReExport`) are real values; `pending.thumbnails` stays `null`. `idle` now covers the
+  scan, trip naming and export (the export screen is `false` until its export settles, never `null`),
+  but **not** the debounced flushes: under control the debounce is a day long and there's no `flush`
+  until slice C, so they're reported under `pending` only. Slice C should fold them into `idle` once
+  `flush` exists.
+- `AppModelContainer.make` gained `url:`.
+- Not done here: `refreshAuthorization` still runs from `AppRootView.task` (slice C's headless start
+  moves it); `ExportView` reached directly (e.g. a control `export:` route with the Overview never
+  mounted) doesn't scan, so its completion stats read an empty day map — slice C's `export.run` should
+  `open` the album first.
+
 ### Slice C — Live actions and headless · ~1–1.5k LOC incl. tests
 
 - **`ControlHost.handle(_:) async -> ControlResponse`** (`@MainActor`), one handler for every

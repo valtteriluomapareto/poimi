@@ -115,20 +115,37 @@ struct DebugScreenHost: View {
     }
 }
 
+/// A screenshot host's graph: the app's own `AppGraph.make` (#297) over the host's fake library and a
+/// fresh in-memory store, keeping the app's thumbnails + naming — so a host can't wire the stores,
+/// coordinator, album session and façade differently from the app. `nil` (logged) if the store fails.
+@MainActor
+func debugHostGraph(_ host: String, library: any PhotoLibraryProviding,
+                    thumbnails: any ThumbnailProviding, naming: any PlaceNaming) -> AppGraph? {
+    guard let container = try? AppModelContainer.make(inMemory: true) else {
+        // Don't signal ready — the capture script then times out loudly instead of snapshotting the
+        // spinner as if it were the screen.
+        Log.app.error("\(host, privacy: .public): failed to build the in-memory container")
+        return nil
+    }
+    return AppGraph.make(container: container, library: library, thumbnails: thumbnails, naming: naming,
+                         timelineCache: TimelineCache())
+}
+
 /// Hosts `AppRootView` with a coordinator seeded to a chosen authorization, so each root phase
 /// (onboarding / recovery / albums) can be screenshotted deterministically (#30/#31).
 struct DebugShellView: View {
     let screen: DebugScreen
     let authorization: LibraryAuthorization
-    @State private var coordinator: AppCoordinator?
-    @State private var projectStore: ProjectStore?
+    @Environment(\.thumbnailProvider) private var thumbnails
+    @Environment(\.placeNaming) private var placeNaming
+    // Retained so the in-memory container outlives `.task` (a context-only hold SIGTRAPs on dealloc).
+    @State private var graph: AppGraph?
 
     var body: some View {
         Group {
-            if let coordinator, let projectStore {
+            if let graph {
                 AppRootView()
-                    .environment(coordinator)
-                    .environment(projectStore)
+                    .environment(graph: graph)
             } else {
                 ProgressView()
             }
@@ -136,24 +153,17 @@ struct DebugShellView: View {
         .task {
             // A dedicated fake at the chosen status — independent of the global `\.photoLibrary`,
             // so onboarding/recovery/albums each render their phase regardless of the launch flag.
-            let resolved = AppCoordinator(library: FakePhotoLibrary(status: authorization))
-            await resolved.refreshAuthorization()
-            guard let container = try? AppModelContainer.make(inMemory: true) else {
-                // Don't signal ready — the capture script then times out loudly instead of
-                // snapshotting the spinner as if it were the screen.
-                Log.app.error("DebugShellView: failed to build the in-memory store")
-                return
-            }
-            let store = ProjectStore(container: container)
+            guard let built = debugHostGraph("DebugShellView", library: FakePhotoLibrary(status: authorization),
+                                             thumbnails: thumbnails, naming: placeNaming) else { return }
+            await built.coordinator.refreshAuthorization()
             // The `shell` library is the shared `four-statuses` control fixture (#296): exported (in sync),
             // edited-since-export (#191), in-progress, and not-started — seeded through the stores.
             if screen == .shell {
-                ControlFixture.fourStatuses.seed(projects: store,
-                                                 selection: SelectionStore(container: container),
-                                                 done: DoneStore(container: container))
+                ControlFixture.fourStatuses.seed(projects: built.projectStore,
+                                                 selection: SelectionStore(container: built.modelContainer),
+                                                 done: DoneStore(container: built.modelContainer))
             }
-            coordinator = resolved
-            projectStore = store
+            graph = built
             Log.app.notice("screenshot-ready: \(screen.rawValue, privacy: .public)")
         }
     }
@@ -179,29 +189,28 @@ func debugSampleTitle(_ english: String) -> String {
 /// Hosts the new-album setup form (#33) against an in-memory store + an authorized fake. Uses a
 /// FIXED clock + UTC calendar so the defaulted title/dates are deterministic in the screenshot.
 struct DebugSetupHostView: View {
-    @State private var coordinator: AppCoordinator?
-    @State private var store: ProjectStore?
+    @Environment(\.photoLibrary) private var library
+    @Environment(\.thumbnailProvider) private var thumbnails
+    @Environment(\.placeNaming) private var placeNaming
+    @State private var graph: AppGraph?
 
     var body: some View {
         Group {
-            if let coordinator, let store {
+            if let graph {
                 NewAlbumSetupView(draft: .priorCalendarYear(now: Self.fixedNow, calendar: Self.utc),
                                   calendar: Self.utc)
-                    .environment(coordinator)
-                    .environment(store)
+                    .environment(graph: graph)
+                    // The album picker lists the launch library's albums (as before this host had a graph).
+                    .environment(\.photoLibrary, library)
             } else {
                 ProgressView()
             }
         }
         .task {
-            let coord = AppCoordinator(library: FakePhotoLibrary(status: .authorized))
-            await coord.refreshAuthorization()
-            guard let built = (try? AppModelContainer.make(inMemory: true)).map({ ProjectStore(container: $0) }) else {
-                Log.app.error("DebugSetupHostView: failed to build the in-memory store")
-                return
-            }
-            coordinator = coord
-            store = built
+            guard let built = debugHostGraph("DebugSetupHostView", library: FakePhotoLibrary(status: .authorized),
+                                             thumbnails: thumbnails, naming: placeNaming) else { return }
+            await built.coordinator.refreshAuthorization()
+            graph = built
             Log.app.notice("screenshot-ready: \(DebugScreen.setup.rawValue, privacy: .public)")
         }
     }
@@ -237,12 +246,11 @@ struct DebugAlbumPickerHostView: View {
 /// excluded. `.ready` renders the grid, so this captures the grid against the deterministic fake
 /// thumbnails with a few cells pre-selected (so selection encoding shows).
 struct DebugScanningHostView: View {
-    // Retained so the in-memory container (owned by the stores) outlives `.task` — otherwise it
+    @Environment(\.thumbnailProvider) private var thumbnails
+    @Environment(\.placeNaming) private var placeNaming
+    // Retained so the in-memory container (owned by the graph) outlives `.task` — otherwise it
     // deallocates, resets its context, and destroys `project` out from under ScanningView.
-    @State private var projectStore: ProjectStore?
-    @State private var selectionStore: SelectionStore?
-    @State private var doneStore: DoneStore?
-    @State private var coordinator: AppCoordinator?
+    @State private var graph: AppGraph?
     @State private var project: CurationProject?
 
     /// A dedicated dense single-day fake (54 photos) so the review grid FILLS on iPad's ~8 columns — NOT
@@ -263,37 +271,24 @@ struct DebugScanningHostView: View {
 
     var body: some View {
         Group {
-            if let selectionStore, let doneStore, let coordinator, let project {
+            if let graph, let project {
                 NavigationStack { ScanningView(project: project) }
-                    .environment(\.photoLibrary, Self.fake)
-                    .environment(selectionStore)
-                    .environment(doneStore)
-                    .environment(coordinator)
+                    .environment(graph: graph)
             } else {
                 ProgressView()
             }
         }
         .task {
-            guard let container = try? AppModelContainer.make(inMemory: true) else {
-                Log.app.error("DebugScanningHostView: failed to build the in-memory container")
-                return
-            }
-            let projects = ProjectStore(container: container)
-            let selection = SelectionStore(container: container)
-            let done = DoneStore(container: container)
-            let created = projects.create(
+            guard let built = debugHostGraph("DebugScanningHostView", library: Self.fake,
+                                             thumbnails: thumbnails, naming: placeNaming) else { return }
+            let created = built.projectStore.create(
                 title: debugSampleTitle("Best of 2025"),
                 rangeStart: Self.yearStart, rangeEnd: Self.yearEnd,
                 targetCount: 100,
                 excludeScreenshots: true)
-            selection.activate(created)
-            Self.preselected.forEach { selection.toggle($0) }
-
-            let coord = AppCoordinator(library: Self.fake)
-            projectStore = projects
-            selectionStore = selection
-            doneStore = done
-            coordinator = coord
+            built.selectionStore.activate(created)
+            Self.preselected.forEach { built.selectionStore.toggle($0) }
+            graph = built
             project = created
 
             // Probe the same fake the view loads against (instant) so we signal ready only once
@@ -312,10 +307,9 @@ struct DebugScanningHostView: View {
 /// screenshots are excluded, so every candidate is filtered out (`.allExcluded`) and the actionable
 /// "Nothing to pick here" (Change range / Review excluded albums) renders instead of a dead-end.
 struct DebugEmptyHostView: View {
-    @State private var projectStore: ProjectStore?
-    @State private var selectionStore: SelectionStore?
-    @State private var doneStore: DoneStore?
-    @State private var coordinator: AppCoordinator?
+    @Environment(\.thumbnailProvider) private var thumbnails
+    @Environment(\.placeNaming) private var placeNaming
+    @State private var graph: AppGraph?
     @State private var project: CurationProject?
 
     private static let fake = FakePhotoLibrary(
@@ -326,34 +320,23 @@ struct DebugEmptyHostView: View {
 
     var body: some View {
         Group {
-            if let selectionStore, let doneStore, let coordinator, let project {
+            if let graph, let project {
                 NavigationStack { ScanningView(project: project) }
-                    .environment(\.photoLibrary, Self.fake)
-                    .environment(selectionStore)
-                    .environment(doneStore)
-                    .environment(coordinator)
+                    .environment(graph: graph)
             } else {
                 ProgressView()
             }
         }
         .task {
-            guard let container = try? AppModelContainer.make(inMemory: true) else {
-                Log.app.error("DebugEmptyHostView: failed to build the in-memory container")
-                return
-            }
-            let projects = ProjectStore(container: container)
-            let selection = SelectionStore(container: container)
-            let done = DoneStore(container: container)
-            let created = projects.create(
+            guard let built = debugHostGraph("DebugEmptyHostView", library: Self.fake,
+                                             thumbnails: thumbnails, naming: placeNaming) else { return }
+            let created = built.projectStore.create(
                 title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100, excludeScreenshots: true)
-            selection.activate(created)
-            done.activate(created)
-            projectStore = projects
-            selectionStore = selection
-            doneStore = done
-            coordinator = AppCoordinator(library: Self.fake)
+            built.selectionStore.activate(created)
+            built.doneStore.activate(created)
+            graph = built
             project = created
 
             let probe = CandidateStore(library: Self.fake)   // settle before signalling (mirrors the view's load)
@@ -366,44 +349,32 @@ struct DebugEmptyHostView: View {
 /// Hosts the review scan's FAILURE state (#40): the fake is seeded to throw on fetch (still authorized),
 /// so `ScanningView` renders the recoverable "Couldn't load your photos · Try again".
 struct DebugScanFailedHostView: View {
-    @State private var projectStore: ProjectStore?
-    @State private var selectionStore: SelectionStore?
-    @State private var doneStore: DoneStore?
-    @State private var coordinator: AppCoordinator?
+    @Environment(\.thumbnailProvider) private var thumbnails
+    @Environment(\.placeNaming) private var placeNaming
+    @State private var graph: AppGraph?
     @State private var project: CurationProject?
 
     private static let fake = FakePhotoLibrary(fetchError: FakePhotoLibrary.FakeError.fetchFailed)
 
     var body: some View {
         Group {
-            if let selectionStore, let doneStore, let coordinator, let project {
+            if let graph, let project {
                 NavigationStack { ScanningView(project: project) }
-                    .environment(\.photoLibrary, Self.fake)
-                    .environment(selectionStore)
-                    .environment(doneStore)
-                    .environment(coordinator)
+                    .environment(graph: graph)
             } else {
                 ProgressView()
             }
         }
         .task {
-            guard let container = try? AppModelContainer.make(inMemory: true) else {
-                Log.app.error("DebugScanFailedHostView: failed to build the in-memory container")
-                return
-            }
-            let projects = ProjectStore(container: container)
-            let selection = SelectionStore(container: container)
-            let done = DoneStore(container: container)
-            let created = projects.create(
+            guard let built = debugHostGraph("DebugScanFailedHostView", library: Self.fake,
+                                             thumbnails: thumbnails, naming: placeNaming) else { return }
+            let created = built.projectStore.create(
                 title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
-            selection.activate(created)
-            done.activate(created)
-            projectStore = projects
-            selectionStore = selection
-            doneStore = done
-            coordinator = AppCoordinator(library: Self.fake)
+            built.selectionStore.activate(created)
+            built.doneStore.activate(created)
+            graph = built
             project = created
 
             let probe = CandidateStore(library: Self.fake)
@@ -418,11 +389,10 @@ struct DebugScanFailedHostView: View {
 /// carry picks (in-progress gold), the rest are untouched (grey) — so all three states show — and the
 /// picks total to 80 / 100 to mirror the design's tally.
 struct DebugOverviewHostView: View {
+    @Environment(\.thumbnailProvider) private var thumbnails
+    @Environment(\.placeNaming) private var placeNaming
     // Retained so the in-memory container outlives `.task` (a context-only hold SIGTRAPs on dealloc).
-    @State private var projectStore: ProjectStore?
-    @State private var selectionStore: SelectionStore?
-    @State private var doneStore: DoneStore?
-    @State private var coordinator: AppCoordinator?
+    @State private var graph: AppGraph?
     @State private var project: CurationProject?
 
     /// A dedicated rich fake (independent of the launch flag's global library) so the chart + sections
@@ -439,36 +409,25 @@ struct DebugOverviewHostView: View {
 
     var body: some View {
         Group {
-            if let selectionStore, let doneStore, let coordinator, let project {
+            if let graph, let project {
                 NavigationStack { AlbumOverviewView(project: project) }
-                    .environment(\.photoLibrary, Self.fake)
-                    .environment(selectionStore)
-                    .environment(doneStore)
-                    .environment(coordinator)
+                    .environment(graph: graph)
             } else {
                 ProgressView()
             }
         }
         .task {
-            guard let container = try? AppModelContainer.make(inMemory: true) else {
-                Log.app.error("DebugOverviewHostView: failed to build the in-memory container")
-                return
-            }
-            let projects = ProjectStore(container: container)
-            let selection = SelectionStore(container: container)
-            let done = DoneStore(container: container)
-            let created = projects.create(
+            guard let built = debugHostGraph("DebugOverviewHostView", library: Self.fake,
+                                             thumbnails: thumbnails, naming: placeNaming) else { return }
+            let created = built.projectStore.create(
                 title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
             created.doneDays = Self.doneDays        // set before activate — DoneStore reads it on hydrate
-            selection.activate(created)
-            done.activate(created)
-            Self.picks.forEach { selection.toggle($0) }
-            projectStore = projects
-            selectionStore = selection
-            doneStore = done
-            coordinator = AppCoordinator(library: Self.fake)
+            built.selectionStore.activate(created)
+            built.doneStore.activate(created)
+            Self.picks.forEach { built.selectionStore.toggle($0) }
+            graph = built
             project = created
 
             let probe = CandidateStore(library: Self.fake)
@@ -482,10 +441,9 @@ struct DebugOverviewHostView: View {
 /// is visible: weekly would be ~5 bars, so it falls back to 8 equal day-slices and fills the width.
 /// The Jun 1 cluster is done (green); Jun 4 + Jun 11 carry picks (in-progress gold).
 struct DebugOverviewShortHostView: View {
-    @State private var projectStore: ProjectStore?
-    @State private var selectionStore: SelectionStore?
-    @State private var doneStore: DoneStore?
-    @State private var coordinator: AppCoordinator?
+    @Environment(\.thumbnailProvider) private var thumbnails
+    @Environment(\.placeNaming) private var placeNaming
+    @State private var graph: AppGraph?
     @State private var project: CurationProject?
 
     private static let fake = FakePhotoLibrary(assets: FakePhotoLibrary.overviewShortSeed())
@@ -499,33 +457,23 @@ struct DebugOverviewShortHostView: View {
 
     var body: some View {
         Group {
-            if let selectionStore, let doneStore, let coordinator, let project {
+            if let graph, let project {
                 NavigationStack { AlbumOverviewView(project: project) }
-                    .environment(\.photoLibrary, Self.fake)
-                    .environment(selectionStore)
-                    .environment(doneStore)
-                    .environment(coordinator)
+                    .environment(graph: graph)
             } else {
                 ProgressView()
             }
         }
         .task {
-            guard let container = try? AppModelContainer.make(inMemory: true) else {
-                Log.app.error("DebugOverviewShortHostView: failed to build the in-memory container")
-                return
-            }
-            let projects = ProjectStore(container: container)
-            let selection = SelectionStore(container: container)
-            let done = DoneStore(container: container)
-            let created = projects.create(title: "Kesä", rangeStart: Self.jun1, rangeEnd: Self.aug1, targetCount: 100)
+            guard let built = debugHostGraph("DebugOverviewShortHostView", library: Self.fake,
+                                             thumbnails: thumbnails, naming: placeNaming) else { return }
+            let created = built.projectStore.create(title: "Kesä", rangeStart: Self.jun1, rangeEnd: Self.aug1,
+                                                    targetCount: 100)
             created.doneDays = Self.doneDays        // set before activate — DoneStore reads it on hydrate
-            selection.activate(created)
-            done.activate(created)
-            Self.picks.forEach { selection.toggle($0) }
-            projectStore = projects
-            selectionStore = selection
-            doneStore = done
-            coordinator = AppCoordinator(library: Self.fake)
+            built.selectionStore.activate(created)
+            built.doneStore.activate(created)
+            Self.picks.forEach { built.selectionStore.toggle($0) }
+            graph = built
             project = created
 
             let probe = CandidateStore(library: Self.fake)
@@ -537,15 +485,13 @@ struct DebugOverviewShortHostView: View {
 
 /// Hosts the export completion (#39) over the spread-out year fake: every day marked done + a subset
 /// picked, then a real export run against the fake, so the hosted `ExportView` renders the settled
-/// "Your album is ready" state (stat card: Picked / Reviewed / Kept). The `ExportStore` is injected
-/// pre-run so the capture never races the async export.
+/// "Your album is ready" state (stat card: Picked / Reviewed / Kept). The album session's export is
+/// run before the view mounts (it then never re-runs), so the capture never races the async export.
 struct DebugExportHostView: View {
-    @State private var projectStore: ProjectStore?
-    @State private var selectionStore: SelectionStore?
-    @State private var doneStore: DoneStore?
-    @State private var coordinator: AppCoordinator?
+    @Environment(\.thumbnailProvider) private var thumbnails
+    @Environment(\.placeNaming) private var placeNaming
+    @State private var graph: AppGraph?
     @State private var project: CurationProject?
-    @State private var exportStore: ExportStore?
 
     private static let fake = FakePhotoLibrary(assets: FakePhotoLibrary.overviewSeed())
     private static let picks: [String] =
@@ -556,52 +502,36 @@ struct DebugExportHostView: View {
 
     var body: some View {
         Group {
-            if let selectionStore, let doneStore, let coordinator, let project, let exportStore {
-                NavigationStack { ExportView(project: project, store: exportStore) }
-                    .environment(\.photoLibrary, Self.fake)
-                    .environment(selectionStore)
-                    .environment(doneStore)
-                    .environment(coordinator)
-                    .environment(AppReviewPrompt())   // read by ExportView; the injected store guards the ask off (#269)
+            if let graph, let project {
+                NavigationStack { ExportView(project: project, isScreenshotHarness: true) }
+                    .environment(graph: graph)
             } else {
                 ProgressView()
             }
         }
         .task {
-            guard let container = try? AppModelContainer.make(inMemory: true) else {
-                Log.app.error("DebugExportHostView: failed to build the in-memory container")
-                return
-            }
-            let projects = ProjectStore(container: container)
-            let selection = SelectionStore(container: container)
-            let done = DoneStore(container: container)
-            let created = projects.create(
+            guard let built = debugHostGraph("DebugExportHostView", library: Self.fake,
+                                             thumbnails: thumbnails, naming: placeNaming) else { return }
+            let created = built.projectStore.create(
                 title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
-            selection.activate(created)
-            Self.picks.forEach { selection.toggle($0) }
+            built.selectionStore.activate(created)
+            Self.picks.forEach { built.selectionStore.toggle($0) }
 
-            // The completion stats read the review scan's day map + done days: load candidates for the
-            // map, then mark EVERY day done (a finished album → "Reviewed" = the whole candidate set).
+            // The completion stats read the review scan's day map + done days: mark EVERY day done (a
+            // finished album → "Reviewed" = the whole candidate set), then open the album through the
+            // session — which hydrates those done days and publishes the day map, as the review would.
             let probe = CandidateStore(library: Self.fake)
             await probe.load(created)
             created.doneDays = Set(probe.dayByID.values).map(\.description).sorted()
-            done.activate(created)
-
-            let coord = AppCoordinator(library: Self.fake)
-            coord.reviewDayByID = probe.dayByID
+            await built.session.open(created, reconcile: false)
 
             // Pre-run the export so the hosted view is already in `.done` when captured.
-            let export = ExportStore(library: Self.fake)
-            await export.run(project: created, picks: selection.selected)
+            await built.session.startExport(created)
 
-            projectStore = projects
-            selectionStore = selection
-            doneStore = done
-            coordinator = coord
+            graph = built
             project = created
-            exportStore = export
             Log.app.notice("screenshot-ready: \(DebugScreen.export.rawValue, privacy: .public)")
         }
     }
@@ -611,49 +541,32 @@ struct DebugExportHostView: View {
 /// grouped form renders with real values: a named album, a full-year period, two excluded albums, and
 /// a target of 200 — plus the destructive Reset / Delete card below.
 struct DebugSettingsHostView: View {
-    @State private var projectStore: ProjectStore?
-    @State private var selectionStore: SelectionStore?
-    @State private var doneStore: DoneStore?
-    @State private var coordinator: AppCoordinator?
+    @Environment(\.thumbnailProvider) private var thumbnails
+    @Environment(\.placeNaming) private var placeNaming
+    @State private var graph: AppGraph?
     @State private var project: CurationProject?
-
-    private static let fake = FakePhotoLibrary(status: .authorized)
 
     var body: some View {
         Group {
-            if let selectionStore, let doneStore, let coordinator, let project {
+            if let graph, let project {
                 NavigationStack { AlbumSettingsView(project: project, calendar: Self.utc) }
-                    .environment(\.photoLibrary, Self.fake)
-                    .environment(projectStore)
-                    .environment(selectionStore)
-                    .environment(doneStore)
-                    .environment(coordinator)
+                    .environment(graph: graph)
             } else {
                 ProgressView()
             }
         }
         .task {
-            guard let container = try? AppModelContainer.make(inMemory: true) else {
-                Log.app.error("DebugSettingsHostView: failed to build the in-memory container")
-                return
-            }
-            let projects = ProjectStore(container: container)
-            let selection = SelectionStore(container: container)
-            let done = DoneStore(container: container)
-            let created = projects.create(
+            guard let built = debugHostGraph("DebugSettingsHostView", library: FakePhotoLibrary(status: .authorized),
+                                             thumbnails: thumbnails, naming: placeNaming) else { return }
+            let created = built.projectStore.create(
                 title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 200,
                 excludedAlbumIDs: ["album/whatsapp", "album/downloads"])
-            selection.activate(created)
-            done.activate(created)
-
-            let coord = AppCoordinator(library: Self.fake)
-            await coord.refreshAuthorization()      // → .authorized, so the access row shows "Full"
-            projectStore = projects
-            selectionStore = selection
-            doneStore = done
-            coordinator = coord
+            built.selectionStore.activate(created)
+            built.doneStore.activate(created)
+            await built.coordinator.refreshAuthorization()      // → .authorized, so the access row shows "Full"
+            graph = built
             project = created
             Log.app.notice("screenshot-ready: \(DebugScreen.settings.rawValue, privacy: .public)")
         }
@@ -701,14 +614,15 @@ struct DebugWhatsNewHostView: View {
     }
 }
 
-/// Hosts the full-screen photo viewer (#36) over the deterministic fake tiles: a coordinator seeded
-/// with the candidate list + last-viewed id, a selection with a few picks, opened on a selected
-/// photo — so the capture shows the pager chrome (position, the gold select-in-place check, tally).
+/// Hosts the full-screen photo viewer (#36) over the deterministic fake tiles: an album session seeded
+/// with the candidate list, a coordinator with the last-viewed id, a selection with a few picks, opened
+/// on a selected photo — so the capture shows the pager chrome (position, the gold select-in-place
+/// check, tally).
 struct DebugPhotoViewerHostView: View {
     @Environment(\.photoLibrary) private var library
-    @State private var coordinator: AppCoordinator?
-    @State private var selectionStore: SelectionStore?
-    @State private var projectStore: ProjectStore?
+    @Environment(\.thumbnailProvider) private var thumbnails
+    @Environment(\.placeNaming) private var placeNaming
+    @State private var graph: AppGraph?
 
     /// The post-filter candidates of the `yearMixed` seed (quiet run + busy day minus WhatsApp).
     private static let ids = ["fake/quiet/16", "fake/quiet/17", "fake/quiet/18"]
@@ -729,43 +643,35 @@ struct DebugPhotoViewerHostView: View {
 
     var body: some View {
         Group {
-            if let coordinator, let selectionStore {
+            if let graph {
                 // Presented directly (not in a sheet) so the capture is deterministic — the viewer's
                 // ambient + layout render full-screen; on device it's a `.sheet` card (grabber, corners,
                 // pull-to-dismiss add only sheet chrome, no content change).
                 PhotoViewerView(startID: Self.startID)
-                    .environment(coordinator)
-                    .environment(selectionStore)
+                    .environment(graph: graph)
             } else {
                 ProgressView()
             }
         }
         .task {
-            guard let container = try? AppModelContainer.make(inMemory: true) else {
-                Log.app.error("DebugPhotoViewerHostView: failed to build the in-memory container")
-                return
-            }
-            let projects = ProjectStore(container: container)
-            let selection = SelectionStore(container: container)
-            let created = projects.create(
+            guard let built = debugHostGraph("DebugPhotoViewerHostView", library: library,
+                                             thumbnails: thumbnails, naming: placeNaming) else { return }
+            let created = built.projectStore.create(
                 title: debugSampleTitle("Best of 2025"),
                 rangeStart: DebugScanningHostView.yearStart, rangeEnd: DebugScanningHostView.yearEnd,
                 targetCount: 100)
-            selection.activate(created)
-            ["fake/busy/2", "fake/busy/5", "fake/quiet/16"].forEach { selection.toggle($0) }
+            built.selectionStore.activate(created)
+            ["fake/busy/2", "fake/busy/5", "fake/quiet/16"].forEach { built.selectionStore.toggle($0) }
 
-            let coord = AppCoordinator(library: library)
-            coord.reviewOrderedIDs = Self.ids
-            coord.reviewDayByID = Self.dayByID
             // Publish the AssetRefs so the viewer's date line shows the capture time + the info panel the
-            // resolution (#127) — mirrors ScanningView.publishForViewer against the fake's seeded assets.
+            // resolution (#127) — the review context a scan would publish, against the fake's seeded assets.
             let interval = DateInterval(start: DebugScanningHostView.yearStart, end: DebugScanningHostView.yearEnd)
             let fetched = (try? await library.fetchAssets(in: interval)) ?? []
-            coord.reviewAssetsByID = Dictionary(fetched.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            coord.lastViewedID = Self.startID
-            projectStore = projects
-            selectionStore = selection
-            coordinator = coord
+            built.session.seedReviewContext(
+                orderedIDs: Self.ids, dayByID: Self.dayByID,
+                assetsByID: Dictionary(fetched.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }))
+            built.coordinator.lastViewedID = Self.startID
+            graph = built
             Log.app.notice("screenshot-ready: \(DebugScreen.photoviewer.rawValue, privacy: .public)")
         }
     }

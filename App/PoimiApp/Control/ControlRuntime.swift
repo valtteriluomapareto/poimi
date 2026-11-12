@@ -100,7 +100,8 @@ final class ControlRuntime {
 
     var inputs: ControlSnapshotInputs {
         ControlSnapshotInputs(
-            fixture: fixture, coordinator: graph.coordinator, projects: graph.projectStore,
+            fixture: fixture, coordinator: graph.coordinator, session: graph.session,
+            projects: graph.projectStore,
             selection: graph.selectionStore, done: graph.doneStore,
             assetAliases: assetAliases, albumAliases: albumAliases,
             launchError: launchError, bootstrapped: bootstrapped,
@@ -138,8 +139,7 @@ struct ControlRouteApplier {
               let project = graph.projectStore.projects.first(where: { $0.id == id }) else {
             throw ControlLaunchError("route album '\(alias)' is not in fixture '\(fixture.rawValue)'")
         }
-        graph.projectStore.open(project)
-        coordinator.openProject(id)
+        graph.actions.open(project)   // bump + overview, exactly as the album list's tap
         switch route {
         case .review(_, let day): coordinator.openReview(id, day: day)
         case .export: coordinator.openExport(id)
@@ -154,13 +154,13 @@ struct ControlRouteApplier {
         guard let assetID = assets.assetID(for: alias) else {
             throw ControlLaunchError("viewer photo '\(alias)' is not in fixture '\(fixture.rawValue)'")
         }
-        let coordinator = graph.coordinator
+        let session = graph.session
         let deadline = ContinuousClock.now + timeout
-        while !coordinator.reviewOrderedIDs.contains(assetID) {
-            switch coordinator.candidateStore?.phase {
+        while !session.reviewOrderedIDs.contains(assetID) {
+            switch session.candidateStore?.phase {
             case .empty?, .failed?:
                 throw ControlLaunchError("viewer: the review has no photos to open '\(alias)' on")
-            case .ready? where !coordinator.reviewOrderedIDs.isEmpty:
+            case .ready? where !session.reviewOrderedIDs.isEmpty:
                 throw ControlLaunchError("viewer photo '\(alias)' is not in the open review")
             default:
                 break   // not scanned yet, scanning, or ready but not yet published by the grid
@@ -170,7 +170,7 @@ struct ControlRouteApplier {
             }
             try? await Task.sleep(for: .milliseconds(50))   // poll with a real deadline
         }
-        coordinator.openPhoto(assetID)
+        graph.coordinator.openPhoto(assetID)
     }
 }
 

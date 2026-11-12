@@ -80,12 +80,21 @@ struct ControlRuntimeTests {
         }
     }
 
-    @Test("an export route reports idle as unknown, never a silent true")
-    func exportIdleUnknown() async {
+    @Test("an export route is not idle until the export settles — and then reports it (#297)")
+    func exportIdleObservable() async throws {
         let harness = ControlHarness(.exported, route: .export(album: "album-1"))
         await harness.runtime.bootstrap()
         #expect(harness.state("nav", "screen") == .string("export"))
-        #expect(harness.state("idle") == .null)
+        #expect(harness.state("active", "export", "phase") == .string("idle"))
+        #expect(harness.state("idle") == .bool(false))   // the screen's export hasn't run yet
+        // Play the export screen's part: its `.task` starts the session's export.
+        let project = try #require(harness.created.first)
+        await harness.graph.session.startExport(project)
+        await harness.settle()
+        #expect(harness.state("active", "export", "phase") == .string("done"))
+        #expect(harness.state("active", "export", "wasReExport") == .bool(true))
+        #expect(harness.state("pending", "export") == .bool(false))
+        #expect(harness.state("idle") == .bool(true))
     }
 
     @Test("a route that can't apply says so", arguments: [

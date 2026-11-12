@@ -9,8 +9,7 @@
 import SwiftUI
 
 struct NewAlbumSetupView: View {
-    @Environment(ProjectStore.self) private var store
-    @Environment(AppCoordinator.self) private var coordinator
+    @Environment(AlbumActions.self) private var actions
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft: NewAlbumDraft
@@ -135,16 +134,14 @@ struct NewAlbumSetupView: View {
         }
     }
 
+    /// Create + open the album (the façade validates again — an invalid draft creates nothing).
     private func create() {
-        let project = store.create(from: draft)
+        guard actions.create(validated: draft) != nil else { return }
         dismiss()
-        coordinator.openProject(project.id)
     }
 
     /// A non-empty name and a non-inverted interval are required to create.
-    private var isValid: Bool {
-        !draft.title.trimmingCharacters(in: .whitespaces).isEmpty && draft.rangeEnd > draft.rangeStart
-    }
+    private var isValid: Bool { draft.isValid }
 
     /// The excluded-albums count as a label — matches Settings' `excludedValue` form ("None" / "1 album" /
     /// "N albums") so Setup and Settings read identically (#190, item 3), not a bare "3" vs "3 albums".

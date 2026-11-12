@@ -63,32 +63,18 @@ struct ControlHarness {
     /// Navigate to `album-1`'s review the way the album list + route do, then scan as the grid does.
     func openReview() async throws {
         let project = try #require(created.first)
-        graph.projectStore.open(project)
-        coordinator.openProject(project.id)
+        graph.actions.open(project)
         coordinator.openReview(project.id)
         try await scanAsGrid()
     }
 
-    /// What `ScanningView`'s `.task` does for the open album: hydrate the stores, scan (with the graph's
-    /// naming + caches), reconcile, and publish the review context the viewer pages through.
+    /// What `ScanningView`'s `.task` does for the open album — the album session's `open` with
+    /// reconcile (#297) — then wait for its trip names, so the snapshot is settled.
     func scanAsGrid() async throws {
         let id = try #require(coordinator.activeAlbumID)
         let project = try #require(graph.projectStore.projects.first { $0.id == id })
-        selection.activate(project)
-        done.activate(project)
-        let store = coordinator.candidateStore(for: project) {
-            CandidateStore(library: graph.photoLibrary, calendar: graph.calendar,
-                           locationEnabled: project.locationEnabled, naming: graph.placeNaming,
-                           nameCache: graph.nameCache, timelineCache: graph.timelineCache)
-        }
-        await store.load(project)
+        let store = await graph.session.open(project, reconcile: true)
         await store.awaitPendingNames()
-        if case .ready(let clusters) = store.phase {
-            coordinator.reviewOrderedIDs = clusters.flatMap(\.assetIDs)
-            coordinator.reviewDayByID = store.dayByID
-            coordinator.reviewAssetsByID = store.assetsByID
-            coordinator.reviewClusters = clusters
-        }
     }
 
     /// The current snapshot pair (content, detail), unstamped.
@@ -320,7 +306,7 @@ struct ControlSnapshotTests {
         if !harness.created.isEmpty, fixture.authorization == .authorized {
             try await harness.openReview()
         }
-        let tripNames = Array((harness.coordinator.candidateStore?.tripNames ?? [:]).values)
+        let tripNames = Array((harness.graph.session.candidateStore?.tripNames ?? [:]).values)
         if fixture == .located {
             // The place-name half must be able to fail: trips formed AND got names the app holds.
             #expect(!tripNames.isEmpty)
@@ -387,7 +373,14 @@ struct ControlSnapshotTests {
 
         let pending = try #require(state["pending"] as? [String: Any])
         #expect(pending["scan"] as? Bool == false)
-        #expect(pending["selectionFlush"] is NSNull)   // unobservable until slice B — null, not a guess
+        #expect(pending["selectionFlush"] as? Bool == false)   // observable since slice B (#297)
+        #expect(pending["doneFlush"] as? Bool == false)
+        #expect(pending["naming"] as? Bool == false)
+        #expect(pending["export"] as? Bool == false)
+        #expect(pending["thumbnails"] is NSNull)   // still unobservable (slice C) — null, not a guess
+        let export = try #require(active["export"] as? [String: Any])
+        #expect(export["phase"] as? String == "idle")
+        #expect(export["wasReExport"] is NSNull)
 
         // The detail file: the active album's days, aliases only, picks as a subset of the day's photos.
         let detail = try #require(try Self.parse(snapshots[1]) as? [String: Any])
@@ -401,7 +394,7 @@ struct ControlSnapshotTests {
         #expect(photos.first == "a-0001")
     }
 
-    @Test("idle: false before bootstrap and while the route's scan is pending; unknown on export")
+    @Test("idle: false before bootstrap, while the route's scan is pending, and until the export settles")
     func idle() async throws {
         let harness = ControlHarness(.oneAlbum)
         #expect(harness.snapshot().content["idle"] == .bool(false))   // not bootstrapped yet
@@ -414,9 +407,18 @@ struct ControlSnapshotTests {
         #expect(harness.snapshot().content["idle"] == .bool(false))
         try await harness.scanAsGrid()
         #expect(harness.snapshot().content["idle"] == .bool(true))
-        // The export screen runs its export in view state slice A can't see: unknown, never `true`.
+        // The export screen, before its export ran: pending, not idle (since #297 it's observable —
+        // slice A could only say `null`).
         harness.coordinator.openExport(project.id)
-        #expect(harness.snapshot().content["idle"] == .null)
+        #expect(harness.snapshot().content["idle"] == .bool(false))
+        #expect(harness.snapshot().content["active"]?["export"]?["phase"] == .string("idle"))
+        harness.selection.select(harness.graph.session.reviewOrderedIDs.prefix(2))   // a debounce is pending …
+        await harness.graph.session.startExport(project)
+        #expect(harness.snapshot().content["active"]?["export"]?["phase"] == .string("done"))
+        #expect(harness.snapshot().content["pending"]?["selectionFlush"] == .bool(true))
+        // … and `idle` doesn't wait on it: under control the debounce is a day long (no flush action
+        // until slice C), so the flush is reported under `pending` only.
+        #expect(harness.snapshot().content["idle"] == .bool(true))
     }
 
     @Test("rev bumps only when the content changes")

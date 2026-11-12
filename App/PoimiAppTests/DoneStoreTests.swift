@@ -149,6 +149,28 @@ struct DoneStoreTests {
         done.deactivate()
     }
 
+    /// The debounce task used to stay non-nil after it fired, so "unsaved day marks" wasn't readable (#297).
+    @Test("hasPendingFlush: true while a debounce is scheduled, false once it fires or flushNow runs (#297)")
+    func hasPendingFlushTracksTheDebounce() async throws {
+        let (projects, done) = try makeStores(debounce: .milliseconds(10))
+        let album = project(projects, "A")
+        let july = DayKey.day(year: 2025, month: 7, day: 5)
+        done.activate(album)
+        #expect(!done.hasPendingFlush)
+
+        done.toggle(group("g", [july]))
+        #expect(done.hasPendingFlush)
+        await done.awaitPendingFlush()   // the real debounce task, not a fixed sleep
+        #expect(!done.hasPendingFlush)
+        #expect(album.doneDays == [july.description])
+
+        done.toggle(group("g", [july]))
+        #expect(done.hasPendingFlush)
+        done.flushNow()
+        #expect(!done.hasPendingFlush)
+        done.deactivate()
+    }
+
     @Test("switching cancels the outgoing project's pending debounce; the incoming fires on its own")
     func switchCancelsStaleDebounceAndIncomingFires() async throws {
         let (projects, done) = try makeStores(debounce: .milliseconds(10))

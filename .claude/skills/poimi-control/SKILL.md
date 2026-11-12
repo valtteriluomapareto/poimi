@@ -83,14 +83,17 @@ Key paths: `.app.rootPhase` (`onboarding|recovery|albums`), `.app.launchError`, 
 (`albums|overview|review|export|settings|appSettings|onboarding|recovery`), `.nav.path`, `.nav.sheet`
 (`"viewer"` or null), `.nav.viewerPhoto`, `.albums["album-1"].status|picked|target`,
 `.active.scan.phase` (`none|idle|scanning|ready|empty|failed`), `.active.scan.clusters|trips`,
-`.active.selection.count`, `.active.done.days|clusters|of`, `.idle`, `.rev` (bumps when either file's
-content changes), `.run` (per launch).
+`.active.selection.count`, `.active.done.days|clusters|of`, `.active.export.phase`
+(`idle|exporting|done|failed`) + `.wasReExport`, `.pending.selectionFlush|doneFlush|naming|export`,
+`.idle`, `.rev` (bumps when either file's content changes), `.run` (per launch).
 
-**`idle` (slice A)** is `false` until the launch bootstrap finished (authorization read, route +
-viewer applied) and while a review scan runs or is still pending for the screen on top; **`null`
-(unknown) on the export screen**, whose export runs in view state slice A can't see; `true`
-otherwise. It never covers debounced flushes, trip naming or thumbnail loads — those are `null` under
-`.pending` ("not observable yet"; slices B/C fill them in). Don't treat a `null` as `false` or `true`.
+**`idle`** is `false` until the launch bootstrap finished (authorization read, route + viewer
+applied), while a review scan or its trip naming runs or is still pending for the screen on top, and
+on the export screen until the export settled (`done`/`failed`); `true` otherwise. It does **not**
+wait on debounced flushes — under control the debounce is a day long, so a pick leaves
+`.pending.selectionFlush == true` until a scene-phase change or project switch flushes it — nor on
+thumbnail loads (`.pending.thumbnails` is `null`, "not observable yet"; slice C). Don't treat a `null`
+as `false` or `true`.
 
 ## Isolation
 

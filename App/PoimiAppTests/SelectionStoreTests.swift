@@ -91,6 +91,27 @@ struct SelectionStoreTests {
         selection.deactivate()
     }
 
+    /// The debounce task used to stay non-nil after it fired, so "unsaved picks" wasn't readable (#297).
+    @Test("hasPendingFlush: true while a debounce is scheduled, false once it fires or flushNow runs (#297)")
+    func hasPendingFlushTracksTheDebounce() async throws {
+        let (projects, selection) = try makeStores(debounce: .milliseconds(10))
+        let a = project(projects, "A")
+        selection.activate(a)
+        #expect(!selection.hasPendingFlush)
+
+        selection.toggle("x")
+        #expect(selection.hasPendingFlush)
+        await selection.awaitPendingFlush()   // the real debounce task, not a fixed sleep
+        #expect(!selection.hasPendingFlush)
+        #expect(SelectionSnapshot.decode(a.selectionSnapshot).assetIDs == ["x"])
+
+        selection.toggle("y")
+        #expect(selection.hasPendingFlush)
+        selection.flushNow()
+        #expect(!selection.hasPendingFlush)
+        selection.deactivate()
+    }
+
     @Test("switching cancels the outgoing project's pending debounce; the incoming one fires on its own")
     func switchCancelsStaleDebounceAndIncomingFires() async throws {
         let (projects, selection) = try makeStores(debounce: .milliseconds(10))

@@ -9,7 +9,7 @@
 //  — a ONE-WAY copy that never reads the album back (D31). The screen is a small state machine:
 //  working → completion (first export / re-export copy) or a recoverable error.
 //
-//  Completion stats reuse the review scan's `id → DayKey` map (the coordinator's `reviewDayByID`), so
+//  Completion stats reuse the review scan's `id → DayKey` map (the album session's `reviewDayByID`), so
 //  the celebration needs no second scan. Review STATE (done/picked) is the list's job; here we only
 //  summarize (Picked / Reviewed / Kept, `CompletionStats`).
 //
@@ -47,6 +47,9 @@ func shouldRequestReview(isInjectedStore: Bool, prompt: AppReviewPrompt) -> Bool
 @Observable
 final class ExportStore {
     enum Phase: Equatable {
+        /// Nothing has run yet (#297). The session starts the run exactly once from here, so nothing reads
+        /// "exporting" before an export actually started, and a second start is a no-op.
+        case idle
         /// Working. `isReExport` picks the "Creating…" vs "Updating…" copy (captured from the attempt,
         /// so a forceNewAlbum recovery reads "Creating…" even though a stale `targetAlbumID` is set).
         case exporting(isReExport: Bool)
@@ -56,7 +59,7 @@ final class ExportStore {
         case failed(ExportError, canCreateNew: Bool)
     }
 
-    private(set) var phase: Phase = .exporting(isReExport: false)
+    private(set) var phase: Phase = .idle
     private let library: any PhotoLibraryProviding
 
     init(library: any PhotoLibraryProviding) {
@@ -98,25 +101,22 @@ final class ExportStore {
 
 struct ExportView: View {
     let project: CurationProject
-    @Environment(\.photoLibrary) private var library
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(AlbumSession.self) private var session
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
     @Environment(AppReviewPrompt.self) private var appReviewPrompt
-    @State private var store: ExportStore?
 
-    /// True when a pre-run store was injected (the screenshot harness) — never ask for a review then, so a
-    /// captured completion screen can't get a system review sheet over it (D30, #269).
-    private let isInjectedStore: Bool
+    /// True for the screenshot harness, which pre-runs the session's export so a settled state renders
+    /// deterministically — never ask for a review then, so a captured completion screen can't get a
+    /// system review sheet over it (D30, #269).
+    private let isScreenshotHarness: Bool
 
-    /// Production callers pass no `store` (the `.task` creates + runs one). The screenshot harness may
-    /// inject a pre-run store so a settled state (completion / error) renders deterministically.
-    init(project: CurationProject, store: ExportStore? = nil) {
+    init(project: CurationProject, isScreenshotHarness: Bool = false) {
         self.project = project
-        _store = State(initialValue: store)
-        isInjectedStore = store != nil
+        self.isScreenshotHarness = isScreenshotHarness
     }
     /// Grace-gate the working spinner so an instant export never flashes it.
     @State private var spinnerVisible = false
@@ -129,21 +129,18 @@ struct ExportView: View {
             .navigationBarBackButtonHidden(true)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(.systemBackground))
-            .task {
-                selection.activate(project)
-                doneStore.activate(project)
-                let resolved = store ?? ExportStore(library: library)
-                store = resolved
-                // Run once on appear; re-runs (Try again / Create new) are driven by the buttons.
-                if case .exporting = resolved.phase {
-                    await resolved.run(project: project, picks: selection.selected)
-                }
-            }
+            // The session owns the export (#297) and runs it only from `.idle`, so a re-appearing screen
+            // (an iPad size-class flip rebuilds the tree) never exports twice. Re-runs (Try again /
+            // Create new) are driven by the buttons.
+            .task { await session.startExport(project) }
     }
 
     @ViewBuilder
     private var content: some View {
-        switch store?.phase ?? .exporting(isReExport: false) {
+        switch session.export.phase {
+        case .idle:
+            // The one frame before the session starts the run — already the working screen.
+            working(isReExport: project.targetAlbumID != nil)
         case .exporting(let isReExport):
             working(isReExport: isReExport)
         case .done(let result, let wasReExport):
@@ -182,7 +179,7 @@ struct ExportView: View {
     // MARK: Completion (success / re-export)
 
     private func completion(result: ExportResult, wasReExport: Bool) -> some View {
-        let stats = CompletionStats(dayByID: coordinator.reviewDayByID,
+        let stats = CompletionStats(dayByID: session.reviewDayByID,
                                     doneDays: doneStore.doneDays,
                                     selection: selection.selected)
         return VStack(spacing: 0) {
@@ -232,7 +229,7 @@ struct ExportView: View {
             // on the albums screen (and we don't mark it asked, so a later export this version still can).
             // Gated to once per app version — the system throttle applies on top; the injected screenshot
             // store is excluded so a captured completion can't get a sheet over it (D30).
-            guard shouldRequestReview(isInjectedStore: isInjectedStore, prompt: appReviewPrompt) else { return }
+            guard shouldRequestReview(isInjectedStore: isScreenshotHarness, prompt: appReviewPrompt) else { return }
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
             appReviewPrompt.markRequested()
@@ -325,11 +322,11 @@ struct ExportView: View {
                     }
                 } else {
                     actionButton("Try again", role: .primary) {
-                        Task { await store?.run(project: project, picks: selection.selected) }
+                        Task { await session.retryExport(project) }
                     }
                     if canCreateNew {
                         actionButton("Create a new album instead", role: .secondary) {
-                            Task { await store?.run(project: project, picks: selection.selected, forceNewAlbum: true) }
+                            Task { await session.retryExport(project, forceNewAlbum: true) }
                         }
                     }
                 }

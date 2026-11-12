@@ -7,6 +7,10 @@ worth telling users about, in plain language (not a commit log). The format foll
 
 ## [Unreleased]
 
+### Fixed
+- Saving an album to Photos straight from its overview, without opening a day first, now
+  counts the days you've reviewed on the completion screen instead of showing none.
+
 ## [1.1.0] — 2026-10-15
 
 ### Added

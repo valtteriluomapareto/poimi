@@ -40,15 +40,7 @@ struct PoimiApp: App {
     var body: some Scene {
         WindowGroup {
             rootView
-                .environment(\.photoLibrary, graph.photoLibrary)
-                .environment(\.thumbnailProvider, graph.thumbnailProvider)
-                .environment(\.placeNaming, graph.placeNaming)
-                .environment(graph.projectStore)
-                .environment(graph.selectionStore)
-                .environment(graph.doneStore)
-                .environment(graph.coordinator)
-                .environment(graph.whatsNewState)
-                .environment(graph.appReviewPrompt)
+                .environment(graph: graph)
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active {
                         // Durability point (D15/§12): persist the live selection as soon as we

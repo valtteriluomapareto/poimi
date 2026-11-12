@@ -38,8 +38,14 @@ enum AppModelContainer {
     /// Build the app's `ModelContainer`. `inMemory` backs fresh-store tests and the DEBUG screenshot
     /// harness. Historical-fixture tests configure their own temporary URL. No migration plan — additive changes ride
     /// SwiftData automatic lightweight migration (file note).
-    static func make(inMemory: Bool = false) throws -> ModelContainer {
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
+    /// `url` places the store at a specific file (a relaunch-persistent control store, a test's temporary
+    /// file); `nil` is the default location.
+    static func make(inMemory: Bool = false, url: URL? = nil) throws -> ModelContainer {
+        let configuration = if let url {
+            ModelConfiguration(schema: schema, url: url)
+        } else {
+            ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
+        }
         return try ModelContainer(for: schema, configurations: configuration)
     }
 }

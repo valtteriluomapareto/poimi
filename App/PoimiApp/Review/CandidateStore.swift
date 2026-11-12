@@ -127,6 +127,10 @@ final class CandidateStore {
     /// The in-flight trip-name resolution — cancelled when a new load starts, so a stale pass never
     /// publishes names for a superseded album/setting. Detached from `.ready` so naming never blocks it.
     private var nameTask: Task<Void, Never>?
+    /// Whether the trip-name pass for the CURRENT load is in flight (#297) — `true` from `.ready` until
+    /// its names publish (or it finds nothing to name). Observable, so "still naming" is readable state
+    /// (the control plane's `pending.naming` / `idle`) instead of a private task handle.
+    private(set) var isNaming = false
     /// Monotonic load token: the name pass only publishes if it's still the current load — guards the
     /// retry paths (`onRetry`/`onRecovered`) that re-enter `load()` without cancelling the prior `.task`.
     private var loadGeneration = 0
@@ -196,6 +200,7 @@ final class CandidateStore {
         assetsByID = [:]
         tripNames = [:]
         nameTask?.cancel()        // supersede any in-flight name pass from a prior load
+        if isNaming { isNaming = false }
         loadGeneration += 1
         let generation = loadGeneration
 
@@ -247,13 +252,7 @@ final class CandidateStore {
                     fetchMillis: fetchMillis, clusterMillis: clusterMillis,
                     namingMillis: nil, namesResolved: nil, locationEnabled: locationEnabled,
                     cached: fromCache)
-                // Resolve trip place names in a DETACHED, cancellable task — geocoding is network-bound
-                // and slow (§7), so it must never block `.ready` (the grid/viewer publish + done reconcile
-                // happen as soon as we return). Names fill into `tripNames` when the pass completes
-                // (cache-fast on repeat opens); trips show a date fallback until then.
-                nameTask = Task { [weak self] in
-                    await self?.resolveTripNames(in: clusters, generation: generation)
-                }
+                startNaming(clusters, generation: generation)
             }
         } catch {
             Log.photoLibrary.error("CandidateStore.load failed: \(String(describing: error), privacy: .public)")
@@ -291,6 +290,21 @@ final class CandidateStore {
         }.value
         await timelineCache?.store(projectID: project.id, fingerprint: fingerprint, clusters: clusters)
         return (clusters, false)
+    }
+
+    /// Resolve trip place names in a DETACHED, cancellable task — geocoding is network-bound and slow (§7),
+    /// so it must never block `.ready` (the grid/viewer publish + done reconcile happen as soon as `load`
+    /// returns). Names fill into `tripNames` when the pass completes (cache-fast on repeat opens); trips
+    /// show a date fallback until then. `isNaming` is set here, in the same turn `.ready` lands.
+    private func startNaming(_ clusters: [ReviewCluster], generation: Int) {
+        isNaming = true
+        nameTask = Task { [weak self] in
+            await self?.resolveTripNames(in: clusters, generation: generation)
+            // Only the current load's pass ends "naming" — a superseded one must not clear the flag a newer
+            // load set (the newer load already reset it when it started).
+            guard let self, generation == self.loadGeneration else { return }
+            self.isNaming = false
+        }
     }
 
     /// Reverse-geocode the trip places (§7) and publish `tripNames`. No-ops without naming deps
