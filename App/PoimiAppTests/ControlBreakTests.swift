@@ -195,7 +195,9 @@ struct ControlRelaunchTests {
             #expect(try await first.send(#"{"type":"selection.toggle","photo":"\#(unflushedAlias)"}"#).isAccepted)
             #expect(first.value("active.selection.count") == .value(.int(36)))
             #expect(first.value("pending.selectionFlush") == .value(.bool(true)))
-            // … and the process dies here: no scene phase, no flush.
+            // … and the process dies here: no scene phase, no flush. (In-process the first graph is only
+            // abandoned: let the work its actions started finish first, so none of it outlives its store.)
+            await first.settled()
         }
 
         let second = ControlHarness(.midReview, paths: paths, relaunch: true)
@@ -225,6 +227,7 @@ struct ControlRelaunchTests {
                 try await first.send(#"{"type":"nav.openExport"}"#)
                 await first.expectWait([("active.export.phase", .eq, .string("done")), ("idle", .eq, .bool(true))])
                 #expect(first.int("library.albumsCreated") == 1)
+                await first.settled()
             }
             if !keepsLibraryState { try FileManager.default.removeItem(at: paths.library) }
 
@@ -279,6 +282,7 @@ struct ControlRelaunchTests {
             let duplicate = try await first.send(#"{"type":"albums.duplicate","album":"album-3"}"#)
             guard case .accepted(_, let extra) = duplicate else { Issue.record("\(duplicate)"); return }
             #expect(extra.first { $0.key == "album" }?.value == .string("album-5"))
+            await first.settled()
         }
         let second = ControlHarness(.fourStatuses, paths: paths, relaunch: true, iPad: true)
         await second.runtime.bootstrap()
@@ -338,6 +342,7 @@ struct ControlLibraryDriftTests {
             #expect(harness.value("albums.album-1.status") == .value(.string("exported")))
             #expect(harness.value("albums.album-1.inPhotos") == .value(.int(inPhotos + 3)))
             #expect(harness.int("library.albumsCreated") == 0)            // found the album it was exported to
+            await harness.settled()
         }
 
         let relaunched = ControlHarness(.exported, paths: paths, relaunch: true)
