@@ -27,9 +27,9 @@ final class ControlRuntime {
     var assetAliases: ControlAssetAliases { host.assets }
     private let initialAssetAliases: ControlAssetAliases
     let albumAliases: ControlAlbumAliases
-    /// The fake library's export gate (#300): `library.*` in the snapshot, the export levers. `nil` when
-    /// the run's library has none (a test's own wrapper).
-    let exportGate: FakeExportGate?
+    /// The fake library's export gate (#300): `library.*` in the snapshot, the export levers. (A test that
+    /// brings its own library wrapper may leave it unwired.)
+    let exportGate: FakeExportGate
     /// The action bookkeeping behind `settledSeq` / `lastSeq` (#298).
     let progress = ControlProgress()
     /// The fake thumbnail loads in flight (`pending.thumbnails`), when the graph counts them.
@@ -67,7 +67,7 @@ final class ControlRuntime {
          run: String = "r-" + String(UInt32.random(in: 0...UInt32.max), radix: 16),
          writeDelay: Duration = .milliseconds(100),
          thumbnailLoads: ThumbnailLoadCounter? = nil, mailbox: URL? = nil, listAlwaysShown: Bool? = nil,
-         exportGate: FakeExportGate? = nil, record: URL? = nil, addedAssets: [AssetRef] = []) {
+         exportGate: FakeExportGate, record: URL? = nil, addedAssets: [AssetRef] = []) {
         self.graph = graph
         self.exportGate = exportGate
         // The iPad's split view keeps the album list on screen; the tests can pick either layout.
@@ -93,8 +93,9 @@ final class ControlRuntime {
         initialAssetAliases = ControlAssetAliases(assets: fixture.assets).appending(addedAssets)
         if let launch, launch.relaunch {
             // A relaunch continues the run on record: nothing is seeded, the aliases are its own.
-            albumAliases = record.flatMap(ControlRunRecord.load(from:)).map(ControlAlbumAliases.init(restoring:))
-                ?? ControlAlbumAliases()
+            // (An unreadable record never gets here: the launch parse refuses it.)
+            albumAliases = record.flatMap { ControlRunRecord.load(from: $0).value }
+                .map(ControlAlbumAliases.init(restoring:)) ?? ControlAlbumAliases()
         } else {
             albumAliases = ControlAlbumAliases()
             if launch != nil {

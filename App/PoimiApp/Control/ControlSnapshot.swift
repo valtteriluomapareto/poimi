@@ -36,8 +36,8 @@ struct ControlSnapshotInputs {
     var progress: ControlProgress?
     /// The fake thumbnail provider's loads in flight, or `nil` when nothing counts them.
     var thumbnails: ThumbnailLoadCounter?
-    /// The fake library's export gate (`library.*`, #300), or `nil` when the library has none.
-    var exportGate: FakeExportGate?
+    /// The fake library's export gate (`library.*`, #300).
+    let exportGate: FakeExportGate
     /// No UI: `ControlHeadlessView` instead of `AppRootView` (`app.host`).
     var headless = false
     /// A launch/route problem to surface (`app.launchError`), or `nil`.
@@ -368,14 +368,13 @@ enum ControlSnapshot {
 
     /// The fake library's side of exports (#300) — what the user would see in Photos, as counts: exports
     /// parked at the gate, export calls so far, and Photos albums export created (a re-export that finds
-    /// its album doesn't create one). `null` when the library has no gate.
+    /// its album doesn't create one).
     @MainActor
-    private static func library(_ gate: FakeExportGate?) -> ControlJSON {
-        guard let gate else { return .null }
+    private static func library(_ gate: FakeExportGate) -> ControlJSON {
         return .object(
             ("heldExports", .int(gate.held)),
             ("exportCalls", .int(gate.calls)),
-            ("albumsCreated", .int(gate.created)))
+            ("albumsCreated", .int(gate.albumsCreated)))
     }
 
     @MainActor

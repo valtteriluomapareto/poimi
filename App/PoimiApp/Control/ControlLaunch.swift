@@ -60,9 +60,11 @@ struct ControlLaunch: Equatable {
         }
     }
 
-    /// Parse `arguments` (pure, so tests drive it directly). `recorded` is the fixture of the last control
-    /// run on record — what `-PoimiRelaunch` continues (`nil`: there's nothing to relaunch).
-    static func parse(_ arguments: [String], recorded: ControlFixture? = nil) -> Parsed {
+    /// Parse `arguments` (pure, so tests drive it directly). `recorded` is the last control run on record —
+    /// what `-PoimiRelaunch` continues: its fixture, why its record can't be read, or `nil` (nothing to
+    /// relaunch).
+    static func parse(_ arguments: [String],
+                      recorded: Result<ControlFixture, ControlLaunchError>? = nil) -> Parsed {
         let controlFlags = [controlFlag, fixtureFlag, routeFlag, viewerFlag, headlessFlag, relaunchFlag]
         guard arguments.contains(where: controlFlags.contains) else { return .off }
         guard arguments.contains(controlFlag) else {
@@ -98,17 +100,22 @@ struct ControlLaunch: Equatable {
 
     /// The launch's fixture: `-PoimiFixture`'s, or — for a relaunch, which takes none — the one on record.
     private static func fixture(in arguments: [String], relaunch: Bool,
-                                recorded: ControlFixture?) throws(ControlLaunchError) -> ControlFixture {
+                                recorded: Result<ControlFixture, ControlLaunchError>?)
+                                throws(ControlLaunchError) -> ControlFixture {
         let name = try value(of: fixtureFlag, in: arguments)
         if relaunch {
             guard name == nil else {
                 throw ControlLaunchError("\(relaunchFlag) continues the last run's fixture; it takes no \(fixtureFlag)")
             }
-            guard let recorded else {
+            switch recorded {
+            case .success(let fixture)?:
+                return fixture
+            case .failure(let error)?:
+                throw ControlLaunchError("\(relaunchFlag): the run on record can't be read — \(error.message)")
+            case nil:
                 throw ControlLaunchError(
                     "\(relaunchFlag): no control run on record to continue — launch a fixture first")
             }
-            return recorded
         }
         guard let name else {
             throw ControlLaunchError("\(controlFlag) needs \(fixtureFlag) <name>; known: \(ControlFixture.names)")
@@ -198,14 +205,12 @@ extension ControlLaunch {
     /// and store — it runs isolated and shows the refusal instead).
     @MainActor
     static func bootGraph(arguments: [String] = ProcessInfo.processInfo.arguments) -> AppGraph? {
-        let recorded = ControlRunRecord.load(from: ControlPaths.standard().record)
-            .flatMap { ControlFixture(rawValue: $0.fixture) }
-        let parsed = parse(arguments, recorded: recorded)
+        let parsed = parse(arguments, recorded: ControlRunRecord.recordedRun(at: ControlPaths.standard().record))
         guard parsed != .off else {
-            ControlEnvironment.clearForNormalLaunch()   // no stale control state survives a normal launch
+            ControlEnvironment.clearForNormalLaunch()   // a normal launch ends any control run
             return nil
         }
-        return ControlEnvironment.boot(parsed).graph
+        return ControlEnvironment.boot(parsed, relaunchRequested: arguments.contains(relaunchFlag)).graph
     }
 
     /// Why a control launch was refused (shown in place of the UI), or `nil`.

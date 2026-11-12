@@ -28,67 +28,102 @@ enum ControlEnvironment {
     static let defaultsSuite = "com.valtteriluoma.poimi.control"
 
     /// Boot a control launch: process-global setup, the isolated graph, the runtime, the file sink.
-    static func boot(_ parsed: ControlLaunch.Parsed) -> ControlRuntime {
+    /// `relaunchRequested`: `-PoimiRelaunch` was passed — even if the launch is refused, the run it names
+    /// is never wiped.
+    static func boot(_ parsed: ControlLaunch.Parsed, relaunchRequested: Bool) -> ControlRuntime {
         let paths = ControlPaths.standard()
         NSTimeZone.default = TimeZone(identifier: "UTC")!   // before anything reads `.current`
-        let runtime = makeRuntime(parsed, paths: paths, defaults: isolatedDefaults(suiteName: defaultsSuite),
+        let runtime = makeRuntime(parsed, relaunchRequested: relaunchRequested, paths: paths,
+                                  defaults: isolatedDefaults(suiteName: defaultsSuite),
                                   sink: ControlFileSink(paths: paths), mailbox: true)
         current = runtime
         runtime.start()
         return runtime
     }
 
-    /// One control run over `paths` — the launch's whole wiring, which the relaunch tests drive too:
+    /// One control run over `paths` — the launch's whole wiring; the integration tests build theirs through
+    /// it too (`ControlHarness`), so test and launch can't be wired differently:
     /// - a **fixture launch** wipes both control directories, then seeds the fixture into a fresh store;
     /// - a **relaunch** (#300) keeps `Application Support/control/` — the store, the fake library's state
-    ///   (added photos, exported albums, authorization), the run record (fixture + album aliases) and the
-    ///   timeline cache — clears only this run's state files and mailbox, and seeds nothing.
-    /// The store is always a file there (a fixture launch might be relaunched), never the app's real one.
-    static func makeRuntime(_ parsed: ControlLaunch.Parsed, paths: ControlPaths, defaults: UserDefaults,
-                            sink: any ControlStateSink, run: String? = nil, writeDelay: Duration = .milliseconds(100),
-                            mailbox: Bool = false, listAlwaysShown: Bool? = nil) -> ControlRuntime {
-        let relaunch = parsed.launch?.relaunch ?? false
+    ///   (added photos, exported albums), the run record (fixture + album aliases) and the timeline cache —
+    ///   clears only this run's state files and mailbox, and seeds nothing. Asked for (`relaunchRequested`)
+    ///   but refused, it still never wipes the run; and a run it can't read (a store this build can't open,
+    ///   an unreadable library file) is refused (`app.launchError`), never replaced by a fresh one.
+    /// The store is a file there (a fixture launch might be relaunched), never the app's real one; the
+    /// in-process tests may keep it in memory (`inMemoryStore`) and bring their own `library`.
+    static func makeRuntime(_ parsed: ControlLaunch.Parsed, relaunchRequested: Bool = false, paths: ControlPaths,
+                            defaults: UserDefaults, sink: any ControlStateSink, run: String? = nil,
+                            writeDelay: Duration = .milliseconds(100), mailbox: Bool = false,
+                            listAlwaysShown: Bool? = nil, inMemoryStore: Bool = false,
+                            library: ((FakeExportGate) -> any PhotoLibraryProviding)? = nil) -> ControlRuntime {
+        var parsed = parsed
+        let relaunch = relaunchRequested || parsed.launch?.relaunch == true
         if relaunch { paths.resetOutput() } else { paths.reset() }
-        let fixture = parsed.launch?.fixture ?? .fresh      // a refused launch runs on `fresh`, unseeded
-        let restored = relaunch ? FakeLibraryState.load(from: paths.library) : nil
-        let gate = FakeExportGate(created: restored?.exportSeq ?? 0)
+        // A refused launch runs on `fresh`, unseeded, touching none of the run's files.
+        var restored: FakeLibraryState?
+        var container: ModelContainer?
+        if parsed.launch != nil {
+            if relaunch {
+                switch FakeLibraryState.load(from: paths.library) {
+                case .loaded(let state): restored = state
+                case .missing: break
+                case .unreadable(let problem): parsed = .invalid("-PoimiRelaunch: \(problem)")
+                }
+            }
+            if parsed.launch != nil, !inMemoryStore {
+                do {
+                    container = try storeContainer(at: paths.store)
+                } catch {
+                    parsed = .invalid("control store can't be opened (\(error.localizedDescription)) — "
+                        + "launch a fixture to start over")
+                }
+            }
+        }
+        let refused = parsed.launch == nil
+        let fixture = parsed.launch?.fixture ?? .fresh
+        let gate = FakeExportGate(albumsCreated: restored?.exportSeq ?? 0)
         let loads = ThumbnailLoadCounter()
-        let graph = makeGraph(fixture: fixture,
-                              timelineCacheDirectory: paths.timelineCache,
-                              defaults: defaults,
+        let graph = makeGraph(fixture: fixture, timelineCacheDirectory: paths.timelineCache, defaults: defaults,
                               thumbnailLoads: loads,
-                              library: fixture.makeLibrary(exportGate: gate, restoring: restored,
-                                                           persistence: paths.library),
-                              store: paths.store)
+                              library: library?(gate) ?? fixture.makeLibrary(
+                                exportGate: gate, restoring: restored, persistence: refused ? nil : paths.library),
+                              store: container)
         return ControlRuntime(parsed: parsed, graph: graph, sink: sink,
                               run: run ?? "r-" + String(UInt32.random(in: 0...UInt32.max), radix: 16),
                               writeDelay: writeDelay, thumbnailLoads: loads,
                               mailbox: mailbox ? paths.output : nil, listAlwaysShown: listAlwaysShown,
-                              exportGate: gate, record: paths.record, addedAssets: restored?.added ?? [])
+                              exportGate: gate, record: refused ? nil : paths.record,
+                              addedAssets: restored?.added ?? [])
     }
 
-    /// A normal (non-control) DEBUG launch: remove any control state left by an earlier control run,
-    /// so a reader can never mistake it for this process's state.
-    static func clearForNormalLaunch() {
-        try? FileManager.default.removeItem(at: ControlPaths.standard().output)
+    /// The control run's file store (DEBUG-only: the shipping app's persistence is unchanged).
+    static func storeContainer(at url: URL) throws -> ModelContainer {
+        let configuration = ModelConfiguration(schema: AppModelContainer.schema, url: url)
+        return try ModelContainer(for: AppModelContainer.schema, configurations: configuration)
+    }
+
+    /// A normal (non-control) DEBUG launch ends any control run: its state files and mailbox, and what a
+    /// relaunch would continue (store, fake library, run record) — so a reader can never mistake them for
+    /// this process's, and a later `-PoimiRelaunch` is refused ("no run on record").
+    static func clearForNormalLaunch(paths: ControlPaths = .standard()) {
+        try? FileManager.default.removeItem(at: paths.output)
+        try? FileManager.default.removeItem(at: paths.support)
     }
 
     /// The graph a control launch runs on — `AppGraph.make` with the fixture's fake library, fake
-    /// thumbnails + naming, the control store (`store`'s file; in memory when `nil`), the long debounce and
-    /// UTC. The integration tests build theirs through this too, so test and launch can't be wired
-    /// differently.
+    /// thumbnails + naming, the control store (`store`; in memory when `nil`), the long debounce and UTC.
     static func makeGraph(fixture: ControlFixture, timelineCacheDirectory: URL,
                           defaults: UserDefaults, thumbnailLoads: ThumbnailLoadCounter? = nil,
-                          library: (any PhotoLibraryProviding)? = nil, store: URL? = nil) -> AppGraph {
+                          library: any PhotoLibraryProviding, store: ModelContainer? = nil) -> AppGraph {
         let container: ModelContainer
         do {
-            container = try store.map(AppModelContainer.make(url:)) ?? AppModelContainer.make(inMemory: true)
+            container = try store ?? AppModelContainer.make(inMemory: true)
         } catch {
-            fatalError("control: could not build the control store: \(error)")
+            fatalError("control: could not build the in-memory store: \(error)")
         }
         return AppGraph.make(
             container: container,
-            library: library ?? fixture.makeLibrary(),   // the tests may wrap the fixture's (e.g. gated)
+            library: library,
             thumbnails: FakeThumbnailProvider(loads: thumbnailLoads),
             naming: FakePlaceNaming(),
             timelineCache: TimelineCache(directory: timelineCacheDirectory),
@@ -158,15 +193,33 @@ struct ControlPaths: Sendable {
 /// albums' starting shape) and the album aliases handed out so far — so `album-2` names the same album
 /// after a relaunch, and a new album still never gets a used number. Rewritten whenever an alias is assigned.
 struct ControlRunRecord: Codable, Equatable {
+    /// The only shape this build reads; anything else is unreadable (a relaunch refuses it).
+    static let currentVersion = 1
+
+    var version = ControlRunRecord.currentVersion
     var fixture: String
     /// Project id (UUID string) → album alias.
     var albums: [String: String]
     /// The next album alias number.
     var nextAlbum: Int
 
-    static func load(from url: URL) -> ControlRunRecord? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(ControlRunRecord.self, from: data)
+    /// The record at `url`: missing, loaded, or unreadable (corrupt, or another version).
+    static func load(from url: URL) -> PersistedLoad<ControlRunRecord> {
+        PersistedLoad(url: url, version: currentVersion, versionAt: \.version)
+    }
+
+    /// What `-PoimiRelaunch` continues, as `ControlLaunch.parse` takes it: the fixture on record, nothing
+    /// (`nil`), or why the record can't be used.
+    static func recordedRun(at url: URL) -> Result<ControlFixture, ControlLaunchError>? {
+        switch load(from: url) {
+        case .missing: return nil
+        case .unreadable(let problem): return .failure(ControlLaunchError(problem))
+        case .loaded(let record):
+            guard let fixture = ControlFixture(rawValue: record.fixture) else {
+                return .failure(ControlLaunchError("run.json names an unknown fixture '\(record.fixture)'"))
+            }
+            return .success(fixture)
+        }
     }
 
     func save(to url: URL) {

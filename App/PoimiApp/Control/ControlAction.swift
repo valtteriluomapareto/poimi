@@ -467,16 +467,22 @@ enum ControlFixtureOp: Equatable {
     case selectionSelect(photos: [String])
     /// Unpick everything in the open album.
     case selectionClear
-    /// Close the fake library's export gate: exports park until released (#300).
-    case libraryHoldExports
-    /// Open the export gate.
-    case libraryReleaseExports
-    /// Make every export fail with this error from now on (`nil` clears).
-    case libraryFailExport(ExportError?)
-    /// Add `count` photos taken on `day` to the fake library (#191 drift).
-    case libraryAddPhotos(day: DayKey, count: Int)
+    /// The fake library's export gate and content (#300).
+    case library(ControlLibraryLever)
     /// Refused in place: a reset is a relaunch.
     case reset(fixture: String)
+}
+
+/// The fake library's levers (#300).
+enum ControlLibraryLever: Equatable {
+    /// Close the export gate: exports park until released.
+    case holdExports
+    /// Open the export gate.
+    case releaseExports
+    /// Make every export fail with this error from now on (`nil` clears).
+    case failExport(ExportError?)
+    /// Add `count` photos taken on `day` (#191 drift).
+    case addPhotos(day: DayKey, count: Int)
 }
 
 extension ControlFixtureOp: Decodable {
@@ -508,12 +514,12 @@ extension ControlFixtureOp: Decodable {
             self = .libraryAuthorization(value)
         case .selectionSelect: self = .selectionSelect(photos: try keys.photos(name))
         case .selectionClear: self = .selectionClear
-        case .libraryHoldExports: self = .libraryHoldExports
-        case .libraryReleaseExports: self = .libraryReleaseExports
-        case .libraryFailExport: self = .libraryFailExport(try keys.exportFailure())
+        case .libraryHoldExports: self = .library(.holdExports)
+        case .libraryReleaseExports: self = .library(.releaseExports)
+        case .libraryFailExport: self = .library(.failExport(try keys.exportFailure()))
         case .libraryAddPhotos:
             let (day, count) = try keys.addedPhotos()
-            self = .libraryAddPhotos(day: day, count: count)
+            self = .library(.addPhotos(day: day, count: count))
         case .reset: self = .reset(fixture: try keys.required(String.self, "fixture"))
         }
     }

@@ -69,8 +69,8 @@ final class ControlHost {
     /// The asset aliases: the fixture's library, grown by `library.addPhotos` (#300).
     private(set) var assets: ControlAssetAliases
     private let albums: ControlAlbumAliases
-    /// The fake library's export gate (the export levers, #300), or `nil` when the library has none.
-    private let exportGate: FakeExportGate?
+    /// The fake library's export gate (the export levers, #300).
+    private let exportGate: FakeExportGate
     /// Whether the album list is always on screen (the iPad split view's sidebar) — otherwise only at the
     /// root of the path (the iPhone stack).
     private let listAlwaysShown: Bool
@@ -85,7 +85,7 @@ final class ControlHost {
 
     init(graph: AppGraph, run: String, fixture: ControlFixture, assets: ControlAssetAliases,
          albums: ControlAlbumAliases, progress: ControlProgress, listAlwaysShown: Bool = false,
-         exportGate: FakeExportGate? = nil,
+         exportGate: FakeExportGate,
          state: @escaping () -> ControlJSON, rev: @escaping () -> Int,
          syncState: @escaping () async -> Void = {}) {
         self.graph = graph
@@ -282,8 +282,8 @@ final class ControlHost {
                 switch session.export.phase {
                 case .done, .failed: break
                 case .idle, .exporting:
-                    throw refuse(.notShown, "Back to albums shows once the export settles (the export screen "
-                        + "has no other way out)")
+                    throw refuse(.notShown, "Back to albums shows once the export settles (on iPad the "
+                        + "sidebar's rows stay live: nav.openAlbum)")
                 }
             }
             coordinator.popToRoot()
@@ -442,32 +442,29 @@ extension ControlHost {
             }
             selection.clear()
             return accept()
-        case .libraryHoldExports, .libraryReleaseExports, .libraryFailExport, .libraryAddPhotos:
-            return await performLibrary(op)
+        case .library(let lever):
+            return await perform(lever)
         case .reset(let name):
             return .refused(.unavailable, "a reset is a relaunch: Scripts/poimi.sh reset \(name)")
         }
     }
 
     /// The fake library's levers (#300): the export gate, and new photos taken mid-session.
-    private func performLibrary(_ op: ControlFixtureOp) async -> ControlOutcome {
-        switch op {
-        case .libraryHoldExports:
-            guard let exportGate else { return .refused(.unavailable, "the library has no export gate") }
+    private func perform(_ lever: ControlLibraryLever) async -> ControlOutcome {
+        switch lever {
+        case .holdExports:
             if exportGate.holding { return .noop("exports are already held") }
             exportGate.hold()
             return accept()
-        case .libraryReleaseExports:
-            guard let exportGate else { return .refused(.unavailable, "the library has no export gate") }
+        case .releaseExports:
             guard exportGate.holding else { return .noop("the export gate is open") }
             exportGate.release()
             return accept()
-        case .libraryFailExport(let error):
-            guard let exportGate else { return .refused(.unavailable, "the library has no export gate") }
+        case .failExport(let error):
             if exportGate.failure == error { return .noop("already so") }
             exportGate.fail(error)
             return accept()
-        case .libraryAddPhotos(let day, let count):
+        case .addPhotos(let day, let count):
             guard let fake = graph.photoLibrary as? FakePhotoLibrary else {
                 return .refused(.unavailable, "not the fake library")
             }
@@ -478,8 +475,6 @@ extension ControlHost {
             assets = assets.appending(added)
             let aliases = added.compactMap { assets.alias(for: $0.id) }
             return accept(extra: [.init(key: "photos", value: .array(aliases.map(ControlJSON.string)))])
-        default:
-            preconditionFailure("performLibrary handles the library levers only")
         }
     }
 

@@ -17,7 +17,7 @@ worth telling users about, in plain language (not a commit log). The format foll
   picks") instead of showing raw formatting codes on the button.
 - On iPad, opening an album again from the sidebar while it's still being saved to Photos,
   then saving it again, no longer creates a second Photos album: the screen shows the save
-  already in progress.
+  already in progress, then adds any photos you picked in between.
 
 ## [1.1.0] — 2026-10-15
 

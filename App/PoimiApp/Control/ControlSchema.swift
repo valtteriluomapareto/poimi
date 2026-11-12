@@ -94,7 +94,7 @@ enum ControlSchema {
         ("active.export.added", "int|null"), ("active.export.total", "int|null"),
         ("active.overview", "object|null"), ("active.overview.filter", "string"),
         ("active.grid", "object|null"), ("active.grid.cluster", "string|null"),
-        ("library", "object|null"),
+        ("library", "object"),
         ("library.heldExports", "int"), ("library.exportCalls", "int"), ("library.albumsCreated", "int"),
         ("pending", "object"),
         ("pending.selectionFlush", "bool"), ("pending.doneFlush", "bool"), ("pending.scan", "bool"),

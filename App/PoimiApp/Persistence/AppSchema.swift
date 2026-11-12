@@ -42,11 +42,4 @@ enum AppModelContainer {
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
         return try ModelContainer(for: schema, configurations: configuration)
     }
-
-    /// A container over the store file at `url` (created if missing) — for a store that must outlive one
-    /// process but not touch the app's real one: the DEBUG control plane's relaunch (#300).
-    static func make(url: URL) throws -> ModelContainer {
-        let configuration = ModelConfiguration(schema: schema, url: url)
-        return try ModelContainer(for: schema, configurations: configuration)
-    }
 }

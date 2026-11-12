@@ -145,8 +145,12 @@ final class AlbumSession {
     private var runningExports: [UUID: RunningExport] = [:]
 
     private struct RunningExport {
+        /// This run (a store can run more than once: a retry, a join's catch-up).
+        let token = UUID()
         let store: ExportStore
         let task: Task<Void, Never>
+        /// The picks the run exports (the selection when it started).
+        let picks: Set<String>
     }
 
     /// Albums with an export run in flight (on the current store or a retired one).
@@ -366,6 +370,16 @@ final class AlbumSession {
         if let running = runningExports[project.id] {
             if export !== running.store, export.phase == .idle { export = running.store }
             await running.task.value
+            // The joined run exported the picks it started with. If the picks changed since (this visit's
+            // Save came after more picking), bring the album up to date as a re-export would: the album
+            // exists now, so it's found, and the dupe-guard adds only what's new.
+            // (The run's own caller may not have cleared its entry yet; another joiner may already have
+            // started the catch-up — then this one leaves it to that.)
+            let nothingNewer = runningExports[project.id].map { $0.token == running.token } ?? true
+            if export === running.store, case .done = export.phase, nothingNewer,
+               selection.selected != running.picks {
+                await run(export, project, forceNewAlbum: false)
+            }
             return
         }
         guard export.phase == .idle else { return }
@@ -389,10 +403,13 @@ final class AlbumSession {
         // The export saves its record of these picks (`exportedSelectionSnapshot`) at once; the picks must
         // be as durable, or a kill inside the debounce leaves the store behind its own export record (#300).
         selection.flushNow()
+        // Unstructured on purpose: a view's `.task` cancelling (the screen leaving) must not cancel a Photos
+        // write mid-flight. It holds the project strongly until it lands; the session lives as long as the app.
         let task = Task { await store.run(project: project, picks: picks, forceNewAlbum: forceNewAlbum) }
-        runningExports[id] = RunningExport(store: store, task: task)
+        let running = RunningExport(store: store, task: task, picks: picks)
+        runningExports[id] = running
         await task.value
-        if runningExports[id]?.store === store { runningExports[id] = nil }
+        if runningExports[id]?.token == running.token { runningExports[id] = nil }
     }
 
     /// The export screen left the path: the next visit starts a fresh run (a later "Save to Photos" after

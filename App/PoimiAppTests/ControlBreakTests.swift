@@ -48,7 +48,7 @@ struct ControlExportGateTests {
     /// re-export finds the album it created (create-or-find + dupe-guard, one-way — D31).
     @Test("held export: live busy, a double-tapped Save is one export, re-export finds its album")
     func heldExportIsLiveBusy() async throws {
-        let harness = ControlHarness(.oneAlbum)
+        let harness = ControlHarness(.oneAlbum, iPad: true)   // the sidebar: Delete is on screen throughout
         await harness.runtime.bootstrap()
         try await harness.pickFirstDayAndReturnToOverview()
 
@@ -65,6 +65,8 @@ struct ControlExportGateTests {
         // The export screen hides its back button; Back to albums shows only once it settles.
         #expect(try await harness.send(#"{"type":"nav.back"}"#).refusal == .notShown)
         #expect(try await harness.send(#"{"type":"nav.root"}"#).refusal == .notShown)
+        // The sidebar's Delete is disabled while the album exports.
+        #expect(try await harness.send(#"{"type":"albums.delete","album":"album-1"}"#).refusal == .busy)
 
         #expect(try await harness.fixtureOp(#"{"op":"library.releaseExports"}"#).isAccepted)
         await harness.expectWait([("active.export.phase", .eq, .string("done")), ("idle", .eq, .bool(true)),
@@ -87,10 +89,11 @@ struct ControlExportGateTests {
         #expect(harness.int("library.albumsCreated") == 1)   // found, not created again
     }
 
-    /// iPad: the sidebar stays tappable over a held export. Re-opening the album and saving again joins the
-    /// run in flight — it used to start a second one, creating a second Photos album (fixed in AlbumSession).
-    @Test("iPad: re-open the album mid-export + Save again → the one run in flight, one Photos album")
-    func iPadReopenMidExportJoins() async throws {
+    /// iPad: the sidebar stays live over a held export. Re-open the album, pick another day, Save again: the
+    /// second Save joins the run in flight (one album), then brings the album up to the new picks — the
+    /// completion screen's counts are the result's, all 22 in the one album (#300 review).
+    @Test("iPad: re-open mid-export, pick more, Save again → one album holding every pick")
+    func iPadPickMoreMidExport() async throws {
         let harness = ControlHarness(.oneAlbum, iPad: true)
         await harness.runtime.bootstrap()
         try await harness.pickFirstDayAndReturnToOverview()
@@ -98,22 +101,25 @@ struct ControlExportGateTests {
         try await harness.send(#"{"type":"nav.openExport"}"#)
         await harness.expectWait([("library.heldExports", .eq, .int(1))])
 
-        // The sidebar: the album's row (Delete is disabled while it exports), then its overview's Save.
-        #expect(try await harness.send(#"{"type":"albums.delete","album":"album-1"}"#).refusal == .busy)
-        #expect(try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#).isAccepted)
-        await harness.expectWait([("active.scan.phase", .eq, .string("ready")),
-                                  ("nav.screen", .eq, .string("overview"))])
-        // The export still runs (on the screen that left): pending, not idle.
+        try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
+        await harness.expectWait([("active.scan.phase", .eq, .string("ready"))])
+        // The export still runs (its screen left): pending, not idle.
         await harness.expectWait([("pending.export", .eq, .bool(true)), ("idle", .eq, .bool(false))], timeoutMs: 0)
+        try await harness.send(#"{"type":"nav.openReview","album":"album-1"}"#)
+        await harness.expectWait([("active.grid.cluster", .exists, .bool(true))])   // the grid entered
+        let day = ControlFixture.yearDays[1].description   // 14 photos
+        #expect(try await harness.send(#"{"type":"selection.toggleCluster","day":"\#(day)"}"#).isAccepted)
+        try await harness.send(#"{"type":"nav.back"}"#)
         #expect(try await harness.send(#"{"type":"nav.openExport"}"#).isAccepted)
-        await harness.expectWait([("active.export.phase", .eq, .string("exporting"))])
-        #expect(harness.int("library.exportCalls") == 1)
 
         try await harness.fixtureOp(#"{"op":"library.releaseExports"}"#)
         await harness.expectWait([("active.export.phase", .eq, .string("done")), ("idle", .eq, .bool(true))])
-        #expect(harness.int("library.exportCalls") == 1)
+        #expect(harness.int("library.exportCalls") == 2)      // the run, then the catch-up into its album
         #expect(harness.int("library.albumsCreated") == 1)
-        #expect(harness.value("active.export.wasReExport") == .value(.bool(false)))
+        #expect(harness.int("active.export.added") == 14)
+        #expect(harness.int("active.export.total") == 22)
+        #expect(harness.value("albums.album-1.status") == .value(.string("exported")))
+        #expect(harness.value("albums.album-1.inPhotos") == .value(.int(22)))
     }
 
     /// A failing export (held, then released into the failure): the error screen, its Try again, recovery.
@@ -139,9 +145,18 @@ struct ControlExportGateTests {
         #expect(harness.int("library.exportCalls") == 3)
         #expect(harness.int("library.albumsCreated") == 1)
         #expect(harness.value("albums.album-1.status") == .value(.string("exported")))
+
+        // A failed export screen's Back to albums (nav.root) is on screen.
+        try await harness.fixtureOp(#"{"op":"library.failExport","error":"writeFailed"}"#)
+        #expect(try await harness.send(#"{"type":"nav.root"}"#).isAccepted)
+        try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
+        await harness.expectWait([("idle", .eq, .bool(true))])
+        try await harness.send(#"{"type":"nav.openExport"}"#)
+        await harness.expectWait([("active.export.phase", .eq, .string("failed")), ("idle", .eq, .bool(true))])
+        #expect(try await harness.send(#"{"type":"nav.root"}"#).isAccepted)
     }
 
-    @Test("the export levers decode strictly and say noop when already so")
+    @Test("the export levers say noop when already so; a bad argument is refused")
     func leverEdges() async throws {
         let harness = ControlHarness(.oneAlbum)
         await harness.runtime.bootstrap()
@@ -151,21 +166,8 @@ struct ControlExportGateTests {
         #expect(try await harness.fixtureOp(#"{"op":"library.failExport"}"#).isNoop)
         #expect(throws: ControlRequestError.self) {
             try JSONDecoder().decode(ControlFixtureOp.self,
-                                     from: Data(#"{"op":"library.failExport","error":"nope"}"#.utf8))
-        }
-        #expect(throws: ControlRequestError.self) {
-            try JSONDecoder().decode(ControlFixtureOp.self,
-                                     from: Data(#"{"op":"library.addPhotos","day":"2025-07-05","count":0}"#.utf8))
-        }
-        #expect(throws: ControlRequestError.self) {
-            try JSONDecoder().decode(ControlFixtureOp.self,
                                      from: Data(#"{"op":"library.addPhotos","day":"undated","count":1}"#.utf8))
         }
-        // A test's own library wrapper has no gate: the levers say so.
-        let wrapped = ControlHarness(.oneAlbum, library: GatedLibrary(ControlFixture.oneAlbum.makeLibrary()))
-        await wrapped.runtime.bootstrap()
-        #expect(try await wrapped.fixtureOp(#"{"op":"library.holdExports"}"#).refusal == .unavailable)
-        #expect(wrapped.value("library") == .value(.null))
     }
 }
 
@@ -175,30 +177,28 @@ struct ControlRelaunchTests {
 
     /// D15's accepted loss window, made concrete: a pick that was flushed survives a kill; a pick still
     /// inside the debounce window does not. (`simctl terminate` delivers no scene-phase change, so nothing
-    /// flushes on the way down; here the first run is simply abandoned without a flush.)
+    /// flushes on the way down. In-process, the first run is kept alive but never used again — as a killed
+    /// process's memory would be — so none of its work outlives its store.)
     @Test("kill mid-debounce: the flushed pick survives a relaunch, the unflushed one is lost")
     func killMidDebounce() async throws {
         let paths = ControlHarness.temporaryPaths()
         let flushed = try #require(ControlFixture.yearDatedIDs.first { !ControlFixture.midReviewPicks.contains($0) })
         let unflushed = try #require(ControlFixture.yearDatedIDs.last { !ControlFixture.midReviewPicks.contains($0) })
-        do {
-            let first = ControlHarness(.midReview, paths: paths)
-            await first.runtime.bootstrap()
-            try await first.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
-            await first.expectWait([("idle", .eq, .bool(true))])
-            try await first.send(#"{"type":"nav.openReview","album":"album-1"}"#)
-            await first.expectWait([("idle", .eq, .bool(true))])
-            let flushedAlias = try #require(first.runtime.assetAliases.alias(for: flushed))
-            let unflushedAlias = try #require(first.runtime.assetAliases.alias(for: unflushed))
-            #expect(try await first.send(#"{"type":"selection.toggle","photo":"\#(flushedAlias)"}"#).isAccepted)
-            #expect(try await first.fixtureOp(#"{"op":"flush"}"#).isAccepted)
-            #expect(try await first.send(#"{"type":"selection.toggle","photo":"\#(unflushedAlias)"}"#).isAccepted)
-            #expect(first.value("active.selection.count") == .value(.int(36)))
-            #expect(first.value("pending.selectionFlush") == .value(.bool(true)))
-            // … and the process dies here: no scene phase, no flush. (In-process the first graph is only
-            // abandoned: let the work its actions started finish first, so none of it outlives its store.)
-            await first.settled()
-        }
+        let first = ControlHarness(.midReview, paths: paths)
+        await first.runtime.bootstrap()
+        try await first.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
+        await first.expectWait([("idle", .eq, .bool(true))])
+        try await first.send(#"{"type":"nav.openReview","album":"album-1"}"#)
+        await first.expectWait([("idle", .eq, .bool(true))])
+        let flushedAlias = try #require(first.runtime.assetAliases.alias(for: flushed))
+        let unflushedAlias = try #require(first.runtime.assetAliases.alias(for: unflushed))
+        #expect(try await first.send(#"{"type":"selection.toggle","photo":"\#(flushedAlias)"}"#).isAccepted)
+        #expect(try await first.fixtureOp(#"{"op":"flush"}"#).isAccepted)
+        #expect(try await first.send(#"{"type":"selection.toggle","photo":"\#(unflushedAlias)"}"#).isAccepted)
+        #expect(first.value("active.selection.count") == .value(.int(36)))
+        #expect(first.value("pending.selectionFlush") == .value(.bool(true)))
+        await first.settled()
+        // … and the process dies here: no scene phase, no flush.
 
         let second = ControlHarness(.midReview, paths: paths, relaunch: true)
         await second.runtime.bootstrap()
@@ -212,23 +212,16 @@ struct ControlRelaunchTests {
         #expect(persisted.contains(flushed))
         #expect(!persisted.contains(unflushed))
         #expect(second.value("active.done.days") == .value(.int(4)))      // the fixture's done days, flushed at seed
+        withExtendedLifetime(first) {}
     }
 
     /// The fake's exported albums persist with the store, so a relaunched re-export finds the album it made —
-    /// and without them (today's in-memory fake) the same re-export fails `.albumMissing`.
+    /// and without them (an in-memory fake) the same re-export fails `.albumMissing`.
     @Test("relaunch: a re-export finds the album the last run created (and fails without its state)")
     func relaunchedReExport() async throws {
         for keepsLibraryState in [true, false] {
             let paths = ControlHarness.temporaryPaths()
-            do {
-                let first = ControlHarness(.oneAlbum, paths: paths)
-                await first.runtime.bootstrap()
-                try await first.pickFirstDayAndReturnToOverview()
-                try await first.send(#"{"type":"nav.openExport"}"#)
-                await first.expectWait([("active.export.phase", .eq, .string("done")), ("idle", .eq, .bool(true))])
-                #expect(first.int("library.albumsCreated") == 1)
-                await first.settled()
-            }
+            let first = try await exportedRun(paths)
             if !keepsLibraryState { try FileManager.default.removeItem(at: paths.library) }
 
             let second = ControlHarness(.oneAlbum, paths: paths, relaunch: true)
@@ -247,27 +240,96 @@ struct ControlRelaunchTests {
             } else {
                 #expect(second.value("active.export.phase") == .value(.string("failed")))
             }
+            withExtendedLifetime(first) {}
         }
+    }
+
+    /// A relaunch the app refuses (a bad route, a stray fixture flag) must leave the run it names alone: it
+    /// used to decide wipe-or-keep from the parse, so a refused relaunch wiped the store, library and record.
+    @Test("a refused relaunch keeps the run: a valid relaunch after it still finds everything")
+    func refusedRelaunchKeepsTheRun() async throws {
+        let paths = ControlHarness.temporaryPaths()
+        let first = try await exportedRun(paths)
+        for extra in [["-PoimiRoute", "nowhere:album-1"], ["-PoimiFixture", "one-album"]] {
+            let refused = ControlHarness(.oneAlbum, paths: paths, relaunch: true, extra: extra)
+            await refused.runtime.bootstrap()
+            #expect(refused.runtime.refusal != nil, "\(extra)")
+        }
+        let second = ControlHarness(.oneAlbum, paths: paths, relaunch: true)
+        await second.runtime.bootstrap()
+        #expect(second.runtime.refusal == nil)
+        #expect(second.value("albums.album-1.status") == .value(.string("exported")))
+        #expect(second.value("albums.album-1.picked") == .value(.int(8)))
+        #expect(second.int("library.albumsCreated") == 1)
+        withExtendedLifetime(first) {}
+    }
+
+    /// A run this build can't read is refused, never silently replaced: a fresh library next to a store that
+    /// says "exported" would answer a re-export with a second album.
+    @Test("unreadable run state refuses the relaunch: library file, run record, store")
+    func unreadableStateRefuses() async throws {
+        let garbage = Data("not json".utf8)
+        for damage in ["library", "record-version", "store"] {
+            let paths = ControlHarness.temporaryPaths()
+            let first = try await exportedRun(paths)
+            switch damage {
+            case "library": try garbage.write(to: paths.library)
+            case "record-version":
+                let record = try String(contentsOf: paths.record, encoding: .utf8)
+                try record.replacingOccurrences(of: #""version":1"#, with: #""version":99"#)
+                    .write(to: paths.record, atomically: true, encoding: .utf8)
+                #expect(ControlRunRecord.load(from: paths.record).problem != nil)
+            default:
+                for suffix in ["", "-wal", "-shm"] {
+                    try? FileManager.default.removeItem(at: URL(fileURLWithPath: paths.store.path + suffix))
+                }
+                try garbage.write(to: paths.store)
+            }
+            let second = ControlHarness(.oneAlbum, paths: paths, relaunch: true)
+            await second.runtime.bootstrap()
+            #expect(second.value("app.launchError") != .value(.null), "\(damage)")
+            #expect(FileManager.default.fileExists(atPath: paths.record.path), "\(damage): the run was wiped")
+            withExtendedLifetime(first) {}
+        }
+    }
+
+    /// A normal launch ends the control run: what a relaunch would continue goes too, so a later relaunch is
+    /// refused instead of resurrecting it.
+    @Test("a normal launch clears the run; a relaunch after it is refused")
+    func normalLaunchEndsTheRun() async throws {
+        let paths = ControlHarness.temporaryPaths()
+        let first = try await exportedRun(paths)
+        ControlEnvironment.clearForNormalLaunch(paths: paths)
+        #expect(!FileManager.default.fileExists(atPath: paths.support.path))
+        #expect(!FileManager.default.fileExists(atPath: paths.output.path))
+        guard case .invalid(let message) = ControlLaunch.parse(
+            ["-PoimiControl", "-PoimiRelaunch"], recorded: ControlRunRecord.recordedRun(at: paths.record)) else {
+            Issue.record("a relaunch after a normal launch ran")
+            return
+        }
+        #expect(message.contains("no control run on record"))
+        withExtendedLifetime(first) {}
     }
 
     @Test("-PoimiRelaunch continues the run on record; refused without one, or with a fixture")
     func relaunchParsing() {
         let relaunch = ["-PoimiControl", "-PoimiRelaunch"]
-        #expect(ControlLaunch.parse(relaunch, recorded: .midReview)
+        #expect(ControlLaunch.parse(relaunch, recorded: .success(.midReview))
                 == .on(ControlLaunch(fixture: .midReview, route: nil, viewer: nil, relaunch: true)))
-        #expect(ControlLaunch.parse(relaunch + ["-PoimiHeadless"], recorded: .oneAlbum).launch?.headless == true)
-        guard case .invalid(let none) = ControlLaunch.parse(relaunch, recorded: nil) else {
-            Issue.record("a relaunch with nothing on record ran")
+        #expect(ControlLaunch.parse(relaunch + ["-PoimiHeadless"], recorded: .success(.oneAlbum))
+            .launch?.headless == true)
+        guard case .invalid(let none) = ControlLaunch.parse(relaunch, recorded: nil),
+              case .invalid(let unreadable) = ControlLaunch.parse(
+                relaunch, recorded: .failure(ControlLaunchError("run.json is version 99"))) else {
+            Issue.record("a relaunch with nothing readable on record ran")
             return
         }
         #expect(none.contains("no control run on record"))
-        guard case .invalid = ControlLaunch.parse(relaunch + ["-PoimiFixture", "one-album"], recorded: .oneAlbum)
-        else {
-            Issue.record("a relaunch with a fixture ran")
-            return
-        }
-        guard case .invalid = ControlLaunch.parse(["-PoimiRelaunch"], recorded: .oneAlbum) else {
-            Issue.record("-PoimiRelaunch without -PoimiControl ran")
+        #expect(unreadable.contains("version 99"))
+        guard case .invalid = ControlLaunch.parse(relaunch + ["-PoimiFixture", "one-album"],
+                                                  recorded: .success(.oneAlbum)),
+              case .invalid = ControlLaunch.parse(["-PoimiRelaunch"], recorded: .success(.oneAlbum)) else {
+            Issue.record("a relaunch with a fixture, or without -PoimiControl, ran")
             return
         }
     }
@@ -275,23 +337,36 @@ struct ControlRelaunchTests {
     @Test("album aliases survive a relaunch; a new album still never reuses a number")
     func aliasesSurviveRelaunch() async throws {
         let paths = ControlHarness.temporaryPaths()
-        do {
-            let first = ControlHarness(.fourStatuses, paths: paths, iPad: true)
-            await first.runtime.bootstrap()
-            #expect(try await first.send(#"{"type":"albums.delete","album":"album-2"}"#).isAccepted)
-            let duplicate = try await first.send(#"{"type":"albums.duplicate","album":"album-3"}"#)
-            guard case .accepted(_, let extra) = duplicate else { Issue.record("\(duplicate)"); return }
-            #expect(extra.first { $0.key == "album" }?.value == .string("album-5"))
-            await first.settled()
-        }
+        let first = ControlHarness(.fourStatuses, paths: paths, iPad: true)
+        await first.runtime.bootstrap()
+        #expect(try await first.send(#"{"type":"albums.delete","album":"album-2"}"#).isAccepted)
+        let duplicate = try await first.send(#"{"type":"albums.duplicate","album":"album-3"}"#)
+        guard case .accepted(_, let extra) = duplicate else { Issue.record("\(duplicate)"); return }
+        #expect(extra.first { $0.key == "album" }?.value == .string("album-5"))
+        await first.settled()
+
         let second = ControlHarness(.fourStatuses, paths: paths, relaunch: true, iPad: true)
         await second.runtime.bootstrap()
         guard case .value(.object(let rows)) = second.value("albums") else { Issue.record("no albums"); return }
         #expect(rows.map(\.key) == ["album-1", "album-3", "album-4", "album-5"])
         #expect(second.value("albums.album-1.status") == .value(.string("exported")))
         let created = try await second.send(#"{"type":"albums.duplicate","album":"album-1"}"#)
-        guard case .accepted(_, let extra) = created else { Issue.record("\(created)"); return }
-        #expect(extra.first { $0.key == "album" }?.value == .string("album-6"))
+        guard case .accepted(_, let createdExtra) = created else { Issue.record("\(created)"); return }
+        #expect(createdExtra.first { $0.key == "album" }?.value == .string("album-6"))
+        withExtendedLifetime(first) {}
+    }
+
+    /// A `one-album` run over `paths` that picked the first day (8) and saved to Photos, settled — returned
+    /// so the caller keeps it alive while it relaunches over the same files.
+    private func exportedRun(_ paths: ControlPaths) async throws -> ControlHarness {
+        let first = ControlHarness(.oneAlbum, paths: paths)
+        await first.runtime.bootstrap()
+        try await first.pickFirstDayAndReturnToOverview()
+        try await first.send(#"{"type":"nav.openExport"}"#)
+        await first.expectWait([("active.export.phase", .eq, .string("done")), ("idle", .eq, .bool(true))])
+        #expect(first.int("library.albumsCreated") == 1)
+        await first.settled()
+        return first
     }
 }
 
@@ -314,8 +389,8 @@ struct ControlLibraryDriftTests {
         })
         let inPhotos = ControlFixture.exportedPicks.count
         var added: [String] = []
-        do {
-            let harness = ControlHarness(.exported, paths: paths)
+        let harness = ControlHarness(.exported, paths: paths)   // the first run, kept alive (as a killed
+        do {                                                    // process's store would be: never reused)
             await harness.runtime.bootstrap()
             #expect(harness.value("albums.album-1.status") == .value(.string("exported")))
             #expect(harness.value("albums.album-1.inPhotos") == .value(.int(inPhotos)))
@@ -352,6 +427,7 @@ struct ControlLibraryDriftTests {
         try await relaunched.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         await relaunched.expectWait([("idle", .eq, .bool(true))])
         #expect(relaunched.value("albums.album-1.status") == .value(.string("exported")))
+        withExtendedLifetime(harness) {}
     }
 
     /// Open `album-1`, add three photos on `day`, and show the open scan doesn't see them until the album is

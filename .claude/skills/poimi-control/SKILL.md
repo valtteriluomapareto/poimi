@@ -132,19 +132,24 @@ Levers for the hard cases (`fixture OP`; the `library.*` paths in `state.json` r
   `library.exportCalls` / `library.albumsCreated` count export calls and Photos albums created — a re-export
   that finds its album creates none.
 - **The export screen has no way out until it settles:** `nav.back` is `notShown` there, and `nav.root` (its
-  Back to albums) only works once the export is `done` or `failed`. On iPad the sidebar stays live.
+  Back to albums) only works once the export is `done` or `failed`. On iPad the sidebar stays live: re-open
+  the album and Save again mid-export and the screen joins the run in flight (then catches the album up to
+  any picks made in between) — never a second album.
 - **New photos mid-session (#191 drift):** `fixture library.addPhotos '{"day":"2025-07-05","count":3}'` replies
   with the new aliases (numbered after every existing one). The app doesn't watch the library: an open album
   sees them only on its next scan — go back and open it again.
 - **`relaunch`** kills the app (`simctl terminate`) and launches it over the same data: the store, the fake
-  library (added photos, exported albums, authorization), the album aliases, the timeline cache. Screen state
-  is gone (it lands on the album list, or `--route`); held exports and `failExport` / `failFetch` are gone too.
-  `reset FIXTURE` is the opposite: a fresh seed.
+  library (added photos, exported albums), the album aliases, the timeline cache. Screen state is gone (it
+  lands on the album list, or `--route`); so are the levers — held exports, `failExport` / `failFetch`, and
+  `library.authorization` (the fixture's again). `reset FIXTURE` is the opposite: a fresh seed. A refused
+  relaunch (a bad `--route`) never wipes the run; a run this build can't read is refused, not replaced; and
+  a normal (non-control) launch ends the run, so a relaunch after it is refused.
 - **The D15 loss window, stated plainly:** `simctl terminate` delivers no scene-phase change, so **nothing
   flushes on the way down — every pick and done mark since the last flush is lost on `relaunch`**. Under
   control the debounce is a day long, so "since the last flush" means since your last `fixture flush` (or
-  opening another album, which flushes the last one). In the shipping app the window is the 2 s debounce, and only for a kill that
-  skips the scene phase (jetsam); a user's swipe-away passes through `.inactive` and flushes. To check what
+  opening another album, or an export, which flush). In the shipping app the window is the 2 s debounce, and
+  only for a kill that skips the scene phase (jetsam); a user's swipe-away passes through `.inactive` and
+  flushes. To check what
   survives: `fixture flush` (or not), `relaunch`, then read `albums.*.picked`.
 
 ## Reading state
@@ -166,4 +171,4 @@ date), days `yyyy-mm-dd`. Titles only as `titleLength`. Every path and type: `sc
 A control launch never touches the real store, `UserDefaults` (its own suite), What's New or the App
 Store review prompt, and runs in UTC. Each launch wipes and re-seeds, so a fixture is always its exact
 start state — except `relaunch`, which keeps everything under `Application Support/control/` (store, fake
-library, aliases); a normal launch deletes the control state files.
+library, aliases); a normal launch deletes all control state, ending the run.

@@ -141,17 +141,9 @@ struct AlbumSessionExportTests {
     func reopenMidExportJoinsTheRun() async throws {
         let ready = try await exportReady()
         let (harness, project, picks) = (ready.harness, ready.project, ready.picks)
-        await harness.gate.hold(exports: true)
-        let first = Task { await harness.session.startExport(project) }
-        await harness.gate.waitUntilHeld()
-
-        harness.actions.open(project)                       // the sidebar row: back to the overview
-        #expect(harness.session.isExporting(project))
-        harness.coordinator.finishToExport()               // … Save to Photos again
-        let second = Task { await harness.session.startExport(project) }
-        for _ in 0..<10 { await Task.yield() }             // let it reach the library, if it would
+        let (first, second, inFlight) = try await saveAgainMidExport(harness, project)
         #expect(await harness.gate.exportCount == 1)
-        #expect(harness.session.export.phase == .exporting(isReExport: false))   // the run in flight, shown
+        #expect(harness.session.export === inFlight)        // the run in flight, shown
 
         await harness.gate.release()
         _ = (await first.value, await second.value)
@@ -162,6 +154,58 @@ struct AlbumSessionExportTests {
         }
         #expect(result.added == picks.count)
         #expect(await harness.library.exportedAssetIDs(inAlbum: "album/exported/2").isEmpty)   // no 2nd album
+    }
+
+    /// The same, with more picks between the two Saves (#300 review): the joined run exported only the
+    /// first Save's picks, and the completion screen reported them against the live selection ("22 photos",
+    /// "14 couldn't be added"). The join now brings the album up to the live picks, in the album the run
+    /// created, and the screen's counts are the result's own.
+    @Test("picks added between the saves: the join exports them too, into the one album")
+    func joinCatchesUpWithNewPicks() async throws {
+        let ready = try await exportReady()
+        let (harness, project) = (ready.harness, ready.project)
+        let (first, second, _) = try await saveAgainMidExport(harness, project) {
+            // (The re-open dropped the review context; these are the seed's, not among the first picks.)
+            harness.selection.select(["fake/quiet/16", "fake/quiet/17", "fake/quiet/18", "fake/busy/11"])
+        }
+        let picks = harness.selection.selected
+        #expect(picks.count == ready.picks.count + 4)
+
+        await harness.gate.release()
+        _ = (await first.value, await second.value)
+        guard case .done(let result, let wasReExport) = harness.session.export.phase else {
+            Issue.record("didn't land: \(harness.session.export.phase)")
+            return
+        }
+        #expect(wasReExport)                                   // found the album the first run created
+        #expect(result.added == 4)
+        #expect(result.total == picks.count)
+        #expect(harness.session.export.exportedPickCount == picks.count)
+        #expect(await harness.library.exportedAssetIDs(inAlbum: "album/exported/1") == picks)
+        #expect(await harness.library.exportedAssetIDs(inAlbum: "album/exported/2").isEmpty)
+        let saved = try #require(try harness.persisted(project))
+        #expect(saved.status(currentPicks: saved.persistedPicks) == .exported)
+    }
+
+    /// Hold an export, re-open the album from the sidebar (then `between`), and Save again; returns both
+    /// runs' tasks and the store of the run in flight, once the second Save has joined it.
+    private func saveAgainMidExport(
+        _ harness: SessionHarness, _ project: CurationProject, between: () -> Void = {}
+    ) async throws -> (Task<Void, Never>, Task<Void, Never>, ExportStore) {
+        await harness.gate.hold(exports: true)
+        let first = Task { await harness.session.startExport(project) }
+        await harness.gate.waitUntilHeld()
+        let inFlight = harness.session.export
+
+        harness.actions.open(project)                       // the sidebar row: back to the overview
+        #expect(harness.session.isExporting(project))
+        between()
+        harness.coordinator.finishToExport()               // … Save to Photos again
+        let second = Task { await harness.session.startExport(project) }
+        let deadline = ContinuousClock.now + .seconds(30)   // poll the real condition: the screen joined
+        while harness.session.export !== inFlight, ContinuousClock.now < deadline { await Task.yield() }
+        try #require(harness.session.export === inFlight, "the second Save didn't join the run in flight")
+        return (first, second, inFlight)
     }
 
     /// The export saves its record of what it exported (`exportedSelectionSnapshot`) at once; the picks it

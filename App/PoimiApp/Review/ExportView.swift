@@ -61,6 +61,9 @@ final class ExportStore {
     }
 
     private(set) var phase: Phase = .idle
+    /// How many picks the last run exported — what its result's counts are about (the live selection can
+    /// have moved on since).
+    private(set) var exportedPickCount = 0
     private let library: any PhotoLibraryProviding
 
     init(library: any PhotoLibraryProviding) {
@@ -71,6 +74,7 @@ final class ExportStore {
     /// error screen's "create a new album instead" recovery when the existing one is gone).
     func run(project: CurationProject, picks: Set<String>, forceNewAlbum: Bool = false) async {
         let existing = forceNewAlbum ? nil : project.targetAlbumID
+        exportedPickCount = picks.count
         phase = .exporting(isReExport: existing != nil)
         do {
             let result = try await library.export(
@@ -208,10 +212,12 @@ struct ExportView: View {
                 statCard(stats)
                     .padding(.top, 12)
                 // Partial first export: some picks couldn't be resolved (deleted/offline since picking),
-                // so the album has fewer than picked. Say so honestly rather than overstating the count.
-                if !wasReExport, result.added < stats.totalPicked {
+                // so the album has fewer than picked. Say so honestly rather than overstating the count — counted
+                // against the picks THIS result was computed from, never the live selection (#300).
+                let unresolved = session.export.exportedPickCount - result.added
+                if !wasReExport, unresolved > 0 {
                     Text("""
-                        ^[\(stats.totalPicked - result.added) photo](inflect: true) \
+                        ^[\(unresolved) photo](inflect: true) \
                         couldn’t be added — no longer in your library.
                         """)
                         .font(.footnote)

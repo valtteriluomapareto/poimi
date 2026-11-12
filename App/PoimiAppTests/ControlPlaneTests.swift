@@ -23,14 +23,14 @@ final class MemorySink: ControlStateSink {
     var lastDetail: ControlJSON? { writes.last { $0.file == .detail }?.json }
 }
 
-/// One control launch, wired exactly as `ControlEnvironment.boot` wires it — the same graph factory
-/// and the same `ControlRuntime` — minus the process-global effects, with an in-memory sink.
+/// One control launch, wired exactly as `ControlEnvironment.boot` wires it — through the same
+/// `ControlEnvironment.makeRuntime` — minus the process-global effects, with an in-memory sink and, by
+/// default, an in-memory store under throwaway control directories.
 @MainActor
 struct ControlHarness {
     let fixture: ControlFixture
     let runtime: ControlRuntime
     let sink = MemorySink()
-    let thumbnailLoads = ThumbnailLoadCounter()
 
     init(_ fixture: ControlFixture, route: ControlRoute? = nil, viewer: String? = nil, headless: Bool = false,
          library: (any PhotoLibraryProviding)? = nil, iPad: Bool = false) {
@@ -39,44 +39,43 @@ struct ControlHarness {
                   library: library, iPad: iPad)
     }
 
-    /// `library` replaces the fixture's own (a test wraps it, e.g. to gate exports); the fixture still
+    /// `library` replaces the fixture's own (a test wraps it, e.g. to gate fetches); the fixture still
     /// decides the albums and aliases.
     /// `iPad` = the split view's layout: the album list (sidebar) is always on screen.
     init(_ fixture: ControlFixture, parsed: ControlLaunch.Parsed, library: (any PhotoLibraryProviding)? = nil,
          iPad: Bool = false) {
         self.fixture = fixture
-        // The fixture's own library carries the export gate, as a launch's does (#300).
-        let gate = library == nil ? FakeExportGate() : nil
-        let graph = ControlEnvironment.makeGraph(
-            fixture: fixture,
-            timelineCacheDirectory: FileManager.default.temporaryDirectory
-                .appendingPathComponent("control-tests-\(UUID().uuidString)", isDirectory: true),
+        runtime = ControlEnvironment.makeRuntime(
+            parsed, paths: Self.temporaryPaths(),
             defaults: ControlEnvironment.isolatedDefaults(suiteName: "control.test.\(UUID().uuidString)"),
-            thumbnailLoads: thumbnailLoads, library: library ?? fixture.makeLibrary(exportGate: gate))
-        runtime = ControlRuntime(parsed: parsed, graph: graph, sink: sink, run: "r-test",
-                                 writeDelay: .milliseconds(10), thumbnailLoads: thumbnailLoads,
-                                 listAlwaysShown: iPad, exportGate: gate)
+            sink: sink, run: "r-test", writeDelay: .milliseconds(10), listAlwaysShown: iPad, inMemoryStore: true,
+            library: library.map { wrapper in { _ in wrapper } })
     }
 
-    /// A launch over `paths`, exactly as `ControlEnvironment.boot` makes one (`makeRuntime`): a fixture
+    /// A launch over `paths` with its file store, exactly as `ControlEnvironment.boot` makes one: a fixture
     /// launch wipes `paths` and seeds; `relaunch` continues whatever the last run over `paths` left (#300).
+    /// `extra` arguments go on the command line too (e.g. a bad route).
     init(_ fixture: ControlFixture, paths: ControlPaths, relaunch: Bool = false, headless: Bool = false,
-         iPad: Bool = false) {
+         iPad: Bool = false, extra: [String] = []) {
         self.fixture = fixture
-        let recorded = ControlRunRecord.load(from: paths.record).flatMap { ControlFixture(rawValue: $0.fixture) }
         let arguments = ["-PoimiControl"] + (relaunch ? ["-PoimiRelaunch"] : ["-PoimiFixture", fixture.rawValue])
-            + (headless ? ["-PoimiHeadless"] : [])
+            + (headless ? ["-PoimiHeadless"] : []) + extra
         runtime = ControlEnvironment.makeRuntime(
-            ControlLaunch.parse(arguments, recorded: recorded), paths: paths,
+            ControlLaunch.parse(arguments, recorded: ControlRunRecord.recordedRun(at: paths.record)),
+            relaunchRequested: relaunch, paths: paths,
             defaults: ControlEnvironment.isolatedDefaults(suiteName: "control.test.\(UUID().uuidString)"),
             sink: sink, run: "r-test-\(relaunch ? "relaunch" : "launch")", writeDelay: .milliseconds(10),
             listAlwaysShown: iPad)
     }
 
+    /// The fake thumbnail loads in flight (the runtime always counts them).
+    var thumbnailLoads: ThumbnailLoadCounter { runtime.thumbnailLoads! }
+
     /// Fresh control directories for one test (both under the temporary directory).
     static func temporaryPaths() -> ControlPaths {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("control-\(UUID().uuidString)")
-        return ControlPaths(support: root.appendingPathComponent("support"), output: root.appendingPathComponent("output"))
+        return ControlPaths(support: root.appendingPathComponent("support"),
+                            output: root.appendingPathComponent("output"))
     }
 
     var graph: AppGraph { runtime.graph }

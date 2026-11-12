@@ -47,7 +47,7 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     private let persistence: URL?
 
     /// `state` restores what an earlier run of the same library persisted (added photos, exported
-    /// albums, authorization) over the seed.
+    /// albums) over the seed.
     init(
         assets: [AssetRef] = FakePhotoLibrary.yearMixedSeed(),
         albums: [AlbumRef] = FakePhotoLibrary.defaultAlbums,
@@ -62,7 +62,7 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
         self.addedAssets = state?.added ?? []
         self.seededAlbums = albums
         self.membership = membership
-        self.status = state?.authorization.flatMap(FakeLibraryState.authorization(named:)) ?? status
+        self.status = status
         self.fetchError = fetchError
         self.exportGate = exportGate
         self.persistence = persistence
@@ -80,11 +80,9 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     func requestAuthorization() async -> LibraryAuthorization { status }
 
     /// Change the reported authorization mid-test — to exercise a transition (e.g. the user
-    /// granting access at the system prompt: `.notDetermined` → `.authorized`). Persisted: a relaunch
-    /// keeps the answer, as the system does.
+    /// granting access at the system prompt: `.notDetermined` → `.authorized`).
     func setAuthorization(_ newStatus: LibraryAuthorization) {
         status = newStatus
-        save()
     }
 
     /// Make every later `fetchAssets` throw `error` (or succeed again with `nil`) — the scan-failure
@@ -157,7 +155,7 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
             exportSeq += 1
             albumID = "album/exported/\(exportSeq)"
             exportedAlbums[albumID] = (name, [])   // created with `name` → that's its title
-            await exportGate?.didCreateAlbum()
+            await exportGate?.report(albumsCreated: exportSeq)
         }
         let added = resolved.subtracting(exportedAlbums[albumID]!.ids)   // dupe guard
         exportedAlbums[albumID]!.ids.formUnion(added)
@@ -181,8 +179,7 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
                 let album = exportedAlbums[id]!
                 return FakeLibraryState.Album(id: id, name: album.name, ids: album.ids.sorted())
             },
-            exportSeq: exportSeq,
-            authorization: FakeLibraryState.name(of: status))
+            exportSeq: exportSeq)
         do {
             try JSONEncoder().encode(state).write(to: persistence, options: .atomic)
         } catch {
@@ -192,38 +189,58 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
 }
 
 /// What a `FakePhotoLibrary` keeps across a relaunch (#300): the photos added mid-session, the albums
-/// export created or filled (so a relaunched re-export finds its album instead of `.albumMissing`), the
-/// created-album counter and the authorization. Not the levers (`fetchError`, the export gate), which —
-/// like the process — don't survive a relaunch.
+/// export created or filled (so a relaunched re-export finds its album instead of `.albumMissing`), and
+/// the created-album counter. Not the levers (authorization, `fetchError`, the export gate), which — like
+/// the process — start over on a relaunch.
 struct FakeLibraryState: Codable, Equatable, Sendable {
+    /// The only shape this build reads; anything else is unreadable (a relaunch refuses it).
+    static let currentVersion = 1
+
     struct Album: Codable, Equatable, Sendable {
         let id: String
         let name: String
         let ids: [String]
     }
 
+    var version = FakeLibraryState.currentVersion
     var added: [AssetRef] = []
     var albums: [Album] = []
     var exportSeq = 0
-    var authorization: String?
 
-    /// The state saved at `url`, or `nil` (none yet, or unreadable: a fresh library).
-    static func load(from url: URL) -> FakeLibraryState? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(FakeLibraryState.self, from: data)
+    /// The state saved at `url`: `.missing` (none yet — a fresh library), `.loaded`, or `.unreadable` (a
+    /// corrupt file or another version — never silently replaced by a fresh library).
+    static func load(from url: URL) -> PersistedLoad<FakeLibraryState> {
+        PersistedLoad(url: url, version: currentVersion, versionAt: \.version)
+    }
+}
+
+/// A persisted control-run file, read back: absent, read, or present but not readable by this build.
+enum PersistedLoad<Value: Decodable> {
+    case missing
+    case loaded(Value)
+    case unreadable(String)
+
+    init(url: URL, version expected: Int, versionAt keyPath: KeyPath<Value, Int>) {
+        guard FileManager.default.fileExists(atPath: url.path) else { self = .missing; return }
+        do {
+            let value = try JSONDecoder().decode(Value.self, from: Data(contentsOf: url))
+            let found = value[keyPath: keyPath]
+            self = found == expected
+                ? .loaded(value)
+                : .unreadable("\(url.lastPathComponent) is version \(found); this build reads \(expected)")
+        } catch {
+            self = .unreadable("\(url.lastPathComponent) is unreadable: \(error.localizedDescription)")
+        }
     }
 
-    private static let authorizations: [(name: String, status: LibraryAuthorization)] = [
-        ("notDetermined", .notDetermined), ("authorized", .authorized), ("limited", .limited),
-        ("denied", .denied), ("restricted", .restricted)
-    ]
-
-    static func name(of status: LibraryAuthorization) -> String {
-        authorizations.first { $0.status == status }?.name ?? "notDetermined"
+    var value: Value? {
+        if case .loaded(let value) = self { return value }
+        return nil
     }
 
-    static func authorization(named name: String) -> LibraryAuthorization? {
-        authorizations.first { $0.name == name }?.status
+    var problem: String? {
+        if case .unreadable(let problem) = self { return problem }
+        return nil
     }
 }
 
@@ -235,8 +252,9 @@ struct FakeLibraryState: Codable, Equatable, Sendable {
 final class FakeExportGate {
     /// `export(…)` calls so far, held or not.
     private(set) var calls = 0
-    /// Albums export created (finding an existing album isn't one) — from the persisted count on.
-    private(set) var created: Int
+    /// Albums export created (finding an existing album isn't one) — the library's own counter
+    /// (`exportSeq`, persisted), mirrored here so the main-actor snapshot can read it.
+    private(set) var albumsCreated: Int
     /// Exports parked at the closed gate.
     private(set) var held = 0
     /// Whether exports park until `release()`.
@@ -245,8 +263,9 @@ final class FakeExportGate {
     private(set) var failure: ExportError?
     @ObservationIgnored private var waiters: [CheckedContinuation<Void, Never>] = []
 
-    init(created: Int = 0) {
-        self.created = created
+    /// `albumsCreated`: the library's counter as restored (a relaunch), else 0.
+    init(albumsCreated: Int = 0) {
+        self.albumsCreated = albumsCreated
     }
 
     /// Close the gate: every export from now parks until `release()`.
@@ -274,7 +293,8 @@ final class FakeExportGate {
         return failure
     }
 
-    func didCreateAlbum() { created += 1 }
+    /// The library created an album; `count` is its counter now.
+    func report(albumsCreated count: Int) { albumsCreated = count }
 }
 
 extension FakePhotoLibrary {

@@ -85,7 +85,7 @@ struct AssetRef: Sendable, Identifiable, Codable {
 
 ### 4. Selection & targets — `@Observable`, app-owned
 
-Selection is an in-memory `Set<String>` held in `SelectionStore` — **the source of truth, mutated instantly on every tap** (D15). It is *not* backed by a per-tap SwiftData write (rewriting a large set on the hottest UI path is the riskiest persistence trap in the plan). Durability comes from a **debounced/coalesced snapshot** — a `Codable` blob on the project (or throttled child rows), flushed on `scenePhase → background` and on project switch (§12). This decouples tap latency from durability.
+Selection is an in-memory `Set<String>` held in `SelectionStore` — **the source of truth, mutated instantly on every tap** (D15). It is *not* backed by a per-tap SwiftData write (rewriting a large set on the hottest UI path is the riskiest persistence trap in the plan). Durability comes from a **debounced/coalesced snapshot** — a `Codable` blob on the project (or throttled child rows), flushed on `scenePhase → background`, on project switch (§12), and before an export (which records the picks it exported at once, so the picks must be as durable — #300). This decouples tap latency from durability.
 
 **Decision: app-owned selection with an explicit export step** (rather than live-writing the album as you tap). Undo, soft per-month targets, the running tally, and the "update existing album / guard duplicate adds" re-run behavior all want an app-side source of truth. The album is a *render target*, produced on export.
 
