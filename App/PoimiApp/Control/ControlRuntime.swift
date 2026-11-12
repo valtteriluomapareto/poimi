@@ -25,11 +25,25 @@ final class ControlRuntime {
     let fixture: ControlFixture
     let assetAliases: ControlAssetAliases
     let albumAliases = ControlAlbumAliases()
+    /// The action bookkeeping behind `settledSeq` / `lastSeq` (#298).
+    let progress = ControlProgress()
+    /// The fake thumbnail loads in flight (`pending.thumbnails`), when the graph counts them.
+    let thumbnailLoads: ThumbnailLoadCounter?
     private(set) lazy var writer = ControlStateWriter(run: run, delay: writeDelay, sink: sink) { [unowned self] in
         inputs
     }
+    /// The one action handler (#298) — what the mailbox, and the in-process tests, talk to.
+    private(set) lazy var host = ControlHost(
+        graph: graph, run: run, fixture: fixture, assets: assetAliases, albums: albumAliases,
+        progress: progress,
+        state: { [unowned self] in stateJSON() },
+        rev: { [unowned self] in writer.rev })
+    /// `Documents/control/` when this run serves the file mailbox; `nil` in-process.
+    private let mailboxDirectory: URL?
+    private var mailbox: ControlMailbox?
 
-    private let run: String
+    /// This launch's id (`state.json`'s `run`; every request must name it).
+    let run: String
     private let writeDelay: Duration
     private let sink: any ControlStateSink
     private let launch: ControlLaunch?
@@ -41,8 +55,11 @@ final class ControlRuntime {
     /// Seeds the fixture (a refused launch seeds nothing) — no I/O, no global effects.
     init(parsed: ControlLaunch.Parsed, graph: AppGraph, sink: any ControlStateSink,
          run: String = "r-" + String(UInt32.random(in: 0...UInt32.max), radix: 16),
-         writeDelay: Duration = .milliseconds(100)) {
+         writeDelay: Duration = .milliseconds(100),
+         thumbnailLoads: ThumbnailLoadCounter? = nil, mailbox: URL? = nil) {
         self.graph = graph
+        self.thumbnailLoads = thumbnailLoads
+        mailboxDirectory = mailbox
         self.run = run
         self.writeDelay = writeDelay
         self.sink = sink
@@ -79,15 +96,23 @@ final class ControlRuntime {
         Task { await bootstrap() }
     }
 
-    /// Read authorization, apply the route and viewer, then write the first snapshot and start
-    /// observing. A problem is recorded as `app.launchError` (the UI stays up, so you can still look).
+    /// Whether this run has no UI (`-PoimiHeadless`).
+    var isHeadless: Bool { launch?.headless ?? false }
+
+    /// Start the graph (the launch authorization read), apply the route and viewer, then write the first
+    /// snapshot, start observing and open the mailbox. The route's screen task (its scan / export) is
+    /// started like any action's, so it runs headless too and `idle` waits for it. A problem is recorded
+    /// as `app.launchError` (the UI stays up, so you can still look).
     func bootstrap() async {
-        await graph.coordinator.refreshAuthorization()
+        await graph.start()
         if refusal == nil, let launch {
             do throws(ControlLaunchError) {
                 let applier = ControlRouteApplier(graph: graph, fixture: fixture,
                                                   albums: albumAliases, assets: assetAliases)
-                if let route = launch.route { try await applier.apply(route) }
+                if let route = launch.route {
+                    try await applier.apply(route)
+                    if let screenWork = host.screenTask() { _ = progress.begin(screenWork) }
+                }
                 if let viewer = launch.viewer { try await applier.openViewer(viewer) }
             } catch {
                 launchError = error.message
@@ -96,6 +121,18 @@ final class ControlRuntime {
         }
         bootstrapped = true
         writer.start()
+        if let mailboxDirectory, refusal == nil {
+            let mailbox = ControlMailbox(directory: mailboxDirectory, host: host)
+            self.mailbox = mailbox
+            mailbox.start()
+        }
+    }
+
+    /// The snapshot as `state.json` carries it now — `wait` and `snapshot` evaluate this, not the file.
+    func stateJSON() -> ControlJSON {
+        let inputs = inputs
+        inputs.albumAliases.assignNew(inputs.projects.projects)   // as the writer does before each pass
+        return ControlSnapshot.stamped(ControlSnapshot.content(inputs), run: run, rev: writer.rev)
     }
 
     var inputs: ControlSnapshotInputs {
@@ -104,6 +141,7 @@ final class ControlRuntime {
             projects: graph.projectStore,
             selection: graph.selectionStore, done: graph.doneStore,
             assetAliases: assetAliases, albumAliases: albumAliases,
+            progress: progress, thumbnails: thumbnailLoads, headless: isHeadless,
             launchError: launchError, bootstrapped: bootstrapped,
             idiom: UIDevice.current.userInterfaceIdiom == .pad ? "pad" : "phone",
             timeZone: Self.timeZoneName(Calendar.current.timeZone))
@@ -115,7 +153,8 @@ final class ControlRuntime {
     }
 }
 
-/// Applies a launch route the way the UI would, through the coordinator's own methods.
+/// Applies a launch route the way the UI would, through the coordinator's own methods. (The screen's own
+/// work — the scan, the export — is the host's `screenTask`, started by the bootstrap after this.)
 @MainActor
 struct ControlRouteApplier {
     let graph: AppGraph
@@ -146,14 +185,14 @@ struct ControlRouteApplier {
         case .review(_, let day): coordinator.openReview(id, day: day)
         case .export:
             await graph.session.openOverview(project)
-            coordinator.openExport(id)
+            coordinator.finishToExport()   // the control plane's one export entry point (#298)
         case .settings: coordinator.openSettings(id)
         case .overview, .appSettings: break
         }
     }
 
-    /// Open the photo viewer on `alias` once the review grid has published it (its `.task` runs the
-    /// scan after the route lands). Bounded by a real deadline, polled — never a fixed sleep.
+    /// Open the photo viewer on `alias` once the review has published it (the route's screen task runs
+    /// the scan after the route lands). Bounded by a real deadline, polled — never a fixed sleep.
     func openViewer(_ alias: String, timeout: Duration = .seconds(30)) async throws(ControlLaunchError) {
         guard let assetID = assets.assetID(for: alias) else {
             throw ControlLaunchError("viewer photo '\(alias)' is not in fixture '\(fixture.rawValue)'")
@@ -175,6 +214,23 @@ struct ControlRouteApplier {
             try? await Task.sleep(for: .milliseconds(50))   // poll with a real deadline
         }
         graph.coordinator.openPhoto(assetID)
+    }
+}
+
+/// Shown instead of `AppRootView` in a headless control run (`-PoimiHeadless`, #298): static on purpose —
+/// it observes nothing, so the run does no UI work; everything goes through the mailbox and the stores.
+/// Dev-facing, so `Text(verbatim:)`.
+struct ControlHeadlessView: View {
+    let run: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(verbatim: "Poimi control — headless")
+                .font(.headline)
+            Text(verbatim: "run \(run)")
+                .font(.footnote.monospaced())
+        }
+        .padding()
     }
 }
 

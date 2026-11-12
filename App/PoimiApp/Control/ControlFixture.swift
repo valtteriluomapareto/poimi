@@ -37,6 +37,10 @@ enum ControlFixture: String, CaseIterable, Sendable {
     /// One album over a LOCATED library (the location-spike seed: a home base plus planted trips), so
     /// trips form and get (fake) place names — the redaction test's place-name half needs real names.
     case located
+    /// An album carried over from before the per-lens done baseline (#273): the first four days done,
+    /// their baseline in the old flat shape (photos only), and a video on the first done day — the
+    /// #289 shape, where switching the media lens must not un-mark a done day that holds a video.
+    case legacyBaseline = "legacy-baseline"
 
     /// The known names, for error messages.
     static var names: String { allCases.map(\.rawValue).joined(separator: ", ") }
@@ -57,6 +61,7 @@ enum ControlFixture: String, CaseIterable, Sendable {
         case .emptyLibrary: []
         case .scale: Self.scaleAssets
         case .located: Self.locatedAssets
+        case .legacyBaseline: Self.yearAssets + [Self.legacyVideo]
         default: Self.yearAssets
         }
     }
@@ -118,6 +123,13 @@ enum ControlFixture: String, CaseIterable, Sendable {
             created = [album]
         case .located:
             created = [seeder.album("Best of 2025", target: 60)]
+        case .legacyBaseline:
+            let album = seeder.album("Best of 2025", target: 80)
+            seeder.pick(Self.midReviewPicks, in: album)
+            let days = Array(Self.yearDays.prefix(4))
+            seeder.markDone(days: days, in: album)
+            seeder.legacyBaseline(album, days: days)
+            created = [album]
         }
         projects.refresh()
         return created
@@ -162,6 +174,21 @@ enum ControlFixture: String, CaseIterable, Sendable {
             project.exportedSelectionSnapshot = try? SelectionSnapshot(assetIDs: Set(exportedPicks)).encoded()
             project.exportedPhotoCount = count
             project.lastExportedAt = ControlFixture.exportedAt
+            projects.saveEdits(to: project)
+        }
+
+        /// Record a pre-#273 review baseline: the flat `day → ids` blob (no lens key) an older build
+        /// wrote after reviewing `days` under the photos-only lens — so it holds the days' photos, never
+        /// a video. Persisted with `saveEdits`, like an upgraded store would hold it.
+        func legacyBaseline(_ project: CurationProject, days: [DayKey]) {
+            let photos = ControlFixture.yearAssets.filter { !$0.isScreenshot }
+            var blob: [String: [String]] = [:]
+            for day in days {
+                blob[day.description] = photos
+                    .filter { $0.captureDate.map { DayKey(date: $0, calendar: ControlFixture.utc) } == day }
+                    .map(\.id)
+            }
+            project.reviewedIDsByDay = try? JSONEncoder().encode(blob)
             projects.saveEdits(to: project)
         }
 
@@ -227,6 +254,13 @@ enum ControlFixture: String, CaseIterable, Sendable {
         assets.append(AssetRef(id: "ctl/\(assets.count)", captureDate: nil))
         return assets
     }()
+
+    /// `legacy-baseline`'s video: on the year's first shooting day (one of the done days), after its
+    /// photos — invisible under the photos-only lens the legacy baseline was recorded with.
+    static let legacyVideo = AssetRef(
+        id: "ctl/video/0",
+        captureDate: utc.date(from: DateComponents(year: 2025, month: 1, day: 6, hour: 18))!,
+        pixelSize: PixelSize(width: 1920, height: 1080), isVideo: true, duration: 12)
 
     /// The year library's dated, non-screenshot photo ids, oldest first — the pickable set.
     static let yearDatedIDs: [String] = yearAssets

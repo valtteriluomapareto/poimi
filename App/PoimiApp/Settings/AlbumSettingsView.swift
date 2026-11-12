@@ -298,15 +298,13 @@ struct AlbumSettingsView: View {
     // MARK: - Derived display
 
     /// "From" writes through here so moving the start past the end never leaves an inverted/greyed range:
-    /// set the new start, then let `nonInvertedEnd` collapse "To" to a single day at that start if the
-    /// start has reached/passed it (the user then extends "To"). Mirrors `NewAlbumSetupView` (#259).
+    /// `AlbumActions.stage` sets the new start, then collapses "To" to a single day at that start if the
+    /// start has reached/passed it (the user then extends "To"). Mirrors `NewAlbumSetupView` (#259). The
+    /// rule lives in the façade so the control plane's `albums.update` applies the same one (#298).
     private var rangeStartBinding: Binding<Date> {
         Binding(
             get: { project.rangeStart },
-            set: {
-                project.rangeStart = $0
-                project.rangeEnd = NewAlbumDraft.nonInvertedEnd(start: $0, end: project.rangeEnd, calendar: calendar)
-            })
+            set: { actions.stage(AlbumEdits(rangeStart: $0), to: project, calendar: calendar) })
     }
 
     /// The "To" picker shows an inclusive end day, while the model stores `rangeEnd` end-exclusive (the
@@ -314,7 +312,10 @@ struct AlbumSettingsView: View {
     private var inclusiveEnd: Binding<Date> {
         Binding(
             get: { NewAlbumDraft.inclusiveEndDay(forExclusiveEnd: project.rangeEnd, calendar: calendar) },
-            set: { project.rangeEnd = NewAlbumDraft.exclusiveEnd(forInclusiveDay: $0, calendar: calendar) })
+            set: {
+                let end = NewAlbumDraft.exclusiveEnd(forInclusiveDay: $0, calendar: calendar)
+                actions.stage(AlbumEdits(rangeEnd: end), to: project, calendar: calendar)
+            })
     }
 
     /// Bridges the single export target (`String?`) to the picker's `Set<String>` selection.

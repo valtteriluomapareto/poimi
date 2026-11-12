@@ -83,6 +83,14 @@ struct AppGraph {
             appReviewPrompt: AppReviewPrompt(userDefaults: defaults))
     }
 
+    /// Start the graph: the cold-launch authorization read (D6), which decides the root phase. Run once
+    /// per launch by the host — the app's root `.task`, or the control runtime's bootstrap — so a run with
+    /// no `AppRootView` (the control plane's headless host, #298) starts exactly like one with it. The
+    /// resume re-read stays on the scene-phase handler.
+    func start() async {
+        await coordinator.refreshAuthorization()
+    }
+
     /// The real app: the on-disk store, and the library / thumbnails / naming the launch selects.
     static func production() -> AppGraph {
         let container: ModelContainer

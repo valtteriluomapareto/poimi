@@ -10,9 +10,9 @@
 //
 //  Since slice B (#297) the album session, the stores' pending debounces and the trip-name pass are
 //  observable, so `pending.selectionFlush` / `doneFlush` / `naming` / `export` and `active.export` are
-//  real values. What still can't be observed honestly stays an explicit `null`, not a guess:
-//  `pending.thumbnails` (slice C adds a counter, and `settledSeq`). `idle` covers what IS observable —
-//  see `ControlSnapshot.isIdle`.
+//  real values. Slice C (#298) adds the action bookkeeping (`settledSeq` / `lastSeq`) and the fake's
+//  thumbnail loads in flight (`pending.thumbnails`). `idle` covers what is observable — see
+//  `ControlSnapshot.isIdle`.
 //
 #if DEBUG
 
@@ -31,6 +31,12 @@ struct ControlSnapshotInputs {
     let done: DoneStore
     let assetAliases: ControlAssetAliases
     let albumAliases: ControlAlbumAliases
+    /// The action bookkeeping (`settledSeq` / `lastSeq`), or `nil` before a host exists.
+    var progress: ControlProgress?
+    /// The fake thumbnail provider's loads in flight, or `nil` when nothing counts them.
+    var thumbnails: ThumbnailLoadCounter?
+    /// No UI: `ControlHeadlessView` instead of `AppRootView` (`app.host`).
+    var headless = false
     /// A launch/route problem to surface (`app.launchError`), or `nil`.
     var launchError: String?
     /// The launch has finished: authorization read, route applied, viewer opened (or failed).
@@ -57,6 +63,8 @@ enum ControlSnapshot {
         let store = session?.candidateStore
         let export = session?.export.phase ?? .idle
         return .object(
+            ("settledSeq", .int(inputs.progress?.settledSeq ?? 0)),
+            ("lastSeq", .int(inputs.progress?.lastSeq ?? 0)),
             ("app", app(inputs)),
             ("nav", nav(inputs)),
             ("albums", albums(inputs)),
@@ -67,7 +75,7 @@ enum ControlSnapshot {
                 ("scan", .bool(store?.phase == .scanning)),
                 ("naming", .bool(store?.isNaming ?? false)),
                 ("export", .bool(export.isRunning)),
-                ("thumbnails", .null))),
+                ("thumbnails", .int(inputs.thumbnails?.inFlight ?? 0)))),
             ("idle", isIdle(inputs, store: store, export: export).map(ControlJSON.bool) ?? .null))
     }
 
@@ -85,18 +93,22 @@ enum ControlSnapshot {
     }
 
     /// Whether the app has settled — `true`, `false`, or `nil` for "unknown" (never a silent `true`):
-    /// - `false` until the launch bootstrap finished, while a review scan or its trip-name pass runs, and
-    ///   while an export runs — including "the screen on top needs a scan / an export that hasn't started
-    ///   yet" (the screen's `.task` runs after the route lands, so a missing or `.idle` store there is
-    ///   pending, not idle).
+    /// - `false` until the launch bootstrap finished; while an accepted action hasn't settled
+    ///   (`settledSeq < lastSeq`); while a review scan or its trip-name pass runs, an export runs, or a
+    ///   fake thumbnail load is in flight — including "the screen on top needs a scan / an export that
+    ///   hasn't started yet" (the screen's `.task` runs after the route lands, so a missing or `.idle`
+    ///   store there is pending, not idle).
     /// - `true` otherwise.
-    /// - NOT covered: debounced flushes (reported under `pending`; under control the debounce is a day
-    ///   long and there's no `flush` action until slice C, so an `idle` that waited on them would never
-    ///   settle after a tap) and thumbnail loads (slice C's counter).
+    /// - Deliberately NOT covered: debounced flushes. Under control the debounce is a day long, so an
+    ///   `idle` that waited on them would stay `false` after every tap until an explicit flush — and the
+    ///   in-memory picks are already the truth the UI shows (D15). `pending.selectionFlush` / `doneFlush`
+    ///   report them; call `fixture flush` before checking what was PERSISTED.
     @MainActor
     static func isIdle(_ inputs: ControlSnapshotInputs, store: CandidateStore?,
                        export: ExportStore.Phase) -> Bool? {
         guard inputs.bootstrapped else { return false }
+        if let progress = inputs.progress, progress.settledSeq < progress.lastSeq { return false }
+        if (inputs.thumbnails?.inFlight ?? 0) > 0 { return false }
         if store?.phase == .scanning || store?.isNaming == true || export.isRunning { return false }
         let coordinator = inputs.coordinator
         guard coordinator.rootPhase == .albums else { return true }
@@ -123,6 +135,7 @@ enum ControlSnapshot {
             ("authorization", .string(authorization(inputs.coordinator.authorization))),
             ("library", .string("fake")),
             ("fixture", .string(inputs.fixture.rawValue)),
+            ("host", .string(inputs.headless ? "headless" : "ui")),
             ("idiom", .string(inputs.idiom)),
             ("timeZone", .string(inputs.timeZone)),
             ("launchError", .string(inputs.launchError)))

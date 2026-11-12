@@ -48,7 +48,7 @@ struct AlbumsView: View {
                         .listRowBackground(rowBackground(for: project))
                         .contextMenu {
                             Button("Duplicate", systemImage: "plus.square.on.square") {
-                                store.duplicate(project)
+                                actions.duplicate(project)
                             }
                             // Reset + Delete are destructive (hand-curated picks are lost) → confirm
                             // first; "no destructive surprises" (design-language).
