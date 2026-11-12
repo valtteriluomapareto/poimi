@@ -34,6 +34,9 @@ enum ControlFixture: String, CaseIterable, Sendable {
     case exported
     /// One album over a 10,000-photo library (the D29 scale shape), 200 picks.
     case scale
+    /// One album over a LOCATED library (the location-spike seed: a home base plus planted trips), so
+    /// trips form and get (fake) place names — the redaction test's place-name half needs real names.
+    case located
 
     /// The known names, for error messages.
     static var names: String { allCases.map(\.rawValue).joined(separator: ", ") }
@@ -53,6 +56,7 @@ enum ControlFixture: String, CaseIterable, Sendable {
         switch self {
         case .emptyLibrary: []
         case .scale: Self.scaleAssets
+        case .located: Self.locatedAssets
         default: Self.yearAssets
         }
     }
@@ -112,6 +116,8 @@ enum ControlFixture: String, CaseIterable, Sendable {
             seeder.pick(stride(from: 0, to: Self.scaleAssets.count, by: 50).map { Self.scaleAssets[$0].id },
                         in: album)
             created = [album]
+        case .located:
+            created = [seeder.album("Best of 2025", target: 60)]
         }
         projects.refresh()
         return created
@@ -244,6 +250,9 @@ enum ControlFixture: String, CaseIterable, Sendable {
 
     /// The scale library — the canonical 10k scale seed.
     static let scaleAssets: [AssetRef] = FakePhotoLibrary.scaleSeed(10_000)
+
+    /// The located library — the deterministic location-spike seed (all of 2025, with coordinates).
+    static let locatedAssets: [AssetRef] = FakePhotoLibrary.locationSpikeSeed()
 }
 
 #endif

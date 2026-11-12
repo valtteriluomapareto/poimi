@@ -44,10 +44,11 @@ enum ControlSnapshot {
     // MARK: - state.json
 
     /// The snapshot content, WITHOUT the `run`/`rev` stamp (so equality means "nothing changed").
+    /// A pure projection: no side effects, no I/O (it runs inside observation tracking). Album aliases
+    /// are assigned beforehand by the writer.
     @MainActor
     static func content(_ inputs: ControlSnapshotInputs) -> ControlJSON {
         let coordinator = inputs.coordinator
-        inputs.albumAliases.registerNew(inputs.projects.projects)
         let activeProject = coordinator.activeAlbumID.flatMap { id in
             inputs.projects.projects.first { $0.id == id }
         }
@@ -65,7 +66,7 @@ enum ControlSnapshot {
                 ("naming", .null),
                 ("export", .null),
                 ("thumbnails", .null))),
-            ("idle", .bool(isIdle(inputs, store: store))))
+            ("idle", isIdle(inputs, store: store).map(ControlJSON.bool) ?? .null))
     }
 
     /// `content` stamped with the format version, the per-launch `run` id and the revision.
@@ -73,13 +74,17 @@ enum ControlSnapshot {
         content.prepending(("snapshotVersion", .int(version)), ("run", .string(run)), ("rev", .int(rev)))
     }
 
-    /// Whether the app has settled, as far as slice A can observe: the launch bootstrap finished, and
-    /// no scan is running — including "the screen on top needs a scan that hasn't started yet" (the
-    /// review/overview `.task` runs after the route lands, so a missing or `.idle` store there is
-    /// pending, not idle). NOT covered yet (slice B/C): debounced flushes, trip naming, an export
-    /// started by `ExportView`, thumbnail loads.
+    /// Whether the app has settled, as far as slice A can observe — `true`, `false`, or `nil` for
+    /// "unknown" (never a silent `true`):
+    /// - `false` until the launch bootstrap finished, and while a review scan runs — including "the
+    ///   screen on top needs a scan that hasn't started yet" (the review/overview `.task` runs after the
+    ///   route lands, so a missing or `.idle` store there is pending, not idle).
+    /// - `nil` on the export screen: `ExportView` runs the export in its own view state, which slice A
+    ///   can't see (slice B lifts it into the album session).
+    /// - `true` otherwise. Not covered on any screen yet (slice B/C): debounced flushes, trip naming,
+    ///   thumbnail loads — those read `null` under `pending`.
     @MainActor
-    static func isIdle(_ inputs: ControlSnapshotInputs, store: CandidateStore?) -> Bool {
+    static func isIdle(_ inputs: ControlSnapshotInputs, store: CandidateStore?) -> Bool? {
         guard inputs.bootstrapped else { return false }
         if store?.phase == .scanning { return false }
         let coordinator = inputs.coordinator
@@ -90,7 +95,9 @@ enum ControlSnapshot {
             case .ready, .empty, .failed: return true
             case .idle, .scanning, nil: return false
             }
-        default:
+        case .export:
+            return nil
+        case .settings, .appSettings, nil:
             return true
         }
     }
@@ -126,11 +133,13 @@ enum ControlSnapshot {
     @MainActor
     private static func albums(_ inputs: ControlSnapshotInputs) -> ControlJSON {
         let activeID = inputs.selection.isActive ? inputs.selection.activeProjectID : nil
-        let rows = inputs.projects.projects.map { project -> (alias: String, value: ControlJSON) in
+        // Every project is aliased before a snapshot is built (`ControlStateWriter.flush`).
+        let rows = inputs.projects.projects.compactMap { project -> (alias: String, value: ControlJSON)? in
+            guard let alias = inputs.albumAliases.alias(for: project.id) else { return nil }
             // The active album's picks are the live in-memory set (D15); the rest are persisted.
             let picks = project.persistentModelID == activeID ? inputs.selection.selected : project.persistedPicks
             let status = project.status(currentPicks: picks)
-            return (inputs.albumAliases.alias(for: project.id), .object(
+            return (alias, .object(
                 ("status", .string(statusName(status))),
                 ("toAdd", .int(toAdd(status))),
                 ("target", .int(project.targetCount)),
@@ -179,28 +188,29 @@ enum ControlSnapshot {
 
     /// Per-day detail for the active album only (`state.json` stays small at `scale`): each day's
     /// photos as aliases, which of them are picked, and whether the day is done. `days` is empty until
-    /// the scan is ready.
+    /// the scan is ready. The day → photos table comes from `cache` (built once per scanned store), so
+    /// a burst of picks only recomputes `picked`/`done`.
     @MainActor
-    static func detail(_ inputs: ControlSnapshotInputs) -> ControlJSON {
+    static func detail(_ inputs: ControlSnapshotInputs, cache: ControlDetailCache) -> ControlJSON {
         let coordinator = inputs.coordinator
         guard let activeID = coordinator.activeAlbumID,
               let project = inputs.projects.projects.first(where: { $0.id == activeID }),
               let store = coordinator.candidateStore, case .ready = store.phase else {
+            cache.invalidate()
             return .object(("album", .null), ("days", .object(pairs: [])))
         }
-        var idsByDay: [DayKey: [String]] = [:]
-        for (id, day) in store.dayByID { idsByDay[day, default: []].append(id) }
         let selected = inputs.selection.activeProjectID == project.persistentModelID
             ? inputs.selection.selected : project.persistedPicks
         let doneDays = inputs.done.activeProjectID == project.persistentModelID
             ? inputs.done.doneDays : Set(project.doneDays.compactMap(DayKey.init))
-        let days = idsByDay.keys.sorted().map { day -> (String, ControlJSON) in
-            let ids = idsByDay[day] ?? []
-            return (day.description, .object(
-                ("photos", .array(inputs.assetAliases.aliases(for: ids).map(ControlJSON.string))),
-                ("picked", .array(inputs.assetAliases.aliases(for: ids.filter(selected.contains))
-                    .map(ControlJSON.string))),
-                ("done", .bool(doneDays.contains(day)))))
+        let days = cache.days(for: store, aliases: inputs.assetAliases).map { row -> (String, ControlJSON) in
+            let picked = row.ids.indices
+                .filter { selected.contains(row.ids[$0]) }
+                .map { ControlJSON.string(row.aliases[$0]) }
+            return (row.day.description, .object(
+                ("photos", .array(row.aliases.map(ControlJSON.string))),
+                ("picked", .array(picked)),
+                ("done", .bool(doneDays.contains(row.day)))))
         }
         return .object(("album", .string(inputs.albumAliases.alias(for: project.id))),
                        ("days", .object(pairs: days)))
@@ -287,6 +297,39 @@ enum ControlSnapshot {
         case .failed(.accessLost): "accessLost"
         case .idle, .scanning, .ready: nil
         }
+    }
+}
+
+/// The active album's day → photos table, built once per scanned `CandidateStore` (by identity) and
+/// dropped whenever no store is ready — a re-scan passes through `.scanning`, and a Settings edit makes
+/// a new store — so `scale` doesn't regroup ~10k photos on every burst of picks.
+@MainActor
+final class ControlDetailCache {
+    struct Day {
+        let day: DayKey
+        /// The day's photo ids in alias order, index-aligned with `aliases`.
+        let ids: [String]
+        let aliases: [String]
+    }
+
+    private var storeID: ObjectIdentifier?
+    private var table: [Day] = []
+
+    func days(for store: CandidateStore, aliases: ControlAssetAliases) -> [Day] {
+        if storeID == ObjectIdentifier(store) { return table }
+        var idsByDay: [DayKey: [String]] = [:]
+        for (id, day) in store.dayByID { idsByDay[day, default: []].append(id) }
+        table = idsByDay.keys.sorted().map { day in
+            let ids = aliases.ordered(idsByDay[day] ?? [])
+            return Day(day: day, ids: ids, aliases: ids.compactMap(aliases.alias(for:)))
+        }
+        storeID = ObjectIdentifier(store)
+        return table
+    }
+
+    func invalidate() {
+        storeID = nil
+        table = []
     }
 }
 

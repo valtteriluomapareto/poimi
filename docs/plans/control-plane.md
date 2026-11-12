@@ -139,19 +139,32 @@ as data, for most agent tasks.
 **As built (#296).** Where slice A landed differently from the text above:
 
 - The pbxproj group for `Control/` is the **`10`** id block: `F0` was already taken by `WhatsNew`.
-- `PoimiApp` now builds from a small **`AppGraph`** value (`production()` is the old wiring,
-  unchanged), so the control launch can hand in its isolated graph through one DEBUG hook. Slice B
-  grows it into `AppGraph.make(…)` shared with the tests.
-- The store is **in-memory**; `Application Support/control/` holds the album-alias table and the
-  timeline cache, and both control directories are wiped at every control launch.
+- **`AppGraph.make(…)`** (`Sources/AppGraph.swift`) already exists: the one wiring of stores,
+  coordinator, timeline cache and name cache, used by `production()`, the control launch and the
+  tests. `PoimiApp` holds the graph. Slice B adds the album session to it.
+- The runtime is split for testing: `ControlEnvironment` (process-global: UTC, wiping the control
+  directories, the isolated defaults, the live instance), `ControlRuntime` + `ControlRouteApplier`
+  (seed, bootstrap, route), and `ControlStateWriter` (observe → coalesce → revise → write, into a
+  sink; the tests use an in-memory one).
+- The store is **in-memory** and album aliases live in memory too; `Application Support/control/`
+  holds only the timeline cache. Both control directories are wiped at every control launch, and a
+  normal DEBUG launch deletes `Documents/control/`.
 - UTC is pinned with `NSTimeZone.default` plus `SIMCTL_CHILD_TZ=UTC`, because the review views still
-  build `CandidateStore` with `Calendar.current`. Explicit calendar injection comes with slice B.
+  build `CandidateStore` with `Calendar.current`. The graph carries a calendar for slice B to inject.
 - `state.json` reports what can't be observed yet as explicit `null` (`pending.selectionFlush`,
   `doneFlush`, `naming`, `export`, `thumbnails`; `active.export.phase`) and has no `settledSeq`
-  (slice C). `idle` covers the launch bootstrap and the review/overview scan only.
+  (slice C). `idle` covers the launch bootstrap and the review/overview scan; on the export screen
+  it is `null` (unknown), never a silent `true`.
+- The first `state.json` of a run is written only after the route and viewer are applied, and
+  `rev` bumps when either file changes (a picks swap shows only in `state-detail.json`).
 - `albums` rows carry `toAdd` (for `editedSinceExport`) instead of `lastExportAlbum`, which would
   need an alias scheme for Photos albums. `state-detail.json` lists each day's `photos` and `picked`
-  as alias arrays.
+  as alias arrays; the day table is cached per scanned store.
+- A ninth fixture, **`located`** (the location-spike seed), makes trips and place names real, so the
+  redaction test's place-name check can fail.
+- `poimi.sh` refuses state from a dead app or another run, and clean-boots the simulator when a
+  normal launch ran since the last control launch: the `xcodebuild test` host's real-PhotoKit
+  conformance test raises the system Photos prompt, which SpringBoard keeps over the next app.
 
 ### Slice B — Lift the album session out of the views · ~0.5–0.8k net, a product refactor
 
@@ -319,8 +332,8 @@ drafts and focus. Size class comes only from the launch device (`--ipad`).
     capture date (D32), then seed index, with undated assets last. They stay stable across
     lens, exclusion and range edits.
   - **Clusters** are keyed by day (`2025-07-05`), not by ordinal.
-  - **Albums** get monotonic aliases that are never reused, persisted next to the isolated
-    store. `albums` is keyed by alias; its sort order changes on open.
+  - **Albums** get monotonic aliases that are never reused within a run (in memory: every
+    control launch starts from its fixture). `albums` is keyed and sorted by alias.
 - **Redaction**: no `localIdentifier`, no titles (length only), no place names, no coordinates.
 - **Detail on demand**: per-day `{photos:[alias], picked, done}` is written to a sibling
   `state-detail.json` only for the active album, so `state.json` stays small at `scale`. The

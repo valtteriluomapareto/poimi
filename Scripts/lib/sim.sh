@@ -13,6 +13,8 @@
 POIMI_PROJECT="${REPO_ROOT}/App/PoimiApp.xcodeproj"
 POIMI_SCHEME="PoimiApp"
 POIMI_BUNDLE_ID="com.valtteriluoma.poimi"
+# One DerivedData for the dev scripts (screenshots.sh, poimi.sh), so they share incremental builds.
+POIMI_DERIVED="${REPO_ROOT}/build/dev-dd"
 
 # Resolve an iOS 26 device by name from the *available* devices (the set xcodebuild can target —
 # picking a merely-"booted" device can yield an ineligible runtime).

@@ -8,9 +8,9 @@
 //
 //      -PoimiControl -PoimiFixture <name> [-PoimiRoute <route>] [-PoimiViewer <asset alias>]
 //
-//  Routes: `overview:<album>`, `review:<album>[:<yyyy-mm-dd>]`, `export:<album>`,
-//  `settings:<album>`, `appsettings`. Albums and assets are the snapshot's aliases (`album-1`,
-//  `a-0012`), never real ids.
+//  The route grammar is `ControlRoute.parse` (its error text is the usage); fixtures are
+//  `ControlFixture`. Albums and assets are the snapshot's aliases, never real ids. User-facing docs:
+//  the `poimi-control` skill.
 //
 #if DEBUG
 
@@ -41,6 +41,12 @@ struct ControlLaunch: Equatable {
         /// A control flag was passed but the launch is malformed. The app still runs isolated (never
         /// against the real library or store) and shows this message instead of the UI.
         case invalid(String)
+
+        /// The valid launch, if this is one.
+        var launch: ControlLaunch? {
+            if case .on(let launch) = self { return launch }
+            return nil
+        }
     }
 
     /// Parse `arguments` (pure, so tests drive it directly).
@@ -157,13 +163,16 @@ extension ControlLaunch {
     @MainActor
     static func bootGraph(arguments: [String] = ProcessInfo.processInfo.arguments) -> AppGraph? {
         let parsed = parse(arguments)
-        if parsed == .off { return nil }
-        return ControlRuntime.boot(parsed).graph
+        guard parsed != .off else {
+            ControlEnvironment.clearForNormalLaunch()   // no stale control state survives a normal launch
+            return nil
+        }
+        return ControlEnvironment.boot(parsed).graph
     }
 
     /// Why a control launch was refused (shown in place of the UI), or `nil`.
     @MainActor
-    static var refusal: String? { ControlRuntime.shared?.refusal }
+    static var refusal: String? { ControlEnvironment.current?.refusal }
 }
 
 #endif

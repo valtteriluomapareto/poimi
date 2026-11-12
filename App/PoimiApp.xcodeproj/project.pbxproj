@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00000000400000000000008F /* ControlRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000008E /* ControlRuntimeTests.swift */; };
+		00000000100000000000B108 /* ControlStateWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A108 /* ControlStateWriter.swift */; };
+		00000000100000000000B107 /* ControlEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A107 /* ControlEnvironment.swift */; };
+		0000000010000000000000B2 /* AppGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000010000000000000B1 /* AppGraph.swift */; };
 		000000001000000000000010 /* PoimiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000001000000000000001 /* PoimiApp.swift */; };
 		000000001000000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000001000000000000003 /* Assets.xcassets */; };
 		0000000010000000000000A2 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000010000000000000A1 /* Localizable.xcstrings */; };
@@ -128,6 +132,10 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXFileReference section */
+		00000000400000000000008E /* ControlRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlRuntimeTests.swift; sourceTree = "<group>"; };
+		00000000100000000000A108 /* ControlStateWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlStateWriter.swift; sourceTree = "<group>"; };
+		00000000100000000000A107 /* ControlEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlEnvironment.swift; sourceTree = "<group>"; };
+		0000000010000000000000B1 /* AppGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGraph.swift; sourceTree = "<group>"; };
 		000000001000000000000001 /* PoimiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoimiApp.swift; sourceTree = "<group>"; };
 		000000001000000000000003 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0000000010000000000000A1 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -287,6 +295,7 @@
 			isa = PBXGroup;
 			children = (
 				000000001000000000000001 /* PoimiApp.swift */,
+				0000000010000000000000B1 /* AppGraph.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -348,6 +357,8 @@
 				00000000100000000000A104 /* ControlFixture.swift */,
 				00000000100000000000A105 /* ControlSnapshot.swift */,
 				00000000100000000000A106 /* ControlRuntime.swift */,
+				00000000100000000000A107 /* ControlEnvironment.swift */,
+				00000000100000000000A108 /* ControlStateWriter.swift */,
 			);
 			path = Control;
 			sourceTree = "<group>";
@@ -485,6 +496,7 @@
 				00000000400000000000007D /* TimelineCacheTests.swift */,
 				000000004000000000000081 /* WhatsNewStateTests.swift */,
 				00000000400000000000008C /* ControlPlaneTests.swift */,
+				00000000400000000000008E /* ControlRuntimeTests.swift */,
 				000000004000000000000083 /* AppReviewPromptTests.swift */,
 				000000004000000000000089 /* Fixtures */,
 				000000004000000000000065 /* TestSupport.swift */,
@@ -603,6 +615,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				000000001000000000000010 /* PoimiApp.swift in Sources */,
+				0000000010000000000000B2 /* AppGraph.swift in Sources */,
 				00000000300000000000B301 /* FakePhotoLibrary.swift in Sources */,
 				00000000300000000000B302 /* SystemPhotoLibrary.swift in Sources */,
 				00000000300000000000B303 /* PhotoLibraryChangeObserver.swift in Sources */,
@@ -665,6 +678,8 @@
 				00000000100000000000B104 /* ControlFixture.swift in Sources */,
 				00000000100000000000B105 /* ControlSnapshot.swift in Sources */,
 				00000000100000000000B106 /* ControlRuntime.swift in Sources */,
+				00000000100000000000B107 /* ControlEnvironment.swift in Sources */,
+				00000000100000000000B108 /* ControlStateWriter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -700,6 +715,7 @@
 				00000000400000000000007E /* TimelineCacheTests.swift in Sources */,
 				000000004000000000000082 /* WhatsNewStateTests.swift in Sources */,
 				00000000400000000000008D /* ControlPlaneTests.swift in Sources */,
+				00000000400000000000008F /* ControlRuntimeTests.swift in Sources */,
 				000000004000000000000084 /* AppReviewPromptTests.swift in Sources */,
 				000000004000000000000066 /* TestSupport.swift in Sources */,
 				000000004000000000000088 /* MigrationFixtureTests.swift in Sources */,
