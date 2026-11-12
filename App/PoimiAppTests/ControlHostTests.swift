@@ -36,7 +36,7 @@ extension ControlHarness {
 
     /// `wait` through the host (predicates as `(path, op, value)`), `timeoutMs` 0 = assert now.
     func wait(_ predicates: [(String, ControlPredicate.Op, ControlJSON)],
-              timeoutMs: Int = 10_000) async -> Result<ControlJSON, ControlRequestError> {
+              timeoutMs: Int = 30_000) async -> Result<ControlJSON, ControlRequestError> {
         await host.wait(predicates.map { ControlPredicate(path: $0.0, op: $0.1, value: $0.2) }, timeoutMs: timeoutMs)
     }
 

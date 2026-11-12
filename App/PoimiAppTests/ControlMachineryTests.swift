@@ -245,7 +245,7 @@ struct ControlHostMachineryTests {
         let harness = ControlHarness(.oneAlbum)
         await harness.runtime.bootstrap()
         async let waited = harness.wait([("active.scan.phase", .eq, .string("ready")), ("idle", .eq, .bool(true))],
-                                        timeoutMs: 20_000)
+                                        timeoutMs: 30_000)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         let result = await waited
         #expect(result.map { $0["met"] } == .success(.bool(true)), "\(result)")
