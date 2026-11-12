@@ -30,8 +30,6 @@ final class ControlRuntime {
     /// The fake library's export gate (#300): `library.*` in the snapshot, the export levers. `nil` when
     /// the run's library has none (a test's own wrapper).
     let exportGate: FakeExportGate?
-    /// Where the run record is kept for a relaunch (#300), or `nil` (in-process runs that never relaunch).
-    private let recordURL: URL?
     /// The action bookkeeping behind `settledSeq` / `lastSeq` (#298).
     let progress = ControlProgress()
     /// The fake thumbnail loads in flight (`pending.thumbnails`), when the graph counts them.
@@ -72,7 +70,6 @@ final class ControlRuntime {
          exportGate: FakeExportGate? = nil, record: URL? = nil, addedAssets: [AssetRef] = []) {
         self.graph = graph
         self.exportGate = exportGate
-        recordURL = record
         // The iPad's split view keeps the album list on screen; the tests can pick either layout.
         self.listAlwaysShown = listAlwaysShown ?? (UIDevice.current.userInterfaceIdiom == .pad)
         self.thumbnailLoads = thumbnailLoads
