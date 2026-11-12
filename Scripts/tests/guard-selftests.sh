@@ -90,6 +90,17 @@ assert "ungated fake fails" "${d}" check-fake-release-isolation.sh nonzero
 rm -f "${d}/App/PoimiApp/FakeThing.swift"
 printf 'let args = ["-PoimiUseFakeLibrary"]\n' > "${d}/App/PoimiApp/Launch.swift"
 assert "ungated -Poimi flag fails" "${d}" check-fake-release-isolation.sh nonzero
+rm -f "${d}/App/PoimiApp/Launch.swift"
+# Control plane (#296): whole-file gating, not "a #if DEBUG somewhere".
+mkdir -p "${d}/App/PoimiApp/Control"
+printf '//\n//  ControlThing.swift\n//\n#if DEBUG\nstruct ControlThing {}\n#endif\n' > "${d}/App/PoimiApp/Control/ControlThing.swift"
+assert "whole-file-gated control source passes" "${d}" check-fake-release-isolation.sh zero
+printf 'struct Leaks {}\n#if DEBUG\nstruct ControlThing {}\n#endif\n' > "${d}/App/PoimiApp/Control/ControlThing.swift"
+assert "control code above the gate fails" "${d}" check-fake-release-isolation.sh nonzero
+printf '#if DEBUG\nstruct ControlThing {}\n#endif\nstruct Leaks {}\n' > "${d}/App/PoimiApp/Control/ControlThing.swift"
+assert "control code below the gate fails" "${d}" check-fake-release-isolation.sh nonzero
+printf 'struct ControlThing {}\n' > "${d}/App/PoimiApp/Control/ControlThing.swift"
+assert "ungated control source fails" "${d}" check-fake-release-isolation.sh nonzero
 
 echo "== check-no-grouping-in-views.sh =="
 d="$(skeleton check-no-grouping-in-views.sh)"; mkdir -p "${d}/App/PoimiApp"

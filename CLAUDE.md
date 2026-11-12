@@ -99,6 +99,7 @@ App/
                                place/trip subsystem (#130)
     Settings/                  AlbumSettingsView (per-album, #41) + AppSettingsView (app-level: access/about)
     Support/                   Log (OSLog), DebugScreen (screenshot harness), LocationSpikeProbe (DEBUG)
+    Control/                   the DEBUG-only control plane (#296): fixtures, launch route, state.json
     Resources/                 Assets.xcassets + Localizable.xcstrings (String Catalog, #95 Phase 0)
   PoimiAppTests/               integration tier (Swift Testing, runs on a sim)
 Curation/                      pure-domain SPM package — NO Photos/SwiftData/UIKit/SwiftUI
@@ -191,6 +192,28 @@ the container deallocates).
 The dev screenshot harness and logging are documented in the [README](README.md). Pixel-snapshot
 *testing* stays deferred (D26) — the harness is for human/agent eyeballing, not assertions.
 
+## Control plane (agents: start here to run the app)
+
+`Scripts/poimi.sh` launches the **real** `AppRootView` on a simulator straight into a named fixture +
+route, on an isolated in-memory store and the fake library (DEBUG-only, D39; plan
+[control-plane.md](docs/plans/control-plane.md); the `poimi-control` skill has the details):
+
+```sh
+Scripts/poimi.sh launch --fixture mid-review --route review:album-1 [--viewer a-0012] [--ipad] [--build]
+Scripts/poimi.sh wait '.idle == true'          # jq predicates over state.json; prints unmet ones
+Scripts/poimi.sh state .active                 # Documents/control/state.json (redacted, aliased)
+Scripts/poimi.sh shot /tmp/grid.png            # waits idle, then screenshots — then LOOK at it
+```
+
+Fixtures: `fresh denied empty-library one-album four-statuses mid-review exported scale`
+(`ControlFixture`, shared with `DebugShellView` + the tests). Routes: `overview:album-1`,
+`review:album-1[:yyyy-mm-dd]`, `export:album-1`, `settings:album-1`, `appsettings`. Rules:
+**launch into the state, don't tap your way there; read `state.json`, not pixels, for what the app
+holds; taps (iOS Simulator MCP) prove wiring and a screenshot someone looks at proves the look;
+never add state fields or fixture knobs just to make a check pass.** Everything in
+`App/PoimiApp/Control/` is whole-file `#if DEBUG` (guarded). Slice A has no action layer: the scan
+still runs from the views, and `null` in `pending` means "not observable yet" (slice B/C).
+
 ## CI gates (every PR, all green to merge)
 
 Checkout → select Xcode 26 → SwiftLint → `Curation` tests → the guard self-tests + the guards →
@@ -226,7 +249,8 @@ Pages, #227).
 - **The `.xcodeproj` is hand-authored** (no XcodeGen/Tuist). Add files by editing `project.pbxproj`
   with the structured ID blocks (app=1, PhotoLibrary=3, tests=4, Support=5, Persistence=6,
   State=7, Navigation=8, Onboarding=9; Albums/Setup/Review/Settings use A0/B0/C0/D0 ids; 2 retired
-  with the Spike; **E0 = Location** (#130); **next new letter group = F0, next numeric = 10**; the
+  with the Spike; **E0 = Location** (#130); **F0 = WhatsNew** (#248); **10 = Control** (#296, ids
+  `00000000100000000000{A1,B1}nn` / group `…C101`); **next new group = 11**; the
   app-group `Localizable.xcstrings` resource took `…A1`/`…A2`); `plutil -lint` after, and
   `xcodebuild -list` to confirm it still reads. Keep diffs to
   the intended change — no Xcode reformatting churn.
@@ -246,7 +270,7 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
 - **[docs/plans/architecture.md](docs/plans/architecture.md)** — the technical design (modules,
   data flow, PhotoKit actor, persistence, navigation, the album-library + mark-as-done subsystems).
 - **[docs/plans/plan-review-decisions.md](docs/plans/plan-review-decisions.md)** — the **decisions
-  log (D1–D38)**: the authoritative record of what was decided and why. Referenced everywhere as `D#`.
+  log (D1–D39)**: the authoritative record of what was decided and why. Referenced everywhere as `D#`.
 - **[docs/plans/project-phases.md](docs/plans/project-phases.md)** — the build sequence + GitHub
   issue tables + the design inventory + the timeline-grouping spec.
 - **[docs/plans/development-guidelines.md](docs/plans/development-guidelines.md)** — testability,
@@ -261,6 +285,8 @@ The durable record lives in `docs/`. Authoritative sources, in reading order:
   review (Finding 1 = no grouping/heavy work in a `body`), enforced by `check-no-grouping-in-views.sh`.
 - **[docs/deploy/testflight-setup.md](docs/deploy/testflight-setup.md)** — the TestFlight / fastlane
   release setup (signing, App Store Connect API key, the CI deploy workflow; #135).
+- **[docs/plans/control-plane.md](docs/plans/control-plane.md)** — the DEBUG-only control plane (D39,
+  epic #295): fixtures, launch route, the redacted `state.json`, `Scripts/poimi.sh`, and slices A–E.
 - **[docs/process/codebase-checkup.md](docs/process/codebase-checkup.md)** — the reproducible, layered
   codebase-checkup playbook + run-log + won't-fix ledger (#213).
 - **[docs/plans/localization.md](docs/plans/localization.md)** — the multi-locale plan (#95): a String

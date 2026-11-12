@@ -66,6 +66,12 @@
 		00000000F00000000000B0F2 /* ReleaseNotesCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000F00000000000A0F2 /* ReleaseNotesCatalog.swift */; };
 		00000000F00000000000B0F3 /* WhatsNewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000F00000000000A0F3 /* WhatsNewState.swift */; };
 		00000000F00000000000B0F4 /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000F00000000000A0F4 /* WhatsNewView.swift */; };
+		00000000100000000000B101 /* ControlJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A101 /* ControlJSON.swift */; };
+		00000000100000000000B102 /* ControlLaunch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A102 /* ControlLaunch.swift */; };
+		00000000100000000000B103 /* ControlAliases.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A103 /* ControlAliases.swift */; };
+		00000000100000000000B104 /* ControlFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A104 /* ControlFixture.swift */; };
+		00000000100000000000B105 /* ControlSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A105 /* ControlSnapshot.swift */; };
+		00000000100000000000B106 /* ControlRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A106 /* ControlRuntime.swift */; };
 		00000000C00000000000B0CF /* ReviewStateViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000C00000000000A0CF /* ReviewStateViews.swift */; };
 		000000004000000000000044 /* PhotoLibraryConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000043 /* PhotoLibraryConformanceTests.swift */; };
 		000000004000000000000046 /* FakePhotoLibrarySeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */; };
@@ -94,6 +100,7 @@
 		00000000400000000000007C /* LocationNameCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000007B /* LocationNameCacheTests.swift */; };
 		00000000400000000000007E /* TimelineCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000007D /* TimelineCacheTests.swift */; };
 		000000004000000000000082 /* WhatsNewStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000081 /* WhatsNewStateTests.swift */; };
+		00000000400000000000008D /* ControlPlaneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000400000000000008C /* ControlPlaneTests.swift */; };
 		000000004000000000000084 /* AppReviewPromptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000083 /* AppReviewPromptTests.swift */; };
 		000000004000000000000066 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000065 /* TestSupport.swift */; };
 		00000000600000000000B604 /* ReviewBaseline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000600000000000A604 /* ReviewBaseline.swift */; };
@@ -181,6 +188,12 @@
 		00000000F00000000000A0F2 /* ReleaseNotesCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotesCatalog.swift; sourceTree = "<group>"; };
 		00000000F00000000000A0F3 /* WhatsNewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewState.swift; sourceTree = "<group>"; };
 		00000000F00000000000A0F4 /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
+		00000000100000000000A101 /* ControlJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlJSON.swift; sourceTree = "<group>"; };
+		00000000100000000000A102 /* ControlLaunch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlLaunch.swift; sourceTree = "<group>"; };
+		00000000100000000000A103 /* ControlAliases.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlAliases.swift; sourceTree = "<group>"; };
+		00000000100000000000A104 /* ControlFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlFixture.swift; sourceTree = "<group>"; };
+		00000000100000000000A105 /* ControlSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlSnapshot.swift; sourceTree = "<group>"; };
+		00000000100000000000A106 /* ControlRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlRuntime.swift; sourceTree = "<group>"; };
 		000000004000000000000042 /* PoimiAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PoimiAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000004000000000000043 /* PhotoLibraryConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryConformanceTests.swift; sourceTree = "<group>"; };
 		000000004000000000000045 /* FakePhotoLibrarySeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakePhotoLibrarySeedTests.swift; sourceTree = "<group>"; };
@@ -209,6 +222,7 @@
 		00000000400000000000007B /* LocationNameCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationNameCacheTests.swift; sourceTree = "<group>"; };
 		00000000400000000000007D /* TimelineCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineCacheTests.swift; sourceTree = "<group>"; };
 		000000004000000000000081 /* WhatsNewStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewStateTests.swift; sourceTree = "<group>"; };
+		00000000400000000000008C /* ControlPlaneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlPlaneTests.swift; sourceTree = "<group>"; };
 		000000004000000000000083 /* AppReviewPromptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppReviewPromptTests.swift; sourceTree = "<group>"; };
 		000000004000000000000065 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		00000000600000000000A604 /* ReviewBaseline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewBaseline.swift; sourceTree = "<group>"; };
@@ -245,6 +259,7 @@
 				00000000300000000000C301 /* PhotoLibrary */,
 				00000000E00000000000C0E1 /* Location */,
 				00000000F00000000000C0F1 /* WhatsNew */,
+				00000000100000000000C101 /* Control */,
 				00000000500000000000C501 /* Support */,
 				00000000600000000000C601 /* Persistence */,
 				00000000700000000000C701 /* State */,
@@ -322,6 +337,19 @@
 				00000000F00000000000A0F4 /* WhatsNewView.swift */,
 			);
 			path = WhatsNew;
+			sourceTree = "<group>";
+		};
+		00000000100000000000C101 /* Control */ = {
+			isa = PBXGroup;
+			children = (
+				00000000100000000000A101 /* ControlJSON.swift */,
+				00000000100000000000A102 /* ControlLaunch.swift */,
+				00000000100000000000A103 /* ControlAliases.swift */,
+				00000000100000000000A104 /* ControlFixture.swift */,
+				00000000100000000000A105 /* ControlSnapshot.swift */,
+				00000000100000000000A106 /* ControlRuntime.swift */,
+			);
+			path = Control;
 			sourceTree = "<group>";
 		};
 		00000000500000000000C501 /* Support */ = {
@@ -456,6 +484,7 @@
 				00000000400000000000007B /* LocationNameCacheTests.swift */,
 				00000000400000000000007D /* TimelineCacheTests.swift */,
 				000000004000000000000081 /* WhatsNewStateTests.swift */,
+				00000000400000000000008C /* ControlPlaneTests.swift */,
 				000000004000000000000083 /* AppReviewPromptTests.swift */,
 				000000004000000000000089 /* Fixtures */,
 				000000004000000000000065 /* TestSupport.swift */,
@@ -630,6 +659,12 @@
 				00000000F00000000000B0F2 /* ReleaseNotesCatalog.swift in Sources */,
 				00000000F00000000000B0F3 /* WhatsNewState.swift in Sources */,
 				00000000F00000000000B0F4 /* WhatsNewView.swift in Sources */,
+				00000000100000000000B101 /* ControlJSON.swift in Sources */,
+				00000000100000000000B102 /* ControlLaunch.swift in Sources */,
+				00000000100000000000B103 /* ControlAliases.swift in Sources */,
+				00000000100000000000B104 /* ControlFixture.swift in Sources */,
+				00000000100000000000B105 /* ControlSnapshot.swift in Sources */,
+				00000000100000000000B106 /* ControlRuntime.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -664,6 +699,7 @@
 				00000000400000000000007C /* LocationNameCacheTests.swift in Sources */,
 				00000000400000000000007E /* TimelineCacheTests.swift in Sources */,
 				000000004000000000000082 /* WhatsNewStateTests.swift in Sources */,
+				00000000400000000000008D /* ControlPlaneTests.swift in Sources */,
 				000000004000000000000084 /* AppReviewPromptTests.swift in Sources */,
 				000000004000000000000066 /* TestSupport.swift in Sources */,
 				000000004000000000000088 /* MigrationFixtureTests.swift in Sources */,

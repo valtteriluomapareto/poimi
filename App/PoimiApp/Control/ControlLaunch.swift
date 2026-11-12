@@ -1,0 +1,169 @@
+//
+//  ControlLaunch.swift
+//  PoimiApp — the control-plane launch flags (#296, docs/plans/control-plane.md §4 slice A).
+//
+//  ALL control flag parsing lives here, gated as a whole file, so the release guard
+//  (Scripts/check-fake-release-isolation.sh) checks this file — not just "a `#if DEBUG` somewhere"
+//  (D30). The composition root only calls `ControlLaunch.bootGraph()`.
+//
+//      -PoimiControl -PoimiFixture <name> [-PoimiRoute <route>] [-PoimiViewer <asset alias>]
+//
+//  Routes: `overview:<album>`, `review:<album>[:<yyyy-mm-dd>]`, `export:<album>`,
+//  `settings:<album>`, `appsettings`. Albums and assets are the snapshot's aliases (`album-1`,
+//  `a-0012`), never real ids.
+//
+#if DEBUG
+
+import Foundation
+import Curation
+
+/// A parsed, valid control launch.
+struct ControlLaunch: Equatable {
+    static let controlFlag = "-PoimiControl"
+    static let fixtureFlag = "-PoimiFixture"
+    static let routeFlag = "-PoimiRoute"
+    static let viewerFlag = "-PoimiViewer"
+    /// The screenshot harness flag — refused alongside `-PoimiControl` (two hosts in one launch would
+    /// make it ambiguous which state you're looking at).
+    static let screenFlag = "-PoimiScreen"
+
+    let fixture: ControlFixture
+    let route: ControlRoute?
+    /// An asset alias (`a-0012`) to open in the photo viewer once the review scan is ready.
+    let viewer: String?
+
+    /// The outcome of reading the launch arguments.
+    enum Parsed: Equatable {
+        /// No control flag at all — a normal launch.
+        case off
+        /// A valid control launch.
+        case on(ControlLaunch)
+        /// A control flag was passed but the launch is malformed. The app still runs isolated (never
+        /// against the real library or store) and shows this message instead of the UI.
+        case invalid(String)
+    }
+
+    /// Parse `arguments` (pure, so tests drive it directly).
+    static func parse(_ arguments: [String]) -> Parsed {
+        let controlFlags = [controlFlag, fixtureFlag, routeFlag, viewerFlag]
+        guard arguments.contains(where: controlFlags.contains) else { return .off }
+        guard arguments.contains(controlFlag) else {
+            return .invalid("\(fixtureFlag), \(routeFlag) and \(viewerFlag) need \(controlFlag)")
+        }
+        if arguments.contains(screenFlag) {
+            return .invalid("\(controlFlag) refuses \(screenFlag) in the same launch")
+        }
+        do throws(ControlLaunchError) {
+            guard let fixtureName = try value(of: fixtureFlag, in: arguments) else {
+                return .invalid("\(controlFlag) needs \(fixtureFlag) <name>; known: \(ControlFixture.names)")
+            }
+            guard let fixture = ControlFixture(rawValue: fixtureName) else {
+                return .invalid("unknown fixture '\(fixtureName)'; known: \(ControlFixture.names)")
+            }
+            let route: ControlRoute? = if let raw = try value(of: routeFlag, in: arguments) {
+                try ControlRoute.parse(raw)
+            } else {
+                nil
+            }
+            let viewer = try value(of: viewerFlag, in: arguments)
+            if let viewer {
+                guard ControlAssetAliases.isAlias(viewer) else {
+                    return .invalid("\(viewerFlag) takes an asset alias like a-0001, got '\(viewer)'")
+                }
+                guard case .review = route else {
+                    return .invalid("\(viewerFlag) needs a review route (\(routeFlag) review:<album>[:<day>])")
+                }
+            }
+            return .on(ControlLaunch(fixture: fixture, route: route, viewer: viewer))
+        } catch {
+            return .invalid(error.message)
+        }
+    }
+
+    /// The value following `flag`, `nil` if the flag is absent. A flag with no value (end of the list,
+    /// or another `-Poimi…` flag next) is an error rather than a silent default.
+    private static func value(of flag: String, in arguments: [String]) throws(ControlLaunchError) -> String? {
+        guard let index = arguments.firstIndex(of: flag) else { return nil }
+        let next = arguments.index(after: index)
+        guard next < arguments.endIndex, !arguments[next].hasPrefix("-Poimi") else {
+            throw ControlLaunchError("\(flag) needs a value")
+        }
+        return arguments[next]
+    }
+}
+
+/// A launch-flag problem, carried as a human-readable message into `state.json` (`app.launchError`).
+struct ControlLaunchError: Error, Equatable {
+    let message: String
+    init(_ message: String) { self.message = message }
+}
+
+/// A launch-time route, in alias terms. Applied through the coordinator's existing methods
+/// (`ControlRuntime.apply`), so it reaches exactly the screens a user can.
+enum ControlRoute: Equatable {
+    case overview(album: String)
+    case review(album: String, day: DayKey?)
+    case export(album: String)
+    case settings(album: String)
+    case appSettings
+
+    /// The album alias this route opens, if any.
+    var album: String? {
+        switch self {
+        case .overview(let album), .review(let album, _), .export(let album), .settings(let album): album
+        case .appSettings: nil
+        }
+    }
+
+    static func parse(_ raw: String) throws(ControlLaunchError) -> ControlRoute {
+        let parts = raw.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        let usage = "routes: overview:<album> | review:<album>[:<yyyy-mm-dd>] | export:<album> | "
+            + "settings:<album> | appsettings"
+        guard let kind = parts.first else { throw ControlLaunchError("empty route; \(usage)") }
+        if kind == "appsettings" {
+            guard parts.count == 1 else { throw ControlLaunchError("appsettings takes no album; \(usage)") }
+            return .appSettings
+        }
+        let maxParts = kind == "review" ? 3 : 2
+        guard ["overview", "review", "export", "settings"].contains(kind) else {
+            throw ControlLaunchError("unknown route '\(kind)'; \(usage)")
+        }
+        guard parts.count >= 2, parts.count <= maxParts else {
+            throw ControlLaunchError("malformed route '\(raw)'; \(usage)")
+        }
+        let album = parts[1]
+        guard ControlAlbumAliases.isAlias(album) else {
+            throw ControlLaunchError("route album must be an alias like album-1, got '\(album)'")
+        }
+        switch kind {
+        case "overview": return .overview(album: album)
+        case "export": return .export(album: album)
+        case "settings": return .settings(album: album)
+        default:
+            guard parts.count == 3 else { return .review(album: album, day: nil) }
+            // Round-trip through `description` so only the canonical form is accepted ("2025-6-1" isn't).
+            guard let day = DayKey(parts[2]), day.description == parts[2] else {
+                throw ControlLaunchError("route day must be yyyy-mm-dd or 'undated', got '\(parts[2])'")
+            }
+            return .review(album: album, day: day)
+        }
+    }
+}
+
+extension ControlLaunch {
+    /// The composition-root hook: `nil` for a normal launch; otherwise the isolated, fixture-seeded
+    /// graph (also for a malformed control launch, which must never fall through to the real library
+    /// and store — it runs isolated and shows the refusal instead).
+    @MainActor
+    static func bootGraph(arguments: [String] = ProcessInfo.processInfo.arguments) -> AppGraph? {
+        let parsed = parse(arguments)
+        if parsed == .off { return nil }
+        return ControlRuntime.boot(parsed).graph
+    }
+
+    /// Why a control launch was refused (shown in place of the UI), or `nil`.
+    @MainActor
+    static var refusal: String? { ControlRuntime.shared?.refusal }
+}
+
+#endif
