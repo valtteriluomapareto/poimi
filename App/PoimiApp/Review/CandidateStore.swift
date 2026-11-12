@@ -63,10 +63,31 @@ final class CandidateStore {
         return .allExcluded
     }
 
-    private static func emptyReason(fetched: [AssetRef], project: CurationProject) -> EmptyReason {
-        emptyReason(fetched: fetched,
-                    includePhotos: project.includePhotos,
-                    includeVideos: project.includeVideos)
+    /// What one pass reads from the album, copied out of the `@Model` BEFORE the first suspension. The
+    /// album can be deleted while the fetch is in flight (the iPad sidebar's Delete, Album settings'
+    /// Delete during a slow scan, the control plane): reading a deleted model's attributes after the
+    /// `await` traps in SwiftData ("backing data was detached from a context"), so nothing after the
+    /// first `await` may touch `project`.
+    struct ScanInputs: Equatable, Sendable {
+        let projectID: UUID
+        let title: String
+        let rangeStart: Date
+        let rangeEnd: Date
+        let excludedAlbumIDs: [String]
+        let excludeScreenshots: Bool
+        let includePhotos: Bool
+        let includeVideos: Bool
+
+        init(_ project: CurationProject) {
+            projectID = project.id
+            title = project.title
+            rangeStart = project.rangeStart
+            rangeEnd = project.rangeEnd
+            excludedAlbumIDs = project.excludedAlbumIDs
+            excludeScreenshots = project.excludeScreenshots
+            includePhotos = project.includePhotos
+            includeVideos = project.includeVideos
+        }
     }
 
     /// Why a pass failed — a transient load error (retry) vs photo access lost mid-session (recover).
@@ -195,6 +216,11 @@ final class CandidateStore {
     /// Idempotent: callable again (e.g. a "Try again" after `.failed`) — it restarts from
     /// `.scanning`.
     func load(_ project: CurationProject) async {
+        await load(ScanInputs(project))   // copied now, before any suspension — see `ScanInputs`
+    }
+
+    /// The pass itself, over values only (never the model — it may be deleted while this awaits).
+    func load(_ project: ScanInputs) async {
         phase = .scanning
         dayByID = [:]   // clear any prior pass's map (e.g. a retry after .failed)
         assetsByID = [:]
@@ -227,7 +253,7 @@ final class CandidateStore {
             // Assemble the timeline once, here — the grid renders it directly and never recomputes it
             // (Finding 1). Reuses the cached result for an unchanged photo set, else clusters off-main.
             let clusterStart = Date()
-            let (clusters, fromCache) = await assembleTimeline(for: candidates, project: project)
+            let (clusters, fromCache) = await assembleTimeline(for: candidates, projectID: project.projectID)
             let clusterMillis = Date().timeIntervalSince(clusterStart) * 1000
             // Per-photo day map for the viewer's label (#36), built from the same candidates +
             // calendar so it agrees with the grouping (a busy day and the viewer read the same day).
@@ -242,7 +268,8 @@ final class CandidateStore {
             if clusters.isEmpty {
                 // Distinguish WHY it's empty so the state is actionable (#40): the range yielded
                 // nothing (widen it) vs photos existed but were all filtered out (relax exclusions).
-                phase = .empty(Self.emptyReason(fetched: fetched, project: project))
+                phase = .empty(Self.emptyReason(fetched: fetched, includePhotos: project.includePhotos,
+                                                includeVideos: project.includeVideos))
             } else {
                 phase = .ready(clusters)
                 scanReport = ScanReport(
@@ -276,19 +303,19 @@ final class CandidateStore {
     ///   counted in the caller's `clusterMillis`; the clustering itself is what's skipped. The fetch that
     ///   produced `candidates` (~1 s) is the remaining per-open floor — the cache doesn't touch it.
     private func assembleTimeline(
-        for candidates: [AssetRef], project: CurationProject
+        for candidates: [AssetRef], projectID: UUID
     ) async -> (clusters: [ReviewCluster], fromCache: Bool) {
         let locationOn = locationEnabled
         let cal = calendar
         let fingerprint = TimelineCache.fingerprint(
             candidates: candidates, locationEnabled: locationOn, calendar: cal)
-        if let cached = await timelineCache?.lookup(projectID: project.id, fingerprint: fingerprint) {
+        if let cached = await timelineCache?.lookup(projectID: projectID, fingerprint: fingerprint) {
             return (cached, true)
         }
         let clusters = await Task.detached(priority: .userInitiated) {
             ReviewTimeline.clusters(for: candidates, calendar: cal, locationEnabled: locationOn)
         }.value
-        await timelineCache?.store(projectID: project.id, fingerprint: fingerprint, clusters: clusters)
+        await timelineCache?.store(projectID: projectID, fingerprint: fingerprint, clusters: clusters)
         return (clusters, false)
     }
 

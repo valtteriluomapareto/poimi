@@ -24,6 +24,23 @@ enum ControlLookup: Equatable {
 }
 
 extension ControlJSON {
+    /// The JSON type name, as the schema declares types (`int`, `string`, `bool`, `null`, `array`, `object`).
+    var typeName: String {
+        switch self {
+        case .null: "null"
+        case .bool: "bool"
+        case .int: "int"
+        case .string: "string"
+        case .array: "array"
+        case .object: "object"
+        }
+    }
+
+    /// Compact JSON text, for messages.
+    var literal: String {
+        (String(bytes: serialized(), encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Resolve a dot path (`active.scan.phase`, `albums.album-1.picked`) through objects.
     func lookup(_ path: String) -> ControlLookup {
         var node = self
@@ -53,6 +70,31 @@ enum ControlWait {
     /// The first predicate whose path the snapshot doesn't declare, if any.
     static func undeclared(_ predicates: [ControlPredicate]) -> ControlPredicate? {
         predicates.first { ControlSchema.declaredPattern(for: $0.path) == nil }
+    }
+
+    /// A predicate whose value can never match its path's declared type (`idle != "true"` would be
+    /// silently, permanently met), described — or `nil`. Ordering ops need an int path.
+    static func typeMismatch(_ predicates: [ControlPredicate]) -> String? {
+        for predicate in predicates {
+            guard let pattern = ControlSchema.declaredPattern(for: predicate.path),
+                  let declared = ControlSchema.statePaths.first(where: { $0.path == pattern })?.type else { continue }
+            let types = Set(declared.split(separator: "|").map(String.init))
+            switch predicate.op {
+            case .eq, .ne:
+                let type = predicate.value.typeName
+                if !types.contains(type) {
+                    let article = type == "null" ? "null" : "a \(type)"
+                    return "'\(predicate.path)' is \(declared); \(predicate.value.literal) is \(article)"
+                }
+            case .gte, .lte:
+                if !types.contains("int") {
+                    return "'\(predicate.path)' is \(declared); \(predicate.op.rawValue) needs an int path"
+                }
+            case .exists:
+                break
+            }
+        }
+        return nil
     }
 
     /// The predicates `state` doesn't satisfy (empty = all met).

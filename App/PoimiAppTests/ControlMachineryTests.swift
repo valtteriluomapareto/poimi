@@ -58,8 +58,11 @@ struct ControlDecodingTests {
          "target"),
         (#""cmd":"send","action":{"type":"albums.update","album":"album-1"}"#, "at least one field"),
         (#""cmd":"send","action":{"type":"albums.update","album":"album-1","media":"all"}"#, "media"),
-        (#""cmd":"send","action":{"type":"selection.select","photos":["a-0001"],"day":"2025-01-06"}"#, "exactly one"),
-        (#""cmd":"send","action":{"type":"selection.select"}"#, "exactly one"),
+        (#""cmd":"send","action":{"type":"selection.select","photos":["a-0001"]}"#, "unknown action"),
+        (#""cmd":"send","action":{"type":"selection.toggleCluster"}"#, "missing 'day'"),
+        (#""cmd":"send","action":{"type":"export.retry","newAlbum":"yes"}"#, "true or false"),
+        (#""cmd":"fixture","fixture":{"op":"selection.select","photos":[]}"#, "empty"),
+        (#""cmd":"fixture","fixture":{"op":"selection.select","photos":["ctl/1"]}"#, "photo alias"),
         (#""cmd":"fixture","fixture":{"op":"explode"}"#, "unknown fixture op"),
         (#""cmd":"fixture","fixture":{"op":"library.failFetch","kind":"timeout"}"#, "kind"),
         (#""cmd":"fixture","fixture":{"op":"library.authorization","status":"maybe"}"#, "unknown status"),
@@ -254,7 +257,7 @@ struct ControlHostMachineryTests {
         await harness.runtime.bootstrap()
         #expect(harness.value("lastSeq") == .value(.int(0)))
         let first = try #require(try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#).seq)
-        let second = try #require(try await harness.send(#"{"type":"nav.openAppSettings"}"#).seq)
+        let second = try #require(try await harness.send(#"{"type":"nav.openSettings","album":"album-1"}"#).seq)
         #expect(second == first + 1)
         #expect(harness.value("lastSeq") == .value(.int(second)))
         #expect(harness.value("idle") == .value(.bool(false)))   // the scan hasn't settled
@@ -262,7 +265,7 @@ struct ControlHostMachineryTests {
         #expect(harness.value("settledSeq") == .value(.int(second)))
         #expect(harness.value("idle") == .value(.bool(true)))
         // A noop or refusal starts nothing: no seq.
-        #expect(try await harness.send(#"{"type":"nav.openAppSettings"}"#).seq == nil)
+        #expect(try await harness.send(#"{"type":"nav.openSettings","album":"album-1"}"#).seq == nil)
         #expect(harness.value("lastSeq") == .value(.int(second)))
     }
 
@@ -281,105 +284,103 @@ struct ControlHostMachineryTests {
         #expect(harness.thumbnailLoads.inFlight == 0)
     }
 
-    @Test("every refusal reason is reachable")
+    @Test("every refusal reason is reachable, each observed for real")
     func everyRefusal() async throws {
         var seen: Set<ControlRefusal> = []
-        let harness = ControlHarness(.oneAlbum)
+        func note(_ outcome: ControlOutcome, _ expected: ControlRefusal) {
+            #expect(outcome.refusal == expected, "\(outcome)")
+            if let reason = outcome.refusal { seen.insert(reason) }
+        }
+        let gated = GatedLibrary(ControlFixture.midReview.makeLibrary())
+        let harness = ControlHarness(.midReview, library: gated, iPad: true)
         await harness.runtime.bootstrap()
         // invalidState: nothing is hydrated yet — never a silent `accepted`.
-        let inactive = try await harness.send(#"{"type":"selection.toggle","photo":"a-0001"}"#)
-        #expect(inactive.refusal == .invalidState)
+        note(try await harness.fixtureOp(#"{"op":"selection.clear"}"#), .invalidState)
         // unknownAlias
-        let unknown = try await harness.send(#"{"type":"nav.openAlbum","album":"album-9"}"#)
-        #expect(unknown.refusal == .unknownAlias)
-        #expect(try await harness.send(#"{"type":"viewer.open","photo":"a-9999"}"#).refusal == .unknownAlias)
+        note(try await harness.send(#"{"type":"nav.openAlbum","album":"album-9"}"#), .unknownAlias)
         // notShown: the viewer opens only on the grid.
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         await harness.settled()
-        let notShown = try await harness.send(#"{"type":"viewer.open","photo":"a-0001"}"#)
-        #expect(notShown.refusal == .notShown)
+        note(try await harness.send(#"{"type":"viewer.open","photo":"a-0001"}"#), .notShown)
         // unavailable: a reset is a relaunch.
-        let reset = try await harness.fixtureOp(#"{"op":"reset","fixture":"one-album"}"#)
-        #expect(reset.refusal == .unavailable)
-        // invalidState: an inverted period.
-        let inverted = try await harness.send(
-            #"{"type":"albums.update","album":"album-1","start":"2025-06-01","end":"2025-05-01"}"#)
-        #expect(inverted.refusal == .invalidState)
-        // busy: ControlHostJourneyTests.busyWhileExporting (needs an export held in flight).
-        for outcome in [inactive, unknown, notShown, reset, inverted] { if let reason = outcome.refusal { seen.insert(reason) } }
-        seen.insert(.busy)
+        note(try await harness.fixtureOp(#"{"op":"reset","fixture":"one-album"}"#), .unavailable)
+        // busy: an export held in flight.
+        await gated.hold(exports: true)
+        #expect(try await harness.send(#"{"type":"nav.openExport"}"#).isAccepted)
+        await gated.waitUntilHeld()
+        note(try await harness.send(#"{"type":"albums.delete","album":"album-1"}"#), .busy)
+        await gated.release()
+        await harness.settled()
         #expect(seen == Set(ControlRefusal.allCases))
     }
 
-    /// Every action, at least once, through the host — enumerated from `ControlActionKind`, so a new
-    /// action without a test here fails.
-    @Test("every action is exercised at least once")
+    /// Every action, at least once, through the host — enumerated from `ControlActionKind` and classified
+    /// by the DECODED action, so a new action without a test here fails.
+    @Test("every action is exercised at least once, and accepted")
     func everyAction() async throws {
         var exercised: Set<ControlActionKind> = []
-        func send(_ harness: ControlHarness, _ json: String) async throws -> ControlOutcome {
+        func send(_ harness: ControlHarness, _ json: String) async throws {
             let action = try JSONDecoder().decode(ControlAction.self, from: Data(json.utf8))
-            let kind = try #require(ControlActionKind.allCases.first { json.contains("\"\($0.rawValue)\"") })
-            exercised.insert(kind)
-            let outcome = await harness.host.perform(action)
-            #expect(outcome.refusal == nil, "\(json) → \(outcome)")
-            return outcome
+            exercised.insert(action.kind)
+            let outcome = harness.host.perform(action)
+            #expect(outcome.isAccepted, "\(json) → \(outcome)")
         }
         // Onboarding: the fake answers the prompt with what it's told to.
         let fresh = ControlHarness(.fresh)
         await fresh.runtime.bootstrap()
         try await fresh.fixtureOp(#"{"op":"library.authorization","status":"authorized"}"#)
-        _ = try await send(fresh, #"{"type":"auth.request"}"#)
+        try await send(fresh, #"{"type":"auth.request"}"#)
         await fresh.settled()
         #expect(fresh.value("app.rootPhase") == .value(.string("albums")))
 
         let harness = ControlHarness(.oneAlbum)
         await harness.runtime.bootstrap()
-        let created = try await send(harness,
-            #"{"type":"albums.create","title":"Summer","start":"2025-06-01","end":"2025-08-31","target":40,"media":"photosAndVideos","excludeScreenshots":false}"#)
-        guard case .accepted(_, let extra) = created else { Issue.record("create: \(created)"); return }
-        #expect(extra.first { $0.key == "album" }?.value == .string("album-2"))
+        try await send(harness,
+            #"{"type":"albums.create","title":"Summer","start":"2025-06-01","end":"2025-08-31","target":40}"#)
         await harness.settled()
         #expect(harness.value("nav.screen") == .value(.string("overview")))
         #expect(harness.value("albums.album-2.target") == .value(.int(40)))
-        _ = try await send(harness, #"{"type":"albums.duplicate","album":"album-2"}"#)
+        try await send(harness, #"{"type":"nav.root"}"#)
+        try await send(harness, #"{"type":"albums.duplicate","album":"album-2"}"#)
         #expect(harness.value("albums.album-3") != .missing)
-        _ = try await send(harness, #"{"type":"albums.delete","album":"album-3"}"#)
-        _ = try await send(harness, #"{"type":"nav.root"}"#)
+        try await send(harness, #"{"type":"albums.delete","album":"album-3"}"#)
+        try await send(harness, #"{"type":"albums.reset","album":"album-2"}"#)
+        try await send(harness, #"{"type":"nav.openAppSettings"}"#)
+        try await send(harness, #"{"type":"nav.back"}"#)
 
-        _ = try await send(harness, #"{"type":"nav.openAlbum","album":"album-1"}"#)
-        _ = try await send(harness, #"{"type":"nav.openSettings","album":"album-1"}"#)
-        _ = try await send(harness, #"{"type":"albums.update","album":"album-1","title":"Year","target":60,"locationEnabled":false,"excludeScreenshots":true}"#)
+        try await send(harness, #"{"type":"nav.openAlbum","album":"album-1"}"#)
+        try await send(harness, #"{"type":"nav.openSettings","album":"album-1"}"#)
+        try await send(harness,
+            #"{"type":"albums.update","album":"album-1","title":"Year","target":60,"locationEnabled":false}"#)
         #expect(harness.value("albums.album-1.target") == .value(.int(60)))
-        _ = try await send(harness, #"{"type":"nav.back"}"#)
-        _ = try await send(harness, #"{"type":"nav.openAppSettings"}"#)
-        _ = try await send(harness, #"{"type":"nav.back"}"#)
-        _ = try await send(harness, #"{"type":"nav.openReview","album":"album-1","day":"2025-07-05"}"#)
-        await harness.settled()
+        try await send(harness, #"{"type":"albums.markAllUnreviewed","album":"album-1"}"#)
+        try await send(harness, #"{"type":"nav.back"}"#)
         let day = "2025-07-05"
+        try await send(harness, #"{"type":"nav.openReview","album":"album-1","day":"\#(day)"}"#)
+        await harness.settled()
         let photos = harness.graph.session.reviewOrderedIDs
             .filter { harness.graph.session.reviewDayByID[$0]?.description == day }
             .compactMap(harness.runtime.assetAliases.alias(for:))
         try #require(photos.count >= 4)
-        _ = try await send(harness, #"{"type":"selection.toggle","photo":"\#(photos[0])"}"#)
-        _ = try await send(harness, #"{"type":"selection.select","photos":["\#(photos[1])","\#(photos[2])"]}"#)
-        _ = try await send(harness, #"{"type":"selection.deselect","day":"\#(day)"}"#)
-        _ = try await send(harness, #"{"type":"selection.select","day":"\#(day)"}"#)
+        try await send(harness, #"{"type":"selection.toggle","photo":"\#(photos[0])"}"#)
+        try await send(harness, #"{"type":"selection.toggleCluster","day":"\#(day)"}"#)
         #expect(harness.value("active.selection.count") == .value(.int(photos.count)))
-        _ = try await send(harness, #"{"type":"viewer.open","photo":"\#(photos[3])"}"#)
+        try await send(harness, #"{"type":"viewer.open","photo":"\#(photos[3])"}"#)
         #expect(harness.value("nav.viewerPhoto") == .value(.string(photos[3])))
-        _ = try await send(harness, #"{"type":"viewer.dismiss"}"#)
-        _ = try await send(harness, #"{"type":"done.toggle","day":"\#(day)"}"#)
-        _ = try await send(harness, #"{"type":"albums.markAllUnreviewed","album":"album-1"}"#)
-        #expect(harness.value("active.done.days") == .value(.int(0)))
-        _ = try await send(harness, #"{"type":"selection.clear"}"#)
-        _ = try await send(harness, #"{"type":"selection.toggle","photo":"\#(photos[0])"}"#)
-        _ = try await send(harness, #"{"type":"nav.openExport"}"#)
+        try await send(harness, #"{"type":"viewer.dismiss"}"#)
+        try await send(harness, #"{"type":"done.toggle","day":"\#(day)"}"#)
+        try await send(harness, #"{"type":"nav.back"}"#)
+        // A failing export, then Try again once the library recovers.
+        await harness.settled()
+        let library = try #require(harness.graph.photoLibrary as? FakePhotoLibrary)
+        await library.setAuthorization(.limited)   // creating an album needs full access → the run fails
+        try await send(harness, #"{"type":"nav.openExport"}"#)
+        await harness.settled()
+        #expect(harness.value("active.export.phase") == .value(.string("failed")))
+        await library.setAuthorization(.authorized)
+        try await send(harness, #"{"type":"export.retry"}"#)
         await harness.settled()
         #expect(harness.value("active.export.phase") == .value(.string("done")))
-        _ = try await send(harness, #"{"type":"albums.reset","album":"album-1"}"#)
-        _ = try await send(harness, #"{"type":"nav.back"}"#)
-        _ = try await send(harness, #"{"type":"export.run","album":"album-2"}"#)
-        await harness.settled()
 
         #expect(exercised == Set(ControlActionKind.allCases),
                 "not exercised: \(Set(ControlActionKind.allCases).subtracting(exercised).map(\.rawValue))")
@@ -442,7 +443,9 @@ struct ControlSchemaTests {
         record(viewer)
         let exported = ControlHarness(.exported)
         await exported.runtime.bootstrap()
-        try await exported.send(#"{"type":"export.run","album":"album-1"}"#)
+        try await exported.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
+        await exported.settled()
+        try await exported.send(#"{"type":"nav.openExport"}"#)
         await exported.settled()
         record(exported)
         let refused = ControlHarness(.fresh, parsed: .invalid("refused"))
@@ -473,7 +476,7 @@ struct ControlSchemaTests {
         guard case .array(let fixtures)? = schema["fixtures"] else { Issue.record("no fixtures"); return }
         #expect(fixtures.count == ControlFixture.allCases.count)
         guard case .array(let ops)? = schema["fixtureOps"] else { Issue.record("no ops"); return }
-        #expect(ops.compactMap { $0["op"] } == ControlFixtureOp.ops.map { .string($0.name) })
+        #expect(ops.compactMap { $0["op"] } == ControlFixtureOpKind.allCases.map { .string($0.rawValue) })
     }
 }
 
@@ -546,5 +549,113 @@ struct ControlMailboxTests {
             await Task.yield()
         }
         #expect(try self.reply(1, in: directory)["ok"] as? Bool == true)
+    }
+}
+
+@MainActor
+@Suite("Control plane: review fixes (#298)")
+struct ControlReviewFixTests {
+
+    @Test("every fixture op the schema lists decodes with its declared arguments (one declaration)")
+    func fixtureOpParity() throws {
+        let sample: [ControlArgType: String] = [
+            .fetchFailure: #""fetchFailed""#, .authorization: #""denied""#, .assetAliases: #"["a-0001"]"#,
+            .fixture: #""one-album""#
+        ]
+        for kind in ControlFixtureOpKind.allCases {
+            let args = kind.args.filter(\.required).map { #""\#($0.name)":\#(sample[$0.type] ?? "null")"# }
+            let json = (["\"op\":\"\(kind.rawValue)\""] + args).joined(separator: ",")
+            let op = try JSONDecoder().decode(ControlFixtureOp.self, from: Data("{\(json)}".utf8))
+            #expect(String(describing: op).isEmpty == false, "\(kind.rawValue)")
+            // And an undeclared argument is refused.
+            let extra = "{\(json),\"bogus\":1}"
+            #expect(throws: ControlRequestError.self) {
+                try JSONDecoder().decode(ControlFixtureOp.self, from: Data(extra.utf8))
+            }
+        }
+    }
+
+    @Test("a predicate value of the wrong type for its path is an error, not silently met")
+    func predicateTypeMismatch() async {
+        let harness = ControlHarness(.oneAlbum)
+        await harness.runtime.bootstrap()
+        let mismatched = await harness.wait([("idle", .ne, .string("true"))], timeoutMs: 0)
+        guard case .failure(let error) = mismatched else { Issue.record("met?"); return }
+        #expect(error.code == .badRequest)
+        #expect(error.message.contains("bool"))
+        let ordering = await harness.wait([("nav.screen", .gte, .int(1))], timeoutMs: 0)
+        guard case .failure(let orderingError) = ordering else { Issue.record("met?"); return }
+        #expect(orderingError.code == .badRequest)
+        // null is fine where the path may be null; a matching type is fine.
+        #expect((try? await harness.wait([("app.launchError", .eq, .null)], timeoutMs: 0).get()) != nil)
+        #expect((try? await harness.wait([("idle", .eq, .bool(true))], timeoutMs: 0).get()) != nil)
+    }
+
+    private func directory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("mailbox-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    private func write(_ body: String, name: String, to directory: URL) throws {
+        let temporary = directory.appendingPathComponent(".\(name).tmp")
+        try Data(body.utf8).write(to: temporary)
+        try FileManager.default.moveItem(at: temporary, to: directory.appendingPathComponent(name))
+    }
+
+    @Test("a send queued behind a wait isn't held by it: actions never queue behind waits")
+    func waitDoesNotBlockSends() async throws {
+        let harness = ControlHarness(.oneAlbum)
+        await harness.runtime.bootstrap()
+        let directory = try directory()
+        // A wait that can only be met by the send behind it.
+        try write(#"{"v":1,"id":1,"run":"r-test","cmd":"wait","timeoutMs":20000,"#
+                  + #""predicates":[{"path":"nav.screen","op":"eq","value":"appSettings"}]}"#,
+                  name: "req-1.json", to: directory)
+        try write(#"{"v":1,"id":2,"run":"r-test","cmd":"send","action":{"type":"nav.openAppSettings"}}"#,
+                  name: "req-2.json", to: directory)
+        let mailbox = ControlMailbox(directory: directory, host: harness.host)
+        mailbox.start()
+        defer { mailbox.stop() }
+        await mailbox.awaitDrain()
+        let wait = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: directory.appendingPathComponent("res-1.json"))) as? [String: Any]
+        #expect(wait?["ok"] as? Bool == true)
+        let send = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: directory.appendingPathComponent("res-2.json"))) as? [String: Any]
+        #expect((send?["data"] as? [String: Any])?["outcome"] as? String == "accepted")
+    }
+
+    @Test("a request file without a number gets a badRequest reply and is removed, not ignored forever")
+    func malformedRequestName() async throws {
+        let harness = ControlHarness(.oneAlbum)
+        await harness.runtime.bootstrap()
+        let directory = try directory()
+        try write(#"{"v":1,"id":3,"run":"r-test","cmd":"schema"}"#, name: "req--3.json", to: directory)
+        let mailbox = ControlMailbox(directory: directory, host: harness.host)
+        mailbox.start()
+        defer { mailbox.stop() }
+        await mailbox.awaitDrain()
+        let reply = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: directory.appendingPathComponent("res--3.json"))) as? [String: Any]
+        #expect(reply?["ok"] as? Bool == false)
+        #expect(reply?["id"] is NSNull)
+        #expect((reply?["error"] as? [String: Any])?["code"] as? String == "badRequest")
+        #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("req--3.json").path))
+    }
+
+    @Test("a reply brings state up to date first: the state written is at least the reply's rev")
+    func replyFlushesState() async throws {
+        let harness = ControlHarness(.oneAlbum)
+        await harness.runtime.bootstrap()
+        let response = await harness.host.handle(
+            ControlRequest(id: 1, run: "r-test", command: .send(.navOpenAppSettings)))
+        let reply = await harness.host.reply(response)
+        guard case .int(let rev)? = reply["rev"], case .int(let written)? = harness.sink.lastState?["rev"] else {
+            Issue.record("no rev")
+            return
+        }
+        #expect(written >= rev)
+        #expect(harness.sink.lastState?["nav"]?["screen"] == .string("appSettings"))   // not 100 ms later
     }
 }

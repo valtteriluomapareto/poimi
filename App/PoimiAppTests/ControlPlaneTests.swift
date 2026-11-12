@@ -33,15 +33,17 @@ struct ControlHarness {
     let thumbnailLoads = ThumbnailLoadCounter()
 
     init(_ fixture: ControlFixture, route: ControlRoute? = nil, viewer: String? = nil, headless: Bool = false,
-         library: (any PhotoLibraryProviding)? = nil) {
+         library: (any PhotoLibraryProviding)? = nil, iPad: Bool = false) {
         self.init(fixture, parsed: .on(ControlLaunch(fixture: fixture, route: route, viewer: viewer,
                                                      headless: headless)),
-                  library: library)
+                  library: library, iPad: iPad)
     }
 
     /// `library` replaces the fixture's own (a test wraps it, e.g. to gate exports); the fixture still
     /// decides the albums and aliases.
-    init(_ fixture: ControlFixture, parsed: ControlLaunch.Parsed, library: (any PhotoLibraryProviding)? = nil) {
+    /// `iPad` = the split view's layout: the album list (sidebar) is always on screen.
+    init(_ fixture: ControlFixture, parsed: ControlLaunch.Parsed, library: (any PhotoLibraryProviding)? = nil,
+         iPad: Bool = false) {
         self.fixture = fixture
         let graph = ControlEnvironment.makeGraph(
             fixture: fixture,
@@ -50,7 +52,8 @@ struct ControlHarness {
             defaults: ControlEnvironment.isolatedDefaults(suiteName: "control.test.\(UUID().uuidString)"),
             thumbnailLoads: thumbnailLoads, library: library)
         runtime = ControlRuntime(parsed: parsed, graph: graph, sink: sink, run: "r-test",
-                                 writeDelay: .milliseconds(10), thumbnailLoads: thumbnailLoads)
+                                 writeDelay: .milliseconds(10), thumbnailLoads: thumbnailLoads,
+                                 listAlwaysShown: iPad)
     }
 
     var graph: AppGraph { runtime.graph }
@@ -418,7 +421,7 @@ struct ControlSnapshotTests {
         #expect(harness.snapshot().content["idle"] == .bool(true))
         // The export screen, before its export ran: pending, not idle (since #297 it's observable —
         // slice A could only say `null`).
-        harness.coordinator.openExport(project.id)
+        harness.coordinator.finishToExport()
         #expect(harness.snapshot().content["idle"] == .bool(false))
         #expect(harness.snapshot().content["active"]?["export"]?["phase"] == .string("idle"))
         harness.selection.select(harness.graph.session.reviewOrderedIDs.prefix(2))   // a debounce is pending …

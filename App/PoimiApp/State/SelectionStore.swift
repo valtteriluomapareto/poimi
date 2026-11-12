@@ -124,6 +124,25 @@ final class SelectionStore {
         if selected.count != before { scheduleFlush() }
     }
 
+    /// Whether every one of `ids` is picked (`false` for none) — the grid's select-all chip state.
+    func containsAll(_ ids: [String]) -> Bool {
+        !ids.isEmpty && ids.allSatisfy(selected.contains)
+    }
+
+    /// The grid's select-all chip (and the control plane's `selection.toggleCluster`): unpick all of `ids`
+    /// when every one is picked, else pick them all. One debounced flush (D15). Returns whether they are
+    /// now all picked; `nil` (nothing changed) when no album is hydrated or `ids` is empty.
+    @discardableResult
+    func toggleAll(_ ids: [String]) -> Bool? {
+        guard activeProject != nil, !ids.isEmpty else { return nil }
+        if containsAll(ids) {
+            deselect(ids)
+            return false
+        }
+        select(ids)
+        return true
+    }
+
     /// Clear the entire selection ("Clear" / "Deselect all" in the review chrome).
     func clear() {
         guard activeProject != nil, !selected.isEmpty else { return }

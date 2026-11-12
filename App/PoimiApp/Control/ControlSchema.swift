@@ -105,21 +105,25 @@ enum ControlSchema {
         return statePaths.contains { $0.path == joined } ? joined : nil
     }
 
+    private static func args(_ specs: [ControlArgSpec]) -> ControlJSON {
+        .object(pairs: specs.map { ($0.name, .string($0.type.rawValue + ($0.required ? "" : " (optional)"))) })
+    }
+
     /// The `schema` reply.
     static func json() -> ControlJSON {
         .object(
             ("protocol", .int(ControlRequest.version)),
             ("commands", .object(
                 ("send", .string("{action: {type, …args}} → accepted{seq} | refused{reason} | noop")),
+                ("mailbox", .string("requests are handled one at a time, in order — except waits, which run "
+                    + "alongside (an action never queues behind a wait)")),
                 ("snapshot", .string("→ the current state.json content")),
                 ("wait", .string("{predicates: [{path, op, value?}], timeoutMs: 0…30000} → met, or error unmet")),
                 ("schema", .string("→ this")),
                 ("fixture", .string("{fixture: {op, …}} → accepted{seq} | refused")))),
             ("actions", .array(ControlActionKind.allCases.map { kind in
                 .object(("type", .string(kind.rawValue)),
-                        ("args", .object(pairs: kind.args.map {
-                            ($0.name, .string($0.type.rawValue + ($0.required ? "" : " (optional)")))
-                        })),
+                        ("args", args(kind.args)),
                         ("summary", .string(kind.summary)))
             })),
             ("outcomes", .object(
@@ -129,8 +133,8 @@ enum ControlSchema {
                 ("noop", .string("already so; nothing started")))),
             ("refusals", .object(pairs: ControlRefusal.allCases.map { ($0.rawValue, .string($0.summary)) })),
             ("errors", .array(ControlRequestError.Code.allCases.map { .string($0.rawValue) })),
-            ("fixtureOps", .array(ControlFixtureOp.ops.map {
-                .object(("op", .string($0.name)), ("args", .string($0.args)), ("summary", .string($0.summary)))
+            ("fixtureOps", .array(ControlFixtureOpKind.allCases.map { kind in
+                .object(("op", .string(kind.rawValue)), ("args", args(kind.args)), ("summary", .string(kind.summary)))
             })),
             ("predicateOps", .object(
                 ("eq", .string("same JSON type and value (10 ≠ \"10\"; null matches null)")),

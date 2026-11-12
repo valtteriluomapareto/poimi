@@ -243,67 +243,109 @@ timeline-cache gap.
 
 ### Slice C — Live actions and headless · ~1–1.5k LOC incl. tests
 
-**As built (#298)** — summary first; the original text follows.
+**As built (#298)** — summary first; the original text follows. Revised after the three-reviewer
+review (Architect, Tester, Pragmatism), whose fixes are folded in below.
 
-- **`ControlHost`** (`Control/ControlHost.swift`) is the one handler; `ControlRequest.swift` holds the
-  strict wire vocabulary (envelope, the 22 actions as `ControlActionKind` + declared arguments, fixture
-  ops, predicates), `ControlSchema.swift` the declared state paths + refusals + the `schema` reply,
-  `ControlWait.swift` the predicates and the Observation-driven wait, `ControlMailbox.swift` the
-  transport. Everything is refused rather than coerced: unknown keys/actions/ops/commands, wrong JSON
-  types, `v` ≠ 1, a stale `run`, an undeclared wait path.
-- **Reachability is part of the action.** An action the user couldn't take from where the app is gets
-  `refused(notShown)` (e.g. `nav.openReview` needs the album's overview on top, `viewer.open` the grid,
-  `nav.back` refuses under the viewer); an alias that names nothing, `unknownAlias`; a store that isn't
-  hydrated, `invalidState` (selection/done with no album open — never a silent `accepted`); a running
-  export, `busy` (façade `false`); a missing lever, `unavailable`. The coordinator's guards become `noop`.
-- **The screen's own task.** After a navigation the host runs the session call the screen now on top
-  makes from its `.task` (Overview → `openOverview`, grid → `openReview`, export → `startExport`) — the
-  same idempotent call, which joins the view's under the UI and is the only one headless. It is decided
-  for the screen the action left on top and skipped if that screen has left the path or its album was
-  deleted by the time it runs (as a view's task is cancelled) — the #59 journey caught the crash
-  without that check. The launch route's screen task runs the same way, so routes work headless too.
-- **One export entry point: `finishToExport()`.** It has the re-entrancy guard (a repeat is a `noop`)
-  and dismisses the viewer; the Overview's unguarded `openExport(_:)` isn't used (the launch route
-  switched to it too). `nav.openExport` = from the open album's overview/grid/viewer; `export.run{album}`
-  = the whole path from anywhere (open the album if needed, let its Overview scan publish the review
-  context so the completion stats are real, go to export, run) — and "Try again" on a failed export
-  screen.
-- **Façade additions:** `AlbumActions.duplicate`, `stage(_:to:calendar:)` (the settings controls' edit
-  rules — the range clamp, the media lens's single writer, the live retarget; the settings range
-  pickers now call it) and `update` (stage + commit, refused when the period would be empty). Plus
-  `albums.markAllUnreviewed` (needed by the #285 tripwire). `excludedAlbumIDs` / the destination album
-  aren't editable through actions: Photos albums have no alias scheme (same reason as slice A).
-- **`idle` excludes the debounced flushes — decided.** Under control the debounce is a day long, so an
-  `idle` that waited on them would be `false` after every tap until a flush, which would turn every
-  `shot` into a hidden `flush`; the in-memory picks are already the truth the UI shows (D15).
-  `pending.selectionFlush|doneFlush` report them; agents call `fixture flush` before checking what was
-  persisted. `idle` now also waits on `settledSeq >= lastSeq` and `pending.thumbnails == 0` (a
-  main-actor `ThumbnailLoadCounter` the fake thumbnail provider brackets each load with).
-- **`wait` has one mode: in the app.** `poimi.sh wait` sends typed `PATH OP VALUE` predicates through
-  the mailbox (the slice-A `jq`-over-the-file mode is gone; simple `.a.b == "x"` predicates still parse).
-  `timeoutMs` 0–30000, 0 asserts now; unmet → `[{path, op, expected, observed, present}]`. Vacuous
-  detection stays deferred.
-- **Mailbox:** `Documents/control/req-<n>.json` (the CLI writes a temp name and renames) → handled one
-  at a time in ascending `n` → `res-<n>.json` (atomic) and the request removed. A `DispatchSource` on
-  the directory plus a 250 ms fallback poll. Replies: `{v, id, run, rev, ok, data | error{code,
-  message, unmet?}}`; error codes `badRequest`, `unsupportedVersion`, `staleRun`, `undeclaredPath`,
-  `unmet`.
-- **Headless:** `-PoimiHeadless` shows `ControlHeadlessView` (static `Text(verbatim:)`, observes
-  nothing) instead of `AppRootView`; `state.json` gains `app.host`. `refreshAuthorization` moved into
-  `AppGraph.start()`, run from `PoimiApp`'s root `.task` (not on a control launch, whose bootstrap runs
-  it) — same timing as `AppRootView`'s old `.task`.
-- **A tenth fixture, `legacy-baseline`**, for the #289 journey: the plan asked for a legacy-blob
-  fixture; it's the `mid-review` album with its done baseline in the pre-#273 flat shape and a video on
-  the first done day.
-- **Tests:** `ControlHostTests` (journeys: the headless happy path, #59, #258, #285, #289, busy while
-  exporting, fetch failure + recovery, revoke mid-session) and `ControlMachineryTests` (strict decoding,
-  every refusal, predicate typing, `timeoutMs` bounds, `staleRun`, schema ↔ snapshot parity both ways,
-  every `ControlActionKind` exercised, seq/idle, the thumbnail counter, mailbox ordering + atomic
-  replies). Redaction is still the slice-A test over every fixture.
-- **For slice D/E:** the Overview's filter, the viewer's current photo and auto-done, the grid's
-  current cluster and mark-done-and-advance are still view state (not actions yet). A held export
-  (`busy` live) needs slice E's export gate; in-process it's covered with a gated library. Settings
-  edits still commit on disappear in the UI.
+- **Files.** `ControlHost` (`Control/ControlHost.swift`) is the one handler. `ControlAction.swift`
+  declares the 20 actions (`ControlActionKind`) and the fixture ops (`ControlFixtureOpKind`), each with
+  its arguments, once; the decoder and the `schema` reply both read that declaration. `ControlRequest.swift`
+  holds the envelope and predicates, `ControlSchema.swift` the declared state paths, refusals and the
+  `schema` reply, `ControlWait.swift` the predicates and the Observation-driven wait,
+  `ControlMailbox.swift` the transport. Everything is refused rather than coerced: unknown
+  keys/actions/ops/commands, wrong JSON types, `v` ≠ 1, a stale `run`, an undeclared wait path, a
+  predicate value whose type can't match its path.
+- **An action is a control a user can reach, from where it is.**
+  - Library actions need the album list on screen: the iPhone stack's root, or always the iPad
+    sidebar.
+  - `albums.delete` / `reset` also work from that album's settings screen. `albums.update` and
+    `albums.markAllUnreviewed` need that album's settings on top.
+  - `nav.openReview` and `nav.openSettings` need the album's overview on top.
+  - `selection.*` / `done.toggle` need the grid; `viewer.open` needs the grid without the viewer.
+  - `nav.openExport` = Save to Photos: the overview's button, or the fully-reviewed grid's. Both are
+    disabled with no picks.
+  - Elsewhere the outcome is `refused(notShown)`. An alias that names nothing is `unknownAlias`; an
+    unhydrated store is `invalidState`, never a silent `accepted`; a running export is `busy`; a missing
+    lever is `unavailable`. The coordinator's guards become `noop`.
+  - What no single control does is a **fixture op**, not an action: picking a photo list
+    (`selection.select`) and clearing every pick (`selection.clear`).
+  - The grid's select-all chip is `selection.toggleCluster{day}`. It goes through
+    `SelectionStore.toggleAll`, which the chip calls too: a trip cluster's photos across all its days,
+    not a day's.
+- **One mapping from screen to session call: `AlbumSession.appear(_ screen:, _ project:)`.** Overview →
+  `openOverview`, grid → `openReview`, export → `startExport`. The views' `.task`s call it, and so does
+  the host.
+  - After every action, the host runs it for **every album screen on the path** (decided at accept
+    time), not only the top one. The Overview's task is keyed on the scan inputs, so a Settings edit
+    rescans with Settings still on top, headless too.
+  - Each screen's call is skipped if, by the time it runs, that screen has left the path or its album
+    was deleted (as a view's task is cancelled). The launch route's screen tasks run the same way.
+- **One export entry point: `finishToExport()`.** The Overview's Save to Photos now calls it too, and the
+  unguarded `openExport(_:)` is gone. There is no composite `export.run`: an agent opens the album, waits
+  for idle, then sends `nav.openExport`. The `export:` launch route does the same steps (open → the
+  Overview's `appear` → `finishToExport`, refused with no picks). `export.retry{newAlbum?}` is a failed
+  export screen's "Try again" / "Create a new album instead".
+- **Façade additions.**
+  - `AlbumActions.duplicate`.
+  - `stage(_:to:calendar:)`: every settings control writes through it (title, range with its clamp,
+    target with the live retarget, media lens, screenshots, location, exclusions, destination). The
+    view's `onChange` retarget is gone.
+  - `update`: stage + commit, refused when the period would be empty.
+  - Edits to a deleted album are no-ops (`CurationProject.isGone`).
+- **Crash fixes from the review.** Both crashes also reach the shipping app; see the PR.
+  - `CandidateStore.load` copied nothing from the model and read it after its fetch `await`: deleting
+    the album mid-scan trapped. It now copies `ScanInputs` before the first suspension. `AlbumSession.load`
+    builds them synchronously, and `close()` cancels the scan task and bumps the generation.
+  - The album row, and the four album screens on their way out after a delete (the iPad sidebar pops
+    the detail in the same turn), re-rendered a deleted model. They now draw nothing when
+    `project.isGone`.
+- **`idle` excludes the debounced flushes — decided.**
+  - Under control the debounce is a day long. An `idle` that waited on flushes would stay `false` after
+    every tap, and every `shot` would turn into a hidden flush. The in-memory picks are already the truth
+    the UI shows (D15).
+  - `pending.selectionFlush|doneFlush` report the flushes; agents call `fixture flush` before checking
+    what was persisted.
+  - `idle` is "no work the app can see is in flight": every action settled (`settledSeq >= lastSeq`), no
+    scan / naming / export / fake thumbnail load (`ThumbnailLoadCounter`).
+- **Transport.**
+  - **Mailbox:** `Documents/control/req-<n>.json`; the CLI writes it under a temp name, then renames.
+    The app handles requests one at a time in ascending `n`, **except waits**, which run on their own
+    task, so an action never queues behind a wait. Each reply goes to `res-<n>.json` (atomic) only after
+    the state writer flushed and its file sink drained, so `state.json`'s `rev` ≥ the reply's.
+  - A `req-*.json` without a number gets a `badRequest` reply (id null) and is removed.
+  - The CLI allocates ids under a lock. When no reply arrives within `REPLY_TIMEOUT`, it withdraws a
+    request the app hasn't taken. There is one way to read state (`state`; no `snapshot` command).
+  - The directory is watched by a `DispatchSource` plus a 250 ms fallback poll. Error codes:
+    `badRequest`, `unsupportedVersion`, `staleRun`, `undeclaredPath`, `unmet`.
+- **`wait` has one mode: in the app.** It takes typed `PATH OP VALUE` predicates; simple slice-A
+  `.a.b == "x"` predicates still parse. `timeoutMs` is 0–30000 (0 asserts now), and an unmet wait returns
+  `[{path, op, expected, observed, present}]`. Vacuous detection stays deferred.
+- **Headless:** `-PoimiHeadless` shows `ControlHeadlessView` (static, observes nothing) instead of
+  `AppRootView`, and `state.json` gains `app.host`. `refreshAuthorization` moved into `AppGraph.start()`,
+  run from `PoimiApp`'s root `.task` (a control launch's bootstrap runs it instead).
+- **A tenth fixture, `legacy-baseline`**, for the #289 journey: the `mid-review` album with its done
+  baseline in the pre-#273 flat shape and a video on the first done day.
+- **Tests.**
+  - `ControlHostTests` journeys: the headless happy path; #59, #258 (iPhone + iPad), #285, #289;
+    delete mid-scan; a Settings edit rescanning under Settings; the chip on a trip cluster;
+    busy while queued/running; fetch failure; revoke; screen gating.
+  - The deleted-row guard.
+  - `CandidateStoreTests.deletedDuringFetch`: the app's own path, no control plane.
+  - `ControlMachineryTests`:
+    - strict decoding and fixture-op parity;
+    - every refusal observed for real;
+    - predicate typing and type mismatch;
+    - `timeoutMs` bounds and `staleRun`;
+    - schema ↔ snapshot parity, both ways;
+    - every action accepted, classified by decoded kind;
+    - seq/idle;
+    - the mailbox: ordering, waits not blocking sends, malformed names, the reply ↔ state `rev`.
+  - `AlbumActionsTests`: the `stage` rules.
+- **For slice D/E:** still view state, not actions yet:
+  - the Overview's filter;
+  - the viewer's current photo, auto-done and end-of-set card;
+  - the grid's current cluster and mark-done-and-advance.
+
+  Live `busy` needs slice E's export gate. Settings edits still commit on disappear in the UI.
 
 Original plan text:
 

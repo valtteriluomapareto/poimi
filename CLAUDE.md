@@ -239,7 +239,7 @@ Pages, #227).
   with the structured ID blocks (app=1, PhotoLibrary=3, tests=4, Support=5, Persistence=6,
   State=7, Navigation=8, Onboarding=9; Albums/Setup/Review/Settings use A0/B0/C0/D0 ids; 2 retired
   with the Spike; **E0 = Location** (#130); **F0 = WhatsNew** (#248); **10 = Control** (#296, ids
-  `00000000100000000000{A1,B1}nn` / group `…C101`; next `…A10E`/`…B10E`); **next new group = 11**; the
+  `00000000100000000000{A1,B1}nn` / group `…C101`; next `…A10F`/`…B10F`); **next new group = 11**; the
   app-group `Localizable.xcstrings` resource took `…A1`/`…A2`, `Sources/AppGraph.swift` took
   `…B1`/`…B2`); `plutil -lint` after, and
   `xcodebuild -list` to confirm it still reads. Keep diffs to

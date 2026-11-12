@@ -801,10 +801,9 @@ private struct SelectAllIconChip: View {
     @Environment(SelectionStore.self) private var selection
 
     var body: some View {
-        let selectedCount = selection.selected.intersection(cluster.assetIDs).count
-        let allSelected = !cluster.assetIDs.isEmpty && selectedCount == cluster.count
+        let allSelected = selection.containsAll(cluster.assetIDs)
         Button {
-            if allSelected { selection.deselect(cluster.assetIDs) } else { selection.select(cluster.assetIDs) }
+            selection.toggleAll(cluster.assetIDs)
         } label: {
             Image(systemName: allSelected ? "checkmark.square.fill" : "checkmark.square")
                 .font(.system(size: 17, weight: .medium))

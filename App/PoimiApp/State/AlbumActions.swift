@@ -105,9 +105,10 @@ final class AlbumActions {
     /// Apply `edits` in place, with the rules the settings controls carry: a new start that reaches or
     /// passes the end collapses the end to a single day at that start (`NewAlbumDraft.nonInvertedEnd`,
     /// #259), the media lens is written through its single writer (#273), and a new target re-syncs the
-    /// live tally. Not durable on its own — the settings screen stages each control's edit through here
-    /// and commits on leave (`applyEdits`); `update` does both at once.
+    /// live tally. EVERY settings control writes through here. Not durable on its own — the settings
+    /// screen commits on leave (`applyEdits`); `update` does both at once.
     func stage(_ edits: AlbumEdits, to project: CurationProject, calendar: Calendar) {
+        guard !project.isGone else { return }   // deleted under the settings screen (iPad sidebar)
         if let title = edits.title { project.title = title }
         if let start = edits.rangeStart {
             project.rangeStart = start
@@ -121,6 +122,8 @@ final class AlbumActions {
         if let media = edits.media { project.media = media }
         if let excludeScreenshots = edits.excludeScreenshots { project.excludeScreenshots = excludeScreenshots }
         if let locationEnabled = edits.locationEnabled { project.locationEnabled = locationEnabled }
+        if let excludedAlbumIDs = edits.excludedAlbumIDs { project.excludedAlbumIDs = excludedAlbumIDs }
+        if let targetAlbumID = edits.targetAlbumID { project.targetAlbumID = targetAlbumID }
     }
 
     /// Stage `edits` and commit them at once (what leaving the settings screen after those edits does).
@@ -142,6 +145,9 @@ final class AlbumActions {
     /// name falls back to the name it had on open (or a placeholder), the edit is saved durably, and the
     /// live tally picks up a changed target.
     func applyEdits(to project: CurationProject, titleOnOpen: String) {
+        // The settings screen commits on leave — which is also when its album was just deleted (from
+        // the screen itself, or the iPad sidebar): nothing to commit then, and the model would trap.
+        guard !project.isGone else { return }
         if project.title.trimmingCharacters(in: .whitespaces).isEmpty {
             project.title = titleOnOpen.trimmingCharacters(in: .whitespaces).isEmpty
                 ? String(localized: "Untitled album",
@@ -162,6 +168,10 @@ struct AlbumEdits: Equatable {
     var media: MediaSelection?
     var excludeScreenshots: Bool?
     var locationEnabled: Bool?
+    /// The Photos albums excluded from the source (the settings exclude-picker).
+    var excludedAlbumIDs: [String]?
+    /// The export destination (`.some(nil)` = a new Photos album; `nil` = unchanged).
+    var targetAlbumID: String??
 
     var isEmpty: Bool { self == AlbumEdits() }
 }

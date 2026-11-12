@@ -146,4 +146,44 @@ struct AlbumActionsTests {
         #expect(harness.selection.target == 42)
         #expect(try harness.persisted(project)?.targetCount == 42)
     }
+
+    /// Every settings control writes through `stage` (#298 review): the rules live there, once, for the
+    /// screen and the control plane's `albums.update` alike.
+    @Test("stage: the range clamp, the live retarget, the lens, exclusions and destination — as the controls")
+    func stageCarriesTheSettingsRules() throws {
+        let harness = try SessionHarness()
+        let project = harness.album()
+        harness.selection.activate(project)
+        let calendar = utcCalendar()
+        // "From" moved past "To" collapses "To" to a single day at the new start (#259).
+        let late = TestDates.year2025End.addingTimeInterval(86_400 * 10)
+        harness.actions.stage(AlbumEdits(rangeStart: late), to: project, calendar: calendar)
+        #expect(project.rangeStart == late)
+        #expect(project.rangeEnd == NewAlbumDraft.exclusiveEnd(forInclusiveDay: late, calendar: calendar))
+        // The target re-syncs the live tally at once (no view onChange needed).
+        harness.actions.stage(AlbumEdits(targetCount: 7), to: project, calendar: calendar)
+        #expect(harness.selection.target == 7)
+        harness.actions.stage(AlbumEdits(media: .videosOnly), to: project, calendar: calendar)
+        #expect(!project.includePhotos && project.includeVideos)
+        harness.actions.stage(AlbumEdits(excludedAlbumIDs: ["album/whatsapp"], targetAlbumID: .some("album/x")),
+                              to: project, calendar: calendar)
+        #expect(project.excludedAlbumIDs == ["album/whatsapp"] && project.targetAlbumID == "album/x")
+        harness.actions.stage(AlbumEdits(targetAlbumID: .some(nil)), to: project, calendar: calendar)
+        #expect(project.targetAlbumID == nil)   // back to "New Photos album"
+        // update refuses an inverted period and applies nothing.
+        let before = (project.rangeStart, project.rangeEnd)
+        #expect(!harness.actions.update(project, with: AlbumEdits(rangeEnd: TestDates.year2025Start),
+                                        calendar: calendar))
+        #expect(project.rangeStart == before.0 && project.rangeEnd == before.1)
+    }
+
+    @Test("a commit-on-leave or a staged edit for an album deleted meanwhile is a no-op, not a trap")
+    func editsOfADeletedAlbumAreNoOps() throws {
+        let harness = try SessionHarness()
+        let project = harness.album()
+        #expect(harness.actions.delete(project))
+        #expect(project.isGone)
+        harness.actions.stage(AlbumEdits(targetCount: 3), to: project, calendar: utcCalendar())
+        harness.actions.applyEdits(to: project, titleOnOpen: "x")
+    }
 }

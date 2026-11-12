@@ -459,6 +459,28 @@ struct CandidateStoreTests {
     }
 }
 
+// MARK: - Deleted mid-fetch (#298 review)
+
+extension CandidateStoreTests {
+    /// Review blocker (#298), and the app's own path since before the control plane: the Overview's /
+    /// grid's `.task` loads with the album, and the album can be deleted while the fetch is in flight (the
+    /// iPad sidebar's Delete during a slow scan; on iPhone, Album settings → Delete before a big library's
+    /// fetch returns). Reading the deleted model's fields after the `await` trapped in SwiftData.
+    @Test("an album deleted while its fetch is in flight: the load finishes on its copied inputs, no trap")
+    func deletedDuringFetch() async throws {
+        let project = makeProject(excludedAlbumIDs: ["album/whatsapp"])
+        let gated = GatedLibrary(FakePhotoLibrary())
+        let candidates = CandidateStore(library: gated, calendar: utcCalendar())
+        await gated.hold(fetches: true)
+        let load = Task { await candidates.load(project) }
+        await gated.waitUntilHeld()
+        store.delete(project)   // the model is gone; its attributes now trap if read
+        await gated.release()
+        await load.value
+        #expect(!readyIDs(candidates, "loaded from the inputs copied before the fetch").isEmpty)
+    }
+}
+
 // MARK: - Videos — the opt-in media-type filter (#125)
 //
 // In an extension (not the main struct body) so these don't push the suite over SwiftLint's
@@ -653,5 +675,4 @@ struct ReviewEmptyCopyTests {
         #expect(CandidateStore.emptyReason(fetched: [photo], includePhotos: true, includeVideos: false)
             == .allExcluded)
     }
-
 }

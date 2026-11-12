@@ -13,9 +13,8 @@
 #   Scripts/poimi.sh wait PREDICATE... [--timeout S]   # e.g. 'active.scan.phase == ready' 'idle == true'
 #   Scripts/poimi.sh fixture OP [ARGS-JSON]             # test levers: flush, lifecycle.resume, library.*
 #   Scripts/poimi.sh reset FIXTURE [LAUNCH-OPTIONS]     # relaunch on a fixture (same device/host, no build)
-#   Scripts/poimi.sh state [JQ-EXPR]                    # print state.json (or a jq expression over it)
+#   Scripts/poimi.sh state [JQ-EXPR]                    # print state.json (current as of the last reply)
 #   Scripts/poimi.sh detail [JQ-EXPR]                   # print state-detail.json (active album, per day)
-#   Scripts/poimi.sh snapshot                           # the app's state right now (via the app, not the file)
 #   Scripts/poimi.sh schema                             # actions, fixture ops, refusals, state paths, …
 #   Scripts/poimi.sh shot OUT.png                       # wait idle, short settle, screenshot — then LOOK
 #   Scripts/poimi.sh logs [--last 2m]                   # the app's OSLog lines
@@ -24,7 +23,8 @@
 # (.claude/skills/poimi-control/SKILL.md). A bad fixture/route is refused with the app's own message.
 #
 # Environment: SIM_NAME (default "iPhone 17 Pro"), IPAD_SIM_NAME (default "iPad Pro 13-inch (M5)"),
-# SHOT_SETTLE (seconds after idle before a screenshot, default 1).
+# SHOT_SETTLE (seconds after idle before a screenshot, default 1), REPLY_TIMEOUT (seconds a request
+# waits for its reply, default 30; a `wait` gets its own timeout on top).
 #
 set -euo pipefail
 
@@ -42,6 +42,7 @@ ID_FILE="${WORK_DIR}/next-id"  # the next mailbox request number (per launch)
 SIM_NAME="${SIM_NAME:-iPhone 17 Pro}"
 IPAD_SIM_NAME="${IPAD_SIM_NAME:-iPad Pro 13-inch (M5)}"
 SHOT_SETTLE="${SHOT_SETTLE:-1}"
+REPLY_TIMEOUT="${REPLY_TIMEOUT:-30}"
 
 die() { echo "poimi: $*" >&2; exit 1; }
 log() { printf '\033[1;34m▸\033[0m %s\n' "$*" >&2; }
@@ -221,17 +222,32 @@ cmd_reset() {
     cmd_launch --no-build --fixture "${fixture}" ${mode[@]+"${mode[@]}"} "$@"
 }
 
-# --- the mailbox (send / fixture / wait / snapshot / schema talk to the running app) ---------------
+# --- the mailbox (send / fixture / wait / schema talk to the running app) ---------------------------
+
+# The next request number, safe when two shells send at once (a mkdir lock around the counter).
+next_request_id() {
+    local lock="${WORK_DIR}/id.lock" tries=0 id
+    until mkdir "${lock}" 2>/dev/null; do
+        tries=$((tries + 1))
+        [ "${tries}" -ge 200 ] && die "request-id lock ${lock} is stuck (remove it if no poimi.sh is running)"
+        sleep 0.01
+    done
+    id="$(cat "${ID_FILE}" 2>/dev/null || echo 1)"
+    echo $((id + 1)) > "${ID_FILE}"
+    rmdir "${lock}"
+    printf '%s\n' "${id}"
+}
 
 # Write one request into the app's mailbox and print its reply (the whole envelope, compact).
 #   $1 = the command's JSON fields (an object, merged into {v, id, run}); $2 = seconds to wait for the reply
+# The app handles requests one at a time in order, except waits (which run alongside). If no reply comes
+# in time and the app hasn't taken the request yet, it's withdrawn — so a retry can't run it twice.
 mailbox() {
-    local body="$1" patience="${2:-20}" sim dir run id tmp reply waited=0
+    local body="$1" patience="${2:-${REPLY_TIMEOUT}}" sim dir run id tmp reply waited=0
     sim="$(session_sim)" || exit 1
     dir="$(container "${sim}")/Documents/control"
     run="$(cat "${RUN_FILE}")"
-    id="$(cat "${ID_FILE}" 2>/dev/null || echo 1)"
-    echo $((id + 1)) > "${ID_FILE}"
+    id="$(next_request_id)" || exit 1
     tmp="${dir}/.req-${id}.tmp"
     reply="${dir}/res-${id}.json"
     # Temp name + rename, so the app never reads half a request.
@@ -240,7 +256,13 @@ mailbox() {
     mv "${tmp}" "${dir}/req-${id}.json"
     local limit=$(( patience * 20 ))
     while [ ! -s "${reply}" ]; do
-        [ "${waited}" -ge "${limit}" ] && die "no reply to request ${id} within ${patience} s — see 'Scripts/poimi.sh logs'."
+        if [ "${waited}" -ge "${limit}" ]; then
+            if mv "${dir}/req-${id}.json" "${dir}/.withdrawn-${id}" 2>/dev/null; then
+                rm -f "${dir}/.withdrawn-${id}"
+                die "request ${id} wasn't taken within ${patience} s — withdrawn, nothing ran. See 'Scripts/poimi.sh logs'."
+            fi
+            die "request ${id} was taken but not answered within ${patience} s — it may still run; check 'state' before retrying."
+        fi
         if [ $(( waited % 40 )) -eq 39 ]; then
             app_running "${sim}" || die "Poimi isn't running any more — see 'Scripts/poimi.sh logs'."
         fi
@@ -301,12 +323,7 @@ cmd_schema() {
     reply_data "${reply}" | jq .
 }
 
-cmd_snapshot() {
-    require_jq
-    local reply
-    reply="$(mailbox '{"cmd":"snapshot"}')" || exit 1
-    reply_data "${reply}" | jq "${1:-.}"
-}
+
 
 # --- state / detail --------------------------------------------------------------------------
 
@@ -362,7 +379,7 @@ cmd_wait() {
     list="$(printf '%s\n' "${predicates[@]}" | jq -cs .)"
     body="$(jq -cn --argjson predicates "${list}" --argjson ms $((timeout * 1000)) \
         '{cmd: "wait", predicates: $predicates, timeoutMs: $ms}')"
-    reply="$(mailbox "${body}" $((timeout + 15)))" || exit 1
+    reply="$(mailbox "${body}" $((timeout + REPLY_TIMEOUT)))" || exit 1
     [ "$(printf '%s' "${reply}" | jq -r '.ok')" = "true" ] && return 0
     if [ "$(printf '%s' "${reply}" | jq -r '.error.code')" = "unmet" ]; then
         echo "poimi: wait timed out after ${timeout}s. Unmet:" >&2
@@ -416,7 +433,6 @@ case "${command}" in
     send)     cmd_send "$@" ;;
     fixture)  cmd_fixture "$@" ;;
     schema)   cmd_schema ;;
-    snapshot) cmd_snapshot "${1:-.}" ;;
     state)    cmd_state "${1:-.}" ;;
     detail)   cmd_state "${1:-.}" state-detail.json ;;
     wait)     cmd_wait "$@" ;;

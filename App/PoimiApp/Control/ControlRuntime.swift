@@ -35,9 +35,12 @@ final class ControlRuntime {
     /// The one action handler (#298) — what the mailbox, and the in-process tests, talk to.
     private(set) lazy var host = ControlHost(
         graph: graph, run: run, fixture: fixture, assets: assetAliases, albums: albumAliases,
-        progress: progress,
+        progress: progress, listAlwaysShown: listAlwaysShown,
         state: { [unowned self] in stateJSON() },
-        rev: { [unowned self] in writer.rev })
+        rev: { [unowned self] in writer.rev },
+        syncState: { [unowned self] in await syncState() })
+    /// Whether the album list is always on screen (the iPad sidebar) — what library actions may assume.
+    private let listAlwaysShown: Bool
     /// `Documents/control/` when this run serves the file mailbox; `nil` in-process.
     private let mailboxDirectory: URL?
     private var mailbox: ControlMailbox?
@@ -56,8 +59,10 @@ final class ControlRuntime {
     init(parsed: ControlLaunch.Parsed, graph: AppGraph, sink: any ControlStateSink,
          run: String = "r-" + String(UInt32.random(in: 0...UInt32.max), radix: 16),
          writeDelay: Duration = .milliseconds(100),
-         thumbnailLoads: ThumbnailLoadCounter? = nil, mailbox: URL? = nil) {
+         thumbnailLoads: ThumbnailLoadCounter? = nil, mailbox: URL? = nil, listAlwaysShown: Bool? = nil) {
         self.graph = graph
+        // The iPad's split view keeps the album list on screen; the tests can pick either layout.
+        self.listAlwaysShown = listAlwaysShown ?? (UIDevice.current.userInterfaceIdiom == .pad)
         self.thumbnailLoads = thumbnailLoads
         mailboxDirectory = mailbox
         self.run = run
@@ -128,6 +133,14 @@ final class ControlRuntime {
         }
     }
 
+    /// Write the current snapshot now (if it changed) and wait until it's on disk — before every reply,
+    /// so `state.json` is never behind what a reply reported. Before the bootstrap, nothing is written.
+    func syncState() async {
+        guard bootstrapped else { return }
+        writer.flush()
+        await sink.drained()
+    }
+
     /// The snapshot as `state.json` carries it now — `wait` and `snapshot` evaluate this, not the file.
     func stateJSON() -> ControlJSON {
         let inputs = inputs
@@ -163,9 +176,9 @@ struct ControlRouteApplier {
     let assets: ControlAssetAliases
 
     /// Open the album (bump + overview, like the album list's tap), then push the destination. A route
-    /// needs the albums phase: on `fresh`/`denied` it can't apply, and says so. The export route first
-    /// opens the album session the way the Overview does, so the export screen finds the review context
-    /// it would have on the real Overview → "Save to Photos" path (its completion stats count from it).
+    /// needs the albums phase: on `fresh`/`denied` it can't apply, and says so. The export route is the
+    /// user's own path, as an agent would send it: open → the Overview's scan settles (its task) → Save to
+    /// Photos (`finishToExport`, disabled with no picks) — so its completion stats match the real one.
     func apply(_ route: ControlRoute) async throws(ControlLaunchError) {
         let coordinator = graph.coordinator
         guard coordinator.rootPhase == .albums else {
@@ -184,8 +197,11 @@ struct ControlRouteApplier {
         switch route {
         case .review(_, let day): coordinator.openReview(id, day: day)
         case .export:
-            await graph.session.openOverview(project)
-            coordinator.finishToExport()   // the control plane's one export entry point (#298)
+            await graph.session.appear(.overview, project)
+            guard graph.selectionStore.progress.picked > 0 else {
+                throw ControlLaunchError("export route: '\(alias)' has no picks (Save to Photos is disabled)")
+            }
+            coordinator.finishToExport()   // the one export entry point (the Overview's button, #298)
         case .settings: coordinator.openSettings(id)
         case .overview, .appSettings: break
         }

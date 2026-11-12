@@ -7,8 +7,8 @@
 //  app-level settings (Photos access, About) belong on a separate app-settings screen reached from
 //  the album library, not inside one album — the 2F1 design's "App" section lives there, not here.
 //  Pushed from the album Overview (the gear). Edits apply immediately (iOS-Settings style, no Save
-//  button): controls bind straight to the `@Observable` `CurationProject`, and leaving the screen
-//  commits them through `AlbumActions.applyEdits` — a durable save (rather than leaning on the
+//  button): every control writes through `AlbumActions.stage` (the edit rules, in one place), and
+//  leaving the screen commits them through `AlbumActions.applyEdits` — a durable save (rather than leaning on the
 //  mainContext's deferred autosave) + re-syncing the live tally's target.
 //
 //  Reset / Delete route through `AlbumActions` (never touching the exported Photos album or the
@@ -55,9 +55,20 @@ struct AlbumSettingsView: View {
     }
 
     var body: some View {
+        // The album can be deleted while this screen is still on its way out (the iPad sidebar's Delete
+        // pops the detail in the same turn the model goes): a deleted model's attributes trap, so the
+        // outgoing screen draws nothing rather than reading it (#298 review).
+        if project.isGone {
+            Color.clear
+        } else {
+            screen
+        }
+    }
+
+    private var screen: some View {
         Form {
             Section("Name") {
-                TextField("Album name", text: $project.title)
+                TextField("Album name", text: staged(\.title) { AlbumEdits(title: $0) })
             }
 
             Section {
@@ -95,7 +106,7 @@ struct AlbumSettingsView: View {
                         : String(localized: "Existing Photos album",
                                  comment: "Destination: an existing album in the Photos app"))
                 }
-                TargetCountField(count: $project.targetCount)
+                TargetCountField(count: staged(\.targetCount) { AlbumEdits(targetCount: $0) })
             } header: {
                 Text("Destination")
             } footer: {
@@ -105,7 +116,7 @@ struct AlbumSettingsView: View {
             // Same 3-way lens as setup (#273, design 604-0 variant A) — bound to `project.media`, the
             // single writer of the two stored bools.
             Section {
-                Picker("Media", selection: $project.media) {
+                Picker("Media", selection: staged(\.media) { AlbumEdits(media: $0) }) {
                     ForEach(MediaSelection.allCases) { option in
                         Text(option.label).tag(option)
                     }
@@ -122,7 +133,7 @@ struct AlbumSettingsView: View {
             // empty state points at, so "Review exclusions" lands somewhere it can actually fix.
             Section {
                 // Inert under the videos-only lens (see setup) — a screenshot is a still.
-                Toggle("Exclude screenshots", isOn: $project.excludeScreenshots)
+                Toggle("Exclude screenshots", isOn: staged(\.excludeScreenshots) { AlbumEdits(excludeScreenshots: $0) })
                     .disabled(project.media == .videosOnly)
                 NavigationLink {
                     AlbumPickerView(selection: excludedSelection, allowsMultiple: true)
@@ -140,7 +151,7 @@ struct AlbumSettingsView: View {
             }
 
             Section {
-                Toggle("Group by trips & places", isOn: $project.locationEnabled)
+                Toggle("Group by trips & places", isOn: staged(\.locationEnabled) { AlbumEdits(locationEnabled: $0) })
             } footer: {
                 Text("""
                     Groups a stretch away from home into one trip (“Week in Salo”) with its place name. \
@@ -212,8 +223,6 @@ struct AlbumSettingsView: View {
         // would silently fall back to the deferred autosave we're avoiding. So persist on both.
         .onDisappear { persistEdits() }
         .onChange(of: scenePhase) { _, phase in if phase != .active { persistEdits() } }
-        // Keep the tally correct the instant the stepper moves (the target is cached in SelectionStore).
-        .onChange(of: project.targetCount) { selection.retarget(project) }
         // Not `.destructive`, and the button says what it does — never a bare "Reset" (#285). It sits
         // next to the red one, so reading alike is the failure mode.
         .confirmationDialog("Mark all days unreviewed?", isPresented: $confirmingUnreview,
@@ -322,14 +331,23 @@ struct AlbumSettingsView: View {
     private var targetSelection: Binding<Set<String>> {
         Binding(
             get: { project.targetAlbumID.map { [$0] } ?? [] },
-            set: { project.targetAlbumID = $0.first })
+            set: { actions.stage(AlbumEdits(targetAlbumID: .some($0.first)), to: project, calendar: calendar) })
     }
 
     /// Bridges the persisted excluded-album list (`[String]`) to the picker's `Set<String>` selection.
     private var excludedSelection: Binding<Set<String>> {
         Binding(
             get: { Set(project.excludedAlbumIDs) },
-            set: { project.excludedAlbumIDs = Array($0) })
+            set: { actions.stage(AlbumEdits(excludedAlbumIDs: Array($0)), to: project, calendar: calendar) })
+    }
+
+    /// A control's binding: reads the model, and writes through `AlbumActions.stage` — the one place the
+    /// settings edit rules live (the range clamp, the media lens's single writer, the live re-target), so
+    /// the control plane's `albums.update` applies exactly what these controls do (#298).
+    private func staged<Value>(_ field: KeyPath<CurationProject, Value>,
+                               _ edit: @escaping (Value) -> AlbumEdits) -> Binding<Value> {
+        Binding(get: { project[keyPath: field] },
+                set: { actions.stage(edit($0), to: project, calendar: calendar) })
     }
 
     private var excludedValue: String {

@@ -259,3 +259,10 @@ extension CurationProject {
         return .empty
     }
 }
+
+extension CurationProject {
+    /// Deleted, or detached from its context: reading any persisted attribute now traps in SwiftData
+    /// ("backing data was detached from a context"). A view or action that may outlive the album — a
+    /// screen on its way out after a delete, a commit-on-leave — checks this first (#298 review).
+    var isGone: Bool { modelContext == nil || isDeleted }
+}
