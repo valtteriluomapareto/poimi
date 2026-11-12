@@ -3,8 +3,9 @@
 //  PoimiApp — album export + completion (issue #39, D19/D31/D34; design 2DN + the export-state mocks).
 //
 //  The terminal step of a curation: write the picked photos into a native Photos album, then celebrate.
-//  Reached from the review grid's Export action (`coordinator.openExport`). `ExportStore` runs the
-//  create-or-find + dupe-guarded add through the `\.photoLibrary` write seam (SystemPhotoLibrary); on
+//  Reached from the Overview's "Save to Photos" (`coordinator.openExport`) or the finished review's
+//  forward path (`finishToExport`). `ExportStore` — owned by the album session (#297), which runs it once
+//  per visit — does the create-or-find + dupe-guarded add through the library's write seam; on
 //  success it stamps the project's `targetAlbumID` (the created album) + `markedDoneAt` (→ status .done)
 //  — a ONE-WAY copy that never reads the album back (D31). The screen is a small state machine:
 //  working → completion (first export / re-export copy) or a recoverable error.

@@ -380,12 +380,4 @@ struct ControlRevision {
     }
 }
 
-extension ExportStore.Phase {
-    /// An export is in flight.
-    var isRunning: Bool {
-        if case .exporting = self { return true }
-        return false
-    }
-}
-
 #endif

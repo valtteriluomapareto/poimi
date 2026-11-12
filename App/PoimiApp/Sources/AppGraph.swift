@@ -60,6 +60,7 @@ struct AppGraph {
                                    selection: selection, done: done)
         // Navigation decides when the album changes; the session drops what it held for it.
         coordinator.onCloseAlbum = { [weak session] in session?.close() }
+        coordinator.onLeaveExport = { [weak session] in session?.exportScreenClosed() }
         return AppGraph(
             photoLibrary: library,
             thumbnailProvider: thumbnails,

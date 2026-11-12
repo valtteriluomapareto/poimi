@@ -73,7 +73,7 @@ struct ControlHarness {
     func scanAsGrid() async throws {
         let id = try #require(coordinator.activeAlbumID)
         let project = try #require(graph.projectStore.projects.first { $0.id == id })
-        let store = await graph.session.open(project, reconcile: true)
+        let store = await graph.session.openReview(project)
         await store.awaitPendingNames()
     }
 

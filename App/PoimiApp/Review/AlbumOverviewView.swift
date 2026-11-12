@@ -115,7 +115,10 @@ struct AlbumOverviewView: View {
                 let store = session.candidateStore(for: project)
                 self.store = store
                 if store.phase == .idle { setIndex(nil) }
-                await session.open(project, reconcile: false)
+                await session.openOverview(project)
+                // A Settings key change cancels this task and starts a new one with a fresh store; this one
+                // resumes after the OLD load and must not overwrite the new task's (reset) index.
+                guard !Task.isCancelled, store === self.store else { return }
                 buildIndex(from: store)
             }
             // Trip place names resolve asynchronously after `.ready` (§7); rebuild the (cheap) index so
@@ -195,7 +198,8 @@ struct AlbumOverviewView: View {
     private func rescan() async {
         guard let store else { return }
         setIndex(nil)
-        await session.rescan(project, reconcile: false)
+        await session.rescanOverview(project)
+        guard store === self.store else { return }   // superseded by a key change meanwhile
         buildIndex(from: store)
     }
 

@@ -56,14 +56,14 @@ struct ScanningView: View {
                 // cache), reconcile done-state (the grid reconciles; the Overview doesn't, #289) and publish
                 // the review context the viewer pages through. Held first so `body` shows the scan phase.
                 store = session.candidateStore(for: project)
-                await session.open(project, reconcile: true)
+                await session.openReview(project)
             }
     }
 
     /// Re-run the fetch pass (a "Try again" / access recovered) through the session, which reconciles and
     /// republishes the review context as on entry.
     private func rescan() async {
-        await session.rescan(project, reconcile: true)
+        await session.rescanReview(project)
     }
 
     private var isReady: Bool {

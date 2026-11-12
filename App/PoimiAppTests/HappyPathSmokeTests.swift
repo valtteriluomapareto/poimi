@@ -50,7 +50,7 @@ struct HappyPathSmokeTests {
 
         // 3 — scan: the Overview opens the album session (no reconcile, #289); the real fetch → filter →
         // adaptive-group pipeline settles with candidates.
-        let candidates = await session.open(project, reconcile: false)
+        let candidates = await session.openOverview(project)
         guard case .ready(let groups) = candidates.phase else {
             Issue.record("scan did not reach .ready: \(candidates.phase)")
             return
@@ -65,7 +65,7 @@ struct HappyPathSmokeTests {
         // 3b — drill into the grid: it REUSES the Overview's scan, reconciles, and the review context the
         // viewer pages through is published.
         coordinator.openReview(project.id)
-        let gridStore = await session.open(project, reconcile: true)
+        let gridStore = await session.openReview(project)
         #expect(gridStore === candidates)
         #expect(session.reviewOrderedIDs == scannedIDs)
 

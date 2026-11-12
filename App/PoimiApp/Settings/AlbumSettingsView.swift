@@ -213,7 +213,7 @@ struct AlbumSettingsView: View {
         .onDisappear { persistEdits() }
         .onChange(of: scenePhase) { _, phase in if phase != .active { persistEdits() } }
         // Keep the tally correct the instant the stepper moves (the target is cached in SelectionStore).
-        .onChange(of: project.targetCount) { actions.retarget(project) }
+        .onChange(of: project.targetCount) { selection.retarget(project) }
         // Not `.destructive`, and the button says what it does — never a bare "Reset" (#285). It sits
         // next to the red one, so reading alike is the failure mode.
         .confirmationDialog("Mark all days unreviewed?", isPresented: $confirmingUnreview,

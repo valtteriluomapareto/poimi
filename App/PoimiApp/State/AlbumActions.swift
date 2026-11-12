@@ -14,8 +14,14 @@
 //    only the stores that held it. A reset or delete of an album that isn't open must neither flush/clear
 //    nor steal the live stores of the album that is — and the album being mutated must not keep a live
 //    debounce that later writes into a deleted or just-zeroed model (#59).
-//  - **delete pops to the library root iff the deleted album is the one on screen**, before the model is
-//    removed, so no route (and no album session) is left pointing at a deleted album.
+//  - **delete pops to the library root iff the deleted album is the one on screen**, and closes the album
+//    session if it holds that album, before the model is removed — so no route and no session is left
+//    pointing at a deleted album.
+//  - **delete / reset are refused while that album's export runs**: the run stamps its result into the
+//    album when it lands, which must not hit a deleted or just-zeroed model. (Reachable only on iPad, from
+//    the sidebar while the export screen shows; the album list disables the two actions meanwhile.)
+//  - **reset leaves the export screen's state alone**: a completion screen on show keeps showing (the
+//    session starts the next visit's export fresh anyway, when the export screen leaves the path).
 //
 
 import Foundation
@@ -55,19 +61,26 @@ final class AlbumActions {
     }
 
     /// Delete an album (never its Photos album or the user's originals, D31). The live stores let go of
-    /// it first (#59); if it's the album on screen, navigation returns to the library root (which closes
-    /// the album session) before the model goes.
-    func delete(_ project: CurationProject) {
+    /// it first (#59); if it's the album on screen, navigation returns to the library root, and the album
+    /// session lets go of it, before the model goes. Refused (`false`) while its export runs.
+    @discardableResult
+    func delete(_ project: CurationProject) -> Bool {
+        guard !session.isExporting(project) else { return false }
         selection.deactivateIfActive(project)
         done.deactivateIfActive(project)
         if coordinator.activeAlbumID == project.id { coordinator.popToRoot() }
+        if session.projectID == project.id { session.close() }
         projects.delete(project)   // also drops the album's cached timeline (#130)
+        return true
     }
 
     /// Clear an album's progress (picks, day marks, export history), keeping its settings. The stores
     /// holding it flush + let go first — or their next debounce would write the old state straight back
     /// over the reset — and re-hydrate it afterwards, so the screen behind shows the reset at once.
-    func reset(_ project: CurationProject) {
+    /// Refused (`false`) while its export runs.
+    @discardableResult
+    func reset(_ project: CurationProject) -> Bool {
+        guard !session.isExporting(project) else { return false }
         let selectionHeld = selection.activeProjectID == project.persistentModelID
         let doneHeld = done.activeProjectID == project.persistentModelID
         selection.deactivateIfActive(project)
@@ -75,7 +88,7 @@ final class AlbumActions {
         projects.reset(project)
         if selectionHeld { selection.activate(project) }
         if doneHeld { done.activate(project) }
-        if session.projectID == project.id { session.resetExport() }
+        return true
     }
 
     /// Clear only the day marks, keeping the picks (#285). The ordering lives in `DoneStore`.
@@ -94,11 +107,6 @@ final class AlbumActions {
                 : titleOnOpen
         }
         projects.saveEdits(to: project)
-        selection.retarget(project)
-    }
-
-    /// Re-sync the live tally's target while the target field is being edited.
-    func retarget(_ project: CurationProject) {
         selection.retarget(project)
     }
 }

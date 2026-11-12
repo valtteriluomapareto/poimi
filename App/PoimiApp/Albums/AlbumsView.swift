@@ -15,6 +15,7 @@ struct AlbumsView: View {
     @Environment(ProjectStore.self) private var store
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(AlbumActions.self) private var actions
+    @Environment(AlbumSession.self) private var session
     @Environment(WhatsNewState.self) private var whatsNew
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showingSetup = false
@@ -51,17 +52,24 @@ struct AlbumsView: View {
                             }
                             // Reset + Delete are destructive (hand-curated picks are lost) → confirm
                             // first; "no destructive surprises" (design-language).
-                            Button("Reset all progress", systemImage: "arrow.counterclockwise", role: .destructive) {
-                                albumToReset = project
+                            // Not while this album's export runs (iPad: the sidebar stays tappable over the
+                            // export screen) — the run stamps its result into the album when it lands.
+                            Group {
+                                Button("Reset all progress", systemImage: "arrow.counterclockwise",
+                                       role: .destructive) {
+                                    albumToReset = project
+                                }
+                                Button("Delete album", systemImage: "trash", role: .destructive) {
+                                    albumToDelete = project
+                                }
                             }
-                            Button("Delete album", systemImage: "trash", role: .destructive) {
-                                albumToDelete = project
-                            }
+                            .disabled(session.isExporting(project))
                         }
                         .swipeActions(edge: .trailing) {
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 albumToDelete = project
                             }
+                            .disabled(session.isExporting(project))
                         }
                     }
                 }

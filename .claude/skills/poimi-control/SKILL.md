@@ -65,7 +65,7 @@ Scripts/poimi.sh logs --last 2m         # the app's OSLog (subsystem com.valtter
 |---|---|
 | `overview:<album>` | the album overview |
 | `review:<album>[:<yyyy-mm-dd>]` | the review grid, on that day's cluster when a day is given |
-| `export:<album>` | the export screen — which **runs the export** (against the fake) |
+| `export:<album>` | the export screen — which **runs the export** (against the fake), after opening the album as the Overview does (so the completion stats are real) |
 | `settings:<album>` | the album settings |
 | `appsettings` | app settings |
 

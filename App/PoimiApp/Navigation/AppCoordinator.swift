@@ -24,8 +24,12 @@ final class AppCoordinator {
     /// prompt. Starts `.notDetermined` until the first `refreshAuthorization()`.
     private(set) var authorization: LibraryAuthorization = .notDetermined
 
-    /// The typed navigation path below the albums root (bound to the `NavigationStack`).
-    var path: [Route] = []
+    /// The typed navigation path below the albums root (bound to the `NavigationStack`). The ONE choke
+    /// point for the album session's lifetime (#297): every change — a method below, or SwiftUI writing
+    /// the binding on a back-swipe / back button — runs `pathDidChange`.
+    var path: [Route] = [] {
+        didSet { pathDidChange(from: oldValue) }
+    }
 
     /// The asset last viewed in the grid / viewer. The grid restores its scroll to it on return
     /// from the viewer (D22); set on cell tap and updated as the viewer swipes. Shared so scroll
@@ -44,10 +48,14 @@ final class AppCoordinator {
     /// differs, so the restore fires reliably.
     private(set) var viewerReturnTick = 0
 
-    /// Called when the open album closes — an album switch, back to the library root, a launch restore —
-    /// so the album session (#297) drops its scan, review context and export. The session owns those;
-    /// the coordinator only owns navigation and says when the album changes. Wired by `AppGraph`.
+    /// Called when the open album closes — the path's album changes (a switch, back to the library root,
+    /// a back-swipe out of the album, a launch restore) or an album is re-opened — so the album session
+    /// (#297) drops its scan, review context and export. The session owns those; the coordinator only
+    /// owns navigation and says when the album changes. Wired by `AppGraph`.
     @ObservationIgnored var onCloseAlbum: (@MainActor () -> Void)?
+    /// Called when an export screen leaves the path, so the next visit runs a fresh export instead of
+    /// showing the last result. Wired by `AppGraph`.
+    @ObservationIgnored var onLeaveExport: (@MainActor () -> Void)?
 
     init(library: any PhotoLibraryProviding) {
         self.library = library
@@ -58,14 +66,22 @@ final class AppCoordinator {
         onCloseAlbum?()
     }
 
-    /// The album at the root of the current path — the one shown in the iPad detail column — or `nil`
-    /// at the albums root / app-settings. Drives the split-view sidebar's selection highlight (#42).
-    var activeAlbumID: UUID? {
+    private func pathDidChange(from old: [Route]) {
+        if old.contains(where: \.isExport), !path.contains(where: \.isExport) { onLeaveExport?() }
+        if let oldAlbum = Self.albumID(of: old), oldAlbum != activeAlbumID { closeAlbum() }
+    }
+
+    /// The album at the root of `path`, or `nil` at the albums root / app settings.
+    private static func albumID(of path: [Route]) -> UUID? {
         switch path.first {
         case .albumOverview(let id), .review(let id, _), .export(let id), .settings(let id): id
         case .appSettings, nil: nil
         }
     }
+
+    /// The album at the root of the current path — the one shown in the iPad detail column — or `nil`
+    /// at the albums root / app-settings. Drives the split-view sidebar's selection highlight (#42).
+    var activeAlbumID: UUID? { Self.albumID(of: path) }
 
     /// Where the app should be, derived from authorization — never stored (single source of truth).
     var rootPhase: RootPhase {
@@ -94,7 +110,7 @@ final class AppCoordinator {
     /// switching albums from the library starts a fresh stack.
     func openProject(_ id: UUID) {
         presentedPhotoID = nil          // dismiss any open viewer when switching albums
-        closeAlbum()                    // a different album scans fresh (and frees the old one)
+        closeAlbum()                    // re-opening (even the same album) scans fresh; frees the old one
         path = [.albumOverview(id)]
     }
 

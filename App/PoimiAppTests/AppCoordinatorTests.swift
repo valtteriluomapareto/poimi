@@ -216,18 +216,6 @@ struct AppCoordinatorTests {
         #expect(coord.presentedPhotoID == nil)         // back to the library root dismisses it
     }
 
-    @Test("an album switch / popToRoot / restore tells the album session to close (#297)")
-    func albumChangeClosesTheSession() {
-        let coord = coordinator(.authorized)
-        var closes = 0
-        coord.onCloseAlbum = { closes += 1 }
-        coord.openProject(UUID())
-        coord.openReview(UUID())   // a push within the album doesn't close it
-        coord.popToRoot()
-        coord.restore(lastOpenedProjectID: nil)
-        #expect(closes == 3)
-    }
-
     @Test("finishToExport is a no-op with no active album (#187)")
     func finishToExportNoActiveAlbum() {
         let coord = coordinator(.authorized)
@@ -273,5 +261,51 @@ struct AppCoordinatorTests {
         coord.openSettings(id)
         coord.openSettings(id)
         #expect(coord.path == [.albumOverview(id), .settings(id)])
+    }
+}
+
+/// The path as the album session's lifetime (#297): every change — a coordinator method or SwiftUI writing
+/// the binding on a back-swipe — reports the album closing and the export screen leaving.
+@MainActor
+@Suite("AppCoordinator — the path drives the album session (#297)")
+struct AppCoordinatorPathTests {
+
+    /// The path is the one choke point (#297): a NavigationStack back-swipe writes it through the binding,
+    /// with no coordinator method involved, and must close the album all the same.
+    @Test("any path change that leaves the album closes it; pushes within it don't (#297)")
+    func pathChangesCloseTheAlbum() {
+        let coord = AppCoordinator(library: FakePhotoLibrary())
+        let id = UUID()
+        var closes = 0
+        coord.onCloseAlbum = { closes += 1 }
+        coord.openProject(id)                      // re-opening always closes (a fresh scan)
+        #expect(closes == 1)
+        coord.openReview(id)
+        coord.openSettings(id)
+        coord.path = [.albumOverview(id)]          // back-swipes within the album
+        #expect(closes == 1)
+        coord.path = []                            // a back-swipe out of the album
+        #expect(closes == 2)
+        coord.openProject(id)
+        coord.openAppSettings()
+        coord.path = [.appSettings]                // the album is no longer at the root
+        #expect(closes == 4)
+    }
+
+    @Test("the export screen leaving the path is reported once, however it leaves (#297)")
+    func leavingExportIsReported() {
+        let coord = AppCoordinator(library: FakePhotoLibrary())
+        let id = UUID()
+        var leaves = 0
+        coord.onLeaveExport = { leaves += 1 }
+        coord.openProject(id)
+        coord.openReview(id)
+        coord.finishToExport()
+        #expect(leaves == 0)
+        coord.pop()                                // back from export
+        #expect(leaves == 1)
+        coord.finishToExport()
+        coord.popToRoot()                          // "Back to albums"
+        #expect(leaves == 2)
     }
 }

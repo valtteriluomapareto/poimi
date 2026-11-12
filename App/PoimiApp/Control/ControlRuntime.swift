@@ -87,7 +87,7 @@ final class ControlRuntime {
             do throws(ControlLaunchError) {
                 let applier = ControlRouteApplier(graph: graph, fixture: fixture,
                                                   albums: albumAliases, assets: assetAliases)
-                if let route = launch.route { try applier.apply(route) }
+                if let route = launch.route { try await applier.apply(route) }
                 if let viewer = launch.viewer { try await applier.openViewer(viewer) }
             } catch {
                 launchError = error.message
@@ -124,8 +124,10 @@ struct ControlRouteApplier {
     let assets: ControlAssetAliases
 
     /// Open the album (bump + overview, like the album list's tap), then push the destination. A route
-    /// needs the albums phase: on `fresh`/`denied` it can't apply, and says so.
-    func apply(_ route: ControlRoute) throws(ControlLaunchError) {
+    /// needs the albums phase: on `fresh`/`denied` it can't apply, and says so. The export route first
+    /// opens the album session the way the Overview does, so the export screen finds the review context
+    /// it would have on the real Overview → "Save to Photos" path (its completion stats count from it).
+    func apply(_ route: ControlRoute) async throws(ControlLaunchError) {
         let coordinator = graph.coordinator
         guard coordinator.rootPhase == .albums else {
             throw ControlLaunchError("route needs photo access, but fixture '\(fixture.rawValue)' starts at "
@@ -142,7 +144,9 @@ struct ControlRouteApplier {
         graph.actions.open(project)   // bump + overview, exactly as the album list's tap
         switch route {
         case .review(_, let day): coordinator.openReview(id, day: day)
-        case .export: coordinator.openExport(id)
+        case .export:
+            await graph.session.openOverview(project)
+            coordinator.openExport(id)
         case .settings: coordinator.openSettings(id)
         case .overview, .appSettings: break
         }

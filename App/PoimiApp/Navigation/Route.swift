@@ -27,6 +27,14 @@ enum Route: Hashable {
     case appSettings
 }
 
+extension Route {
+    /// The export / completion step — the coordinator tells the album session when it leaves the path.
+    var isExport: Bool {
+        if case .export = self { return true }
+        return false
+    }
+}
+
 /// The app's root phase, derived from authorization (D6). Onboarding/permission sit *above* the
 /// albums library (§11); the typed `Route` path only exists once we're in `.albums`.
 enum RootPhase: Equatable {

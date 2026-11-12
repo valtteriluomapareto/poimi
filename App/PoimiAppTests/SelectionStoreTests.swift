@@ -112,6 +112,24 @@ struct SelectionStoreTests {
         selection.deactivate()
     }
 
+    @Test("hasPendingFlush across a project switch: the switch flushes the outgoing one (#297)")
+    func hasPendingFlushAcrossSwitch() throws {
+        let (projects, selection) = try makeStores()
+        let a = project(projects, "A")
+        let b = project(projects, "B")
+        selection.activate(a)
+        selection.toggle("x")
+        #expect(selection.hasPendingFlush)
+
+        selection.activate(b)   // flushes A to its own snapshot first
+        #expect(!selection.hasPendingFlush)
+        #expect(SelectionSnapshot.decode(a.selectionSnapshot).assetIDs == ["x"])
+        selection.toggle("y")
+        #expect(selection.hasPendingFlush)
+        selection.deactivate()
+        #expect(!selection.hasPendingFlush)
+    }
+
     @Test("switching cancels the outgoing project's pending debounce; the incoming one fires on its own")
     func switchCancelsStaleDebounceAndIncomingFires() async throws {
         let (projects, selection) = try makeStores(debounce: .milliseconds(10))

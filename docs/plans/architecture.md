@@ -120,7 +120,7 @@ Resolve selection → `PHAsset`s, create-or-find `PHAssetCollection` by stored a
 
 **The write seam.** Export is the one WRITE on `PhotoLibraryProviding`: `export(assetIDs:toAlbumNamed:existingAlbumID:) -> ExportResult` (added to the same seam, not split per D21 — the app injects one `\.photoLibrary` and uses the whole surface). `SystemPhotoLibrary` runs it through `PHPhotoLibrary.performChanges` — first export creates the album and adds every resolved pick in one change (capturing the placeholder's `localIdentifier`); a re-export finds the album by `existingAlbumID`, throws `.albumMissing` if it was deleted, else adds only the picks it doesn't already hold. Only id strings + `Sendable` values cross the `performChanges` block (PHAssets are re-fetched inside it — Swift-6-safe). `FakePhotoLibrary` models it in-memory (create-or-find + dupe guard) so the flow is deterministic for tests + screenshots.
 
-**Flow + state (`ExportStore` + `ExportView`, #39; owned by `AlbumSession` since #297).** The Overview's Export → `coordinator.openExport` → `ExportView`, a small state machine: `idle` → `exporting` → `done(result, wasReExport)` (completion / re-export copy) or `failed(ExportError, canCreateNew)` (D19 recoverable channel — `.notAuthorized` / `.albumMissing` / `.noAssetsResolved` / `.writeFailed`; "create a new album instead" appears when a re-export's album is gone). On success the store stamps **our state only** — `targetAlbumID` (the created/found album) + `markedDoneAt` (→ status `.done`) — a **one-way copy** that never reads the album back (D31). The `ExportStore` lives on the **album session** (§12a), not in view state: it starts `.idle` and `ExportView`'s `.task` asks the session to start it, which it does only from `.idle` — so a re-mounted screen (an iPad size-class flip rebuilds the tree) or a second caller can't export twice; the error screen's buttons re-run it explicitly, and the session returns it to `.idle` when the album closes. Completion **stats reuse the review scan's `reviewDayByID`** (on the album session) via `CompletionStats(dayByID:doneDays:selection:)`, so the celebration needs no second scan. There is no "open the album in Photos" action — iOS exposes no public deep-link to a specific `PHAssetCollection`.
+**Flow + state (`ExportStore` + `ExportView`, #39; owned by `AlbumSession` since #297).** The Overview's Export → `coordinator.openExport` → `ExportView`, a small state machine: `idle` → `exporting` → `done(result, wasReExport)` (completion / re-export copy) or `failed(ExportError, canCreateNew)` (D19 recoverable channel — `.notAuthorized` / `.albumMissing` / `.noAssetsResolved` / `.writeFailed`; "create a new album instead" appears when a re-export's album is gone). On success the store stamps **our state only** — `targetAlbumID` (the created/found album) + `markedDoneAt` (→ status `.done`) — a **one-way copy** that never reads the album back (D31). The `ExportStore` lives on the **album session** (§12a), not in view state: it starts `.idle` and `ExportView`'s `.task` asks the session to start it, which it does only from `.idle` — so a re-mounted screen (an iPad size-class flip rebuilds the tree) or a second caller can't export twice; the error screen's buttons re-run it (never while a run is in flight), and the session retires it to a fresh `.idle` store when the export screen leaves the path or the album closes, so the next visit exports again. Completion **stats reuse the review scan's `reviewDayByID`** (on the album session) via `CompletionStats(dayByID:doneDays:selection:)`, so the celebration needs no second scan. There is no "open the album in Photos" action — iOS exposes no public deep-link to a specific `PHAssetCollection`.
 
 ### 9. Persistence (SwiftData)
 
@@ -143,16 +143,6 @@ We persist **many `CurationProject`s** (the album library, §12 — date range, 
 
 ## Key subsystem designs (cont. — added after the design pass)
 
-### 12a. The album session + album actions (#297)
-
-The open album's review lifecycle is a store, not view code. **`AlbumSession`** (`State/`, `@MainActor @Observable`, built by `AppGraph` with the library, naming, name cache, the shared `TimelineCache`, the calendar and the selection/done stores) owns:
-
-- **`open(project, reconcile:)`** — activate selection + done → get-or-create the album's `CandidateStore` (keyed by `CandidateStoreKey`: album + range + location + source filters; always with the timeline cache) → load it once (a second caller awaits the in-flight load) → on `.ready`, optionally reconcile done-state → publish the **review context** (`reviewOrderedIDs`, `reviewDayByID`, `reviewAssetsByID`, `reviewClusters`, `reviewIsReExport`) that the viewer, grid and export read. The reconcile and publish land in the same main-actor turn as `.ready`. The **Overview opens with `reconcile: false`, the grid with `true`** (#289: the Overview's done-state is display-only; the per-lens baseline is recorded where the user reviews).
-- the album's **`ExportStore`** (§8).
-- `close()` — the coordinator calls it (`onCloseAlbum`) on an album switch, `popToRoot` and launch restore; navigation stays the coordinator's.
-
-So the whole review flow runs with no view mounted (tests, the control plane's headless host). **`AlbumActions`** is the façade for the library flows — `open`, `create(validated:)`, `delete`, `reset`, `markAllUnreviewed`, `applyEdits` — with **one** ordering each: delete/reset deactivate only the stores that hold that album (#59), reset re-hydrates exactly those, and delete returns to the library root iff the album is on screen. The album list, album settings and new-album sheet call it.
-
 ### 12. Projects — the album library (D31)
 
 The original model assumed a single active `CurationSession`. The design makes the **album library the home**: many named projects, each its own curation toward one Photos album. So the persisted aggregate is plural.
@@ -164,6 +154,16 @@ The original model assumed a single active `CurationSession`. The design makes t
 - Two albums = two projects; nothing global is shared except app-level Photos access and the resource-size cache (keyed by asset, so it's reused across projects).
 
 > Naming: internally `CurationProject` to avoid colliding with PhotoKit's album; the UI word stays "album."
+
+### 12a. The album session + album actions (#297)
+
+The open album's review lifecycle is a store, not view code. **`AlbumSession`** (`State/`, `@MainActor @Observable`, built by `AppGraph` with the library, naming, name cache, the shared `TimelineCache`, the calendar and the selection/done stores) owns:
+
+- **`openOverview(project)` / `openReview(project)`** — activate selection + done → get-or-create the album's `CandidateStore` (keyed by `CandidateStoreKey`: album + range + location + source filters; always with the timeline cache) → load it once (a second caller joins the in-flight load) → on `.ready`, reconcile done-state (`openReview` only) → publish the **review context** (`reviewOrderedIDs`, `reviewDayByID`, `reviewAssetsByID`, `reviewClusters`, `reviewIsReExport`) that the viewer, grid and export read. The reconcile and publish land in the same main-actor turn as `.ready`, and each load is published once. The **Overview doesn't reconcile, the grid does** (#289: the Overview's done-state is display-only; the per-lens baseline is recorded where the user reviews).
+- the album's **`ExportStore`** (§8): one run per visit to the export screen.
+- `close()` — fired from the coordinator's `path` (`onCloseAlbum`) whenever the path's album changes, including a back-swipe; navigation stays the coordinator's.
+
+So the whole review flow runs with no view mounted (tests, the control plane's headless host). **`AlbumActions`** is the façade for the library flows — `open`, `create(validated:)`, `delete`, `reset`, `markAllUnreviewed`, `applyEdits` — with **one** ordering each: delete/reset deactivate only the stores that hold that album (#59) and are refused while its export runs, reset re-hydrates exactly those stores, and delete returns to the library root iff the album is on screen and closes the session if it holds it. The album list, album settings and new-album sheet call it.
 
 ### 13. Section completion & resume — "mark as done" (D32 → **(d), decided**)
 

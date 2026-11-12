@@ -525,7 +525,7 @@ struct DebugExportHostView: View {
             let probe = CandidateStore(library: Self.fake)
             await probe.load(created)
             created.doneDays = Set(probe.dayByID.values).map(\.description).sorted()
-            await built.session.open(created, reconcile: false)
+            await built.session.openOverview(created)
 
             // Pre-run the export so the hosted view is already in `.done` when captured.
             await built.session.startExport(created)
