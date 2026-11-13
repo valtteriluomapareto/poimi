@@ -28,13 +28,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-PROJECT="${REPO_ROOT}/App/PoimiApp.xcodeproj"
-SCHEME="PoimiApp"
-BUNDLE_ID="com.valtteriluoma.poimi"
+# shellcheck source=lib/sim.sh
+. "${SCRIPT_DIR}/lib/sim.sh"   # resolve / boot / build / install / privacy (shared with poimi.sh)
+SCHEME="${POIMI_SCHEME}"
+BUNDLE_ID="${POIMI_BUNDLE_ID}"
 CATALOG_FILE="${REPO_ROOT}/App/PoimiApp/Support/DebugScreen.swift"
 OUT_DIR="${REPO_ROOT}/screenshots"
-DERIVED="${REPO_ROOT}/build/screenshots-dd"
-BUILD_LOG="${DERIVED}/build.log"
+DERIVED="${POIMI_DERIVED}"   # shared with poimi.sh, so the two reuse one incremental build
+BUILD_LOG="${REPO_ROOT}/build/screenshots-build.log"
 SIM_NAME="${SIM_NAME:-iPhone 17 Pro}"
 READY_TIMEOUT="${READY_TIMEOUT:-20}"   # max seconds to wait for a screen's ready signal
 RENDER_SETTLE="${RENDER_SETTLE:-1}"    # settle for the final frame once ready
@@ -84,12 +85,7 @@ fi
 
 # Resolve an iOS 26 '${SIM_NAME}' from the *available* devices (the set xcodebuild can target —
 # picking a merely-"booted" device can yield an ineligible runtime). Boot is idempotent.
-SIM_ID="$(xcrun simctl list devices available | awk -v name="${SIM_NAME}" '
-    /^-- iOS 26/        { ok = 1; next }
-    /^-- /              { ok = 0 }
-    ok && index($0, name " (") {
-        if (match($0, /\(([0-9A-Fa-f-]{36})\)/)) { print substr($0, RSTART + 1, RLENGTH - 2); exit }
-    }')"
+SIM_ID="$(poimi_resolve_sim "${SIM_NAME}")"
 [ -n "${SIM_ID}" ] || { echo "error: no available iOS 26 '${SIM_NAME}' simulator found." >&2; exit 1; }
 # FRESH=1 → shut the device down first, clearing any stuck system alert (e.g. a leftover photo
 # prompt from a prior non-harness run) so the capture starts from a clean SpringBoard.
@@ -98,31 +94,18 @@ if [ "${FRESH:-0}" = "1" ]; then
     xcrun simctl shutdown "${SIM_ID}" 2>/dev/null || true
 fi
 log "Booting ${SIM_NAME} (${SIM_ID})"
-xcrun simctl boot "${SIM_ID}" 2>/dev/null || true
-xcrun simctl bootstatus "${SIM_ID}" -b >/dev/null
+poimi_boot_sim "${SIM_ID}"
 log "Screens: $(echo ${SCREENS} | tr '\n' ' ')"
 
-# Build + install (Debug — the harness is DEBUG-only). Keep the build output (no -quiet, so a
-# failed harness run is self-diagnosing) and surface the tail if the build fails.
-mkdir -p "${DERIVED}"
+# Build + install (Debug — the harness is DEBUG-only). The build log is kept; its tail is surfaced
+# if the build fails.
 log "Building ${SCHEME} (Debug) — log: ${BUILD_LOG}"
-if ! xcodebuild build \
-        -project "${PROJECT}" -scheme "${SCHEME}" -configuration Debug \
-        -destination "id=${SIM_ID}" -derivedDataPath "${DERIVED}" \
-        > "${BUILD_LOG}" 2>&1; then
-    echo "error: build failed — last 40 lines:" >&2
-    tail -40 "${BUILD_LOG}" >&2
-    exit 1
-fi
-APP_PATH="${DERIVED}/Build/Products/Debug-iphonesimulator/PoimiApp.app"
-[ -d "${APP_PATH}" ] || { echo "error: built app not found at ${APP_PATH}" >&2; exit 1; }
+APP_PATH="$(poimi_build_app "${SIM_ID}" "${DERIVED}" "${BUILD_LOG}")" || exit 1
 log "Installing ${APP_PATH##*/}"
-xcrun simctl install "${SIM_ID}" "${APP_PATH}"
+poimi_install_app "${SIM_ID}" "${APP_PATH}"
 
-# Pre-authorize photo privacy. The harness always runs against the fake (never real PhotoKit),
-# but the simulator can present a leftover system photo-permission alert over the capture — this
-# suppresses it so every screenshot is clean and deterministic.
-xcrun simctl privacy "${SIM_ID}" grant photos "${BUNDLE_ID}" 2>/dev/null || true
+# Pre-authorize photo privacy so a leftover system alert can't cover a capture.
+poimi_grant_privacy "${SIM_ID}"
 
 # Wait until the launched screen logs `screenshot-ready: <id>` (a `.notice`, so `log show` sees
 # it). Returns non-zero if it never signals within READY_TIMEOUT.

@@ -12,68 +12,43 @@
 import OSLog
 import SwiftData
 import SwiftUI
+import Curation
 
 @main
 struct PoimiApp: App {
-    // Composition root (#23/#29/#30): resolve the app's dependencies once at launch and inject
-    // them into the environment. `AppRootView` + `AppCoordinator` drive the UI (onboarding →
+    // Composition root (#23/#29/#30): the app's dependencies, wired once at launch by `AppGraph` and
+    // injected into the environment. `AppRootView` + `AppCoordinator` drive the UI (onboarding →
     // permission → albums), reading `\.photoLibrary` and the stores — never PhotoKit/SwiftData
-    // directly.
-    private let photoLibrary = PhotoLibraryProvider.make()
-    private let thumbnailProvider = ThumbnailProvider.make()
-    /// The reverse-geocoding seam (#130): the real `CLGeocoder` on device, the deterministic fake only
-    /// under `-PoimiUseFakeLibrary`. MUST be injected here — the environment's DEBUG default is the fake,
-    /// so a missing injection silently shows synthetic "Place <lat>,<lon>" names instead of real places.
-    private let placeNaming = PlaceNamingProvider.make()
-    private let modelContainer: ModelContainer
-    @State private var projectStore: ProjectStore
-    @State private var selectionStore: SelectionStore
-    @State private var doneStore: DoneStore
-    @State private var coordinator: AppCoordinator
-    @State private var whatsNewState: WhatsNewState
-    @State private var appReviewPrompt: AppReviewPrompt
+    // directly. Held in `@State` so the graph survives every `App` re-evaluation.
+    @State private var graph: AppGraph
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        let container: ModelContainer
-        do {
-            container = try AppModelContainer.make()
-        } catch {
-            // The data store is unrecoverable at launch — there is no sensible degraded mode.
-            Log.app.fault("Failed to open the data store: \(String(describing: error), privacy: .public)")
-            fatalError("Poimi could not open its data store: \(error)")
+        #if DEBUG
+        // Control plane (#296): `-PoimiControl` swaps in an isolated, fixture-seeded graph (fake
+        // library, in-memory store, its own defaults). All of it lives in `Control/`, DEBUG-only (D30).
+        if let control = ControlLaunch.bootGraph() {
+            _graph = State(initialValue: control)
+            Log.app.notice("Poimi launched")
+            return
         }
-        modelContainer = container
-        // One shared timeline cache (#130): the review screens read/write it through the coordinator,
-        // and `ProjectStore` uses the SAME instance to drop an album's cached file on delete.
-        let timelineCache = TimelineCache()
-        _projectStore = State(initialValue: ProjectStore(container: container, timelineCache: timelineCache))
-        _selectionStore = State(initialValue: SelectionStore(container: container))
-        _doneStore = State(initialValue: DoneStore(container: container))
-        _coordinator = State(initialValue: AppCoordinator(library: photoLibrary, timelineCache: timelineCache))
-        // What's New (#248): reads the current CFBundleShortVersionString + the last-seen version from
-        // UserDefaults and decides whether to present on this launch. Owned once here (above the layout
-        // swap) so it survives the iPad size-class re-init and its silent-mark persist is lifecycle-free.
-        _whatsNewState = State(initialValue: WhatsNewState())
-        // App Store review prompt (#269): reads the current app version + the last-prompted version from
-        // UserDefaults and gates the ask to once per version. Owned here (like whatsNewState) so it survives
-        // the iPad size-class re-init; the actual requestReview() fires from ExportView on a successful export.
-        _appReviewPrompt = State(initialValue: AppReviewPrompt())
+        #endif
+        _graph = State(initialValue: .production())
         Log.app.notice("Poimi launched")
     }
 
     var body: some Scene {
         WindowGroup {
             rootView
-                .environment(\.photoLibrary, photoLibrary)
-                .environment(\.thumbnailProvider, thumbnailProvider)
-                .environment(\.placeNaming, placeNaming)
-                .environment(projectStore)
-                .environment(selectionStore)
-                .environment(doneStore)
-                .environment(coordinator)
-                .environment(whatsNewState)
-                .environment(appReviewPrompt)
+                .environment(\.photoLibrary, graph.photoLibrary)
+                .environment(\.thumbnailProvider, graph.thumbnailProvider)
+                .environment(\.placeNaming, graph.placeNaming)
+                .environment(graph.projectStore)
+                .environment(graph.selectionStore)
+                .environment(graph.doneStore)
+                .environment(graph.coordinator)
+                .environment(graph.whatsNewState)
+                .environment(graph.appReviewPrompt)
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active {
                         // Durability point (D15/§12): persist the live selection as soon as we
@@ -81,24 +56,27 @@ struct PoimiApp: App {
                         // before `.background` — so picks survive a force-quit, which delivers no
                         // `.background`. (A jetsam kill mid-foreground still loses the last
                         // `debounce` window; acceptable at v1.)
-                        selectionStore.flushNow()
-                        doneStore.flushNow()
+                        graph.selectionStore.flushNow()
+                        graph.doneStore.flushNow()
                     } else {
                         // Re-read authorization on resume (D6): the user may have changed it in
                         // Settings (the recovery deep-link path) while we were backgrounded.
-                        Task { await coordinator.refreshAuthorization() }
+                        Task { await graph.coordinator.refreshAuthorization() }
                     }
                 }
         }
-        .modelContainer(modelContainer)
+        .modelContainer(graph.modelContainer)
     }
 
     @ViewBuilder
     private var rootView: some View {
         #if DEBUG
+        // A refused control launch (malformed `-PoimiControl` flags) runs isolated and says why.
         // Screenshot harness (#48): `-PoimiScreen <id>` boots straight to a catalog screen.
         // An unknown id fails loud (never a silent fallback that mis-captures the real root).
-        if let id = DebugLaunch.screenArgument {
+        if let refusal = ControlLaunch.refusal {
+            ControlRefusedView(message: refusal)
+        } else if let id = DebugLaunch.screenArgument {
             if let screen = DebugLaunch.requestedScreen {
                 DebugScreenHost(screen: screen)
             } else {
