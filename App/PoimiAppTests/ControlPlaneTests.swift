@@ -39,6 +39,17 @@ struct ControlHarness {
                   library: library, iPad: iPad)
     }
 
+    /// A launch that has already bootstrapped — where most tests start. (Tests of the bootstrap itself
+    /// use the plain `init` and call `runtime.bootstrap()` when they mean to.)
+    static func booted(_ fixture: ControlFixture, route: ControlRoute? = nil, viewer: String? = nil,
+                       headless: Bool = false, library: (any PhotoLibraryProviding)? = nil,
+                       iPad: Bool = false) async -> ControlHarness {
+        let harness = ControlHarness(fixture, route: route, viewer: viewer, headless: headless, library: library,
+                                     iPad: iPad)
+        await harness.runtime.bootstrap()
+        return harness
+    }
+
     /// `library` replaces the fixture's own (a test wraps it, e.g. to gate fetches); the fixture still
     /// decides the albums and aliases.
     /// `iPad` = the split view's layout: the album list (sidebar) is always on screen.
@@ -333,8 +344,7 @@ struct ControlSnapshotTests {
     @Test("no localIdentifier, title, place name or project id in any fixture's snapshot",
           arguments: ControlFixture.allCases)
     func redaction(_ fixture: ControlFixture) async throws {
-        let harness = ControlHarness(fixture)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(fixture)
         if !harness.created.isEmpty, fixture.authorization == .authorized {
             try await harness.openReview()
         }
@@ -368,8 +378,7 @@ struct ControlSnapshotTests {
 
     @Test("state.json shape: keys, types, explicit nulls")
     func shape() async throws {
-        let harness = ControlHarness(.midReview)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview)
         try await harness.openReview()
         let snapshots = harness.serializedSnapshots()
         let state = try #require(try Self.parse(snapshots[0]) as? [String: Any])

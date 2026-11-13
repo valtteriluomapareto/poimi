@@ -94,8 +94,7 @@ struct ControlExportGateTests {
     /// completion screen's counts are the result's, all 22 in the one album (#300 review).
     @Test("iPad: re-open mid-export, pick more, Save again → one album holding every pick")
     func iPadPickMoreMidExport() async throws {
-        let harness = ControlHarness(.oneAlbum, iPad: true)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum, iPad: true)
         try await harness.pickFirstDayAndReturnToOverview()
         try await harness.fixtureOp(#"{"op":"library.holdExports"}"#)
         try await harness.send(#"{"type":"nav.openExport"}"#)
@@ -125,8 +124,7 @@ struct ControlExportGateTests {
     /// A failing export (held, then released into the failure): the error screen, its Try again, recovery.
     @Test("failExport: a held export released into a failure → failed → Try again recovers once cleared")
     func failedExportRetries() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         try await harness.pickFirstDayAndReturnToOverview()
         try await harness.fixtureOp(#"{"op":"library.holdExports"}"#)
         #expect(try await harness.fixtureOp(#"{"op":"library.failExport","error":"writeFailed"}"#).isAccepted)
@@ -158,8 +156,7 @@ struct ControlExportGateTests {
 
     @Test("the export levers say noop when already so; a bad argument is refused")
     func leverEdges() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         #expect(try await harness.fixtureOp(#"{"op":"library.releaseExports"}"#).isNoop)
         #expect(try await harness.fixtureOp(#"{"op":"library.holdExports"}"#).isAccepted)
         #expect(try await harness.fixtureOp(#"{"op":"library.holdExports"}"#).isNoop)

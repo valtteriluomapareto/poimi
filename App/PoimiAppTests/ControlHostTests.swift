@@ -77,8 +77,7 @@ struct ControlHostJourneyTests {
     /// → grid → the cluster's select-all chip → its done seal → flush → back → Save to Photos → exported.
     @Test("headless happy path: open → scan → pick a cluster → done → flush → export → exported")
     func headlessHappyPath() async throws {
-        let harness = ControlHarness(.oneAlbum, headless: true)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum, headless: true)
         #expect(harness.value("app.host") == .value(.string("headless")))
 
         let open = try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
@@ -160,8 +159,7 @@ struct ControlHostJourneyTests {
     @Test("deleting an album while its scan is in flight doesn't trap; nothing is published for it")
     func deleteDuringScan() async throws {
         let gated = GatedLibrary(ControlFixture.scale.makeLibrary())
-        let harness = ControlHarness(.scale, library: gated, iPad: true)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.scale, library: gated, iPad: true)
         await gated.hold(fetches: true)
         #expect(try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#).isAccepted)
         await gated.waitUntilHeld()
@@ -179,14 +177,12 @@ struct ControlHostJourneyTests {
     /// #258: on iPad the cog stays tappable while App settings shows; a repeat must not stack a copy.
     @Test("#258: openAppSettings twice → the second is a noop, one copy on the path (iPhone + iPad)")
     func appSettingsIdempotent() async throws {
-        let phone = ControlHarness(.oneAlbum)
-        await phone.runtime.bootstrap()
+        let phone = await ControlHarness.booted(.oneAlbum)
         #expect(try await phone.send(#"{"type":"nav.openAppSettings"}"#).isAccepted)
         #expect(try await phone.send(#"{"type":"nav.openAppSettings"}"#).isNoop)
         #expect(phone.coordinator.path == [.appSettings])
 
-        let pad = ControlHarness(.oneAlbum, iPad: true)
-        await pad.runtime.bootstrap()
+        let pad = await ControlHarness.booted(.oneAlbum, iPad: true)
         try await pad.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         #expect(try await pad.send(#"{"type":"nav.openAppSettings"}"#).isAccepted)
         #expect(try await pad.send(#"{"type":"nav.openAppSettings"}"#).isNoop)
@@ -202,8 +198,7 @@ struct ControlHostJourneyTests {
     /// every pick; the done store's live set must not write the old marks back.
     @Test("#285: markAllUnreviewed clears day marks (even unflushed), keeps the picks, and stays cleared")
     func markAllUnreviewedKeepsPicks() async throws {
-        let harness = ControlHarness(.midReview)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         try await harness.send(#"{"type":"nav.openReview","album":"album-1"}"#)
         await harness.settled()
@@ -233,8 +228,7 @@ struct ControlHostJourneyTests {
     /// day that holds a video.
     @Test("#289: done days survive a lens switch through albums.update (legacy baseline, video on a done day)")
     func doneSurvivesLensSwitch() async throws {
-        let harness = ControlHarness(.legacyBaseline)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.legacyBaseline)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         await harness.settled()
         let photosOnly = harness.value("active.scan.candidates")
@@ -259,8 +253,7 @@ struct ControlHostJourneyTests {
     /// Settings edit rescans while Settings is still on top — headless too.
     @Test("albums.update with Settings on top rescans the Overview beneath it (headless)")
     func updateRescansUnderSettings() async throws {
-        let harness = ControlHarness(.legacyBaseline, headless: true)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.legacyBaseline, headless: true)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         try await harness.send(#"{"type":"nav.openSettings","album":"album-1"}"#)
         await harness.settled()
@@ -276,8 +269,7 @@ struct ControlHostJourneyTests {
 
     @Test("selection.toggleCluster is the grid's chip: a trip cluster's photos across all its days")
     func toggleClusterMatchesChip() async throws {
-        let harness = ControlHarness(.located)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.located)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         try await harness.send(#"{"type":"nav.openReview","album":"album-1"}"#)
         await harness.settled()
@@ -293,8 +285,7 @@ struct ControlHostJourneyTests {
     @Test("a running or queued export makes delete / reset refuse busy; it finishes and settles")
     func busyWhileExporting() async throws {
         let gated = GatedLibrary(ControlFixture.midReview.makeLibrary())
-        let harness = ControlHarness(.midReview, library: gated, iPad: true)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview, library: gated, iPad: true)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         await harness.settled()
         await gated.hold(exports: true)
@@ -319,8 +310,7 @@ struct ControlHostJourneyTests {
 
     @Test("a failing fetch, then recovery: failFetch → failed scan; null → re-open settles ready")
     func failFetchAndRecover() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         #expect(try await harness.fixtureOp(#"{"op":"library.failFetch","kind":"fetchFailed"}"#).isAccepted)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         await harness.settled()
@@ -335,8 +325,7 @@ struct ControlHostJourneyTests {
 
     @Test("revoked access mid-session: library.authorization + lifecycle.resume → recovery")
     func revokeMidSession() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         await harness.settled()
         #expect(try await harness.fixtureOp(#"{"op":"library.authorization","status":"denied"}"#).isAccepted)
@@ -348,8 +337,7 @@ struct ControlHostJourneyTests {
 
     @Test("library actions need the album list (or the album's settings) on screen; iPad's sidebar always is")
     func libraryActionsRespectTheScreen() async throws {
-        let phone = ControlHarness(.fourStatuses)
-        await phone.runtime.bootstrap()
+        let phone = await ControlHarness.booted(.fourStatuses)
         try await phone.send(#"{"type":"nav.openAlbum","album":"album-3"}"#)
         #expect(try await phone.send(#"{"type":"albums.delete","album":"album-1"}"#).refusal == .notShown)
         #expect(try await phone.send(#"{"type":"albums.duplicate","album":"album-1"}"#).refusal == .notShown)
@@ -364,8 +352,7 @@ struct ControlHostJourneyTests {
         #expect(phone.value("nav.screen") == .value(.string("albums")))
         await phone.settled()
 
-        let pad = ControlHarness(.fourStatuses, iPad: true)
-        await pad.runtime.bootstrap()
+        let pad = await ControlHarness.booted(.fourStatuses, iPad: true)
         try await pad.send(#"{"type":"nav.openAlbum","album":"album-3"}"#)
         #expect(try await pad.send(#"{"type":"albums.duplicate","album":"album-1"}"#).isAccepted)
         #expect(try await pad.send(#"{"type":"albums.delete","album":"album-1"}"#).isAccepted)
@@ -381,8 +368,7 @@ struct ControlHostJourneyTests {
 struct AlbumRowDeletedTests {
     @Test("open → back → delete: the row's model reads as gone, and rendering it doesn't trap")
     func rowSkipsDeletedModel() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let project = try #require(harness.project("album-1"))
         #expect(!project.isGone)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)

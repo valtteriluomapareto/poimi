@@ -35,8 +35,7 @@ struct ControlUIStateTests {
 
     @Test("review.setFilter: the overview's menu — active.overview.filter; noop on repeat; not on the grid")
     func overviewFilter() async throws {
-        let harness = ControlHarness(.midReview)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview)
         #expect(try await harness.send(#"{"type":"review.setFilter","filter":"toReview"}"#).refusal == .notShown)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         await harness.settled()
@@ -54,8 +53,7 @@ struct ControlUIStateTests {
 
     @Test("the filter isn't shown with a single cluster")
     func filterHiddenOnOneCluster() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let created = try await harness.send(
             #"{"type":"albums.create","title":"One day","start":"2025-07-05","end":"2025-07-05","target":5}"#)
         #expect(created.isAccepted, "\(created)")
@@ -68,8 +66,7 @@ struct ControlUIStateTests {
     /// `DayKey.anchorDate` (noon), so a one-day album ran noon to noon and held the next morning's photos.
     @Test("albums.create / albums.update periods run midnight to midnight, as the date pickers give them")
     func periodsStartAtMidnight() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         try await harness.send(
             #"{"type":"albums.create","title":"One day","start":"2025-07-05","end":"2025-07-05","target":5}"#)
         await harness.settled()
@@ -90,8 +87,7 @@ struct ControlUIStateTests {
 
     @Test("the grid page: active.grid.cluster; goTo / markDoneAndAdvance only on the grid")
     func gridCluster() async throws {
-        let harness = ControlHarness(.midReview)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview)
         try await harness.openGrid()
         let entry = try #require(harness.graph.session.currentReviewCluster)
         #expect(harness.value("active.grid.cluster") == .value(.string(entry.firstDay?.description)))
@@ -115,8 +111,7 @@ struct ControlUIStateTests {
 
     @Test("viewer.page + the auto-done toast: nav.viewerPhoto / nav.viewerToast; Undo; the filmstrip's reach")
     func viewerPagingAndToast() async throws {
-        let harness = ControlHarness(.midReview)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview)
         try await harness.openGrid()
         let done = harness.graph.doneStore
         let index = try #require(harness.clusters.firstIndex { !done.isDone($0) })
@@ -148,8 +143,7 @@ struct ControlUIStateTests {
 
     @Test("past the last photo: the end-of-set card covers the transport; its Save to Photos is nav.openExport")
     func endOfSetCard() async throws {
-        let harness = ControlHarness(.midReview)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview)
         try await harness.openGrid()
         let lastID = try #require(harness.graph.session.reviewOrderedIDs.last)
         try await harness.send(#"{"type":"viewer.open","photo":"\#(harness.alias(lastID))"}"#)
@@ -179,8 +173,7 @@ struct ControlModalTests {
 
     @Test("New album sheet: present, it covers the screen, Create from it, or dismiss")
     func newAlbumSheet() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         #expect(try await harness.send(#"{"type":"ui.present","modal":"newAlbum"}"#).isAccepted)
         #expect(harness.value("nav.sheet") == .value(.string("newAlbum")))
         #expect(try await harness.send(#"{"type":"ui.present","modal":"newAlbum"}"#).isNoop)
@@ -201,8 +194,7 @@ struct ControlModalTests {
 
     @Test("confirmations from the album list: nav.sheet + sheetAlbum; ui.confirm / ui.dismiss; settings-only ones")
     func listConfirmations() async throws {
-        let harness = ControlHarness(.fourStatuses)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.fourStatuses)
         // A confirmation needs its album, and only the confirmations take one.
         #expect(throws: (any Error).self) {
             try JSONDecoder().decode(ControlAction.self,
@@ -229,8 +221,7 @@ struct ControlModalTests {
     @Test("a refused ui.confirm leaves the dialog up and the album untouched (its export is running)")
     func refusedConfirm() async throws {
         let gated = GatedLibrary(ControlFixture.midReview.makeLibrary())
-        let harness = ControlHarness(.midReview, library: gated, iPad: true)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview, library: gated, iPad: true)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         await harness.settled()
         await gated.hold(exports: true)
@@ -254,8 +245,7 @@ struct ControlModalTests {
 
     @Test("iPad: on album settings the settings' dialog is the one (not the sidebar's); What's New on app settings")
     func settingsConfirmations() async throws {
-        let harness = ControlHarness(.midReview, iPad: true)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview, iPad: true)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         await harness.settled()
         try await harness.send(#"{"type":"nav.openSettings","album":"album-1"}"#)

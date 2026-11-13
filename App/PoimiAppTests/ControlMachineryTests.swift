@@ -195,8 +195,7 @@ struct ControlHostMachineryTests {
 
     @Test("staleRun: a request for another launch's run is refused before anything runs")
     func staleRun() async {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let response = await request(harness, #""cmd":"send","action":{"type":"nav.openAlbum","album":"album-1"}"#,
                                      run: "r-old")
         #expect(response.error?.code == .staleRun)
@@ -206,8 +205,7 @@ struct ControlHostMachineryTests {
 
     @Test("the reply envelope: v, id, run, rev, ok + data | error; an id that isn't the file's is refused")
     func replyEnvelope() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let ok = await request(harness, #""cmd":"snapshot""#)
         let json = ok.json(run: "r-test", rev: 3)
         #expect(json["v"] == .int(1) && json["id"] == .int(7) && json["run"] == .string("r-test"))
@@ -222,8 +220,7 @@ struct ControlHostMachineryTests {
 
     @Test("wait: an undeclared path fails at once; timeoutMs 0 asserts now; unmet names every predicate")
     func waitErrors() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let started = ContinuousClock.now
         let undeclared = await harness.wait([("active.scan.phaze", .eq, .string("ready"))], timeoutMs: 30_000)
         #expect(ContinuousClock.now - started < .seconds(5))   // immediate, not after the timeout
@@ -242,8 +239,7 @@ struct ControlHostMachineryTests {
 
     @Test("wait is Observation-driven: it wakes when the scan an action started lands, before its timeout")
     func waitWakesOnChange() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         async let waited = harness.wait([("active.scan.phase", .eq, .string("ready")), ("idle", .eq, .bool(true))],
                                         timeoutMs: 30_000)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
@@ -253,8 +249,7 @@ struct ControlHostMachineryTests {
 
     @Test("seq / settledSeq / idle: accepted carries a seq; settled once its async work is done")
     func seqBookkeeping() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         #expect(harness.value("lastSeq") == .value(.int(0)))
         let first = try #require(try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#).seq)
         let second = try #require(try await harness.send(#"{"type":"nav.openSettings","album":"album-1"}"#).seq)
@@ -271,8 +266,7 @@ struct ControlHostMachineryTests {
 
     @Test("idle waits for fake thumbnail loads in flight (pending.thumbnails)")
     func thumbnailsHoldIdle() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         harness.thumbnailLoads.begin()
         #expect(harness.value("pending.thumbnails") == .value(.int(1)))
         #expect(harness.value("idle") == .value(.bool(false)))
@@ -292,8 +286,7 @@ struct ControlHostMachineryTests {
             if let reason = outcome.refusal { seen.insert(reason) }
         }
         let gated = GatedLibrary(ControlFixture.midReview.makeLibrary())
-        let harness = ControlHarness(.midReview, library: gated, iPad: true)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview, library: gated, iPad: true)
         // invalidState: nothing is hydrated yet — never a silent `accepted`.
         note(try await harness.fixtureOp(#"{"op":"selection.clear"}"#), .invalidState)
         // unknownAlias
@@ -326,15 +319,13 @@ struct ControlHostMachineryTests {
             #expect(outcome.isAccepted, "\(json) → \(outcome)")
         }
         // Onboarding: the fake answers the prompt with what it's told to.
-        let fresh = ControlHarness(.fresh)
-        await fresh.runtime.bootstrap()
+        let fresh = await ControlHarness.booted(.fresh)
         try await fresh.fixtureOp(#"{"op":"library.authorization","status":"authorized"}"#)
         try await send(fresh, #"{"type":"auth.request"}"#)
         await fresh.settled()
         #expect(fresh.value("app.rootPhase") == .value(.string("albums")))
 
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         try await send(harness, #"{"type":"ui.present","modal":"newAlbum"}"#)
         try await send(harness,
             #"{"type":"albums.create","title":"Summer","start":"2025-06-01","end":"2025-08-31","target":40}"#)
@@ -421,8 +412,7 @@ struct ControlHostMachineryTests {
 
     @Test("a predicate value of the wrong type for its path is an error, not silently met")
     func predicateTypeMismatch() async {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let mismatched = await harness.wait([("idle", .ne, .string("true"))], timeoutMs: 0)
         guard case .failure(let error) = mismatched else { Issue.record("met?"); return }
         #expect(error.code == .badRequest)
@@ -437,8 +427,7 @@ struct ControlHostMachineryTests {
 
     @Test("a reply brings state up to date first: the state written is at least the reply's rev")
     func replyFlushesState() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let response = await harness.host.handle(
             ControlRequest(id: 1, run: "r-test", command: .send(.navOpenAppSettings)))
         let reply = await harness.host.reply(response)
@@ -481,8 +470,7 @@ struct ControlSchemaTests {
             for (path, type) in paths(harness.runtime.stateJSON()) { observed[path, default: []].insert(type) }
         }
         for fixture in ControlFixture.allCases {
-            let harness = ControlHarness(fixture)
-            await harness.runtime.bootstrap()
+            let harness = await ControlHarness.booted(fixture)
             record(harness)
             if fixture.authorization == .authorized, !harness.created.isEmpty {
                 try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
@@ -491,8 +479,7 @@ struct ControlSchemaTests {
             }
         }
         // States the fixtures alone don't reach: the viewer, a finished export, a refused launch.
-        let viewer = ControlHarness(.midReview, route: .review(album: "album-1", day: nil), viewer: "a-0002")
-        await viewer.runtime.bootstrap()
+        let viewer = await ControlHarness.booted(.midReview, route: .review(album: "album-1", day: nil), viewer: "a-0002")
         record(viewer)
         // …and its auto-done toast: from the open cluster's last photo, across its end.
         try await viewer.send(#"{"type":"viewer.dismiss"}"#)
@@ -500,8 +487,7 @@ struct ControlSchemaTests {
         try await viewer.send(#"{"type":"viewer.open","photo":"\#(viewer.alias(try #require(open.assetIDs.last)))"}"#)
         try await viewer.send(#"{"type":"viewer.page","direction":"next"}"#)
         record(viewer)
-        let exported = ControlHarness(.exported)
-        await exported.runtime.bootstrap()
+        let exported = await ControlHarness.booted(.exported)
         try await exported.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         await exported.settled()
         try await exported.send(#"{"type":"nav.openExport"}"#)
@@ -594,8 +580,7 @@ struct ControlMailboxTests {
 
     @Test("requests are handled in ascending n, replied atomically, and removed; a bad one gets an error reply")
     func ordering() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let directory = try directory()
         // Written out of order; each accepted op takes the next seq, so the replies show the order handled.
         try write(#""cmd":"fixture","fixture":{"op":"flush"}"#, id: 12, to: directory)
@@ -625,8 +610,7 @@ struct ControlMailboxTests {
 
     @Test("a request that arrives after start is picked up (directory source or the fallback poll)")
     func picksUpLaterRequests() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let directory = try directory()
         let mailbox = ControlMailbox(directory: directory, host: harness.host, pollInterval: .milliseconds(20))
         mailbox.start()
@@ -644,8 +628,7 @@ struct ControlMailboxTests {
 
     @Test("a send queued behind a wait isn't held by it: actions never queue behind waits")
     func waitDoesNotBlockSends() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let directory = try directory()
         // A wait that can only be met by the send behind it.
         try write(#"{"v":1,"id":1,"run":"r-test","cmd":"wait","timeoutMs":20000,"#
@@ -663,8 +646,7 @@ struct ControlMailboxTests {
 
     @Test("a request file without a number gets a badRequest reply and is removed, not ignored forever")
     func malformedRequestName() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let directory = try directory()
         try write(#"{"v":1,"id":3,"run":"r-test","cmd":"schema"}"#, name: "req--3.json", to: directory)
         let mailbox = ControlMailbox(directory: directory, host: harness.host)
