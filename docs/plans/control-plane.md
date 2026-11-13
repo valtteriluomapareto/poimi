@@ -427,6 +427,28 @@ Lift a piece of state only when a real task needs it, verifying each on device:
 **Out of scope:** vertical scroll offset, column pinch, split-view column visibility, form
 drafts and focus. Size class comes only from the launch device (`--ipad`).
 
+**As built (#299).** All four pieces were lifted, each with an action, a snapshot path and tests; the
+vocabulary is `poimi.sh schema`. Decisions and deviations:
+
+- **Where the state lives.** The filter and the grid's current cluster are on `AlbumSession`; the modal is
+  `AppCoordinator.modal`; the viewer's photo, filmstrip window, end-of-set card and toast are a new
+  `ViewerStore`. The views keep only presentation (scroll position, haptics, timers, prefetch).
+- **A modal knows its origin** (album list or album settings): on iPad both are on screen, so the origin
+  picks which view presents the dialog. Every confirm button goes through `AlbumActions.confirm`, which
+  refuses (and leaves the dialog up) for a gone album or one that's exporting.
+- **While a modal is up every other action is `notShown`**, the iPad split view included — except the New
+  album sheet's own `albums.create`.
+- **The grid enters once per visit** (the drill day's cluster, else the first unreviewed one) after the
+  reconcile, and again on a new scan under an open grid. The pager keeps its own scroll position and
+  follows the session both ways; only the end-cap's own advance animates (in the view), so a control-plane
+  advance jumps.
+- **A viewer dismissal keeps the viewer's state** (the sheet is still sliding down, showing it); an opening
+  starts over. A filmstrip tap (`viewer.page{photo}`) reaches exactly what the strip shows.
+- **The toast timer is the view's**: in a headless run the toast stays until Undo or the next opening.
+- **Found on the way:** `albums.create` / `update` built periods on noon anchors (`DayKey.anchorDate`), so
+  a one-day album held the next morning's photos; they now start at midnight.
+- **Not lifted:** no launch flags for the filter or modals (after `launch`, a `send` does the same).
+
 ### Slice E — Break on purpose (only when tied to a specific bug)
 
 - An export gate in `FakePhotoLibrary` (hold, release, fail): re-export dupe-guard and

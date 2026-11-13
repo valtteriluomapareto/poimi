@@ -42,9 +42,9 @@ struct AlbumOverviewView: View {
     /// leaves, not a fixed guess that fired while the hero was still on screen.
     @State private var headerHeight: CGFloat = 0
     /// The cluster-list lens (#202): everything, only days still needing review, or only finished days —
-    /// how you hunt a straggler left behind. Defaults to `.all` (like Photos' filter), so the Overview
-    /// still opens showing the whole timeline; done days de-emphasize in place rather than vanish.
-    @State private var filter: ReviewFilter = .all
+    /// how you hunt a straggler left behind. Starts `.all` (like Photos'); done days de-emphasize in place
+    /// rather than vanish. The album session's (#299), so it's settable as data; it lasts while it's open.
+    private var filter: ReviewFilter { session.overviewFilter }
     /// Review-progress facts derived from the done-state, computed OFF the `body` (#202, mirroring the
     /// grid's `refreshCompletion` — #187): `AlbumOverviewView.body` re-evaluates on every *pick* (the
     /// toolbar reads `selection.progress`), so these done-derived scans are refreshed event-driven
@@ -414,7 +414,8 @@ struct AlbumOverviewView: View {
         let allCount = index.totalClusters
         let toReviewCount = allCount - doneClusterCount
         return Menu {
-            Picker("Filter", selection: $filter) {
+            Picker("Filter", selection: Binding(get: { session.overviewFilter },
+                                                set: { session.setOverviewFilter($0) })) {
                 Text("To review · \(toReviewCount)").tag(ReviewFilter.toReview)
                 Text("Done · \(doneClusterCount)").tag(ReviewFilter.done)
                 Text("All · \(allCount)").tag(ReviewFilter.all)

@@ -32,6 +32,8 @@ struct AppGraph {
     let coordinator: AppCoordinator
     /// The open album's scan, review context and export (#297) — no view has to be mounted for it.
     let session: AlbumSession
+    /// The photo viewer's state: the photo on screen, the end-of-set card, the auto-mark-done (#299).
+    let viewer: ViewerStore
     /// Open / create / delete / reset / edit, sequenced once (#297).
     let actions: AlbumActions
     let whatsNewState: WhatsNewState
@@ -61,6 +63,16 @@ struct AppGraph {
         // Navigation decides when the album changes; the session drops what it held for it.
         coordinator.onCloseAlbum = { [weak session] in session?.close() }
         coordinator.onLeaveExport = { [weak session] in session?.exportScreenClosed() }
+        coordinator.onLeaveReview = { [weak session] in session?.reviewScreenClosed() }
+        let viewer = ViewerStore(coordinator: coordinator, session: session, selection: selection, done: done)
+        // The viewer starts over on each opening; on its dismissal the grid's page follows the last photo
+        // (the viewer itself keeps its state: the sheet is still sliding down, showing it).
+        coordinator.onPhotoViewer = { [weak viewer, weak session] event in
+            switch event {
+            case .opened(let id): viewer?.open(id)
+            case .dismissed(let lastViewed): session?.followViewer(to: lastViewed)
+            }
+        }
         return AppGraph(
             photoLibrary: library,
             thumbnailProvider: thumbnails,
@@ -74,6 +86,7 @@ struct AppGraph {
             doneStore: done,
             coordinator: coordinator,
             session: session,
+            viewer: viewer,
             actions: AlbumActions(projects: projects, selection: selection, done: done,
                                   session: session, coordinator: coordinator),
             // What's New (#248) and the App Store review prompt (#269) read their last-seen /
@@ -124,6 +137,7 @@ extension View {
             .environment(graph.doneStore)
             .environment(graph.coordinator)
             .environment(graph.session)
+            .environment(graph.viewer)
             .environment(graph.actions)
             .environment(graph.whatsNewState)
             .environment(graph.appReviewPrompt)

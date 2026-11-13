@@ -23,6 +23,7 @@ import UIKit   // UIPasteboard for the DEBUG "Copy scan diagnostics" tool
 
 struct AlbumSettingsView: View {
     @Environment(AlbumActions.self) private var actions
+    @Environment(AppCoordinator.self) private var coordinator   // the confirmations are its modal (#299)
     @Environment(AlbumSession.self) private var session
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
@@ -35,9 +36,6 @@ struct AlbumSettingsView: View {
     /// calendar (matches `NewAlbumSetupView`).
     private let calendar: Calendar
 
-    @State private var confirmingUnreview = false
-    @State private var confirmingReset = false
-    @State private var confirmingDelete = false
     /// Set just before a delete pops the screen, so the teardown save doesn't touch a project that's
     /// already been removed from the context.
     @State private var isDeleting = false
@@ -164,7 +162,7 @@ struct AlbumSettingsView: View {
             // again" from "throw things away" — three identical red rows is how someone loses a year of
             // picks to a mis-tap.
             Section {
-                Button("Mark all days unreviewed") { confirmingUnreview = true }
+                Button("Mark all days unreviewed") { coordinator.present(.confirm(confirmation(.markAllUnreviewed))) }
                     .disabled(doneStore.doneDays.isEmpty)
             } footer: {
                 Text("Clears which days you’ve marked done so you can walk the album again. Your picks are kept.")
@@ -173,8 +171,8 @@ struct AlbumSettingsView: View {
             Section {
                 // Relabelled (#285): this always cleared day marks, the resume point and the export
                 // history too — "Reset picks" named a fraction of what it does.
-                Button("Reset all progress", role: .destructive) { confirmingReset = true }
-                Button("Delete album", role: .destructive) { confirmingDelete = true }
+                Button("Reset all progress", role: .destructive) { coordinator.present(.confirm(confirmation(.reset))) }
+                Button("Delete album", role: .destructive) { coordinator.present(.confirm(confirmation(.delete))) }
             } footer: {
                 Text("""
                     Reset clears your picks, your day marks and the export history — everything except the \
@@ -225,9 +223,12 @@ struct AlbumSettingsView: View {
         .onChange(of: scenePhase) { _, phase in if phase != .active { persistEdits() } }
         // Not `.destructive`, and the button says what it does — never a bare "Reset" (#285). It sits
         // next to the red one, so reading alike is the failure mode.
-        .confirmationDialog("Mark all days unreviewed?", isPresented: $confirmingUnreview,
+        // The three dialogs are the coordinator's modal (#299); each confirm runs through
+        // `AlbumActions.confirm`, the one path the album list's dialogs and the control plane use too.
+        .confirmationDialog("Mark all days unreviewed?",
+                            isPresented: coordinator.presenting(.confirm(confirmation(.markAllUnreviewed))),
                             titleVisibility: .visible) {
-            Button("Mark all unreviewed") { markAllUnreviewed() }
+            Button("Mark all unreviewed") { actions.confirm(confirmation(.markAllUnreviewed)) }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("""
@@ -235,15 +236,15 @@ struct AlbumSettingsView: View {
                 “\(project.title)”. Your picks are kept.
                 """)
         }
-        .confirmationDialog("Reset all progress?", isPresented: $confirmingReset, titleVisibility: .visible) {
+        .confirmationDialog("Reset all progress?", isPresented: coordinator.presenting(.confirm(confirmation(.reset))),
+                            titleVisibility: .visible) {
             // The confirm button counts what it destroys, so the cost is in the tap target rather than
             // only the prose above it.
-            Button(pickedCount == 0
-                   ? String(localized: "Reset everything",
-                            comment: "Destructive confirm when there are no picks to name")
-                   : String(localized: "Discard ^[\(pickedCount) pick](inflect: true)",
-                            comment: "Destructive confirm button: names the pick count it discards"),
-                   role: .destructive) { resetPicks() }
+            Button(role: .destructive) {
+                actions.confirm(confirmation(.reset))
+            } label: {
+                Text(ResetConfirmTitle.text(picks: pickedCount))
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("""
@@ -251,7 +252,8 @@ struct AlbumSettingsView: View {
                 for “\(project.title)”. The Photos album it created is not touched.
                 """)
         }
-        .confirmationDialog("Delete this album?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+        .confirmationDialog("Delete this album?", isPresented: coordinator.presenting(.confirm(confirmation(.delete))),
+                            titleVisibility: .visible) {
             Button("Delete “\(project.title)”", role: .destructive) { deleteAlbum() }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -271,11 +273,13 @@ struct AlbumSettingsView: View {
 
     // MARK: - Destructive actions
 
-    /// Clear all progress, reconciling the live stores — through the one reset ordering
-    /// (`AlbumActions.reset`): the stores holding this album flush + let go, THEN the model is zeroed,
-    /// THEN they re-hydrate the now-empty state, so a later debounced flush can't write stale picks back.
-    private func resetPicks() {
-        actions.reset(project)
+    /// This screen's confirmation of `kind` — the coordinator's modal while its dialog is up (#299). The
+    /// confirms run through `AlbumActions.confirm` → `reset` / `markAllUnreviewed` / `delete`, the one
+    /// ordering each shares: reset flushes + lets go of the live stores, zeroes, then re-hydrates (so a
+    /// later debounced flush can't write stale picks back); mark-all-unreviewed's ordering lives in
+    /// `DoneStore` and keeps every pick (#285).
+    private func confirmation(_ kind: AlbumConfirmation.Kind) -> AlbumConfirmation {
+        AlbumConfirmation(kind: kind, album: project.id, origin: .albumSettings)
     }
 
     /// The pick count to quote in the destructive dialogs. Prefers the LIVE count while this album is
@@ -288,20 +292,14 @@ struct AlbumSettingsView: View {
             : project.persistedPickedCount
     }
 
-    /// Clear the day marks only, keeping every pick (#285). The ordering that makes this safe lives
-    /// inside `DoneStore.markAllUnreviewed` — the store that owns the in-memory done set — rather than
-    /// being a sequence this view has to remember. `SelectionStore` is deliberately untouched: the
-    /// picks are the whole point of the action.
-    private func markAllUnreviewed() {
-        actions.markAllUnreviewed(project)
-    }
-
     /// Delete the project record and return to the album library (`AlbumActions.delete`: the live stores
     /// let go first, so nothing holds the dangling project). Flags `isDeleting` so teardown doesn't
-    /// re-save it. NEVER deletes the exported Photos album (D31).
+    /// re-save it (a delete that didn't come from this button is caught by `applyEdits`' `isGone` guard).
+    /// NEVER deletes the exported Photos album (D31).
     private func deleteAlbum() {
-        isDeleting = true
-        actions.delete(project)   // lets go of the stores, pops to the library, drops the model + cached timeline
+        // Only once it ran (it pops to the library, drops the model + cached timeline): a refused delete
+        // (the album is exporting) leaves this screen up, and its edits must still be saved on leave.
+        isDeleting = actions.confirm(confirmation(.delete))
     }
 
     // MARK: - Derived display

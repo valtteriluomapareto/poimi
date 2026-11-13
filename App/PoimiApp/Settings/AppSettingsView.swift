@@ -18,7 +18,7 @@ struct AppSettingsView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(WhatsNewState.self) private var whatsNew
     @Environment(\.openURL) private var openURL
-    @State private var showingWhatsNew = false
+    // The What's New sheet is the coordinator's `.whatsNew` modal (#299), not view state.
 
     /// The public source repository — Poimi is dual-licensed (AGPL-3.0 + commercial), curating in the open.
     private static let sourceURL = URL(string: "https://github.com/valtteriluomapareto/poimi")!
@@ -43,7 +43,7 @@ struct AppSettingsView: View {
                 LabeledContent("Version", value: appVersion)
                 LabeledContent("License", value: "AGPL-3.0")
                 // Re-open the What's New sheet on demand (#248).
-                Button { showingWhatsNew = true } label: {
+                Button { coordinator.present(.whatsNew) } label: {
                     LabeledContent("What's New") {
                         Image(systemName: "chevron.right")
                             .font(.footnote.weight(.semibold))
@@ -68,8 +68,8 @@ struct AppSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         // Manual re-read: shows the current version's notes regardless of seen-state, so it never
         // touches the persisted last-seen version (#248).
-        .sheet(isPresented: $showingWhatsNew) {
-            WhatsNewView(notes: whatsNew.manualNotes) { showingWhatsNew = false }
+        .sheet(isPresented: coordinator.presenting(.whatsNew)) {
+            WhatsNewView(notes: whatsNew.manualNotes) { coordinator.dismiss(.whatsNew) }
         }
     }
 

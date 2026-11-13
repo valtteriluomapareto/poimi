@@ -26,6 +26,65 @@ enum ControlArgType: String {
     case fetchFailure = "fetchFailed | null"
     case authorization = "notDetermined | authorized | limited | denied | restricted"
     case fixture = "fixture name"
+    case filter = "toReview | done | all"
+    case direction = "next | previous"
+    case modal = "newAlbum | whatsNew | confirmDelete | confirmReset | confirmUnreview"
+}
+
+/// The Overview filter's lenses by name (`review.setFilter`, `-PoimiFilter`, `active.overview.filter`).
+extension ReviewFilter {
+    static let controlNames: [(name: String, filter: ReviewFilter)] = [
+        ("toReview", .toReview), ("done", .done), ("all", .all)
+    ]
+
+    init?(controlName: String) {
+        guard let match = Self.controlNames.first(where: { $0.name == controlName }) else { return nil }
+        self = match.filter
+    }
+
+    var controlName: String {
+        Self.controlNames.first { $0.filter == self }?.name ?? "all"
+    }
+}
+
+/// `ui.present`'s modals by name — each the button that presents it (`nav.sheet` reports them so).
+enum ControlModal: String, CaseIterable {
+    case newAlbum
+    case whatsNew
+    case confirmDelete
+    case confirmReset
+    case confirmUnreview
+
+    /// The confirmation kind, for the three that need an album.
+    var confirmation: AlbumConfirmation.Kind? {
+        switch self {
+        case .newAlbum, .whatsNew: nil
+        case .confirmDelete: .delete
+        case .confirmReset: .reset
+        case .confirmUnreview: .markAllUnreviewed
+        }
+    }
+
+    /// The control name of a coordinator modal.
+    init(_ modal: AppModal) {
+        switch modal {
+        case .newAlbum: self = .newAlbum
+        case .whatsNew: self = .whatsNew
+        case .confirm(let confirmation):
+            switch confirmation.kind {
+            case .delete: self = .confirmDelete
+            case .reset: self = .confirmReset
+            case .markAllUnreviewed: self = .confirmUnreview
+            }
+        }
+    }
+}
+
+/// `viewer.page`'s target: a chevron / swipe step, or a filmstrip tap on a photo.
+enum ControlPageTarget: Equatable {
+    case next
+    case previous
+    case photo(String)
 }
 
 struct ControlArgSpec {
@@ -65,6 +124,16 @@ enum ControlActionKind: String, CaseIterable {
     case doneToggle = "done.toggle"
     case exportRetry = "export.retry"
     case authRequest = "auth.request"
+    case reviewSetFilter = "review.setFilter"
+    case reviewGoTo = "review.goTo"
+    case reviewMarkDoneAndAdvance = "review.markDoneAndAdvance"
+    case viewerPage = "viewer.page"
+    case viewerPick = "viewer.pick"
+    case viewerKeepReviewing = "viewer.keepReviewing"
+    case viewerUndoAutoDone = "viewer.undoAutoDone"
+    case uiPresent = "ui.present"
+    case uiConfirm = "ui.confirm"
+    case uiDismiss = "ui.dismiss"
 
     var args: [ControlArgSpec] {
         switch self {
@@ -72,8 +141,14 @@ enum ControlActionKind: String, CaseIterable {
              .albumsMarkAllUnreviewed:
             [.req("album", .albumAlias)]
         case .navOpenReview: [.req("album", .albumAlias), .opt("day", .day)]
-        case .navOpenExport, .navOpenAppSettings, .navBack, .navRoot, .viewerDismiss, .authRequest: []
+        case .navOpenExport, .navOpenAppSettings, .navBack, .navRoot, .viewerDismiss, .authRequest,
+             .reviewMarkDoneAndAdvance, .viewerPick, .viewerKeepReviewing, .viewerUndoAutoDone, .uiConfirm,
+             .uiDismiss: []
         case .viewerOpen, .selectionToggle: [.req("photo", .assetAlias)]
+        case .reviewSetFilter: [.req("filter", .filter)]
+        case .reviewGoTo: [.req("day", .day)]
+        case .viewerPage: [.opt("direction", .direction), .opt("photo", .assetAlias)]
+        case .uiPresent: [.req("modal", .modal), .opt("album", .albumAlias)]
         case .albumsCreate:
             [.opt("title", .string), .req("start", .day), .req("end", .day), .req("target", .int),
              .opt("media", .media), .opt("excludeScreenshots", .bool)]
@@ -99,8 +174,9 @@ enum ControlActionKind: String, CaseIterable {
         case .navBack: "the back button (not under the viewer)"
         case .navRoot: "back to the album list"
         case .viewerOpen: "tap a photo in the review grid: the viewer"
-        case .viewerDismiss: "pull the viewer down"
-        case .albumsCreate: "the album list's New album sheet → Create (inclusive start/end days); opens it"
+        case .viewerDismiss: "pull the viewer down (or the end-of-set card's Back to grid); the grid follows the photo"
+        case .albumsCreate:
+            "the New album sheet's Create (inclusive start/end days), from the sheet or the album list; opens it"
         case .albumsDelete: "Delete, from the album list or that album's settings; refused busy while it exports"
         case .albumsReset: "Reset all progress, from the album list or that album's settings; busy while it exports"
         case .albumsDuplicate: "Duplicate, from the album list"
@@ -111,6 +187,21 @@ enum ControlActionKind: String, CaseIterable {
         case .doneToggle: "the grid's done seal on the cluster holding that day (a trip toggles all its days)"
         case .exportRetry: "a failed export screen's Try again (newAlbum: Create a new album instead)"
         case .authRequest: "onboarding's continue: request photo access (answers with the fake's status)"
+        case .reviewSetFilter: "the overview's filter menu (shown with more than one cluster)"
+        case .reviewGoTo: "swipe the review grid to the cluster holding that day"
+        case .reviewMarkDoneAndAdvance:
+            "the current cluster's end-cap: Mark day done → the next unreviewed cluster (reopens a done one)"
+        case .viewerPage:
+            "the viewer: direction = the ‹ › chevrons / a swipe (forward past a cluster's end marks it done; "
+                + "next on the last photo opens the end-of-set card); photo = a filmstrip tap (never marks)"
+        case .viewerPick: "the viewer's Pick: toggle; a pick advances (the end-of-set card after the last photo)"
+        case .viewerKeepReviewing: "the end-of-set card's Keep reviewing"
+        case .viewerUndoAutoDone: "the auto-done toast's Undo (#128): reopens the cluster the viewer just marked"
+        case .uiPresent:
+            "the button that opens it: New album (album list), What's New (app settings), Delete / Reset all "
+                + "progress (album list or that album's settings; album), Mark all days unreviewed (settings; album)"
+        case .uiConfirm: "the open confirmation's confirm button (Delete / Discard picks / Mark all unreviewed)"
+        case .uiDismiss: "Cancel / swipe down / Continue on the open sheet or dialog"
         }
     }
 }
@@ -138,6 +229,16 @@ enum ControlAction: Equatable {
     case doneToggle(day: DayKey)
     case exportRetry(newAlbum: Bool)
     case authRequest
+    case reviewSetFilter(ReviewFilter)
+    case reviewGoTo(day: DayKey)
+    case reviewMarkDoneAndAdvance
+    case viewerPage(ControlPageTarget)
+    case viewerPick
+    case viewerKeepReviewing
+    case viewerUndoAutoDone
+    case uiPresent(ControlModal, album: String?)
+    case uiConfirm
+    case uiDismiss
 
     var kind: ControlActionKind {
         switch self {
@@ -161,6 +262,16 @@ enum ControlAction: Equatable {
         case .doneToggle: .doneToggle
         case .exportRetry: .exportRetry
         case .authRequest: .authRequest
+        case .reviewSetFilter: .reviewSetFilter
+        case .reviewGoTo: .reviewGoTo
+        case .reviewMarkDoneAndAdvance: .reviewMarkDoneAndAdvance
+        case .viewerPage: .viewerPage
+        case .viewerPick: .viewerPick
+        case .viewerKeepReviewing: .viewerKeepReviewing
+        case .viewerUndoAutoDone: .viewerUndoAutoDone
+        case .uiPresent: .uiPresent
+        case .uiConfirm: .uiConfirm
+        case .uiDismiss: .uiDismiss
         }
     }
 }
@@ -201,7 +312,7 @@ extension ControlAction: Decodable {
     }
 
     // One case per action, each reading its declared arguments — a switch is the clearest shape.
-    // swiftlint:disable:next cyclomatic_complexity
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     private static func make(_ kind: ControlActionKind,
                              _ keys: KeyedDecodingContainer<ControlKey>) throws -> ControlAction {
         switch kind {
@@ -240,6 +351,52 @@ extension ControlAction: Decodable {
         case .doneToggle: return .doneToggle(day: try keys.day("day")!)
         case .exportRetry: return .exportRetry(newAlbum: try keys.optional(Bool.self, "newAlbum") ?? false)
         case .authRequest: return .authRequest
+        case .reviewSetFilter:
+            let raw = try keys.required(String.self, "filter")
+            guard let filter = ReviewFilter(controlName: raw) else {
+                throw ControlRequestError.bad("'filter' must be \(ControlArgType.filter.rawValue), got '\(raw)'")
+            }
+            return .reviewSetFilter(filter)
+        case .reviewGoTo: return .reviewGoTo(day: try keys.day("day")!)
+        case .reviewMarkDoneAndAdvance: return .reviewMarkDoneAndAdvance
+        case .viewerPage: return .viewerPage(try keys.pageTarget())
+        case .viewerPick: return .viewerPick
+        case .viewerKeepReviewing: return .viewerKeepReviewing
+        case .viewerUndoAutoDone: return .viewerUndoAutoDone
+        case .uiPresent:
+            let raw = try keys.required(String.self, "modal")
+            guard let modal = ControlModal(rawValue: raw) else {
+                throw ControlRequestError.bad("'modal' must be \(ControlArgType.modal.rawValue), got '\(raw)'")
+            }
+            let album = keys.contains(ControlKey("album")) ? try keys.album() : nil
+            guard (modal.confirmation != nil) == (album != nil) else {
+                throw ControlRequestError.bad(modal.confirmation != nil
+                    ? "ui.present \(raw): give the 'album' it's for" : "ui.present \(raw) takes no 'album'")
+            }
+            return .uiPresent(modal, album: album)
+        case .uiConfirm: return .uiConfirm
+        case .uiDismiss: return .uiDismiss
+        }
+    }
+}
+
+extension KeyedDecodingContainer where Key == ControlKey {
+    /// `viewer.page`: exactly one of `direction` (next | previous) or `photo` (an alias).
+    func pageTarget() throws -> ControlPageTarget {
+        let direction = try optional(String.self, "direction")
+        let photo = try optional(String.self, "photo")
+        switch (direction, photo) {
+        case ("next"?, nil): return .next
+        case ("previous"?, nil): return .previous
+        case (nil, let alias?):
+            guard ControlAssetAliases.isAlias(alias) else {
+                throw ControlRequestError.bad("'photo' must be a photo alias like a-0001, got '\(alias)'")
+            }
+            return .photo(alias)
+        case (let other?, nil):
+            throw ControlRequestError.bad("'direction' must be \(ControlArgType.direction.rawValue), got '\(other)'")
+        default:
+            throw ControlRequestError.bad("viewer.page: give exactly one of 'direction' or 'photo'")
         }
     }
 }

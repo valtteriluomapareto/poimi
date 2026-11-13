@@ -670,7 +670,8 @@ struct DebugPhotoViewerHostView: View {
             built.session.seedReviewContext(
                 orderedIDs: Self.ids, dayByID: Self.dayByID,
                 assetsByID: Dictionary(fetched.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }))
-            built.coordinator.lastViewedID = Self.startID
+            // Open it as the grid would: the viewer store starts on the photo (and it's the last viewed).
+            built.coordinator.openPhoto(Self.startID)
             graph = built
             Log.app.notice("screenshot-ready: \(DebugScreen.photoviewer.rawValue, privacy: .public)")
         }

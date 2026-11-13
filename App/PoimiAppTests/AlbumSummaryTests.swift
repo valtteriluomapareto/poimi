@@ -63,3 +63,18 @@ struct AlbumSummaryTests {
         #expect(legacy.detailLine == "Exported")
     }
 }
+
+/// Regression (#299 review): the Reset confirm button was built with `String(localized:)`, which doesn't
+/// apply `^[…](inflect: true)`, so it showed "Discard ^[34 pick](inflect: true)" verbatim.
+@Suite("Reset confirmation title")
+struct ResetConfirmTitleTests {
+
+    @Test("counts the picks it discards, inflected, with no markup left; nothing to name says Reset everything")
+    func inflects() {
+        func title(_ picks: Int) -> String { String(ResetConfirmTitle.text(picks: picks).characters) }
+        #expect(title(1) == "Discard 1 pick")
+        #expect(title(34) == "Discard 34 picks")
+        #expect(title(0) == "Reset everything")
+        #expect(![1, 34].contains { title($0).contains("^[") || title($0).contains("inflect") })
+    }
+}

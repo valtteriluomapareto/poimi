@@ -150,7 +150,7 @@ final class ControlRuntime {
 
     var inputs: ControlSnapshotInputs {
         ControlSnapshotInputs(
-            fixture: fixture, coordinator: graph.coordinator, session: graph.session,
+            fixture: fixture, coordinator: graph.coordinator, session: graph.session, viewer: graph.viewer,
             projects: graph.projectStore,
             selection: graph.selectionStore, done: graph.doneStore,
             assetAliases: assetAliases, albumAliases: albumAliases,

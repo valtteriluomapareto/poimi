@@ -35,6 +35,45 @@ extension Route {
     }
 }
 
+extension Route {
+    /// The review grid — the coordinator tells the album session when it leaves the path.
+    var isReview: Bool {
+        if case .review = self { return true }
+        return false
+    }
+}
+
+/// A modal over the albums phase, held by `AppCoordinator.modal` (#299). The photo viewer isn't one: it's
+/// `presentedPhotoID`, its own sheet over the grid.
+enum AppModal: Hashable {
+    /// The album list's New album sheet.
+    case newAlbum
+    /// App settings' What's New sheet (the manual re-read; the once-per-version one is `WhatsNewState`'s).
+    case whatsNew
+    /// A confirmation dialog for one album.
+    case confirm(AlbumConfirmation)
+}
+
+/// A confirmation dialog: which action, for which album, and which screen asked — the album list (a row's
+/// context menu / swipe action) or the album's settings. On iPad both are on screen at once, so the origin
+/// decides which of them presents it.
+struct AlbumConfirmation: Hashable {
+    enum Kind: Hashable {
+        case delete
+        case reset
+        case markAllUnreviewed
+    }
+
+    enum Origin: Hashable {
+        case albumList
+        case albumSettings
+    }
+
+    let kind: Kind
+    let album: UUID
+    let origin: Origin
+}
+
 /// The app's root phase, derived from authorization (D6). Onboarding/permission sit *above* the
 /// albums library (§11); the typed `Route` path only exists once we're in `.albums`.
 enum RootPhase: Equatable {

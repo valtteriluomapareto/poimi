@@ -335,12 +335,15 @@ struct ControlHostMachineryTests {
 
         let harness = ControlHarness(.oneAlbum)
         await harness.runtime.bootstrap()
+        try await send(harness, #"{"type":"ui.present","modal":"newAlbum"}"#)
         try await send(harness,
             #"{"type":"albums.create","title":"Summer","start":"2025-06-01","end":"2025-08-31","target":40}"#)
         await harness.settled()
         #expect(harness.value("nav.screen") == .value(.string("overview")))
         #expect(harness.value("albums.album-2.target") == .value(.int(40)))
         try await send(harness, #"{"type":"nav.root"}"#)
+        try await send(harness, #"{"type":"ui.present","modal":"newAlbum"}"#)
+        try await send(harness, #"{"type":"ui.dismiss"}"#)
         try await send(harness, #"{"type":"albums.duplicate","album":"album-2"}"#)
         #expect(harness.value("albums.album-3") != .missing)
         try await send(harness, #"{"type":"albums.delete","album":"album-3"}"#)
@@ -349,11 +352,15 @@ struct ControlHostMachineryTests {
         try await send(harness, #"{"type":"nav.back"}"#)
 
         try await send(harness, #"{"type":"nav.openAlbum","album":"album-1"}"#)
+        await harness.settled()
+        try await send(harness, #"{"type":"review.setFilter","filter":"toReview"}"#)
         try await send(harness, #"{"type":"nav.openSettings","album":"album-1"}"#)
         try await send(harness,
             #"{"type":"albums.update","album":"album-1","title":"Year","target":60,"locationEnabled":false}"#)
         #expect(harness.value("albums.album-1.target") == .value(.int(60)))
         try await send(harness, #"{"type":"albums.markAllUnreviewed","album":"album-1"}"#)
+        try await send(harness, #"{"type":"ui.present","modal":"confirmReset","album":"album-1"}"#)
+        try await send(harness, #"{"type":"ui.confirm"}"#)
         try await send(harness, #"{"type":"nav.back"}"#)
         let day = "2025-07-05"
         try await send(harness, #"{"type":"nav.openReview","album":"album-1","day":"\#(day)"}"#)
@@ -367,8 +374,23 @@ struct ControlHostMachineryTests {
         #expect(harness.value("active.selection.count") == .value(.int(photos.count)))
         try await send(harness, #"{"type":"viewer.open","photo":"\#(photos[3])"}"#)
         #expect(harness.value("nav.viewerPhoto") == .value(.string(photos[3])))
+        try await send(harness, #"{"type":"viewer.page","direction":"next"}"#)
+        try await send(harness, #"{"type":"viewer.page","photo":"\#(photos[0])"}"#)
+        try await send(harness, #"{"type":"viewer.pick"}"#)   // un-picks photos[0] and stays
         try await send(harness, #"{"type":"viewer.dismiss"}"#)
+        try await send(harness, #"{"type":"viewer.open","photo":"\#(try #require(photos.last))"}"#)
+        try await send(harness, #"{"type":"viewer.page","direction":"next"}"#)   // across the day's end
+        try await send(harness, #"{"type":"viewer.undoAutoDone"}"#)
+        try await send(harness, #"{"type":"viewer.dismiss"}"#)
+        let lastPhoto = try #require(harness.graph.session.reviewOrderedIDs.last
+            .flatMap(harness.runtime.assetAliases.alias(for:)))
+        try await send(harness, #"{"type":"viewer.open","photo":"\#(lastPhoto)"}"#)
+        try await send(harness, #"{"type":"viewer.page","direction":"next"}"#)   // → the end-of-set card
+        try await send(harness, #"{"type":"viewer.keepReviewing"}"#)
+        try await send(harness, #"{"type":"viewer.dismiss"}"#)
+        try await send(harness, #"{"type":"review.goTo","day":"\#(day)"}"#)
         try await send(harness, #"{"type":"done.toggle","day":"\#(day)"}"#)
+        try await send(harness, #"{"type":"review.markDoneAndAdvance"}"#)   // reopens it (it was done)
         try await send(harness, #"{"type":"nav.back"}"#)
         // A failing export, then Try again once the library recovers.
         await harness.settled()
@@ -440,6 +462,12 @@ struct ControlSchemaTests {
         // States the fixtures alone don't reach: the viewer, a finished export, a refused launch.
         let viewer = ControlHarness(.midReview, route: .review(album: "album-1", day: nil), viewer: "a-0002")
         await viewer.runtime.bootstrap()
+        record(viewer)
+        // …and its auto-done toast: from the open cluster's last photo, across its end.
+        try await viewer.send(#"{"type":"viewer.dismiss"}"#)
+        let open = try #require(viewer.clusters.first { !viewer.graph.doneStore.isDone($0) })
+        try await viewer.send(#"{"type":"viewer.open","photo":"\#(viewer.alias(try #require(open.assetIDs.last)))"}"#)
+        try await viewer.send(#"{"type":"viewer.page","direction":"next"}"#)
         record(viewer)
         let exported = ControlHarness(.exported)
         await exported.runtime.bootstrap()

@@ -114,6 +114,25 @@ final class AlbumSession {
     /// affordances (#187) pick #185's re-export-aware label without holding a `CurationProject`.
     private(set) var reviewIsReExport = false
 
+    // MARK: - Screen state (#299)
+
+    /// The Overview's cluster-list lens (#202). Session state, not the view's, so it can be read and set
+    /// as data; like the view's `@State` it was, it lasts while the album is open and starts at `.all`.
+    private(set) var overviewFilter: ReviewFilter = .all
+
+    /// The review grid's LOGICAL current cluster (its page), by cluster id — `nil` while no grid is open.
+    /// The pager keeps its own scroll position and follows this both ways: a swipe settles here
+    /// (`showCluster`), and a move made here (`goTo`, `markDoneAndAdvance`, the viewer's return) scrolls it.
+    private(set) var reviewClusterID: String?
+    /// Where the grid is in its entry: not open, waiting for a published scan to pick its entry cluster
+    /// (the drill target `day`, else the first unreviewed one), or entered (from that `day`).
+    private enum GridEntry: Equatable {
+        case closed
+        case pending(DayKey?)
+        case entered(DayKey?)
+    }
+    @ObservationIgnored private var gridEntry = GridEntry.closed
+
     // MARK: - Export
 
     /// The open album's export for the current visit to the export screen. Starts `.idle`; `startExport`
@@ -146,14 +165,16 @@ final class AlbumSession {
     /// The album screens that start work when they appear.
     enum Screen: Equatable {
         case overview
-        case review
+        /// The review grid, entered on the cluster holding `day` (a drill from the Overview) or, with no
+        /// day, on the first unreviewed one.
+        case review(DayKey?)
         case export
 
         /// The screen a route shows, if it's one that starts work (settings screens don't).
         init?(_ route: Route) {
             switch route {
             case .albumOverview: self = .overview
-            case .review: self = .review
+            case .review(_, let day): self = .review(day)
             case .export: self = .export
             case .settings, .appSettings: return nil
             }
@@ -162,12 +183,13 @@ final class AlbumSession {
 
     /// What `screen` runs when it appears — its `.task`. THE one mapping from screen to session call: the
     /// views call it, and so does the control plane's host for a run with no views (#298), so the two can't
-    /// disagree. The Overview opens without reconciling (#289), the grid reconciles, the export screen
-    /// exports (once per visit). Idempotent: a second caller joins the load / no-ops the export.
+    /// disagree. The Overview opens without reconciling (#289), the grid reconciles (and picks its entry
+    /// cluster once per visit), the export screen exports (once per visit). Idempotent: a second caller
+    /// joins the load / no-ops the export.
     func appear(_ screen: Screen, _ project: CurationProject) async {
         switch screen {
         case .overview: await openOverview(project)
-        case .review: await openReview(project)
+        case .review(let day): await openReview(project, day: day)
         case .export: await startExport(project)
         }
     }
@@ -202,10 +224,14 @@ final class AlbumSession {
     }
 
     /// The review grid's entry: hydrate, scan (or reuse the scan), reconcile done-state — a done day that
-    /// gained a photo since the last load re-opens (D32(d)) — and publish.
+    /// gained a photo since the last load re-opens (D32(d)) — and publish. On the first call of a visit to
+    /// the grid it also picks the entry cluster (`day`'s, else the first unreviewed one) once the scan is
+    /// published; later calls (the screen re-appearing, the control host's re-runs) leave the page alone.
     @discardableResult
-    func openReview(_ project: CurationProject) async -> CandidateStore {
-        await open(project, reconcile: true)
+    func openReview(_ project: CurationProject, day: DayKey? = nil) async -> CandidateStore {
+        adopt(project)   // first: adopting another album closes the session, which resets the entry
+        if gridEntry == .closed { gridEntry = .pending(day) }
+        return await open(project, reconcile: true)
     }
 
     /// Re-run the scan (the Overview's "Try again" / access-recovered paths), then settle like `openOverview`.
@@ -292,6 +318,15 @@ final class AlbumSession {
             reviewClusters = clusters
             publishedStore = identity
             publishCount += 1
+            // A new load under an open grid re-enters it, as the grid a re-scan remounts always did.
+            if case .entered(let day) = gridEntry { gridEntry = .pending(day) }
+        }
+        // The grid's entry cluster, picked once per visit — after the reconcile above, so "first
+        // unreviewed" sees a done day that re-opened.
+        if case .pending(let day) = gridEntry {
+            gridEntry = .entered(day)
+            let entry = initialPage(clusters: clusters, scrollToDay: day, isDone: { done.isDone($0) })
+            moveCluster(to: clusters.indices.contains(entry) ? clusters[entry].id : clusters.first?.id)
         }
         let isReExport = project.targetAlbumID != nil
         if reviewIsReExport != isReExport { reviewIsReExport = isReExport }
@@ -357,6 +392,7 @@ final class AlbumSession {
         // Idempotent without churn: a second close (the coordinator's explicit one + its path hook) must
         // not write the observed properties again.
         guard projectID != nil || candidateStore != nil || !reviewOrderedIDs.isEmpty || export.phase != .idle
+            || overviewFilter != .all || reviewClusterID != nil || gridEntry != .closed
         else { return }
         projectID = nil
         candidateStore = nil
@@ -373,6 +409,8 @@ final class AlbumSession {
         reviewAssetsByID = [:]
         reviewClusters = []
         reviewIsReExport = false
+        if overviewFilter != .all { overviewFilter = .all }
+        reviewScreenClosed()
         retireExport()
     }
 
@@ -392,6 +430,63 @@ final class AlbumSession {
         reviewAssetsByID = assetsByID
     }
     #endif
+}
+
+// MARK: - Overview lens + grid position (#299)
+
+extension AlbumSession {
+    /// The Overview filter menu's choice.
+    func setOverviewFilter(_ filter: ReviewFilter) {
+        if overviewFilter != filter { overviewFilter = filter }
+    }
+
+    /// The pager settled on the cluster `id` (a swipe). Ignores an id that isn't a published cluster.
+    func showCluster(_ id: String) {
+        guard reviewClusters.contains(where: { $0.id == id }) else { return }
+        moveCluster(to: id)
+    }
+
+    /// Page the grid to the cluster holding `day` — what swiping to it does. `false` if no published
+    /// cluster holds it.
+    @discardableResult
+    func goTo(day: DayKey) -> Bool {
+        guard let cluster = reviewClusters.first(where: { $0.days.contains(day) }) else { return false }
+        moveCluster(to: cluster.id)
+        return true
+    }
+
+    /// The viewer was dismissed on `photoID`: the grid's page follows it to the cluster holding that photo
+    /// (#126). A photo outside the open review leaves the page where it is.
+    func followViewer(to photoID: String?) {
+        guard gridEntry != .closed, let photoID, let day = reviewDayByID[photoID] else { return }
+        goTo(day: day)
+    }
+
+    /// The end-cap's "Mark day done" on `cluster` (#38/#202) — ONE implementation for the grid and the
+    /// control plane: toggle its done-state; if that marked it done, advance to the next unreviewed cluster
+    /// after the CURRENT page (else the literal next; else stay — `nextUnreviewedPage`). Un-marking stays
+    /// put. Returns whether the cluster was done before (for the view's VoiceOver announcement).
+    @discardableResult
+    func markDoneAndAdvance(_ cluster: ReviewCluster) -> Bool {
+        let wasDone = done.isDone(cluster)
+        done.toggle(cluster)
+        guard !wasDone else { return wasDone }
+        let clusters = reviewClusters
+        let current = reviewClusterID.flatMap { id in clusters.firstIndex { $0.id == id } } ?? 0
+        let next = nextUnreviewedPage(after: current, count: clusters.count, isDone: { done.isDone(clusters[$0]) })
+        if clusters.indices.contains(next) { moveCluster(to: clusters[next].id) }
+        return wasDone
+    }
+
+    /// The grid left the path: its next visit picks its entry cluster afresh.
+    func reviewScreenClosed() {
+        gridEntry = .closed
+        moveCluster(to: nil)
+    }
+
+    private func moveCluster(to id: String?) {
+        if reviewClusterID != id { reviewClusterID = id }
+    }
 }
 
 extension ExportStore.Phase {
