@@ -23,14 +23,14 @@ final class MemorySink: ControlStateSink {
     var lastDetail: ControlJSON? { writes.last { $0.file == .detail }?.json }
 }
 
-/// One control launch, wired exactly as `ControlEnvironment.boot` wires it — the same graph factory
-/// and the same `ControlRuntime` — minus the process-global effects, with an in-memory sink.
+/// One control launch, wired exactly as `ControlEnvironment.boot` wires it — through the same
+/// `ControlEnvironment.makeRuntime` — minus the process-global effects, with an in-memory sink and, by
+/// default, an in-memory store under throwaway control directories.
 @MainActor
 struct ControlHarness {
     let fixture: ControlFixture
     let runtime: ControlRuntime
     let sink = MemorySink()
-    let thumbnailLoads = ThumbnailLoadCounter()
 
     init(_ fixture: ControlFixture, route: ControlRoute? = nil, viewer: String? = nil, headless: Bool = false,
          library: (any PhotoLibraryProviding)? = nil, iPad: Bool = false) {
@@ -39,21 +39,54 @@ struct ControlHarness {
                   library: library, iPad: iPad)
     }
 
-    /// `library` replaces the fixture's own (a test wraps it, e.g. to gate exports); the fixture still
+    /// A launch that has already bootstrapped — where most tests start. (Tests of the bootstrap itself
+    /// use the plain `init` and call `runtime.bootstrap()` when they mean to.)
+    static func booted(_ fixture: ControlFixture, route: ControlRoute? = nil, viewer: String? = nil,
+                       headless: Bool = false, library: (any PhotoLibraryProviding)? = nil,
+                       iPad: Bool = false) async -> ControlHarness {
+        let harness = ControlHarness(fixture, route: route, viewer: viewer, headless: headless, library: library,
+                                     iPad: iPad)
+        await harness.runtime.bootstrap()
+        return harness
+    }
+
+    /// `library` replaces the fixture's own (a test wraps it, e.g. to gate fetches); the fixture still
     /// decides the albums and aliases.
     /// `iPad` = the split view's layout: the album list (sidebar) is always on screen.
     init(_ fixture: ControlFixture, parsed: ControlLaunch.Parsed, library: (any PhotoLibraryProviding)? = nil,
          iPad: Bool = false) {
         self.fixture = fixture
-        let graph = ControlEnvironment.makeGraph(
-            fixture: fixture,
-            timelineCacheDirectory: FileManager.default.temporaryDirectory
-                .appendingPathComponent("control-tests-\(UUID().uuidString)", isDirectory: true),
+        runtime = ControlEnvironment.makeRuntime(
+            parsed, paths: Self.temporaryPaths(),
             defaults: ControlEnvironment.isolatedDefaults(suiteName: "control.test.\(UUID().uuidString)"),
-            thumbnailLoads: thumbnailLoads, library: library)
-        runtime = ControlRuntime(parsed: parsed, graph: graph, sink: sink, run: "r-test",
-                                 writeDelay: .milliseconds(10), thumbnailLoads: thumbnailLoads,
-                                 listAlwaysShown: iPad)
+            sink: sink, run: "r-test", writeDelay: .milliseconds(10), listAlwaysShown: iPad, inMemoryStore: true,
+            library: library.map { wrapper in { _ in wrapper } })
+    }
+
+    /// A launch over `paths` with its file store, exactly as `ControlEnvironment.boot` makes one: a fixture
+    /// launch wipes `paths` and seeds; `relaunch` continues whatever the last run over `paths` left (#300).
+    /// `extra` arguments go on the command line too (e.g. a bad route).
+    init(_ fixture: ControlFixture, paths: ControlPaths, relaunch: Bool = false, headless: Bool = false,
+         iPad: Bool = false, extra: [String] = []) {
+        self.fixture = fixture
+        let arguments = ["-PoimiControl"] + (relaunch ? ["-PoimiRelaunch"] : ["-PoimiFixture", fixture.rawValue])
+            + (headless ? ["-PoimiHeadless"] : []) + extra
+        runtime = ControlEnvironment.makeRuntime(
+            ControlLaunch.parse(arguments, recorded: ControlRunRecord.recordedRun(at: paths.record)),
+            relaunchRequested: relaunch, paths: paths,
+            defaults: ControlEnvironment.isolatedDefaults(suiteName: "control.test.\(UUID().uuidString)"),
+            sink: sink, run: "r-test-\(relaunch ? "relaunch" : "launch")", writeDelay: .milliseconds(10),
+            listAlwaysShown: iPad)
+    }
+
+    /// The fake thumbnail loads in flight (the runtime always counts them).
+    var thumbnailLoads: ThumbnailLoadCounter { runtime.thumbnailLoads! }
+
+    /// Fresh control directories for one test (both under the temporary directory).
+    static func temporaryPaths() -> ControlPaths {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("control-\(UUID().uuidString)")
+        return ControlPaths(support: root.appendingPathComponent("support"),
+                            output: root.appendingPathComponent("output"))
     }
 
     var graph: AppGraph { runtime.graph }
@@ -311,8 +344,7 @@ struct ControlSnapshotTests {
     @Test("no localIdentifier, title, place name or project id in any fixture's snapshot",
           arguments: ControlFixture.allCases)
     func redaction(_ fixture: ControlFixture) async throws {
-        let harness = ControlHarness(fixture)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(fixture)
         if !harness.created.isEmpty, fixture.authorization == .authorized {
             try await harness.openReview()
         }
@@ -346,13 +378,12 @@ struct ControlSnapshotTests {
 
     @Test("state.json shape: keys, types, explicit nulls")
     func shape() async throws {
-        let harness = ControlHarness(.midReview)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview)
         try await harness.openReview()
         let snapshots = harness.serializedSnapshots()
         let state = try #require(try Self.parse(snapshots[0]) as? [String: Any])
         #expect(Set(state.keys) == ["snapshotVersion", "run", "rev", "settledSeq", "lastSeq", "app", "nav",
-                                    "albums", "active", "pending", "idle"])
+                                    "albums", "active", "library", "pending", "idle"])
         #expect(state["settledSeq"] as? Int == state["lastSeq"] as? Int)
         #expect(state["snapshotVersion"] as? Int == 1)
         #expect(state["idle"] as? Bool == true)
@@ -424,9 +455,10 @@ struct ControlSnapshotTests {
         harness.coordinator.finishToExport()
         #expect(harness.snapshot().content["idle"] == .bool(false))
         #expect(harness.snapshot().content["active"]?["export"]?["phase"] == .string("idle"))
-        harness.selection.select(harness.graph.session.reviewOrderedIDs.prefix(2))   // a debounce is pending …
-        await harness.graph.session.startExport(project)
+        harness.selection.select(harness.graph.session.reviewOrderedIDs.prefix(2))
+        await harness.graph.session.startExport(project)   // (an export flushes the picks it exports, #300)
         #expect(harness.snapshot().content["active"]?["export"]?["phase"] == .string("done"))
+        harness.selection.toggle(harness.graph.session.reviewOrderedIDs[2])   // a debounce is pending …
         #expect(harness.snapshot().content["pending"]?["selectionFlush"] == .bool(true))
         // … and `idle` doesn't wait on it: under control the debounce is a day long (no flush action
         // until slice C), so the flush is reported under `pending` only.

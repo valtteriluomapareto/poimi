@@ -76,8 +76,7 @@ struct ControlRuntimeTests {
             (.appSettings, { _ in [.appSettings] })
         ]
         for (route, expected) in cases {
-            let harness = ControlHarness(.midReview, route: route)
-            await harness.runtime.bootstrap()
+            let harness = await ControlHarness.booted(.midReview, route: route)
             let id = try #require(harness.created.first?.id)
             #expect(harness.coordinator.path == expected(id), "\(route)")
             #expect(harness.runtime.launchError == nil, "\(route)")
@@ -86,8 +85,7 @@ struct ControlRuntimeTests {
 
     @Test("an export route is not idle until the export settles — and then reports it (#297)")
     func exportIdleObservable() async throws {
-        let harness = ControlHarness(.exported, route: .export(album: "album-1"))
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.exported, route: .export(album: "album-1"))
         #expect(harness.state("nav", "screen") == .string("export"))
         #expect(harness.state("active", "export", "phase") == .string("idle"))
         #expect(harness.state("idle") == .bool(false))   // the screen's export hasn't run yet
@@ -107,8 +105,7 @@ struct ControlRuntimeTests {
         (.oneAlbum, .review(album: "album-9", day: nil))
     ])
     func routeCannotApply(_ fixture: ControlFixture, _ route: ControlRoute) async {
-        let harness = ControlHarness(fixture, route: route)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(fixture, route: route)
         guard case .string(let error)? = harness.state("app", "launchError") else {
             Issue.record("expected a launchError for \(route) on \(fixture)")
             return
@@ -134,8 +131,7 @@ struct ControlRuntimeTests {
 
     @Test("a viewer photo outside the fixture is a launchError")
     func viewerUnknownPhoto() async {
-        let harness = ControlHarness(.midReview, route: .review(album: "album-1", day: nil), viewer: "a-9999")
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview, route: .review(album: "album-1", day: nil), viewer: "a-9999")
         guard case .string(let error)? = harness.state("app", "launchError") else {
             Issue.record("expected a launchError")
             return
@@ -148,35 +144,24 @@ struct ControlRuntimeTests {
 
     /// A bootstrapped, scanned `mid-review` with the writer drained — the baseline for write counting.
     private func scannedMidReview() async throws -> ControlHarness {
-        let harness = ControlHarness(.midReview, route: .review(album: "album-1", day: nil))
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview, route: .review(album: "album-1", day: nil))
         try await harness.scanAsGrid()
         await harness.settle()
         return harness
     }
 
-    @Test("one toggle → one write pair, one rev")
-    func oneToggleOneWrite() async throws {
+    /// One toggle, or a burst of five, is one write pair and one rev (the burst coalesces).
+    @Test("toggles → one write pair, one rev; a burst coalesces", arguments: [(1, 35), (5, 39)])
+    func togglesWriteOnce(_ toggles: Int, _ count: Int) async throws {
         let harness = try await scannedMidReview()
         let writes = harness.sink.writes.count, rev = harness.runtime.writer.rev
-        let unpicked = try #require(ControlFixture.yearDatedIDs.first { !harness.selection.contains($0) })
-        harness.selection.toggle(unpicked)
-        await harness.settle()
-        #expect(harness.sink.writes.count == writes + 2)
-        #expect(harness.runtime.writer.rev == rev + 1)
-        #expect(harness.state("active", "selection", "count") == .int(35))
-    }
-
-    @Test("a burst of changes coalesces into one write pair")
-    func burstCoalesces() async throws {
-        let harness = try await scannedMidReview()
-        let writes = harness.sink.writes.count, rev = harness.runtime.writer.rev
-        let unpicked = ControlFixture.yearDatedIDs.filter { !harness.selection.contains($0) }.prefix(5)
+        let unpicked = ControlFixture.yearDatedIDs.filter { !harness.selection.contains($0) }.prefix(toggles)
+        try #require(unpicked.count == toggles)
         for id in unpicked { harness.selection.toggle(id) }
         await harness.settle()
         #expect(harness.sink.writes.count == writes + 2)
         #expect(harness.runtime.writer.rev == rev + 1)
-        #expect(harness.state("active", "selection", "count") == .int(39))
+        #expect(harness.state("active", "selection", "count") == .int(count))
     }
 
     @Test("every revision writes detail before state, both stamped with the same rev")
@@ -208,8 +193,7 @@ struct ControlRuntimeTests {
 
     @Test("an album created after launch gets the next alias")
     func newAlbumGetsNextAlias() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         harness.graph.projectStore.create(title: "New", rangeStart: ControlFixture.rangeStart,
                                           rangeEnd: ControlFixture.rangeEnd, targetCount: 10)
         await harness.settle()

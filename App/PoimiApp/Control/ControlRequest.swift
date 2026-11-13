@@ -286,7 +286,7 @@ extension KeyedDecodingContainer where Key == ControlKey {
     func media() throws -> MediaSelection? {
         guard let raw = try optional(String.self, "media") else { return nil }
         guard let media = MediaSelection(rawValue: raw) else {
-            throw ControlRequestError.bad("'media' must be \(ControlArgType.media.rawValue), got '\(raw)'")
+            throw ControlRequestError.bad("'media' must be \(ControlArgType.media.text), got '\(raw)'")
         }
         return media
     }

@@ -7,6 +7,7 @@
 //  (D30). The composition root only calls `ControlLaunch.bootGraph()`.
 //
 //      -PoimiControl -PoimiFixture <name> [-PoimiRoute <route>] [-PoimiViewer <asset alias>] [-PoimiHeadless]
+//      -PoimiControl -PoimiRelaunch [-PoimiRoute …] [-PoimiViewer …] [-PoimiHeadless]   (continue the last run)
 //
 //  The route grammar is `ControlRoute.parse` (its error text is the usage); fixtures are
 //  `ControlFixture`. Albums and assets are the snapshot's aliases, never real ids. User-facing docs:
@@ -26,6 +27,9 @@ struct ControlLaunch: Equatable {
     /// Run the graph, album session and control host behind a static view instead of `AppRootView`
     /// (#298) — no screen is mounted, so everything the run does goes through the stores.
     static let headlessFlag = "-PoimiHeadless"
+    /// Continue the last control run (#300): its store, fake library and aliases as it left them — no
+    /// wipe, no seed. Takes no `-PoimiFixture` (the run's own is kept). `Scripts/poimi.sh relaunch`.
+    static let relaunchFlag = "-PoimiRelaunch"
     /// The screenshot harness flag — refused alongside `-PoimiControl` (two hosts in one launch would
     /// make it ambiguous which state you're looking at).
     static let screenFlag = "-PoimiScreen"
@@ -36,6 +40,8 @@ struct ControlLaunch: Equatable {
     let viewer: String?
     /// No UI: a static `ControlHeadlessView` instead of `AppRootView` (#298).
     var headless = false
+    /// A relaunch of the last control run (#300): nothing is wiped or seeded.
+    var relaunch = false
 
     /// The outcome of reading the launch arguments.
     enum Parsed: Equatable {
@@ -54,23 +60,23 @@ struct ControlLaunch: Equatable {
         }
     }
 
-    /// Parse `arguments` (pure, so tests drive it directly).
-    static func parse(_ arguments: [String]) -> Parsed {
-        let controlFlags = [controlFlag, fixtureFlag, routeFlag, viewerFlag, headlessFlag]
+    /// Parse `arguments` (pure, so tests drive it directly). `recorded` is the last control run on record —
+    /// what `-PoimiRelaunch` continues: its fixture, why its record can't be read, or `nil` (nothing to
+    /// relaunch).
+    static func parse(_ arguments: [String],
+                      recorded: Result<ControlFixture, ControlLaunchError>? = nil) -> Parsed {
+        let controlFlags = [controlFlag, fixtureFlag, routeFlag, viewerFlag, headlessFlag, relaunchFlag]
         guard arguments.contains(where: controlFlags.contains) else { return .off }
         guard arguments.contains(controlFlag) else {
-            return .invalid("\(fixtureFlag), \(routeFlag), \(viewerFlag) and \(headlessFlag) need \(controlFlag)")
+            return .invalid("\(fixtureFlag), \(routeFlag), \(viewerFlag), \(headlessFlag) and \(relaunchFlag) "
+                + "need \(controlFlag)")
         }
         if arguments.contains(screenFlag) {
             return .invalid("\(controlFlag) refuses \(screenFlag) in the same launch")
         }
+        let relaunch = arguments.contains(relaunchFlag)
         do throws(ControlLaunchError) {
-            guard let fixtureName = try value(of: fixtureFlag, in: arguments) else {
-                return .invalid("\(controlFlag) needs \(fixtureFlag) <name>; known: \(ControlFixture.names)")
-            }
-            guard let fixture = ControlFixture(rawValue: fixtureName) else {
-                return .invalid("unknown fixture '\(fixtureName)'; known: \(ControlFixture.names)")
-            }
+            let fixture = try self.fixture(in: arguments, relaunch: relaunch, recorded: recorded)
             let route: ControlRoute? = if let raw = try value(of: routeFlag, in: arguments) {
                 try ControlRoute.parse(raw)
             } else {
@@ -86,10 +92,38 @@ struct ControlLaunch: Equatable {
                 }
             }
             return .on(ControlLaunch(fixture: fixture, route: route, viewer: viewer,
-                                     headless: arguments.contains(headlessFlag)))
+                                     headless: arguments.contains(headlessFlag), relaunch: relaunch))
         } catch {
             return .invalid(error.message)
         }
+    }
+
+    /// The launch's fixture: `-PoimiFixture`'s, or — for a relaunch, which takes none — the one on record.
+    private static func fixture(in arguments: [String], relaunch: Bool,
+                                recorded: Result<ControlFixture, ControlLaunchError>?)
+                                throws(ControlLaunchError) -> ControlFixture {
+        let name = try value(of: fixtureFlag, in: arguments)
+        if relaunch {
+            guard name == nil else {
+                throw ControlLaunchError("\(relaunchFlag) continues the last run's fixture; it takes no \(fixtureFlag)")
+            }
+            switch recorded {
+            case .success(let fixture)?:
+                return fixture
+            case .failure(let error)?:
+                throw ControlLaunchError("\(relaunchFlag): the run on record can't be read — \(error.message)")
+            case nil:
+                throw ControlLaunchError(
+                    "\(relaunchFlag): no control run on record to continue — launch a fixture first")
+            }
+        }
+        guard let name else {
+            throw ControlLaunchError("\(controlFlag) needs \(fixtureFlag) <name>; known: \(ControlFixture.names)")
+        }
+        guard let fixture = ControlFixture(rawValue: name) else {
+            throw ControlLaunchError("unknown fixture '\(name)'; known: \(ControlFixture.names)")
+        }
+        return fixture
     }
 
     /// The value following `flag`, `nil` if the flag is absent. A flag with no value (end of the list,
@@ -171,12 +205,12 @@ extension ControlLaunch {
     /// and store — it runs isolated and shows the refusal instead).
     @MainActor
     static func bootGraph(arguments: [String] = ProcessInfo.processInfo.arguments) -> AppGraph? {
-        let parsed = parse(arguments)
+        let parsed = parse(arguments, recorded: ControlRunRecord.recordedRun(at: ControlPaths.standard().record))
         guard parsed != .off else {
-            ControlEnvironment.clearForNormalLaunch()   // no stale control state survives a normal launch
+            ControlEnvironment.clearForNormalLaunch()   // a normal launch ends any control run
             return nil
         }
-        return ControlEnvironment.boot(parsed).graph
+        return ControlEnvironment.boot(parsed, relaunchRequested: arguments.contains(relaunchFlag)).graph
     }
 
     /// Why a control launch was refused (shown in place of the UI), or `nil`.

@@ -14,24 +14,36 @@ import Foundation
 import Curation
 
 /// An argument's declared JSON shape — read by the decoder and printed by `schema`.
-enum ControlArgType: String {
-    case albumAlias = "album alias (album-N)"
-    case assetAlias = "photo alias (a-NNNN)"
-    case assetAliases = "[photo alias]"
-    case day = "day (yyyy-mm-dd)"
-    case int
-    case bool
-    case string
-    case media = "photosOnly | photosAndVideos | videosOnly"
-    case fetchFailure = "fetchFailed | null"
-    case authorization = "notDetermined | authorized | limited | denied | restricted"
-    case fixture = "fixture name"
-    case filter = "toReview | done | all"
-    case direction = "next | previous"
-    case modal = "newAlbum | whatsNew | confirmDelete | confirmReset | confirmUnreview"
+enum ControlArgType {
+    case albumAlias, assetAlias, assetAliases, day, int, bool, string, fixture
+    case media, fetchFailure, exportFailure, authorization, filter, direction, modal
+
+    /// How `schema` and the decoder's errors name it. A closed set is spelled out FROM the list the decoder
+    /// accepts, so adding a filter, modal or failure can't leave `schema` describing the old set.
+    var text: String {
+        switch self {
+        case .albumAlias: "album alias (album-N)"
+        case .assetAlias: "photo alias (a-NNNN)"
+        case .assetAliases: "[photo alias]"
+        case .day: "day (yyyy-mm-dd)"
+        case .int: "int"
+        case .bool: "bool"
+        case .string: "string"
+        case .fixture: "fixture name"
+        case .media: Self.oneOf(MediaSelection.allCases.map(\.rawValue))
+        case .fetchFailure: Self.oneOf([ControlFixtureOp.fetchFailure, "null"])
+        case .exportFailure: Self.oneOf(ExportError.controlNames.map(\.name) + ["null"])
+        case .authorization: Self.oneOf(LibraryAuthorization.allControlCases.map(ControlSnapshot.authorization))
+        case .filter: Self.oneOf(ReviewFilter.controlNames.map(\.name))
+        case .direction: Self.oneOf(ControlPageTarget.directions.map(\.name))
+        case .modal: Self.oneOf(ControlModal.allCases.map(\.rawValue))
+        }
+    }
+
+    private static func oneOf(_ names: [String]) -> String { names.joined(separator: " | ") }
 }
 
-/// The Overview filter's lenses by name (`review.setFilter`, `-PoimiFilter`, `active.overview.filter`).
+/// The Overview filter's lenses by name (`review.setFilter`, `active.overview.filter`).
 extension ReviewFilter {
     static let controlNames: [(name: String, filter: ReviewFilter)] = [
         ("toReview", .toReview), ("done", .done), ("all", .all)
@@ -85,6 +97,9 @@ enum ControlPageTarget: Equatable {
     case next
     case previous
     case photo(String)
+
+    /// The steps by name (`viewer.page{direction}`).
+    static let directions: [(name: String, target: ControlPageTarget)] = [("next", .next), ("previous", .previous)]
 }
 
 struct ControlArgSpec {
@@ -354,7 +369,7 @@ extension ControlAction: Decodable {
         case .reviewSetFilter:
             let raw = try keys.required(String.self, "filter")
             guard let filter = ReviewFilter(controlName: raw) else {
-                throw ControlRequestError.bad("'filter' must be \(ControlArgType.filter.rawValue), got '\(raw)'")
+                throw ControlRequestError.bad("'filter' must be \(ControlArgType.filter.text), got '\(raw)'")
             }
             return .reviewSetFilter(filter)
         case .reviewGoTo: return .reviewGoTo(day: try keys.day("day")!)
@@ -366,7 +381,7 @@ extension ControlAction: Decodable {
         case .uiPresent:
             let raw = try keys.required(String.self, "modal")
             guard let modal = ControlModal(rawValue: raw) else {
-                throw ControlRequestError.bad("'modal' must be \(ControlArgType.modal.rawValue), got '\(raw)'")
+                throw ControlRequestError.bad("'modal' must be \(ControlArgType.modal.text), got '\(raw)'")
             }
             let album = keys.contains(ControlKey("album")) ? try keys.album() : nil
             guard (modal.confirmation != nil) == (album != nil) else {
@@ -386,15 +401,16 @@ extension KeyedDecodingContainer where Key == ControlKey {
         let direction = try optional(String.self, "direction")
         let photo = try optional(String.self, "photo")
         switch (direction, photo) {
-        case ("next"?, nil): return .next
-        case ("previous"?, nil): return .previous
+        case (let name?, nil):
+            guard let step = ControlPageTarget.directions.first(where: { $0.name == name })?.target else {
+                throw ControlRequestError.bad("'direction' must be \(ControlArgType.direction.text), got '\(name)'")
+            }
+            return step
         case (nil, let alias?):
             guard ControlAssetAliases.isAlias(alias) else {
                 throw ControlRequestError.bad("'photo' must be a photo alias like a-0001, got '\(alias)'")
             }
             return .photo(alias)
-        case (let other?, nil):
-            throw ControlRequestError.bad("'direction' must be \(ControlArgType.direction.rawValue), got '\(other)'")
         default:
             throw ControlRequestError.bad("viewer.page: give exactly one of 'direction' or 'photo'")
         }
@@ -411,14 +427,20 @@ enum ControlFixtureOpKind: String, CaseIterable {
     case libraryAuthorization = "library.authorization"
     case selectionSelect = "selection.select"
     case selectionClear = "selection.clear"
+    case libraryHoldExports = "library.holdExports"
+    case libraryReleaseExports = "library.releaseExports"
+    case libraryFailExport = "library.failExport"
+    case libraryAddPhotos = "library.addPhotos"
     case reset
 
     var args: [ControlArgSpec] {
         switch self {
-        case .flush, .lifecycleResume, .selectionClear: []
+        case .flush, .lifecycleResume, .selectionClear, .libraryHoldExports, .libraryReleaseExports: []
         case .libraryFailFetch: [.opt("kind", .fetchFailure)]
         case .libraryAuthorization: [.req("status", .authorization)]
         case .selectionSelect: [.req("photos", .assetAliases)]
+        case .libraryFailExport: [.opt("error", .exportFailure)]
+        case .libraryAddPhotos: [.req("day", .day), .req("count", .int)]
         case .reset: [.req("fixture", .fixture)]
         }
     }
@@ -428,9 +450,18 @@ enum ControlFixtureOpKind: String, CaseIterable {
         case .flush: "persist the debounced picks + day marks now (both stores' flushNow), as backgrounding does"
         case .lifecycleResume: "the app becoming active: re-read photo authorization"
         case .libraryFailFetch: "make the fake's fetches fail (or recover with null / no kind)"
-        case .libraryAuthorization: "what the fake reports from now on (then lifecycle.resume / auth.request)"
+        case .libraryAuthorization:
+            "what the fake reports from now on (then lifecycle.resume / auth.request); persisted"
         case .selectionSelect: "pick these photos of the open review directly (no single control does this)"
         case .selectionClear: "unpick everything in the open album (no control does this)"
+        case .libraryHoldExports:
+            "close the fake's export gate: exports park mid-flight (library.heldExports) until releaseExports"
+        case .libraryReleaseExports: "open the export gate: parked exports go on"
+        case .libraryFailExport:
+            "make the fake's exports fail with this error from now on (a parked one once released); null clears"
+        case .libraryAddPhotos:
+            "add count (1–100) new photos on day (from 21:00 UTC) to the fake library — new photos taken mid-session; "
+                + "persisted; an open album sees them on its next scan (re-open it)"
         case .reset: "refused here — a reset is a relaunch: Scripts/poimi.sh reset <fixture>"
         }
     }
@@ -439,6 +470,9 @@ enum ControlFixtureOpKind: String, CaseIterable {
 /// Test levers, not user actions (`fixture` command). `reset` is a RELAUNCH (`poimi.sh reset`), so the
 /// app refuses it in place — the container and library are built once per launch.
 enum ControlFixtureOp: Equatable {
+    /// `library.failFetch`'s one failure kind, by name.
+    static let fetchFailure = "fetchFailed"
+
     /// Persist both stores' debounced state now (`flushNow()`), as a scene-phase change would.
     case flush
     /// The app becoming active again: re-read authorization (the Settings round-trip, D6).
@@ -451,8 +485,22 @@ enum ControlFixtureOp: Equatable {
     case selectionSelect(photos: [String])
     /// Unpick everything in the open album.
     case selectionClear
+    /// The fake library's export gate and content (#300).
+    case library(ControlLibraryLever)
     /// Refused in place: a reset is a relaunch.
     case reset(fixture: String)
+}
+
+/// The fake library's levers (#300).
+enum ControlLibraryLever: Equatable {
+    /// Close the export gate: exports park until released.
+    case holdExports
+    /// Open the export gate.
+    case releaseExports
+    /// Make every export fail with this error from now on (`nil` clears).
+    case failExport(ExportError?)
+    /// Add `count` photos taken on `day` (#191 drift).
+    case addPhotos(day: DayKey, count: Int)
 }
 
 extension ControlFixtureOp: Decodable {
@@ -470,9 +518,10 @@ extension ControlFixtureOp: Decodable {
         case .libraryFailFetch:
             switch try keys.optional(String.self, "kind") {
             case nil: self = .libraryFailFetch(failing: false)
-            case "fetchFailed": self = .libraryFailFetch(failing: true)
+            case Self.fetchFailure?: self = .libraryFailFetch(failing: true)
             case let other?:
-                throw ControlRequestError.bad("library.failFetch: kind must be fetchFailed or null, got '\(other)'")
+                throw ControlRequestError.bad(
+                    "library.failFetch: kind must be \(ControlArgType.fetchFailure.text), got '\(other)'")
             }
         case .libraryAuthorization:
             let status = try keys.required(String.self, "status")
@@ -484,9 +533,46 @@ extension ControlFixtureOp: Decodable {
             self = .libraryAuthorization(value)
         case .selectionSelect: self = .selectionSelect(photos: try keys.photos(name))
         case .selectionClear: self = .selectionClear
+        case .libraryHoldExports: self = .library(.holdExports)
+        case .libraryReleaseExports: self = .library(.releaseExports)
+        case .libraryFailExport: self = .library(.failExport(try keys.exportFailure()))
+        case .libraryAddPhotos:
+            let (day, count) = try keys.addedPhotos()
+            self = .library(.addPhotos(day: day, count: count))
         case .reset: self = .reset(fixture: try keys.required(String.self, "fixture"))
         }
     }
+}
+
+extension KeyedDecodingContainer where Key == ControlKey {
+    /// `library.failExport`'s `error` (absent / null clears it).
+    func exportFailure() throws -> ExportError? {
+        guard let raw = try optional(String.self, "error") else { return nil }
+        guard let error = ExportError.controlNames.first(where: { $0.name == raw })?.error else {
+            throw ControlRequestError.bad("library.failExport: error must be "
+                + "\(ControlArgType.exportFailure.text), got '\(raw)'")
+        }
+        return error
+    }
+
+    /// `library.addPhotos`'s calendar `day` and `count` (1…100).
+    func addedPhotos() throws -> (day: DayKey, count: Int) {
+        guard let day = try day("day"), day.anchorDate(in: ControlFixture.utc) != nil else {
+            throw ControlRequestError.bad("library.addPhotos: 'day' must be a calendar day (yyyy-mm-dd)")
+        }
+        let count = try required(Int.self, "count")
+        guard (1...100).contains(count) else {
+            throw ControlRequestError.bad("library.addPhotos: 'count' must be 1…100, got \(count)")
+        }
+        return (day, count)
+    }
+}
+
+extension ExportError {
+    /// The failures `library.failExport` can inject, by name.
+    static let controlNames: [(name: String, error: ExportError)] = [
+        ("albumMissing", .albumMissing), ("writeFailed", .writeFailed), ("noAssetsResolved", .noAssetsResolved)
+    ]
 }
 
 extension LibraryAuthorization {
@@ -499,7 +585,7 @@ extension KeyedDecodingContainer where Key == ControlKey {
     func declared(_ args: [ControlArgSpec], extra: [String], in context: String) throws {
         try allow(extra + args.map(\.name), in: context)
         for arg in args where arg.required && !contains(ControlKey(arg.name)) {
-            throw ControlRequestError.bad("\(context): missing '\(arg.name)' (\(arg.type.rawValue))")
+            throw ControlRequestError.bad("\(context): missing '\(arg.name)' (\(arg.type.text))")
         }
     }
 }

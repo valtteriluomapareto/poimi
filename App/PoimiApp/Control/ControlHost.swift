@@ -66,8 +66,11 @@ final class ControlHost {
     let progress: ControlProgress
     private let run: String
     private let fixture: ControlFixture
-    private let assets: ControlAssetAliases
+    /// The asset aliases: the fixture's library, grown by `library.addPhotos` (#300).
+    private(set) var assets: ControlAssetAliases
     private let albums: ControlAlbumAliases
+    /// The fake library's export gate (the export levers, #300).
+    private let exportGate: FakeExportGate
     /// Whether the album list is always on screen (the iPad split view's sidebar) — otherwise only at the
     /// root of the path (the iPhone stack).
     private let listAlwaysShown: Bool
@@ -82,6 +85,7 @@ final class ControlHost {
 
     init(graph: AppGraph, run: String, fixture: ControlFixture, assets: ControlAssetAliases,
          albums: ControlAlbumAliases, progress: ControlProgress, listAlwaysShown: Bool = false,
+         exportGate: FakeExportGate,
          state: @escaping () -> ControlJSON, rev: @escaping () -> Int,
          syncState: @escaping () async -> Void = {}) {
         self.graph = graph
@@ -89,6 +93,7 @@ final class ControlHost {
         self.fixture = fixture
         self.assets = assets
         self.albums = albums
+        self.exportGate = exportGate
         self.progress = progress
         self.listAlwaysShown = listAlwaysShown
         self.state = state
@@ -183,8 +188,6 @@ final class ControlHost {
         return .success(.object(("met", .bool(true)), ("waitedMs", .int(waitedMs))))
     }
 
-    var currentRun: String { run }
-
     // MARK: - Actions
 
     func perform(_ action: ControlAction) -> ControlOutcome {
@@ -259,6 +262,11 @@ final class ControlHost {
             try requireAlbumsPhase()
             try requireNoViewer()
             guard !coordinator.path.isEmpty else { return .noop("already at the album list") }
+            // The export screen hides the navigation bar and its back button (no swipe back mid-write).
+            if case .export? = coordinator.path.last {
+                throw refuse(.notShown, "the export screen has no back button: Back to albums (nav.root) "
+                    + "once the export settles")
+            }
             coordinator.pop()
             return accept()
 
@@ -266,6 +274,15 @@ final class ControlHost {
             try requireAlbumsPhase()
             guard !coordinator.path.isEmpty || coordinator.presentedPhotoID != nil else {
                 return .noop("already at the album list")
+            }
+            // On the export screen, the way out is its Back to albums — shown only once the export settled.
+            if case .export? = coordinator.path.last {
+                switch session.export.phase {
+                case .done, .failed: break
+                case .idle, .exporting:
+                    throw refuse(.notShown, "Back to albums shows once the export settles (on iPad the "
+                        + "sidebar's rows stay live: nav.openAlbum)")
+                }
             }
             coordinator.popToRoot()
             return accept()
@@ -345,7 +362,7 @@ final class ControlHost {
             return accept()
 
         case .doneToggle(let day):
-            guard done.isActive else { throw refuse(.invalidState, "no album is open (the done store is inactive)") }
+            try requireDoneActive()
             try requireGrid()
             done.toggle(try cluster(day))
             return accept()
@@ -376,8 +393,11 @@ final class ControlHost {
         }
     }
 
-    // MARK: - Fixture ops
+}
 
+// MARK: - Fixture ops + the screens' own tasks
+
+extension ControlHost {
     func perform(_ op: ControlFixtureOp) async -> ControlOutcome {
         switch op {
         case .flush:
@@ -389,15 +409,11 @@ final class ControlHost {
             await graph.coordinator.refreshAuthorization()
             return accept()
         case .libraryFailFetch(let failing):
-            guard let fake = graph.photoLibrary as? FakePhotoLibrary else {
-                return .refused(.unavailable, "not the fake library")
-            }
+            guard let fake = fakeLibrary else { return Self.notTheFake }
             await fake.setFetchError(failing ? FakePhotoLibrary.FakeError.fetchFailed : nil)
             return accept()
         case .libraryAuthorization(let status):
-            guard let fake = graph.photoLibrary as? FakePhotoLibrary else {
-                return .refused(.unavailable, "not the fake library")
-            }
+            guard let fake = fakeLibrary else { return Self.notTheFake }
             await fake.setAuthorization(status)
             return accept()
         case .selectionSelect(let aliases):
@@ -415,13 +431,43 @@ final class ControlHost {
                 return .refused(error.reason, error.message)
             }
         case .selectionClear:
-            guard selection.isActive else {
-                return .refused(.invalidState, "no album is open (the selection store is inactive)")
-            }
+            do throws(Refused) { try requireSelectionActive() } catch { return .refused(error.reason, error.message) }
             selection.clear()
             return accept()
+        case .library(let lever):
+            return await perform(lever)
         case .reset(let name):
             return .refused(.unavailable, "a reset is a relaunch: Scripts/poimi.sh reset \(name)")
+        }
+    }
+
+    private var fakeLibrary: FakePhotoLibrary? { graph.photoLibrary as? FakePhotoLibrary }
+    private static let notTheFake = ControlOutcome.refused(.unavailable, "not the fake library")
+
+    /// The fake library's levers (#300): the export gate, and new photos taken mid-session.
+    private func perform(_ lever: ControlLibraryLever) async -> ControlOutcome {
+        switch lever {
+        case .holdExports:
+            if exportGate.holding { return .noop("exports are already held") }
+            exportGate.hold()
+            return accept()
+        case .releaseExports:
+            guard exportGate.holding else { return .noop("the export gate is open") }
+            exportGate.release()
+            return accept()
+        case .failExport(let error):
+            if exportGate.failure == error { return .noop("already so") }
+            exportGate.fail(error)
+            return accept()
+        case .addPhotos(let day, let count):
+            guard let fake = fakeLibrary else { return Self.notTheFake }
+            guard let start = day.anchorDate(in: ControlFixture.utc).map(ControlFixture.utc.startOfDay(for:)) else {
+                return .refused(.invalidState, "not a calendar day")
+            }
+            let added = await fake.addPhotos(onDayStarting: start, count: count)
+            assets = assets.appending(added)
+            let aliases = added.compactMap { assets.alias(for: $0.id) }
+            return accept(extra: [.init(key: "photos", value: .array(aliases.map(ControlJSON.string)))])
         }
     }
 
@@ -495,7 +541,7 @@ extension ControlHost {
             return accept()
 
         case .reviewMarkDoneAndAdvance:
-            guard done.isActive else { throw refuse(.invalidState, "no album is open (the done store is inactive)") }
+            try requireDoneActive()
             try requireGrid()
             guard let current = session.currentReviewCluster else {
                 throw refuse(.invalidState, "the grid has no current cluster yet")
@@ -737,6 +783,10 @@ extension ControlHost {
         }
     }
 
+    fileprivate func requireDoneActive() throws(Refused) {
+        guard done.isActive else { throw refuse(.invalidState, "no album is open (the done store is inactive)") }
+    }
+
     fileprivate func isReview(_ route: Route) -> Bool {
         if case .review = route { return true }
         return false
@@ -788,8 +838,6 @@ struct ControlResponse {
         if case .success = result { return true }
         return false
     }
-
-    var data: ControlJSON? { try? result.get() }
 
     var error: ControlRequestError? {
         if case .failure(let error) = result { return error }

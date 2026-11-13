@@ -7,8 +7,10 @@
 //  - **Assets** (`a-0001`): assigned ONCE per fixture over the whole seeded library — ordered by
 //    capture date (D32), then seed index, undated last — so they stay stable across lens, exclusion
 //    and range edits (an alias is a property of the library, not of a scan).
+//  - **Assets added mid-run** (`library.addPhotos`, #300) get the next numbers, in the order added — an
+//    existing alias never moves.
 //  - **Albums** (`album-1`): monotonic and never reused within a run, so a deleted album's alias is
-//    never handed to a later one. (In memory: every control launch starts from its fixture.)
+//    never handed to a later one. A fixture launch starts over; a relaunch keeps them (#300).
 //  - **Clusters/days** are keyed by their `DayKey` (`2025-07-05`), not an ordinal.
 //
 #if DEBUG
@@ -34,23 +36,37 @@ struct ControlAssetAliases: Equatable, Sendable {
             default: lhs.offset < rhs.offset
             }
         }.map(\.element.id)
-        let width = max(4, String(ordered.count).count)
-        var aliasByID: [String: String] = [:]
-        var idByAlias: [String: String] = [:]
-        var rankByID: [String: Int] = [:]
-        for (index, id) in ordered.enumerated() where aliasByID[id] == nil {
+        self.init(width: max(4, String(ordered.count).count), aliasByID: [:], idByAlias: [:], rankByID: [:],
+                  adding: ordered)
+    }
+
+    private let width: Int
+
+    private init(width: Int, aliasByID: [String: String], idByAlias: [String: String], rankByID: [String: Int],
+                 adding ids: [String]) {
+        var aliasByID = aliasByID
+        var idByAlias = idByAlias
+        var rankByID = rankByID
+        for id in ids where aliasByID[id] == nil {
+            let index = rankByID.count
             let number = String(index + 1)
             let alias = "a-" + String(repeating: "0", count: max(0, width - number.count)) + number
             aliasByID[id] = alias
             idByAlias[alias] = id
             rankByID[id] = index
         }
+        self.width = width
         self.aliasByID = aliasByID
         self.idByAlias = idByAlias
         self.rankByID = rankByID
     }
 
-    var count: Int { aliasByID.count }
+    /// This table plus `assets` (added to the library mid-run), numbered after every existing alias in the
+    /// order given — so no alias already handed out changes.
+    func appending(_ assets: [AssetRef]) -> ControlAssetAliases {
+        ControlAssetAliases(width: width, aliasByID: aliasByID, idByAlias: idByAlias, rankByID: rankByID,
+                            adding: assets.map(\.id))
+    }
 
     func alias(for assetID: String) -> String? { aliasByID[assetID] }
 
@@ -75,12 +91,32 @@ struct ControlAssetAliases: Equatable, Sendable {
     }
 }
 
-/// Album aliases: `album-<n>`, monotonic and never reused within a run. In memory only — every
-/// control launch wipes and re-seeds, so there is nothing to carry across launches.
+/// Album aliases: `album-<n>`, monotonic and never reused within a run. A fixture launch starts them
+/// over; a relaunch (#300) restores them from the run record, which `didAssign` keeps current.
 @MainActor
 final class ControlAlbumAliases {
     private var aliasByID: [UUID: String] = [:]
     private var next = 1
+    /// Called after a new alias is assigned (the runtime saves the run record).
+    var didAssign: (() -> Void)?
+
+    init() {}
+
+    /// The aliases a run record carries (a relaunch).
+    init(restoring record: ControlRunRecord) {
+        for (id, alias) in record.albums {
+            guard let uuid = UUID(uuidString: id), Self.isAlias(alias) else { continue }
+            aliasByID[uuid] = alias
+        }
+        next = max(record.nextAlbum, (aliasByID.values.map(Self.number).max() ?? 0) + 1)
+    }
+
+    /// The table as a run record carries it.
+    func record(fixture: ControlFixture) -> ControlRunRecord {
+        ControlRunRecord(fixture: fixture.rawValue,
+                         albums: Dictionary(uniqueKeysWithValues: aliasByID.map { ($0.key.uuidString, $0.value) }),
+                         nextAlbum: next)
+    }
 
     /// The alias already assigned to `id`, or `nil`. A pure lookup — the snapshot projection uses
     /// this, so building a snapshot never mutates the table.
@@ -93,6 +129,7 @@ final class ControlAlbumAliases {
         let alias = "album-\(next)"
         next += 1
         aliasByID[id] = alias
+        didAssign?()
         return alias
     }
 

@@ -2,8 +2,8 @@
 //  ControlMachineryTests.swift
 //  PoimiAppTests — the control plane's machinery (#298): strict decoding, every refusal reason, value
 //  typing in predicates, `timeoutMs` bounds, `staleRun`, schema ↔ snapshot path parity, every action
-//  exercised at least once, the seq / settledSeq / idle bookkeeping, and the file mailbox (ordering +
-//  atomic replies). In-process; every wait awaits real work — never a fixed sleep.
+//  exercised at least once, the seq / settledSeq / idle bookkeeping, and the file mailbox (ordering,
+//  atomic replies, waits never holding sends). In-process; every wait awaits real work — never a fixed sleep.
 //
 
 import Testing
@@ -129,36 +129,36 @@ struct ControlPredicateTests {
         ControlWait.unmet([ControlPredicate(path: path, op: op, value: value)], in: state).isEmpty
     }
 
-    @Test("eq / ne compare type and value: 10 ≠ \"10\" ≠ null; a missing path equals nothing")
-    func equality() {
-        #expect(holds("count", .eq, .int(10)))
-        #expect(!holds("count", .eq, .string("10")))
-        #expect(holds("text", .eq, .string("10")))
-        #expect(!holds("text", .eq, .int(10)))
-        #expect(holds("none", .eq, .null))
-        #expect(!holds("missing", .eq, .null))       // missing is not null
-        #expect(holds("missing", .ne, .null))
-        #expect(holds("count", .ne, .string("10")))
-        #expect(holds("nested.flag", .eq, .bool(false)))
+    /// One row of the operator table: does `path op value` hold against `state`?
+    struct Case: Sendable, CustomTestStringConvertible {
+        let path: String
+        let op: ControlPredicate.Op
+        let value: ControlJSON
+        let holds: Bool
+        init(_ path: String, _ op: ControlPredicate.Op, _ value: ControlJSON, _ holds: Bool) {
+            (self.path, self.op, self.value, self.holds) = (path, op, value, holds)
+        }
+        var testDescription: String { "\(path) \(op.rawValue) \(value) → \(holds)" }
     }
 
-    @Test("gte / lte need integers on both sides; anything else is unmet")
-    func ordering() {
-        #expect(holds("count", .gte, .int(10)))
-        #expect(holds("count", .lte, .int(10)))
-        #expect(!holds("count", .gte, .int(11)))
-        #expect(!holds("text", .gte, .int(1)))       // a string is never ≥
-        #expect(!holds("none", .lte, .int(1)))
-        #expect(!holds("missing", .gte, .int(0)))
-    }
-
-    @Test("exists: present AND not null; value false inverts")
-    func exists() {
-        #expect(holds("count", .exists, .bool(true)))
-        #expect(!holds("none", .exists, .bool(true)))    // null is not "exists"
-        #expect(!holds("missing", .exists, .bool(true)))
-        #expect(holds("none", .exists, .bool(false)))
-        #expect(holds("missing", .exists, .bool(false)))
+    @Test("operators: eq / ne compare type and value; gte / lte need integers; exists = present and not null",
+          arguments: [
+        // eq / ne: 10 ≠ "10" ≠ null; a missing path equals nothing.
+        Case("count", .eq, .int(10), true), Case("count", .eq, .string("10"), false),
+        Case("text", .eq, .string("10"), true), Case("text", .eq, .int(10), false),
+        Case("none", .eq, .null, true), Case("missing", .eq, .null, false), Case("missing", .ne, .null, true),
+        Case("count", .ne, .string("10"), true), Case("nested.flag", .eq, .bool(false), true),
+        // gte / lte: integers on both sides, anything else is unmet.
+        Case("count", .gte, .int(10), true), Case("count", .lte, .int(10), true),
+        Case("count", .gte, .int(11), false), Case("text", .gte, .int(1), false),
+        Case("none", .lte, .int(1), false), Case("missing", .gte, .int(0), false),
+        // exists: present AND not null; value false inverts.
+        Case("count", .exists, .bool(true), true), Case("none", .exists, .bool(true), false),
+        Case("missing", .exists, .bool(true), false), Case("none", .exists, .bool(false), true),
+        Case("missing", .exists, .bool(false), true)
+    ])
+    func operators(_ row: Case) {
+        #expect(holds(row.path, row.op, row.value) == row.holds)
     }
 
     @Test("an unmet predicate reports path, op, expected, observed and presence")
@@ -195,8 +195,7 @@ struct ControlHostMachineryTests {
 
     @Test("staleRun: a request for another launch's run is refused before anything runs")
     func staleRun() async {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let response = await request(harness, #""cmd":"send","action":{"type":"nav.openAlbum","album":"album-1"}"#,
                                      run: "r-old")
         #expect(response.error?.code == .staleRun)
@@ -206,8 +205,7 @@ struct ControlHostMachineryTests {
 
     @Test("the reply envelope: v, id, run, rev, ok + data | error; an id that isn't the file's is refused")
     func replyEnvelope() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let ok = await request(harness, #""cmd":"snapshot""#)
         let json = ok.json(run: "r-test", rev: 3)
         #expect(json["v"] == .int(1) && json["id"] == .int(7) && json["run"] == .string("r-test"))
@@ -222,8 +220,7 @@ struct ControlHostMachineryTests {
 
     @Test("wait: an undeclared path fails at once; timeoutMs 0 asserts now; unmet names every predicate")
     func waitErrors() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let started = ContinuousClock.now
         let undeclared = await harness.wait([("active.scan.phaze", .eq, .string("ready"))], timeoutMs: 30_000)
         #expect(ContinuousClock.now - started < .seconds(5))   // immediate, not after the timeout
@@ -242,8 +239,7 @@ struct ControlHostMachineryTests {
 
     @Test("wait is Observation-driven: it wakes when the scan an action started lands, before its timeout")
     func waitWakesOnChange() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         async let waited = harness.wait([("active.scan.phase", .eq, .string("ready")), ("idle", .eq, .bool(true))],
                                         timeoutMs: 30_000)
         try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
@@ -253,8 +249,7 @@ struct ControlHostMachineryTests {
 
     @Test("seq / settledSeq / idle: accepted carries a seq; settled once its async work is done")
     func seqBookkeeping() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         #expect(harness.value("lastSeq") == .value(.int(0)))
         let first = try #require(try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#).seq)
         let second = try #require(try await harness.send(#"{"type":"nav.openSettings","album":"album-1"}"#).seq)
@@ -271,8 +266,7 @@ struct ControlHostMachineryTests {
 
     @Test("idle waits for fake thumbnail loads in flight (pending.thumbnails)")
     func thumbnailsHoldIdle() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         harness.thumbnailLoads.begin()
         #expect(harness.value("pending.thumbnails") == .value(.int(1)))
         #expect(harness.value("idle") == .value(.bool(false)))
@@ -292,8 +286,7 @@ struct ControlHostMachineryTests {
             if let reason = outcome.refusal { seen.insert(reason) }
         }
         let gated = GatedLibrary(ControlFixture.midReview.makeLibrary())
-        let harness = ControlHarness(.midReview, library: gated, iPad: true)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.midReview, library: gated, iPad: true)
         // invalidState: nothing is hydrated yet — never a silent `accepted`.
         note(try await harness.fixtureOp(#"{"op":"selection.clear"}"#), .invalidState)
         // unknownAlias
@@ -326,15 +319,13 @@ struct ControlHostMachineryTests {
             #expect(outcome.isAccepted, "\(json) → \(outcome)")
         }
         // Onboarding: the fake answers the prompt with what it's told to.
-        let fresh = ControlHarness(.fresh)
-        await fresh.runtime.bootstrap()
+        let fresh = await ControlHarness.booted(.fresh)
         try await fresh.fixtureOp(#"{"op":"library.authorization","status":"authorized"}"#)
         try await send(fresh, #"{"type":"auth.request"}"#)
         await fresh.settled()
         #expect(fresh.value("app.rootPhase") == .value(.string("albums")))
 
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         try await send(harness, #"{"type":"ui.present","modal":"newAlbum"}"#)
         try await send(harness,
             #"{"type":"albums.create","title":"Summer","start":"2025-06-01","end":"2025-08-31","target":40}"#)
@@ -418,6 +409,35 @@ struct ControlHostMachineryTests {
             return
         }
     }
+
+    @Test("a predicate value of the wrong type for its path is an error, not silently met")
+    func predicateTypeMismatch() async {
+        let harness = await ControlHarness.booted(.oneAlbum)
+        let mismatched = await harness.wait([("idle", .ne, .string("true"))], timeoutMs: 0)
+        guard case .failure(let error) = mismatched else { Issue.record("met?"); return }
+        #expect(error.code == .badRequest)
+        #expect(error.message.contains("bool"))
+        let ordering = await harness.wait([("nav.screen", .gte, .int(1))], timeoutMs: 0)
+        guard case .failure(let orderingError) = ordering else { Issue.record("met?"); return }
+        #expect(orderingError.code == .badRequest)
+        // null is fine where the path may be null; a matching type is fine.
+        #expect((try? await harness.wait([("app.launchError", .eq, .null)], timeoutMs: 0).get()) != nil)
+        #expect((try? await harness.wait([("idle", .eq, .bool(true))], timeoutMs: 0).get()) != nil)
+    }
+
+    @Test("a reply brings state up to date first: the state written is at least the reply's rev")
+    func replyFlushesState() async throws {
+        let harness = await ControlHarness.booted(.oneAlbum)
+        let response = await harness.host.handle(
+            ControlRequest(id: 1, run: "r-test", command: .send(.navOpenAppSettings)))
+        let reply = await harness.host.reply(response)
+        guard case .int(let rev)? = reply["rev"], case .int(let written)? = harness.sink.lastState?["rev"] else {
+            Issue.record("no rev")
+            return
+        }
+        #expect(written >= rev)
+        #expect(harness.sink.lastState?["nav"]?["screen"] == .string("appSettings"))   // not 100 ms later
+    }
 }
 
 @MainActor
@@ -450,8 +470,7 @@ struct ControlSchemaTests {
             for (path, type) in paths(harness.runtime.stateJSON()) { observed[path, default: []].insert(type) }
         }
         for fixture in ControlFixture.allCases {
-            let harness = ControlHarness(fixture)
-            await harness.runtime.bootstrap()
+            let harness = await ControlHarness.booted(fixture)
             record(harness)
             if fixture.authorization == .authorized, !harness.created.isEmpty {
                 try await harness.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
@@ -460,8 +479,7 @@ struct ControlSchemaTests {
             }
         }
         // States the fixtures alone don't reach: the viewer, a finished export, a refused launch.
-        let viewer = ControlHarness(.midReview, route: .review(album: "album-1", day: nil), viewer: "a-0002")
-        await viewer.runtime.bootstrap()
+        let viewer = await ControlHarness.booted(.midReview, route: .review(album: "album-1", day: nil), viewer: "a-0002")
         record(viewer)
         // …and its auto-done toast: from the open cluster's last photo, across its end.
         try await viewer.send(#"{"type":"viewer.dismiss"}"#)
@@ -469,8 +487,7 @@ struct ControlSchemaTests {
         try await viewer.send(#"{"type":"viewer.open","photo":"\#(viewer.alias(try #require(open.assetIDs.last)))"}"#)
         try await viewer.send(#"{"type":"viewer.page","direction":"next"}"#)
         record(viewer)
-        let exported = ControlHarness(.exported)
-        await exported.runtime.bootstrap()
+        let exported = await ControlHarness.booted(.exported)
         try await exported.send(#"{"type":"nav.openAlbum","album":"album-1"}"#)
         await exported.settled()
         try await exported.send(#"{"type":"nav.openExport"}"#)
@@ -496,7 +513,7 @@ struct ControlSchemaTests {
         let schema = ControlSchema.json()
         guard case .array(let actions)? = schema["actions"] else { Issue.record("no actions"); return }
         #expect(actions.compactMap { $0["type"] } == ControlActionKind.allCases.map { .string($0.rawValue) })
-        #expect(actions.first?["args"]?["album"] == .string(ControlArgType.albumAlias.rawValue))
+        #expect(actions.first?["args"]?["album"] == .string(ControlArgType.albumAlias.text))
         guard case .object(let refusals)? = schema["refusals"] else { Issue.record("no refusals"); return }
         #expect(refusals.map(\.key) == ControlRefusal.allCases.map(\.rawValue))
         guard case .object(let paths)? = schema["statePaths"] else { Issue.record("no paths"); return }
@@ -506,34 +523,66 @@ struct ControlSchemaTests {
         guard case .array(let ops)? = schema["fixtureOps"] else { Issue.record("no ops"); return }
         #expect(ops.compactMap { $0["op"] } == ControlFixtureOpKind.allCases.map { .string($0.rawValue) })
     }
+
+    @Test("every fixture op the schema lists decodes with its declared arguments (one declaration)")
+    func fixtureOpParity() throws {
+        let sample: [ControlArgType: String] = [
+            .fetchFailure: #""fetchFailed""#, .authorization: #""denied""#, .assetAliases: #"["a-0001"]"#,
+            .fixture: #""one-album""#, .day: #""2025-07-05""#, .int: "3", .exportFailure: #""writeFailed""#
+        ]
+        for kind in ControlFixtureOpKind.allCases {
+            let args = kind.args.filter(\.required).map { #""\#($0.name)":\#(sample[$0.type] ?? "null")"# }
+            let json = (["\"op\":\"\(kind.rawValue)\""] + args).joined(separator: ",")
+            let op = try JSONDecoder().decode(ControlFixtureOp.self, from: Data("{\(json)}".utf8))
+            #expect(String(describing: op).isEmpty == false, "\(kind.rawValue)")
+            // And an undeclared argument is refused.
+            let extra = "{\(json),\"bogus\":1}"
+            #expect(throws: ControlRequestError.self) {
+                try JSONDecoder().decode(ControlFixtureOp.self, from: Data(extra.utf8))
+            }
+        }
+    }
 }
 
 @MainActor
 @Suite("Control plane: file mailbox (#298)")
 struct ControlMailboxTests {
 
-    private func directory() -> URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent("mailbox-\(UUID().uuidString)", isDirectory: true)
+    /// A fresh mailbox directory; `create: false` leaves making it to `ControlMailbox.start()`.
+    private func directory(create: Bool = true) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("mailbox-\(UUID().uuidString)")
+        if create { try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true) }
+        return url
+    }
+
+    /// As the CLI does: a temporary name, then a rename into place.
+    private func write(_ data: Data, name: String, to directory: URL) throws {
+        let temporary = directory.appendingPathComponent(".\(name).tmp")
+        try data.write(to: temporary)
+        try FileManager.default.moveItem(at: temporary, to: directory.appendingPathComponent(name))
+    }
+
+    private func write(_ raw: String, name: String, to directory: URL) throws {
+        try write(Data(raw.utf8), name: name, to: directory)
     }
 
     private func write(_ body: String, id: Int, to directory: URL) throws {
-        // As the CLI does: a temporary name, then a rename into place.
-        let temporary = directory.appendingPathComponent(".req-\(id).tmp")
-        try envelope(body, id: id).write(to: temporary)
-        try FileManager.default.moveItem(at: temporary, to: directory.appendingPathComponent("req-\(id).json"))
+        try write(envelope(body, id: id), name: "req-\(id).json", to: directory)
+    }
+
+    private func reply(_ name: String, in directory: URL) throws -> [String: Any] {
+        let data = try Data(contentsOf: directory.appendingPathComponent(name))
+        return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
     private func reply(_ id: Int, in directory: URL) throws -> [String: Any] {
-        let data = try Data(contentsOf: directory.appendingPathComponent("res-\(id).json"))
-        return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        try reply("res-\(id).json", in: directory)
     }
 
     @Test("requests are handled in ascending n, replied atomically, and removed; a bad one gets an error reply")
     func ordering() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
-        let directory = directory()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let harness = await ControlHarness.booted(.oneAlbum)
+        let directory = try directory()
         // Written out of order; each accepted op takes the next seq, so the replies show the order handled.
         try write(#""cmd":"fixture","fixture":{"op":"flush"}"#, id: 12, to: directory)
         try write(#""cmd":"fixture","fixture":{"op":"flush"}"#, id: 3, to: directory)
@@ -560,14 +609,14 @@ struct ControlMailboxTests {
         #expect(mailbox.pendingRequests().isEmpty)
     }
 
-    @Test("a request that arrives after start is picked up (directory source or the fallback poll)")
+    @Test("start() makes its directory; a request that arrives after start is picked up")
     func picksUpLaterRequests() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
-        let directory = directory()
+        let harness = await ControlHarness.booted(.oneAlbum)
+        let directory = try directory(create: false)
         let mailbox = ControlMailbox(directory: directory, host: harness.host, pollInterval: .milliseconds(20))
         mailbox.start()
         defer { mailbox.stop() }
+        #expect(FileManager.default.fileExists(atPath: directory.path))   // start() makes its directory
         await mailbox.awaitDrain()
         try write(#""cmd":"schema""#, id: 1, to: directory)
         let reply = directory.appendingPathComponent("res-1.json")
@@ -578,63 +627,10 @@ struct ControlMailboxTests {
         }
         #expect(try self.reply(1, in: directory)["ok"] as? Bool == true)
     }
-}
-
-@MainActor
-@Suite("Control plane: review fixes (#298)")
-struct ControlReviewFixTests {
-
-    @Test("every fixture op the schema lists decodes with its declared arguments (one declaration)")
-    func fixtureOpParity() throws {
-        let sample: [ControlArgType: String] = [
-            .fetchFailure: #""fetchFailed""#, .authorization: #""denied""#, .assetAliases: #"["a-0001"]"#,
-            .fixture: #""one-album""#
-        ]
-        for kind in ControlFixtureOpKind.allCases {
-            let args = kind.args.filter(\.required).map { #""\#($0.name)":\#(sample[$0.type] ?? "null")"# }
-            let json = (["\"op\":\"\(kind.rawValue)\""] + args).joined(separator: ",")
-            let op = try JSONDecoder().decode(ControlFixtureOp.self, from: Data("{\(json)}".utf8))
-            #expect(String(describing: op).isEmpty == false, "\(kind.rawValue)")
-            // And an undeclared argument is refused.
-            let extra = "{\(json),\"bogus\":1}"
-            #expect(throws: ControlRequestError.self) {
-                try JSONDecoder().decode(ControlFixtureOp.self, from: Data(extra.utf8))
-            }
-        }
-    }
-
-    @Test("a predicate value of the wrong type for its path is an error, not silently met")
-    func predicateTypeMismatch() async {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
-        let mismatched = await harness.wait([("idle", .ne, .string("true"))], timeoutMs: 0)
-        guard case .failure(let error) = mismatched else { Issue.record("met?"); return }
-        #expect(error.code == .badRequest)
-        #expect(error.message.contains("bool"))
-        let ordering = await harness.wait([("nav.screen", .gte, .int(1))], timeoutMs: 0)
-        guard case .failure(let orderingError) = ordering else { Issue.record("met?"); return }
-        #expect(orderingError.code == .badRequest)
-        // null is fine where the path may be null; a matching type is fine.
-        #expect((try? await harness.wait([("app.launchError", .eq, .null)], timeoutMs: 0).get()) != nil)
-        #expect((try? await harness.wait([("idle", .eq, .bool(true))], timeoutMs: 0).get()) != nil)
-    }
-
-    private func directory() throws -> URL {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("mailbox-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
-    }
-
-    private func write(_ body: String, name: String, to directory: URL) throws {
-        let temporary = directory.appendingPathComponent(".\(name).tmp")
-        try Data(body.utf8).write(to: temporary)
-        try FileManager.default.moveItem(at: temporary, to: directory.appendingPathComponent(name))
-    }
 
     @Test("a send queued behind a wait isn't held by it: actions never queue behind waits")
     func waitDoesNotBlockSends() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let directory = try directory()
         // A wait that can only be met by the send behind it.
         try write(#"{"v":1,"id":1,"run":"r-test","cmd":"wait","timeoutMs":20000,"#
@@ -646,44 +642,23 @@ struct ControlReviewFixTests {
         mailbox.start()
         defer { mailbox.stop() }
         await mailbox.awaitDrain()
-        let wait = try JSONSerialization.jsonObject(
-            with: Data(contentsOf: directory.appendingPathComponent("res-1.json"))) as? [String: Any]
-        #expect(wait?["ok"] as? Bool == true)
-        let send = try JSONSerialization.jsonObject(
-            with: Data(contentsOf: directory.appendingPathComponent("res-2.json"))) as? [String: Any]
-        #expect((send?["data"] as? [String: Any])?["outcome"] as? String == "accepted")
+        #expect(try reply(1, in: directory)["ok"] as? Bool == true)
+        #expect((try reply(2, in: directory)["data"] as? [String: Any])?["outcome"] as? String == "accepted")
     }
 
     @Test("a request file without a number gets a badRequest reply and is removed, not ignored forever")
     func malformedRequestName() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
+        let harness = await ControlHarness.booted(.oneAlbum)
         let directory = try directory()
         try write(#"{"v":1,"id":3,"run":"r-test","cmd":"schema"}"#, name: "req--3.json", to: directory)
         let mailbox = ControlMailbox(directory: directory, host: harness.host)
         mailbox.start()
         defer { mailbox.stop() }
         await mailbox.awaitDrain()
-        let reply = try JSONSerialization.jsonObject(
-            with: Data(contentsOf: directory.appendingPathComponent("res--3.json"))) as? [String: Any]
-        #expect(reply?["ok"] as? Bool == false)
-        #expect(reply?["id"] is NSNull)
-        #expect((reply?["error"] as? [String: Any])?["code"] as? String == "badRequest")
+        let reply = try self.reply("res--3.json", in: directory)
+        #expect(reply["ok"] as? Bool == false)
+        #expect(reply["id"] is NSNull)
+        #expect((reply["error"] as? [String: Any])?["code"] as? String == "badRequest")
         #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("req--3.json").path))
-    }
-
-    @Test("a reply brings state up to date first: the state written is at least the reply's rev")
-    func replyFlushesState() async throws {
-        let harness = ControlHarness(.oneAlbum)
-        await harness.runtime.bootstrap()
-        let response = await harness.host.handle(
-            ControlRequest(id: 1, run: "r-test", command: .send(.navOpenAppSettings)))
-        let reply = await harness.host.reply(response)
-        guard case .int(let rev)? = reply["rev"], case .int(let written)? = harness.sink.lastState?["rev"] else {
-            Issue.record("no rev")
-            return
-        }
-        #expect(written >= rev)
-        #expect(harness.sink.lastState?["nav"]?["screen"] == .string("appSettings"))   // not 100 ms later
     }
 }

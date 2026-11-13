@@ -6,7 +6,7 @@ description: Launch, inspect, drive, screenshot or run headless the Poimi iOS ap
 # Poimi control plane
 
 `Scripts/poimi.sh` runs the **real** app on an iOS 26 simulator, already in a known state, on an
-isolated in-memory store and the deterministic fake library — never real photos. You drive it with
+isolated control store and the deterministic fake library — never real photos. You drive it with
 **actions** — each one a control a user can reach, calling the same method that control calls — through
 a file mailbox, and read its state as JSON. It runs with its UI (`AppRootView`) or **headless** (no UI;
 the stores and album session only). DEBUG-only (`App/PoimiApp/Control/`, D39,
@@ -43,6 +43,7 @@ Scripts/poimi.sh detail '.days | keys'             # state-detail.json: the acti
 Scripts/poimi.sh schema | jq '.actions[] | {type, summary}'
 Scripts/poimi.sh shot /tmp/poimi.png               # waits idle; then ALWAYS open the PNG and look
 Scripts/poimi.sh reset mid-review                  # a reset is a relaunch (same device/host, no build)
+Scripts/poimi.sh relaunch                          # kill + launch over the SAME data: no reseed
 Scripts/poimi.sh logs --last 2m                    # the app's OSLog (subsystem com.valtteriluoma.poimi)
 ```
 
@@ -119,6 +120,38 @@ flags for them: `launch` returns once the route has settled, so `send` the actio
   or dialog covers everything (iPad too): other actions are `notShown` until it's dismissed — except
   the New album sheet's `albums.create`.
 
+## Breaking it on purpose
+
+Levers for the hard cases (`fixture OP`; the `library.*` paths in `state.json` report the fake's side):
+
+- **Hold an export mid-flight:** `fixture library.holdExports`, then `send nav.openExport` and
+  `wait 'library.heldExports == 1'` — the export is now live and visible: `active.export.phase == exporting`,
+  `pending.export == true`, `idle == false` (so don't `wait idle` or `shot` until you release).
+  `fixture library.releaseExports` lets it go on. `library.failExport '{"error":"writeFailed"}'` makes every
+  export fail from then on (a held one when released); `library.failExport` with no error clears it.
+  `library.exportCalls` / `library.albumsCreated` count export calls and Photos albums created — a re-export
+  that finds its album creates none.
+- **The export screen has no way out until it settles:** `nav.back` is `notShown` there, and `nav.root` (its
+  Back to albums) only works once the export is `done` or `failed`. On iPad the sidebar stays live: re-open
+  the album and Save again mid-export and the screen joins the run in flight (then catches the album up to
+  any picks made in between) — never a second album.
+- **New photos mid-session (#191 drift):** `fixture library.addPhotos '{"day":"2025-07-05","count":3}'` replies
+  with the new aliases (numbered after every existing one). The app doesn't watch the library: an open album
+  sees them only on its next scan — go back and open it again.
+- **`relaunch`** kills the app (`simctl terminate`) and launches it over the same data: the store, the fake
+  library (added photos, exported albums), the album aliases, the timeline cache. Screen state is gone (it
+  lands on the album list, or `--route`); so are the levers — held exports, `failExport` / `failFetch`, and
+  `library.authorization` (the fixture's again). `reset FIXTURE` is the opposite: a fresh seed. A refused
+  relaunch (a bad `--route`) never wipes the run; a run this build can't read is refused, not replaced; and
+  a normal (non-control) launch ends the run, so a relaunch after it is refused.
+- **The D15 loss window, stated plainly:** `simctl terminate` delivers no scene-phase change, so **nothing
+  flushes on the way down — every pick and done mark since the last flush is lost on `relaunch`**. Under
+  control the debounce is a day long, so "since the last flush" means since your last `fixture flush` (or
+  opening another album, or an export, which flush). In the shipping app the window is the 2 s debounce, and
+  only for a kill that skips the scene phase (jetsam); a user's swipe-away passes through `.inactive` and
+  flushes. To check what
+  survives: `fixture flush` (or not), `relaunch`, then read `albums.*.picked`.
+
 ## Reading state
 
 Aliases, never ids: albums `album-N` (monotonic, never reused in a run), photos `a-NNNN` (by capture
@@ -130,10 +163,12 @@ date), days `yyyy-mm-dd`. Titles only as `titleLength`. Every path and type: `sc
 - **`idle` does not wait for debounced persistence.** Under control the debounce is a day long, so a
   pick leaves `pending.selectionFlush == true` until a flush; the in-memory picks are already what the
   UI shows. Call `fixture flush` before checking what was *persisted* (`albums.*` of a closed album, a
-  relaunch).
+  relaunch). The album list's row reads the *persisted* picks, so with a flush pending it can lag the open
+  album's `albums.*` (e.g. still "Exported" while state says `editedSinceExport`); flush before a `shot` of it.
 
 ## Isolation
 
 A control launch never touches the real store, `UserDefaults` (its own suite), What's New or the App
 Store review prompt, and runs in UTC. Each launch wipes and re-seeds, so a fixture is always its exact
-start state; a normal launch deletes the control state files.
+start state — except `relaunch`, which keeps everything under `Application Support/control/` (store, fake
+library, aliases); a normal launch deletes all control state, ending the run.
