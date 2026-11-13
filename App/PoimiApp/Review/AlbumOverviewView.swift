@@ -23,15 +23,13 @@ import Curation
 
 struct AlbumOverviewView: View {
     let project: CurationProject
-    @Environment(\.photoLibrary) private var library
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(AlbumSession.self) private var session
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
-    @Environment(\.placeNaming) private var placeNaming
-    @Environment(\.modelContext) private var modelContext
-    /// The album's scanned store — obtained from the coordinator (shared with the grid), held here so
-    /// `body` reads its phase. Store freshness (album / range / location) is the coordinator's key, so
-    /// this view no longer tracks the scanned range/setting itself.
+    /// The album's scanned store — obtained from the album session (shared with the grid), held here so
+    /// `body` reads its phase. Store freshness (album / range / location / filters) is the session's key,
+    /// so this view doesn't track the scanned range/setting itself.
     @State private var store: CandidateStore?
     /// The finished cluster index — built once when the scan settles, so `body` never groups/formats.
     @State private var index: ClusterIndex?
@@ -106,27 +104,22 @@ struct AlbumOverviewView: View {
             // Keyed on the range too (not just the id): a period edit in Settings mutates this same
             // project, so the key changes and the task re-runs, re-scanning even while Settings is still
             // on top — so the cluster index is fresh by the time you pop back.
-            // Keyed by the SAME `CandidateStoreKey` the coordinator uses — album + range + location + the
+            // Keyed by the SAME `CandidateStoreKey` the session uses — album + range + location + the
             // source filters — so a Settings edit to any of them re-scans (even while Settings is still on
-            // top), keeping the cluster index fresh. One key type, so it can't drift from the coordinator.
-            .task(id: AppCoordinator.CandidateStoreKey(project)) {
-                selection.activate(project)     // hydrate persisted picks so the counts are live
-                doneStore.activate(project)     // hydrate marked-done days so the state colours are live
-                // Get the album's shared store (created here on the album-landing scan; the grid reuses
-                // it on drill-in). A Settings edit changes the coordinator's key → a fresh store to scan.
-                let store = coordinator.candidateStore(for: project) {
-                    CandidateStore(library: library, locationEnabled: project.locationEnabled,
-                                   naming: placeNaming,
-                                   nameCache: NameCacheStore(modelContainer: modelContext.container),
-                                   timelineCache: coordinator.timelineCache)
-                }
+            // top), keeping the cluster index fresh. One key type, so it can't drift from the session.
+            .task(id: AlbumSession.CandidateStoreKey(project)) {
+                // The album session (#297) hydrates the picks + done-days (so the counts and state colours
+                // are live), gets the album's shared store (created here on the album-landing scan; the grid
+                // reuses it) and scans it. WITHOUT reconciling: the Overview's done-state is display-only
+                // (#289) — the grid reconciles on entry.
+                let store = session.candidateStore(for: project)
                 self.store = store
-                if store.phase == .idle {
-                    await scan()
-                } else if case .ready(let clusters) = store.phase {
-                    setIndex(ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames,
-                                                       assets: store.assetsByID))
-                }
+                if store.phase == .idle { setIndex(nil) }
+                await session.openOverview(project)
+                // A Settings key change cancels this task and starts a new one with a fresh store; this one
+                // resumes after the OLD load and must not overwrite the new task's (reset) index.
+                guard !Task.isCancelled, store === self.store else { return }
+                buildIndex(from: store)
             }
             // Trip place names resolve asynchronously after `.ready` (§7); rebuild the (cheap) index so
             // the trip titles swap from their date fallback to "Week in …" as the names land.
@@ -202,14 +195,18 @@ struct AlbumOverviewView: View {
 
     /// Run (or re-run, e.g. a "Try again") the fetch pass and rebuild the cluster index from the result.
     /// Reuses the current `store` so a retry re-scans the same album.
-    private func scan() async {
+    private func rescan() async {
         guard let store else { return }
         setIndex(nil)
-        await store.load(project)
-        if case .ready(let clusters) = store.phase {
-            setIndex(ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames,
-                                               assets: store.assetsByID))
-        }
+        await session.rescanOverview(project)
+        guard store === self.store else { return }   // superseded by a key change meanwhile
+        buildIndex(from: store)
+    }
+
+    /// Build the cluster index from a settled `.ready` store (no-op otherwise) — once, off `body`.
+    private func buildIndex(from store: CandidateStore) {
+        guard case .ready(let clusters) = store.phase else { return }
+        setIndex(ClusterIndexBuilder.build(from: clusters, tripNames: store.tripNames, assets: store.assetsByID))
     }
 
     @ViewBuilder
@@ -232,9 +229,9 @@ struct AlbumOverviewView: View {
                 // The scan re-runs because `CandidateStoreKey` tracks the media filter.
                 onIncludePhotos: { project.media = .photosAndVideos })
         case .failed(.loadError):
-            ReviewLoadFailedView(onRetry: { Task { await scan() } })
+            ReviewLoadFailedView(onRetry: { Task { await rescan() } })
         case .failed(.accessLost):
-            ReviewAccessLostView(onRecovered: { Task { await scan() } })
+            ReviewAccessLostView(onRecovered: { Task { await rescan() } })
         }
     }
 

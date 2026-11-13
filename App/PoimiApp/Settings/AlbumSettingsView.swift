@@ -8,11 +8,11 @@
 //  the album library, not inside one album — the 2F1 design's "App" section lives there, not here.
 //  Pushed from the album Overview (the gear). Edits apply immediately (iOS-Settings style, no Save
 //  button): controls bind straight to the `@Observable` `CurationProject`, and leaving the screen
-//  forces a durable save via `ProjectStore` (rather than leaning on the mainContext's deferred
-//  autosave) and re-syncs the live tally's target.
+//  commits them through `AlbumActions.applyEdits` — a durable save (rather than leaning on the
+//  mainContext's deferred autosave) + re-syncing the live tally's target.
 //
-//  Reset / Delete route through `ProjectStore` (never touching the exported Photos album or the
-//  user's originals, D31) and reconcile the live `SelectionStore` / `DoneStore` so the Overview
+//  Reset / Delete route through `AlbumActions` (never touching the exported Photos album or the
+//  user's originals, D31), which reconciles the live `SelectionStore` / `DoneStore` so the Overview
 //  behind reflects the change the moment this screen pops.
 //
 
@@ -22,8 +22,8 @@ import UIKit   // UIPasteboard for the DEBUG "Copy scan diagnostics" tool
 #endif
 
 struct AlbumSettingsView: View {
-    @Environment(ProjectStore.self) private var store
-    @Environment(AppCoordinator.self) private var coordinator
+    @Environment(AlbumActions.self) private var actions
+    @Environment(AlbumSession.self) private var session
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
     @Environment(\.scenePhase) private var scenePhase
@@ -182,7 +182,7 @@ struct AlbumSettingsView: View {
                 }
                 .tint(.primary)
                 Button {
-                    UIPasteboard.general.string = coordinator.candidateStore?.scanReport?.text
+                    UIPasteboard.general.string = session.candidateStore?.scanReport?.text
                         ?? "No scan yet — open this album's overview first."
                 } label: {
                     Label { Text(verbatim: "Copy scan diagnostics") } icon: { Image(systemName: "stopwatch") }
@@ -257,27 +257,16 @@ struct AlbumSettingsView: View {
     /// with (clearing the field is a no-op, not a silent rename). Skipped mid-delete — the project is gone.
     private func persistEdits() {
         guard !isDeleting else { return }
-        if project.title.trimmingCharacters(in: .whitespaces).isEmpty {
-            project.title = titleOnOpen.trimmingCharacters(in: .whitespaces).isEmpty
-                ? String(localized: "Untitled album", comment: "Fallback album name when the user clears the name field")
-                : titleOnOpen
-        }
-        store.saveEdits(to: project)
-        selection.retarget(project)
+        actions.applyEdits(to: project, titleOnOpen: titleOnOpen)
     }
 
     // MARK: - Destructive actions
 
-    /// Clear all progress, reconciling the live stores. Order matters: `deactivate()` flushes and
-    /// clears each store's in-memory state, THEN `reset` zeroes the model, THEN we re-activate to reload
-    /// the now-empty state — otherwise a later debounced flush would write stale picks back over the
-    /// reset. The interim flush is redundant but harmless; Reset is a rare, explicit action.
+    /// Clear all progress, reconciling the live stores — through the one reset ordering
+    /// (`AlbumActions.reset`): the stores holding this album flush + let go, THEN the model is zeroed,
+    /// THEN they re-hydrate the now-empty state, so a later debounced flush can't write stale picks back.
     private func resetPicks() {
-        selection.deactivate()
-        doneStore.deactivate()
-        store.reset(project)
-        selection.activate(project)
-        doneStore.activate(project)
+        actions.reset(project)
     }
 
     /// The pick count to quote in the destructive dialogs. Prefers the LIVE count while this album is
@@ -295,18 +284,15 @@ struct AlbumSettingsView: View {
     /// being a sequence this view has to remember. `SelectionStore` is deliberately untouched: the
     /// picks are the whole point of the action.
     private func markAllUnreviewed() {
-        doneStore.markAllUnreviewed(project, in: store)
+        actions.markAllUnreviewed(project)
     }
 
-    /// Delete the project record and return to the album library. Deactivates the live stores first
-    /// (so nothing holds the dangling project) and flags `isDeleting` so teardown doesn't re-save it.
-    /// NEVER deletes the exported Photos album (D31).
+    /// Delete the project record and return to the album library (`AlbumActions.delete`: the live stores
+    /// let go first, so nothing holds the dangling project). Flags `isDeleting` so teardown doesn't
+    /// re-save it. NEVER deletes the exported Photos album (D31).
     private func deleteAlbum() {
         isDeleting = true
-        selection.deactivate()
-        doneStore.deactivate()
-        store.delete(project)   // also drops the album's cached timeline (ProjectStore.delete, #130)
-        coordinator.popToRoot()
+        actions.delete(project)   // lets go of the stores, pops to the library, drops the model + cached timeline
     }
 
     // MARK: - Derived display

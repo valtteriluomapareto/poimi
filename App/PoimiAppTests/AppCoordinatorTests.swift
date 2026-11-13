@@ -216,87 +216,6 @@ struct AppCoordinatorTests {
         #expect(coord.presentedPhotoID == nil)         // back to the library root dismisses it
     }
 
-    @Test("the review candidate list is shared so the viewer can page through it (#36)")
-    func reviewCandidateListShared() {
-        let coord = coordinator(.authorized)
-        #expect(coord.reviewOrderedIDs.isEmpty)
-        coord.reviewOrderedIDs = ["a", "b", "c"]   // published by the review screen on .ready
-        #expect(coord.reviewOrderedIDs == ["a", "b", "c"])
-    }
-
-    @Test("the per-photo day map is shared so the viewer can label each photo's day (#36)")
-    func reviewDayMapShared() {
-        let coord = coordinator(.authorized)
-        #expect(coord.reviewDayByID.isEmpty)
-        coord.reviewDayByID = ["a": .day(year: 2025, month: 7, day: 5)]   // published with the list
-        #expect(coord.reviewDayByID["a"] == .day(year: 2025, month: 7, day: 5))
-    }
-
-    @Test("CandidateStoreKey tracks every source filter — a Settings filter edit forces a re-scan (#125)")
-    func candidateStoreKeyTracksFilters() {
-        let fixedID = UUID()   // same album id, so only the filter under test differs
-        func project(includeVideos: Bool = false, includePhotos: Bool = true,
-                     excludeScreenshots: Bool = true,
-                     excludedAlbumIDs: [String] = []) -> CurationProject {
-            CurationProject(
-                id: fixedID, title: "A",
-                rangeStart: Date(timeIntervalSince1970: 0), rangeEnd: Date(timeIntervalSince1970: 86_400),
-                targetCount: 100, excludeScreenshots: excludeScreenshots,
-                excludedAlbumIDs: excludedAlbumIDs, includeVideos: includeVideos,
-                includePhotos: includePhotos,
-                selectionSnapshot: Data(),
-                createdAt: Date(timeIntervalSince1970: 0), lastOpenedAt: Date(timeIntervalSince1970: 0))
-        }
-        typealias Key = AppCoordinator.CandidateStoreKey
-        let base = Key(project())
-        #expect(base == Key(project()))                                   // same config → reuse the scan
-        #expect(base != Key(project(includeVideos: true)))               // videos toggled → re-scan (#125)
-        #expect(base != Key(project(excludeScreenshots: false)))         // screenshots toggled → re-scan
-        #expect(base != Key(project(excludedAlbumIDs: ["x"])))           // an excluded album added → re-scan
-        #expect(base != Key(project(includePhotos: false)))              // videos-only lens → re-scan (#273)
-        // Excluded-album ORDER must not matter — the picker's Set is unordered, so the key sorts it; an
-        // order-only difference must NOT spuriously invalidate the scan.
-        #expect(Key(project(excludedAlbumIDs: ["a", "b"])) == Key(project(excludedAlbumIDs: ["b", "a"])))
-    }
-
-    @Test("candidateStore reuses one store per key, and rebuilds when a source filter is edited (#125)")
-    func candidateStoreReuseAcrossFilterEdit() {
-        let coord = coordinator(.authorized)
-        let project = CurationProject(
-            title: "A",
-            rangeStart: Date(timeIntervalSince1970: 0), rangeEnd: Date(timeIntervalSince1970: 86_400),
-            targetCount: 100, selectionSnapshot: Data(),
-            createdAt: Date(timeIntervalSince1970: 0), lastOpenedAt: Date(timeIntervalSince1970: 0))
-        // Same key twice → the SAME store (Overview + grid share one scan; no double-fetch/re-cluster).
-        let first = coord.candidateStore(for: project) { CandidateStore(library: FakePhotoLibrary()) }
-        let reused = coord.candidateStore(for: project) { CandidateStore(library: FakePhotoLibrary()) }
-        #expect(first === reused)
-        // A Settings filter edit flips the key → a FRESH store, so the next scan runs the new candidate
-        // set (not the stale cached one). This is the reuse path the key-equality test only proxies.
-        project.includeVideos.toggle()
-        let rebuilt = coord.candidateStore(for: project) { CandidateStore(library: FakePhotoLibrary()) }
-        #expect(rebuilt !== first)
-    }
-
-    @Test("AssetRef map shared for the info panel; the review context clears on an album switch (#127)")
-    func reviewAssetMapSharedAndCleared() {
-        let coord = coordinator(.authorized)
-        #expect(coord.reviewAssetsByID.isEmpty)
-        // Publish the review context the way the review screen does on `.ready`.
-        coord.reviewOrderedIDs = ["a"]
-        coord.reviewDayByID = ["a": .day(year: 2025, month: 7, day: 5)]
-        coord.reviewAssetsByID = ["a": AssetRef(id: "a", captureDate: Date(timeIntervalSince1970: 0),
-                                                pixelSize: PixelSize(width: 4032, height: 3024))]
-        coord.reviewIsReExport = true   // a previously-exported album published "Update in Photos" (#187)
-        #expect(coord.reviewAssetsByID["a"]?.pixelSize.width == 4032)
-        // Switching albums must clear ALL of it — no stale metadata / labels bleed into the next album.
-        coord.openProject(UUID())
-        #expect(coord.reviewAssetsByID.isEmpty)
-        #expect(coord.reviewDayByID.isEmpty)
-        #expect(coord.reviewOrderedIDs.isEmpty)
-        #expect(!coord.reviewIsReExport)   // else a fresh album's finish would read the stale "Update in Photos"
-    }
-
     @Test("finishToExport is a no-op with no active album (#187)")
     func finishToExportNoActiveAlbum() {
         let coord = coordinator(.authorized)
@@ -342,5 +261,51 @@ struct AppCoordinatorTests {
         coord.openSettings(id)
         coord.openSettings(id)
         #expect(coord.path == [.albumOverview(id), .settings(id)])
+    }
+}
+
+/// The path as the album session's lifetime (#297): every change — a coordinator method or SwiftUI writing
+/// the binding on a back-swipe — reports the album closing and the export screen leaving.
+@MainActor
+@Suite("AppCoordinator — the path drives the album session (#297)")
+struct AppCoordinatorPathTests {
+
+    /// The path is the one choke point (#297): a NavigationStack back-swipe writes it through the binding,
+    /// with no coordinator method involved, and must close the album all the same.
+    @Test("any path change that leaves the album closes it; pushes within it don't (#297)")
+    func pathChangesCloseTheAlbum() {
+        let coord = AppCoordinator(library: FakePhotoLibrary())
+        let id = UUID()
+        var closes = 0
+        coord.onCloseAlbum = { closes += 1 }
+        coord.openProject(id)                      // re-opening always closes (a fresh scan)
+        #expect(closes == 1)
+        coord.openReview(id)
+        coord.openSettings(id)
+        coord.path = [.albumOverview(id)]          // back-swipes within the album
+        #expect(closes == 1)
+        coord.path = []                            // a back-swipe out of the album
+        #expect(closes == 2)
+        coord.openProject(id)
+        coord.openAppSettings()
+        coord.path = [.appSettings]                // the album is no longer at the root
+        #expect(closes == 4)
+    }
+
+    @Test("the export screen leaving the path is reported once, however it leaves (#297)")
+    func leavingExportIsReported() {
+        let coord = AppCoordinator(library: FakePhotoLibrary())
+        let id = UUID()
+        var leaves = 0
+        coord.onLeaveExport = { leaves += 1 }
+        coord.openProject(id)
+        coord.openReview(id)
+        coord.finishToExport()
+        #expect(leaves == 0)
+        coord.pop()                                // back from export
+        #expect(leaves == 1)
+        coord.finishToExport()
+        coord.popToRoot()                          // "Back to albums"
+        #expect(leaves == 2)
     }
 }

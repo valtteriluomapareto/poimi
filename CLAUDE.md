@@ -88,7 +88,9 @@ App/
     Sources/                   @main PoimiApp (composition root)
     PhotoLibrary/              System/FakePhotoLibrary, PhotoLibraryProvider (DI seam) + thumbnail seam
     Persistence/               CurationProject + GeocodedPlaceName @Models, AppSchemaV2 (SwiftData)
-    State/                     ProjectStore, SelectionStore, DoneStore (@MainActor @Observable)
+    State/                     ProjectStore, SelectionStore, DoneStore, AlbumSession (the open album's
+                               scan / review context / export, #297), AlbumActions (open/create/delete/
+                               reset/edit façade) — all @MainActor @Observable
     Navigation/                Route, AppCoordinator, AppRootView (the adaptive spine, #30)
     Onboarding/                OnboardingView, AccessRecoveryView (first-run + auth, #31)
     Albums/                    AlbumsView — the album library (#32)

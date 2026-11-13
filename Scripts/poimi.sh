@@ -258,14 +258,14 @@ cmd_wait() {
 
 cmd_shot() {
     local out="${1:?shot needs an output .png path}"
-    # `idle` is true/false, or null where slice A can't observe the screen (export) — wait for it to
-    # be not-false, and say so when it's unknown.
+    # `idle` is true/false, or null where the app can't observe the screen's work — wait for it to be
+    # not-false, and say so when it's unknown.
     cmd_wait '.idle != false' --timeout 30
     local idle screen sim
     idle="$(cmd_state .idle)"
     if [ "${idle}" = "null" ]; then
         screen="$(cmd_state .nav.screen)"; screen="${screen//\"/}"
-        log "idle is unknown on the ${screen} screen (slice A can't observe it); capturing after the settle"
+        log "idle is unknown on the ${screen} screen (not observable); capturing after the settle"
     fi
     sleep "${SHOT_SETTLE}"   # a short visual settle (animations), after the semantic barrier
     mkdir -p "$(dirname "${out}")"

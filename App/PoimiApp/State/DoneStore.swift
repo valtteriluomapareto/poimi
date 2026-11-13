@@ -30,6 +30,10 @@ final class DoneStore {
 
     private var activeProject: CurationProject?
     private var flushTask: Task<Void, Never>?
+    /// Whether a debounced flush is scheduled and hasn't written yet (#297) — `true` from a mutation
+    /// until the debounce fires or `flushNow()` runs. Observable, so "unsaved day marks" is readable
+    /// state (the control plane's `pending` block) instead of a private task handle.
+    private(set) var hasPendingFlush = false
 
     var isActive: Bool { activeProject != nil }
 
@@ -207,6 +211,7 @@ final class DoneStore {
         flushTask?.cancel()
         let project = activeProject
         let window = debounce
+        if !hasPendingFlush { hasPendingFlush = true }
         flushTask = Task { [weak self] in
             try? await Task.sleep(for: window)
             guard !Task.isCancelled else { return }
@@ -215,6 +220,9 @@ final class DoneStore {
     }
 
     private func write(to project: CurationProject?) {
+        // The pending flush ends here, whichever path got here (the debounce firing or `flushNow`).
+        flushTask = nil
+        if hasPendingFlush { hasPendingFlush = false }
         // Only the active project is written — a stale debounce from a previous project is a no-op
         // (the multi-project trap, §12). The guard makes the live `doneDays` safe to encode here.
         guard let project, project.persistentModelID == activeProjectID else { return }

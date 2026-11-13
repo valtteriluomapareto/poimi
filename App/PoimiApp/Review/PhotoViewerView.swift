@@ -22,6 +22,7 @@ struct PhotoViewerView: View {
     /// The asset tapped in the grid — the page the viewer opens on.
     let startID: String
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(AlbumSession.self) private var session   // the review context it pages through (#297)
     @Environment(SelectionStore.self) private var selection
     @Environment(DoneStore.self) private var doneStore
     @Environment(\.thumbnailProvider) private var thumbnails
@@ -81,7 +82,7 @@ struct PhotoViewerView: View {
     /// Every candidate, in order — the pager's universe; falls back to just this photo with no live
     /// review context. (COW array, so passing it to the pager is cheap.)
     private var allIDs: [String] {
-        coordinator.reviewOrderedIDs.contains(startID) ? coordinator.reviewOrderedIDs : [startID]
+        session.reviewOrderedIDs.contains(startID) ? session.reviewOrderedIDs : [startID]
     }
 
     var body: some View {
@@ -147,7 +148,7 @@ struct PhotoViewerView: View {
     /// an undoable toast. (Deferred to #128 follow-up: an end-of-album terminal affordance + an opt-out.)
     private func autoMarkDoneIfPagedPastCluster(from previous: String, to current: String) {
         guard let finished = clusterToAutoMarkDone(from: previous, to: current,
-                                                   clusters: coordinator.reviewClusters,
+                                                   clusters: session.reviewClusters,
                                                    isDone: doneStore.isDone) else { return }
         doneStore.toggle(finished)
         autoDoneHaptic &+= 1
@@ -240,7 +241,7 @@ struct PhotoViewerView: View {
                     .monospacedDigit()
                 VStack(spacing: 10) {
                     Button { coordinator.finishToExport() } label: {
-                        Text(finishActionLabel(isReExport: coordinator.reviewIsReExport)).frame(maxWidth: .infinity)
+                        Text(finishActionLabel(isReExport: session.reviewIsReExport)).frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glassProminent).tint(Color.accentColor).foregroundStyle(Color.onAccent)
                     .disabled(selection.progress.picked == 0)   // nothing to save with zero picks
@@ -279,7 +280,7 @@ struct PhotoViewerView: View {
             loadFull: { await thumbnails.fullImage(for: $0, targetSize: $1) },
             // The published AssetRef map decides each page's kind (photo vs video, #125); the player item
             // loads lazily on the first play tap and is unboxed here for the video page's own AVPlayer.
-            assets: coordinator.reviewAssetsByID,
+            assets: session.reviewAssetsByID,
             loadPlayerItem: { await thumbnails.playerItem(for: $0)?.item },
             axLabel: { photoAXLabel(for: $0) },
             // Single-tap the photo = the same Pick action as the button (toggle + auto-advance) — the
@@ -600,20 +601,20 @@ extension PhotoViewerView {
 
     /// The current photo's day, "" when there's no review context (the day map is empty).
     private func dayLabel(for id: String) -> String {
-        coordinator.reviewDayByID[id].map { DayGroupHeader.dayLabel(for: $0) } ?? ""
+        session.reviewDayByID[id].map { DayGroupHeader.dayLabel(for: $0) } ?? ""
     }
 
     /// Whether `id` is a video — so the viewer's a11y (page label + Pick control) reads "Video" like the
     /// grid cell does, rather than always "Photo" (#125). Reads the same published `AssetRef` map.
     private func isVideo(_ id: String) -> Bool {
-        coordinator.reviewAssetsByID[id]?.isVideo ?? false
+        session.reviewAssetsByID[id]?.isVideo ?? false
     }
 
     /// Re-format the info labels for `id` — called when `currentID` settles / on appear, NEVER in a body
     /// (repo rule). Free tier (#127): the day + capture time for the date line, and the resolution for the
     /// panel, both from the published `AssetRef`. Async device + file size are a follow-up.
     private func refreshInfo(for id: String) {
-        let asset = coordinator.reviewAssetsByID[id]
+        let asset = session.reviewAssetsByID[id]
         // Compact ISO timestamp "2025-01-01 17:34" (#183) — the localized spelled form ran edge-to-edge
         // (esp. Finnish "keskiviikkona 1. tammikuuta 2025 klo 17.34"); ISO is short + unambiguous everywhere.
         let dateTime = asset?.captureDate.map { PhotoInfoFormat.timestamp($0) } ?? ""

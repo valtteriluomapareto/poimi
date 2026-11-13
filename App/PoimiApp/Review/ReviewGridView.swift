@@ -55,6 +55,7 @@ struct ReviewGridView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(DoneStore.self) private var done
     @Environment(AppCoordinator.self) private var coordinator   // observe viewer dismissal to restore the page (#126)
+    @Environment(AlbumSession.self) private var session   // the review context: video badges (#297)
 
     /// The current cluster page, identified by its GROUP ID (a stable id, not a positional index —
     /// so a re-scan that reshapes grouping can't leave the selection pointing at a different cluster).
@@ -385,7 +386,7 @@ struct ReviewGridView: View {
     /// AssetRef map is published to the coordinator on `.ready` (the same source the viewer reads), so
     /// this is an O(1) dictionary lookup + a pure format, done once per cell — not work in a `body`.
     private func videoBadge(_ id: String) -> String? {
-        guard let asset = coordinator.reviewAssetsByID[id], asset.isVideo else { return nil }
+        guard let asset = session.reviewAssetsByID[id], asset.isVideo else { return nil }
         return PhotoInfoFormat.duration(asset.duration)
     }
 
@@ -712,6 +713,7 @@ private struct ReviewCompleteBar: View {
     let totalPhotos: Int
     @Environment(SelectionStore.self) private var selection
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(AlbumSession.self) private var session
 
     var body: some View {
         let picked = selection.progress.picked
@@ -736,7 +738,7 @@ private struct ReviewCompleteBar: View {
                 // glass-tinted button washes out (device-caught) — the signed-off mock is a solid capsule.
                 // A solid fill is not a material, so it's fine under the pure-Liquid-Glass guard.
                 Button { coordinator.finishToExport() } label: {
-                    Text(finishActionLabel(isReExport: coordinator.reviewIsReExport))
+                    Text(finishActionLabel(isReExport: session.reviewIsReExport))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.onAccent)
                         .padding(.horizontal, 16)

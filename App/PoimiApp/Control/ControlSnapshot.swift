@@ -8,11 +8,11 @@
 //
 //  Built by the control runtime's observer — never from a View `body`.
 //
-//  Fields that slice A can't observe honestly are explicit `null`, not a guess:
-//  `pending.selectionFlush` / `doneFlush` (the debounce task isn't observable yet), `pending.naming`
-//  (the name task is private), `active.export.phase` + `pending.export` (`ExportStore` is view state),
-//  `pending.thumbnails`. Slice B lifts the album session into a store and fills these in; slice C adds
-//  `settledSeq`. `idle` covers what IS observable — see `ControlSnapshot.isIdle`.
+//  Since slice B (#297) the album session, the stores' pending debounces and the trip-name pass are
+//  observable, so `pending.selectionFlush` / `doneFlush` / `naming` / `export` and `active.export` are
+//  real values. What still can't be observed honestly stays an explicit `null`, not a guess:
+//  `pending.thumbnails` (slice C adds a counter, and `settledSeq`). `idle` covers what IS observable —
+//  see `ControlSnapshot.isIdle`.
 //
 #if DEBUG
 
@@ -25,6 +25,7 @@ import Curation
 struct ControlSnapshotInputs {
     let fixture: ControlFixture
     let coordinator: AppCoordinator
+    let session: AlbumSession
     let projects: ProjectStore
     let selection: SelectionStore
     let done: DoneStore
@@ -52,21 +53,30 @@ enum ControlSnapshot {
         let activeProject = coordinator.activeAlbumID.flatMap { id in
             inputs.projects.projects.first { $0.id == id }
         }
-        let store = activeProject == nil ? nil : coordinator.candidateStore
-        let scanning = store?.phase == .scanning
+        let session = sessionFor(activeProject, inputs)
+        let store = session?.candidateStore
+        let export = session?.export.phase ?? .idle
         return .object(
             ("app", app(inputs)),
             ("nav", nav(inputs)),
             ("albums", albums(inputs)),
-            ("active", active(inputs, project: activeProject, store: store)),
+            ("active", active(inputs, project: activeProject, store: store, export: export)),
             ("pending", .object(
-                ("selectionFlush", .null),
-                ("doneFlush", .null),
-                ("scan", .bool(scanning)),
-                ("naming", .null),
-                ("export", .null),
+                ("selectionFlush", .bool(inputs.selection.hasPendingFlush)),
+                ("doneFlush", .bool(inputs.done.hasPendingFlush)),
+                ("scan", .bool(store?.phase == .scanning)),
+                ("naming", .bool(store?.isNaming ?? false)),
+                ("export", .bool(export.isRunning)),
                 ("thumbnails", .null))),
-            ("idle", isIdle(inputs, store: store).map(ControlJSON.bool) ?? .null))
+            ("idle", isIdle(inputs, store: store, export: export).map(ControlJSON.bool) ?? .null))
+    }
+
+    /// The album session, if it holds the album on screen (it may still hold nothing, or — briefly —
+    /// another album's leftovers before the new one's screen opens it).
+    @MainActor
+    private static func sessionFor(_ project: CurationProject?, _ inputs: ControlSnapshotInputs) -> AlbumSession? {
+        guard let project, inputs.session.projectID == project.id else { return nil }
+        return inputs.session
     }
 
     /// `content` stamped with the format version, the per-launch `run` id and the revision.
@@ -74,19 +84,20 @@ enum ControlSnapshot {
         content.prepending(("snapshotVersion", .int(version)), ("run", .string(run)), ("rev", .int(rev)))
     }
 
-    /// Whether the app has settled, as far as slice A can observe — `true`, `false`, or `nil` for
-    /// "unknown" (never a silent `true`):
-    /// - `false` until the launch bootstrap finished, and while a review scan runs — including "the
-    ///   screen on top needs a scan that hasn't started yet" (the review/overview `.task` runs after the
-    ///   route lands, so a missing or `.idle` store there is pending, not idle).
-    /// - `nil` on the export screen: `ExportView` runs the export in its own view state, which slice A
-    ///   can't see (slice B lifts it into the album session).
-    /// - `true` otherwise. Not covered on any screen yet (slice B/C): debounced flushes, trip naming,
-    ///   thumbnail loads — those read `null` under `pending`.
+    /// Whether the app has settled — `true`, `false`, or `nil` for "unknown" (never a silent `true`):
+    /// - `false` until the launch bootstrap finished, while a review scan or its trip-name pass runs, and
+    ///   while an export runs — including "the screen on top needs a scan / an export that hasn't started
+    ///   yet" (the screen's `.task` runs after the route lands, so a missing or `.idle` store there is
+    ///   pending, not idle).
+    /// - `true` otherwise.
+    /// - NOT covered: debounced flushes (reported under `pending`; under control the debounce is a day
+    ///   long and there's no `flush` action until slice C, so an `idle` that waited on them would never
+    ///   settle after a tap) and thumbnail loads (slice C's counter).
     @MainActor
-    static func isIdle(_ inputs: ControlSnapshotInputs, store: CandidateStore?) -> Bool? {
+    static func isIdle(_ inputs: ControlSnapshotInputs, store: CandidateStore?,
+                       export: ExportStore.Phase) -> Bool? {
         guard inputs.bootstrapped else { return false }
-        if store?.phase == .scanning { return false }
+        if store?.phase == .scanning || store?.isNaming == true || export.isRunning { return false }
         let coordinator = inputs.coordinator
         guard coordinator.rootPhase == .albums else { return true }
         switch coordinator.path.last {
@@ -96,7 +107,10 @@ enum ControlSnapshot {
             case .idle, .scanning, nil: return false
             }
         case .export:
-            return nil
+            switch export {
+            case .done, .failed: return true
+            case .idle, .exporting: return false
+            }
         case .settings, .appSettings, nil:
             return true
         }
@@ -154,7 +168,7 @@ enum ControlSnapshot {
 
     @MainActor
     private static func active(_ inputs: ControlSnapshotInputs, project: CurationProject?,
-                               store: CandidateStore?) -> ControlJSON {
+                               store: CandidateStore?, export: ExportStore.Phase) -> ControlJSON {
         guard let project else {
             return .object(("album", .null), ("scan", .null), ("selection", .null), ("done", .null),
                            ("export", .null))
@@ -181,7 +195,9 @@ enum ControlSnapshot {
                 ("clusters", .int(doneActive ? clusters.count { inputs.done.isDone($0) } : 0)),
                 ("of", .int(clusters.count)),
                 ("active", .bool(doneActive)))),
-            ("export", .object(("phase", .null))))
+            ("export", .object(
+                ("phase", .string(exportPhase(export))),
+                ("wasReExport", wasReExport(export).map(ControlJSON.bool) ?? .null))))
     }
 
     // MARK: - state-detail.json
@@ -195,7 +211,7 @@ enum ControlSnapshot {
         let coordinator = inputs.coordinator
         guard let activeID = coordinator.activeAlbumID,
               let project = inputs.projects.projects.first(where: { $0.id == activeID }),
-              let store = coordinator.candidateStore, case .ready = store.phase else {
+              let store = sessionFor(project, inputs)?.candidateStore, case .ready = store.phase else {
             cache.invalidate()
             return .object(("album", .null), ("days", .object(pairs: [])))
         }
@@ -273,6 +289,23 @@ enum ControlSnapshot {
 
     private static func toAdd(_ status: ProjectStatus) -> Int? {
         if case .editedSinceExport(let toAdd) = status { return toAdd }
+        return nil
+    }
+
+    @MainActor
+    private static func exportPhase(_ phase: ExportStore.Phase) -> String {
+        switch phase {
+        case .idle: "idle"
+        case .exporting: "exporting"
+        case .done: "done"
+        case .failed: "failed"
+        }
+    }
+
+    /// Whether the settled export updated an existing Photos album (`done` only; `null` otherwise).
+    @MainActor
+    private static func wasReExport(_ phase: ExportStore.Phase) -> Bool? {
+        if case .done(_, let wasReExport) = phase { return wasReExport }
         return nil
     }
 

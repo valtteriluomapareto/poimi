@@ -87,7 +87,7 @@ final class ControlRuntime {
             do throws(ControlLaunchError) {
                 let applier = ControlRouteApplier(graph: graph, fixture: fixture,
                                                   albums: albumAliases, assets: assetAliases)
-                if let route = launch.route { try applier.apply(route) }
+                if let route = launch.route { try await applier.apply(route) }
                 if let viewer = launch.viewer { try await applier.openViewer(viewer) }
             } catch {
                 launchError = error.message
@@ -100,7 +100,8 @@ final class ControlRuntime {
 
     var inputs: ControlSnapshotInputs {
         ControlSnapshotInputs(
-            fixture: fixture, coordinator: graph.coordinator, projects: graph.projectStore,
+            fixture: fixture, coordinator: graph.coordinator, session: graph.session,
+            projects: graph.projectStore,
             selection: graph.selectionStore, done: graph.doneStore,
             assetAliases: assetAliases, albumAliases: albumAliases,
             launchError: launchError, bootstrapped: bootstrapped,
@@ -123,8 +124,10 @@ struct ControlRouteApplier {
     let assets: ControlAssetAliases
 
     /// Open the album (bump + overview, like the album list's tap), then push the destination. A route
-    /// needs the albums phase: on `fresh`/`denied` it can't apply, and says so.
-    func apply(_ route: ControlRoute) throws(ControlLaunchError) {
+    /// needs the albums phase: on `fresh`/`denied` it can't apply, and says so. The export route first
+    /// opens the album session the way the Overview does, so the export screen finds the review context
+    /// it would have on the real Overview → "Save to Photos" path (its completion stats count from it).
+    func apply(_ route: ControlRoute) async throws(ControlLaunchError) {
         let coordinator = graph.coordinator
         guard coordinator.rootPhase == .albums else {
             throw ControlLaunchError("route needs photo access, but fixture '\(fixture.rawValue)' starts at "
@@ -138,11 +141,12 @@ struct ControlRouteApplier {
               let project = graph.projectStore.projects.first(where: { $0.id == id }) else {
             throw ControlLaunchError("route album '\(alias)' is not in fixture '\(fixture.rawValue)'")
         }
-        graph.projectStore.open(project)
-        coordinator.openProject(id)
+        graph.actions.open(project)   // bump + overview, exactly as the album list's tap
         switch route {
         case .review(_, let day): coordinator.openReview(id, day: day)
-        case .export: coordinator.openExport(id)
+        case .export:
+            await graph.session.openOverview(project)
+            coordinator.openExport(id)
         case .settings: coordinator.openSettings(id)
         case .overview, .appSettings: break
         }
@@ -154,13 +158,13 @@ struct ControlRouteApplier {
         guard let assetID = assets.assetID(for: alias) else {
             throw ControlLaunchError("viewer photo '\(alias)' is not in fixture '\(fixture.rawValue)'")
         }
-        let coordinator = graph.coordinator
+        let session = graph.session
         let deadline = ContinuousClock.now + timeout
-        while !coordinator.reviewOrderedIDs.contains(assetID) {
-            switch coordinator.candidateStore?.phase {
+        while !session.reviewOrderedIDs.contains(assetID) {
+            switch session.candidateStore?.phase {
             case .empty?, .failed?:
                 throw ControlLaunchError("viewer: the review has no photos to open '\(alias)' on")
-            case .ready? where !coordinator.reviewOrderedIDs.isEmpty:
+            case .ready? where !session.reviewOrderedIDs.isEmpty:
                 throw ControlLaunchError("viewer photo '\(alias)' is not in the open review")
             default:
                 break   // not scanned yet, scanning, or ready but not yet published by the grid
@@ -170,7 +174,7 @@ struct ControlRouteApplier {
             }
             try? await Task.sleep(for: .milliseconds(50))   // poll with a real deadline
         }
-        coordinator.openPhoto(assetID)
+        graph.coordinator.openPhoto(assetID)
     }
 }
 

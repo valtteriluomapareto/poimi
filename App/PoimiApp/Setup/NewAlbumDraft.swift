@@ -38,6 +38,12 @@ struct NewAlbumDraft: Equatable {
     /// existing album.
     var targetAlbumID: String?
 
+    /// A non-empty name and a non-inverted interval are required to create (the setup form's Create
+    /// button and `AlbumActions.create(validated:)` share this one rule).
+    var isValid: Bool {
+        !title.trimmingCharacters(in: .whitespaces).isEmpty && rangeEnd > rangeStart
+    }
+
     /// The default new album: the **prior full calendar year**, screenshots excluded, target 100,
     /// exporting to a new album. Deterministic given `now`/`calendar` (injected in tests).
     static func priorCalendarYear(now: Date, calendar: Calendar) -> NewAlbumDraft {

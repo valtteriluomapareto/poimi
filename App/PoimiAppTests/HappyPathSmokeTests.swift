@@ -1,8 +1,8 @@
 //
 //  HappyPathSmokeTests.swift
 //  PoimiAppTests — the ONE end-to-end happy-path smoke (#43, D23): a tripwire that drives the whole
-//  curation loop through the REAL production stores + coordinator + FakePhotoLibrary — authorize →
-//  create album → scan → select → mark done → export → completion — and asserts the album really holds
+//  curation loop through the REAL production graph (stores, coordinator, album session) + FakePhotoLibrary —
+//  authorize → create album → scan → select → mark done → export → completion — and asserts the album holds
 //  the picks. Headless (no UI automation, per the chosen approach): deterministic + fast, so it's a
 //  reliable tripwire rather than a flaky one. It uses a `localIdentifier`-CHURN seed (ids differ every
 //  run) so nothing in the pipeline may depend on a specific id string — the smoke selects/exports by
@@ -21,30 +21,36 @@ struct HappyPathSmokeTests {
 
     @Test("curation loop end to end: authorize → create → scan → select → mark done → export → done")
     func happyPath() async throws {
-        // Real composition: an authorized fake library + in-memory SwiftData; a long debounce so
-        // durability is driven explicitly (never by a timer — no fixed-sleep flakiness).
-        let container = try AppModelContainer.make(inMemory: true)
+        // Real composition: the app's own `AppGraph` wiring (stores, coordinator, album session, façade)
+        // over an authorized fake library + in-memory SwiftData; a long debounce so durability is driven
+        // explicitly (never by a timer — no fixed-sleep flakiness). No view is mounted: since #297 the
+        // album session runs the scan / reconcile / publish / export the screens used to run.
         let library = FakePhotoLibrary(assets: Self.churnSeed())
-        let coordinator = AppCoordinator(library: library)
-        let projects = ProjectStore(container: container, now: monotonicClock())
-        let selection = SelectionStore(container: container, debounce: .seconds(60))
-        let done = DoneStore(container: container, debounce: .seconds(60))
-        let export = ExportStore(library: library)
+        let graph = AppGraph.make(
+            container: try AppModelContainer.make(inMemory: true),
+            library: library, thumbnails: FakeThumbnailProvider(), naming: FakePlaceNaming(),
+            timelineCache: TimelineCache(directory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("smoke-\(UUID().uuidString)", isDirectory: true)),
+            debounce: .seconds(60), now: monotonicClock(), calendar: utcCalendar())
+        let coordinator = graph.coordinator
+        let session = graph.session
+        let selection = graph.selectionStore
+        let done = graph.doneStore
 
         // 1 — authorize: onboarding resolves to the albums library (D6).
         await coordinator.refreshAuthorization()
         #expect(coordinator.rootPhase == .albums)
 
-        // 2 — create an album over the seeded year and open it.
-        let project = projects.create(
-            title: "Best of 2025",
-            rangeStart: TestDates.year2025Start, rangeEnd: TestDates.year2025End, targetCount: 100)
-        coordinator.openProject(project.id)
+        // 2 — create an album over the seeded year and open it (the setup sheet's Create).
+        var draft = NewAlbumDraft.priorCalendarYear(now: TestDates.year2025End, calendar: utcCalendar())
+        draft.title = "Best of 2025"
+        draft.targetCount = 100
+        let project = try #require(graph.actions.create(validated: draft))
         #expect(coordinator.activeAlbumID == project.id)
 
-        // 3 — scan: the real fetch → filter → adaptive-group pipeline settles with candidates.
-        let candidates = CandidateStore(library: library, calendar: utcCalendar())
-        await candidates.load(project)
+        // 3 — scan: the Overview opens the album session (no reconcile, #289); the real fetch → filter →
+        // adaptive-group pipeline settles with candidates.
+        let candidates = await session.openOverview(project)
         guard case .ready(let groups) = candidates.phase else {
             Issue.record("scan did not reach .ready: \(candidates.phase)")
             return
@@ -56,15 +62,21 @@ struct HappyPathSmokeTests {
         // cluster to act on. Ids are unique (nonce + index), so the count comparisons below are clean.
         #expect(groups.count >= 2)
 
+        // 3b — drill into the grid: it REUSES the Overview's scan, reconciles, and the review context the
+        // viewer pages through is published.
+        coordinator.openReview(project.id)
+        let gridStore = await session.openReview(project)
+        #expect(gridStore === candidates)
+        #expect(session.reviewOrderedIDs == scannedIDs)
+
         // 4 — select every candidate. (In the grid, "Pick all" picks one cluster; here we select the
         // whole scan at the store — the same SelectionStore path the UI drives.)
-        selection.activate(project)
         selection.select(scannedIDs)
         #expect(selection.progress.picked == scannedIDs.count)
+        #expect(selection.hasPendingFlush)
 
         // 5 — mark the first cluster done, and prove it PERSISTED to the model (not just in-memory) —
         // otherwise this step is a no-op no downstream assertion would catch regressing.
-        done.activate(project)
         let firstGroup = try #require(groups.first)
         done.toggle(firstGroup)
         #expect(done.isDone(firstGroup))
@@ -80,15 +92,17 @@ struct HappyPathSmokeTests {
         // 5c — the forward path: from the review grid (where the fully-reviewed affordance lives), the ONE
         // coordinator transition the UI fires routes to export. Assert the whole path — review is no longer
         // a dead-end — before running the export below.
-        coordinator.openReview(project.id)
         coordinator.finishToExport()
         #expect(coordinator.path == [.albumOverview(project.id), .review(project.id, nil), .export(project.id)])
 
-        // 6 — export: create-or-find the Photos album and copy the picks in (one-way, D31).
+        // 6 — export: the export screen starts the session's export (create-or-find the Photos album and
+        // copy the picks in, one-way, D31) — once.
         selection.flushNow()
-        await export.run(project: project, picks: selection.selected)
-        guard case .done(let result, let wasReExport) = export.phase else {
-            Issue.record("export did not reach .done: \(export.phase)")
+        #expect(!selection.hasPendingFlush)
+        #expect(session.export.phase == .idle)
+        await session.startExport(project)
+        guard case .done(let result, let wasReExport) = session.export.phase else {
+            Issue.record("export did not reach .done: \(session.export.phase)")
             return
         }
         #expect(!wasReExport)                         // first export
@@ -98,6 +112,10 @@ struct HappyPathSmokeTests {
         #expect(project.markedDoneAt != nil)          // … and stamped done
         #expect(project.exportedSelectionSnapshot != nil)   // … with the #191 drift baseline
         #expect(project.status == .exported)          // exported + in sync
+        // The completion stats read the published review context: every candidate is on a done day.
+        let stats = CompletionStats(dayByID: session.reviewDayByID, doneDays: done.doneDays,
+                                    selection: selection.selected)
+        #expect(stats.markedDone == scannedIDs.count)
 
         // 7 — the album really holds exactly the picks (peek the fake's exported album).
         let inAlbum = await library.exportedAssetIDs(inAlbum: result.albumID)
@@ -111,6 +129,11 @@ struct HappyPathSmokeTests {
             selection.flushNow()
             #expect(project.status == .exported)
         }
+
+        // 9 — "Back to albums": the album closes, and the session lets go of its scan + export.
+        coordinator.popToRoot()
+        #expect(session.candidateStore == nil)
+        #expect(session.export.phase == .idle)
 
         selection.deactivate()
         done.deactivate()

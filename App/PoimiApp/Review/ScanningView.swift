@@ -20,13 +20,9 @@ struct ScanningView: View {
     let project: CurationProject
     /// A day-group to scroll the grid to on open — the overview's "drill into this month" target (#37).
     var scrollToDay: DayKey?
-    @Environment(\.photoLibrary) private var library
     @Environment(AppCoordinator.self) private var coordinator
-    @Environment(SelectionStore.self) private var selection
-    @Environment(DoneStore.self) private var doneStore
-    @Environment(\.placeNaming) private var placeNaming
-    @Environment(\.modelContext) private var modelContext
-    /// The album's scanned store — shared via the coordinator with the Overview, so drilling in reuses
+    @Environment(AlbumSession.self) private var session
+    /// The album's scanned store — shared via the album session with the Overview, so drilling in reuses
     /// its clusters instead of re-fetching + re-clustering. Held here so `body` reads its phase.
     @State private var store: CandidateStore?
     /// Gates the scanning indicator behind a grace delay (below) so instant scans never flash it.
@@ -51,69 +47,28 @@ struct ScanningView: View {
             // backdrop reacting to a collapsing title), which removes the observation feedback loop
             // — verified on device (no scroll flicker); re-check if the top-title layout changes.
             .toolbarBackground(.hidden, for: .navigationBar)
-            // Keyed by the SAME `CandidateStoreKey` the coordinator uses for scan-vs-reuse (album + range +
+            // Keyed by the SAME `CandidateStoreKey` the session uses for scan-vs-reuse (album + range +
             // location + the source filters), so re-targeting (iPad detail column) / any Settings edit
-            // re-runs against the right candidate set — one key type, so this can't drift from the coordinator.
-            .task(id: AppCoordinator.CandidateStoreKey(project)) {
-                // Hydrate the selection + done-state for this project (idempotent — activate() no-ops
-                // if already active, so re-entry never clobbers unflushed picks/done-days).
-                selection.activate(project)
-                doneStore.activate(project)
-                // Reuse the album's shared store: the Overview scanned it on the way in, so drilling here
-                // doesn't re-fetch + re-cluster. Scan only if WE are the first (iPad-direct / debug host);
-                // otherwise just reconcile done-state + publish the viewer's paging list.
-                let store = coordinator.candidateStore(for: project) {
-                    CandidateStore(library: library, locationEnabled: project.locationEnabled,
-                                   naming: placeNaming,
-                                   nameCache: NameCacheStore(modelContainer: modelContext.container))
-                }
-                self.store = store
-                if store.phase == .idle {
-                    await scan()
-                } else if case .ready = store.phase {
-                    doneStore.reconcile(currentIDsByDay: Self.idsByDay(store.dayByID))
-                    publishForViewer()
-                }
+            // re-runs against the right candidate set — one key type, so this can't drift from the session.
+            .task(id: AlbumSession.CandidateStoreKey(project)) {
+                // The album session (#297) does the whole entry: hydrate selection + done, reuse the store
+                // the Overview scanned (or scan it — iPad-direct / debug host — with the shared timeline
+                // cache), reconcile done-state (the grid reconciles; the Overview doesn't, #289) and publish
+                // the review context the viewer pages through. Held first so `body` shows the scan phase.
+                store = session.candidateStore(for: project)
+                await session.openReview(project)
             }
     }
 
-    /// Run (or re-run, e.g. a "Try again") the fetch pass, then reconcile done-state and publish the
-    /// candidate list for the viewer. Reuses the current `store` so a retry re-scans the same album.
-    private func scan() async {
-        guard let store else { return }
-        await store.load(project)
-        // Reconcile done-state against the freshly-loaded candidates: a done day that gained a photo
-        // since the last load re-opens, so the collapse never hides a new unreviewed photo (D32(d)).
-        // Only on a real .ready load — an empty/failed load would record a bogus (empty) baseline.
-        if case .ready = store.phase {
-            doneStore.reconcile(currentIDsByDay: Self.idsByDay(store.dayByID))
-        }
-        publishForViewer()
-    }
-
-    /// Publish the candidate list + per-photo day map so the photo viewer can page through it and
-    /// label each photo's day (#36). A no-op until the pass is `.ready`.
-    private func publishForViewer() {
-        if case .ready(let clusters) = store?.phase {
-            coordinator.reviewOrderedIDs = clusters.flatMap(\.assetIDs)
-            coordinator.reviewDayByID = store?.dayByID ?? [:]
-            coordinator.reviewAssetsByID = store?.assetsByID ?? [:]   // viewer info panel (#127)
-            coordinator.reviewClusters = clusters   // viewer auto-done (#128) + grid page-restore (#126)
-            coordinator.reviewIsReExport = project.targetAlbumID != nil   // finish-action label (#185/#187)
-        }
+    /// Re-run the fetch pass (a "Try again" / access recovered) through the session, which reconciles and
+    /// republishes the review context as on entry.
+    private func rescan() async {
+        await session.rescanReview(project)
     }
 
     private var isReady: Bool {
         if case .ready = store?.phase { return true }
         return false
-    }
-
-    /// Invert the store's per-photo `id → DayKey` map into the `DayKey → ids` shape the done-state
-    /// reconcile diffs against the persisted baseline.
-    private static func idsByDay(_ dayByID: [String: DayKey]) -> [DayKey: Set<String>] {
-        var out: [DayKey: Set<String>] = [:]
-        for (id, day) in dayByID { out[day, default: []].insert(id) }
-        return out
     }
 
     @ViewBuilder
@@ -161,10 +116,10 @@ struct ScanningView: View {
                 onIncludePhotos: { project.media = .photosAndVideos })
 
         case .failed(.loadError):
-            ReviewLoadFailedView(onRetry: { Task { await scan() } })
+            ReviewLoadFailedView(onRetry: { Task { await rescan() } })
 
         case .failed(.accessLost):
-            ReviewAccessLostView(onRecovered: { Task { await scan() } })
+            ReviewAccessLostView(onRecovered: { Task { await rescan() } })
         }
     }
 }

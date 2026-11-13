@@ -14,8 +14,8 @@ import Curation
 struct AlbumsView: View {
     @Environment(ProjectStore.self) private var store
     @Environment(AppCoordinator.self) private var coordinator
-    @Environment(SelectionStore.self) private var selection
-    @Environment(DoneStore.self) private var doneStore
+    @Environment(AlbumActions.self) private var actions
+    @Environment(AlbumSession.self) private var session
     @Environment(WhatsNewState.self) private var whatsNew
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showingSetup = false
@@ -52,17 +52,24 @@ struct AlbumsView: View {
                             }
                             // Reset + Delete are destructive (hand-curated picks are lost) → confirm
                             // first; "no destructive surprises" (design-language).
-                            Button("Reset all progress", systemImage: "arrow.counterclockwise", role: .destructive) {
-                                albumToReset = project
+                            // Not while this album's export runs (iPad: the sidebar stays tappable over the
+                            // export screen) — the run stamps its result into the album when it lands.
+                            Group {
+                                Button("Reset all progress", systemImage: "arrow.counterclockwise",
+                                       role: .destructive) {
+                                    albumToReset = project
+                                }
+                                Button("Delete album", systemImage: "trash", role: .destructive) {
+                                    albumToDelete = project
+                                }
                             }
-                            Button("Delete album", systemImage: "trash", role: .destructive) {
-                                albumToDelete = project
-                            }
+                            .disabled(session.isExporting(project))
                         }
                         .swipeActions(edge: .trailing) {
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 albumToDelete = project
                             }
+                            .disabled(session.isExporting(project))
                         }
                     }
                 }
@@ -132,31 +139,21 @@ struct AlbumsView: View {
     /// Open an album: bump it to the top of the library (most-recently-opened, §12) and navigate
     /// to its overview.
     private func open(_ project: CurationProject) {
-        store.open(project)
-        coordinator.openProject(project.id)
+        actions.open(project)
     }
 
-    /// Delete from the library list. Deactivate the live stores first if this is the active album
-    /// (reachable on iPad, where the sidebar shows while an album is active) — otherwise a store left
-    /// holding the deleted model could flush a debounced write to it (#59). Mirrors `AlbumSettingsView`.
+    /// Delete from the library list — through the one ordering every delete shares (`AlbumActions`): the
+    /// live stores let go of it first (#59), and on iPad, where the sidebar shows while an album is open,
+    /// deleting the album on screen returns the detail to the library root.
     private func deleteAlbum(_ project: CurationProject) {
-        selection.deactivateIfActive(project)
-        doneStore.deactivateIfActive(project)
-        store.delete(project)
+        actions.delete(project)
     }
 
-    /// Reset from the library list. If it's the active album, deactivate (flush + clear) BEFORE zeroing so
-    /// a late debounce can't resurrect the just-cleared picks, then re-activate to reload the emptied state
-    /// (the `AlbumSettingsView.resetPicks` ordering). A no-op deactivate for any non-active album.
+    /// Reset from the library list — through the one ordering every reset shares (`AlbumActions`): the
+    /// stores holding it flush + let go before the zeroing and re-hydrate after. A non-active album's
+    /// reset never touches the live stores.
     private func resetAlbum(_ project: CurationProject) {
-        let wasActive = selection.activeProjectID == project.persistentModelID
-        selection.deactivateIfActive(project)
-        doneStore.deactivateIfActive(project)
-        store.reset(project)
-        if wasActive {
-            selection.activate(project)
-            doneStore.activate(project)
-        }
+        actions.reset(project)
     }
 
     /// The iPad sidebar's selection highlight (#42): tint the open album's row — regular width only, since
