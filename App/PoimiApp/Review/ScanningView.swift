@@ -29,6 +29,17 @@ struct ScanningView: View {
     @State private var indicatorVisible = false
 
     var body: some View {
+        // The album can be deleted while this screen is still on its way out (the iPad sidebar's Delete
+        // pops the detail in the same turn the model goes): a deleted model's attributes trap, so the
+        // outgoing screen draws nothing rather than reading it (#298 review).
+        if project.isGone {
+            Color.clear
+        } else {
+            screen
+        }
+    }
+
+    private var screen: some View {
         content()
             // Blanked once the grid is up — the pinned ReviewTopBar carries the current cluster's
             // identity there, so a nav title too would be a double title. Other phases (scanning /
@@ -56,7 +67,7 @@ struct ScanningView: View {
                 // cache), reconcile done-state (the grid reconciles; the Overview doesn't, #289) and publish
                 // the review context the viewer pages through. Held first so `body` shows the scan phase.
                 store = session.candidateStore(for: project)
-                await session.openReview(project)
+                await session.appear(.review, project)
             }
     }
 

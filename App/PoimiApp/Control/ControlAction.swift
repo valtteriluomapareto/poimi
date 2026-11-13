@@ -1,0 +1,350 @@
+//
+//  ControlAction.swift
+//  PoimiApp — the control plane's actions (what a user does) and fixture ops (test levers), each
+//  declared ONCE with its arguments: the decoder and the `schema` reply both read the declaration, so
+//  they can't drift (#298, docs/plans/control-plane.md §4 C). DEBUG-only (D30).
+//
+//  An action is something the UI offers: each maps to one control a user can reach (a row, a button, a
+//  chip). Things no control does — picking an arbitrary photo list, clearing every pick — are fixture
+//  ops, so an agent can't mistake a lever for a user path.
+//
+#if DEBUG
+
+import Foundation
+import Curation
+
+/// An argument's declared JSON shape — read by the decoder and printed by `schema`.
+enum ControlArgType: String {
+    case albumAlias = "album alias (album-N)"
+    case assetAlias = "photo alias (a-NNNN)"
+    case assetAliases = "[photo alias]"
+    case day = "day (yyyy-mm-dd)"
+    case int
+    case bool
+    case string
+    case media = "photosOnly | photosAndVideos | videosOnly"
+    case fetchFailure = "fetchFailed | null"
+    case authorization = "notDetermined | authorized | limited | denied | restricted"
+    case fixture = "fixture name"
+}
+
+struct ControlArgSpec {
+    let name: String
+    let type: ControlArgType
+    let required: Bool
+
+    static func req(_ name: String, _ type: ControlArgType) -> ControlArgSpec {
+        ControlArgSpec(name: name, type: type, required: true)
+    }
+
+    static func opt(_ name: String, _ type: ControlArgType) -> ControlArgSpec {
+        ControlArgSpec(name: name, type: type, required: false)
+    }
+}
+
+/// The action names, each with its declared arguments. `CaseIterable`, so `schema` and the
+/// every-action-is-exercised test enumerate the same list the decoder accepts.
+enum ControlActionKind: String, CaseIterable {
+    case navOpenAlbum = "nav.openAlbum"
+    case navOpenReview = "nav.openReview"
+    case navOpenExport = "nav.openExport"
+    case navOpenSettings = "nav.openSettings"
+    case navOpenAppSettings = "nav.openAppSettings"
+    case navBack = "nav.back"
+    case navRoot = "nav.root"
+    case viewerOpen = "viewer.open"
+    case viewerDismiss = "viewer.dismiss"
+    case albumsCreate = "albums.create"
+    case albumsDelete = "albums.delete"
+    case albumsReset = "albums.reset"
+    case albumsDuplicate = "albums.duplicate"
+    case albumsUpdate = "albums.update"
+    case albumsMarkAllUnreviewed = "albums.markAllUnreviewed"
+    case selectionToggle = "selection.toggle"
+    case selectionToggleCluster = "selection.toggleCluster"
+    case doneToggle = "done.toggle"
+    case exportRetry = "export.retry"
+    case authRequest = "auth.request"
+
+    var args: [ControlArgSpec] {
+        switch self {
+        case .navOpenAlbum, .navOpenSettings, .albumsDelete, .albumsReset, .albumsDuplicate,
+             .albumsMarkAllUnreviewed:
+            [.req("album", .albumAlias)]
+        case .navOpenReview: [.req("album", .albumAlias), .opt("day", .day)]
+        case .navOpenExport, .navOpenAppSettings, .navBack, .navRoot, .viewerDismiss, .authRequest: []
+        case .viewerOpen, .selectionToggle: [.req("photo", .assetAlias)]
+        case .albumsCreate:
+            [.opt("title", .string), .req("start", .day), .req("end", .day), .req("target", .int),
+             .opt("media", .media), .opt("excludeScreenshots", .bool)]
+        case .albumsUpdate:
+            [.req("album", .albumAlias), .opt("title", .string), .opt("start", .day), .opt("end", .day),
+             .opt("target", .int), .opt("media", .media), .opt("excludeScreenshots", .bool),
+             .opt("locationEnabled", .bool)]
+        case .selectionToggleCluster, .doneToggle: [.req("day", .day)]
+        case .exportRetry: [.opt("newAlbum", .bool)]
+        }
+    }
+
+    /// The control it is, and where it's reachable — for `schema`.
+    var summary: String {
+        switch self {
+        case .navOpenAlbum: "tap the album's row in the album list (bump + its overview, which scans)"
+        case .navOpenReview: "tap a day/cluster on the album's overview: the review grid (on that day), which scans"
+        case .navOpenExport:
+            "Save to Photos: the overview's button, or the fully-reviewed grid's (needs picks); "
+                + "the export screen runs the export"
+        case .navOpenSettings: "the overview's settings button: album settings"
+        case .navOpenAppSettings: "the album list's cog: app settings (noop when already on top, #258)"
+        case .navBack: "the back button (not under the viewer)"
+        case .navRoot: "back to the album list"
+        case .viewerOpen: "tap a photo in the review grid: the viewer"
+        case .viewerDismiss: "pull the viewer down"
+        case .albumsCreate: "the album list's New album sheet → Create (inclusive start/end days); opens it"
+        case .albumsDelete: "Delete, from the album list or that album's settings; refused busy while it exports"
+        case .albumsReset: "Reset all progress, from the album list or that album's settings; busy while it exports"
+        case .albumsDuplicate: "Duplicate, from the album list"
+        case .albumsUpdate: "edit fields on that album's settings screen (inclusive end day); committed at once"
+        case .albumsMarkAllUnreviewed: "Mark all days unreviewed, on that album's settings (#285)"
+        case .selectionToggle: "tap a grid cell: toggle one photo"
+        case .selectionToggleCluster: "the grid's select-all chip on the cluster holding that day"
+        case .doneToggle: "the grid's done seal on the cluster holding that day (a trip toggles all its days)"
+        case .exportRetry: "a failed export screen's Try again (newAlbum: Create a new album instead)"
+        case .authRequest: "onboarding's continue: request photo access (answers with the fake's status)"
+        }
+    }
+}
+
+/// A decoded action. Aliases are checked for SHAPE here; whether they name something is the host's
+/// call (`refused(unknownAlias)`).
+enum ControlAction: Equatable {
+    case navOpenAlbum(album: String)
+    case navOpenReview(album: String, day: DayKey?)
+    case navOpenExport
+    case navOpenSettings(album: String)
+    case navOpenAppSettings
+    case navBack
+    case navRoot
+    case viewerOpen(photo: String)
+    case viewerDismiss
+    case albumsCreate(ControlNewAlbum)
+    case albumsDelete(album: String)
+    case albumsReset(album: String)
+    case albumsDuplicate(album: String)
+    case albumsUpdate(album: String, ControlAlbumEdit)
+    case albumsMarkAllUnreviewed(album: String)
+    case selectionToggle(photo: String)
+    case selectionToggleCluster(day: DayKey)
+    case doneToggle(day: DayKey)
+    case exportRetry(newAlbum: Bool)
+    case authRequest
+
+    var kind: ControlActionKind {
+        switch self {
+        case .navOpenAlbum: .navOpenAlbum
+        case .navOpenReview: .navOpenReview
+        case .navOpenExport: .navOpenExport
+        case .navOpenSettings: .navOpenSettings
+        case .navOpenAppSettings: .navOpenAppSettings
+        case .navBack: .navBack
+        case .navRoot: .navRoot
+        case .viewerOpen: .viewerOpen
+        case .viewerDismiss: .viewerDismiss
+        case .albumsCreate: .albumsCreate
+        case .albumsDelete: .albumsDelete
+        case .albumsReset: .albumsReset
+        case .albumsDuplicate: .albumsDuplicate
+        case .albumsUpdate: .albumsUpdate
+        case .albumsMarkAllUnreviewed: .albumsMarkAllUnreviewed
+        case .selectionToggle: .selectionToggle
+        case .selectionToggleCluster: .selectionToggleCluster
+        case .doneToggle: .doneToggle
+        case .exportRetry: .exportRetry
+        case .authRequest: .authRequest
+        }
+    }
+}
+
+/// `albums.create`'s fields. `end` is the INCLUSIVE last day, as the setup form's "To" picker shows it.
+struct ControlNewAlbum: Equatable {
+    var title: String?
+    var start: DayKey
+    var end: DayKey
+    var target: Int
+    var media: MediaSelection?
+    var excludeScreenshots: Bool?
+}
+
+/// `albums.update`'s fields (`nil` = unchanged). `end` is the INCLUSIVE last day.
+struct ControlAlbumEdit: Equatable {
+    var title: String?
+    var start: DayKey?
+    var end: DayKey?
+    var target: Int?
+    var media: MediaSelection?
+    var excludeScreenshots: Bool?
+    var locationEnabled: Bool?
+}
+
+/// The UI's target bound (`TargetCountField`), so an action can't set what the UI can't.
+let controlTargetRange = 1...10_000
+
+extension ControlAction: Decodable {
+    init(from decoder: any Decoder) throws {
+        let keys = try decoder.container(keyedBy: ControlKey.self)
+        let name = try keys.required(String.self, "type")
+        guard let kind = ControlActionKind(rawValue: name) else {
+            throw ControlRequestError.bad("unknown action '\(name)'; see `schema` for the list")
+        }
+        try keys.declared(kind.args, extra: ["type"], in: name)
+        self = try Self.make(kind, keys)
+    }
+
+    // One case per action, each reading its declared arguments — a switch is the clearest shape.
+    // swiftlint:disable:next cyclomatic_complexity
+    private static func make(_ kind: ControlActionKind,
+                             _ keys: KeyedDecodingContainer<ControlKey>) throws -> ControlAction {
+        switch kind {
+        case .navOpenAlbum: return .navOpenAlbum(album: try keys.album())
+        case .navOpenReview: return .navOpenReview(album: try keys.album(), day: try keys.day("day"))
+        case .navOpenExport: return .navOpenExport
+        case .navOpenSettings: return .navOpenSettings(album: try keys.album())
+        case .navOpenAppSettings: return .navOpenAppSettings
+        case .navBack: return .navBack
+        case .navRoot: return .navRoot
+        case .viewerOpen: return .viewerOpen(photo: try keys.photo())
+        case .viewerDismiss: return .viewerDismiss
+        case .albumsCreate:
+            let album = ControlNewAlbum(
+                title: try keys.optional(String.self, "title"),
+                start: try keys.day("start")!, end: try keys.day("end")!,
+                target: try keys.target()!,
+                media: try keys.media(), excludeScreenshots: try keys.optional(Bool.self, "excludeScreenshots"))
+            return .albumsCreate(album)
+        case .albumsDelete: return .albumsDelete(album: try keys.album())
+        case .albumsReset: return .albumsReset(album: try keys.album())
+        case .albumsDuplicate: return .albumsDuplicate(album: try keys.album())
+        case .albumsUpdate:
+            let edit = ControlAlbumEdit(
+                title: try keys.optional(String.self, "title"),
+                start: try keys.day("start"), end: try keys.day("end"), target: try keys.target(),
+                media: try keys.media(), excludeScreenshots: try keys.optional(Bool.self, "excludeScreenshots"),
+                locationEnabled: try keys.optional(Bool.self, "locationEnabled"))
+            guard edit != ControlAlbumEdit() else {
+                throw ControlRequestError.bad("albums.update: give at least one field to change")
+            }
+            return .albumsUpdate(album: try keys.album(), edit)
+        case .albumsMarkAllUnreviewed: return .albumsMarkAllUnreviewed(album: try keys.album())
+        case .selectionToggle: return .selectionToggle(photo: try keys.photo())
+        case .selectionToggleCluster: return .selectionToggleCluster(day: try keys.day("day")!)
+        case .doneToggle: return .doneToggle(day: try keys.day("day")!)
+        case .exportRetry: return .exportRetry(newAlbum: try keys.optional(Bool.self, "newAlbum") ?? false)
+        case .authRequest: return .authRequest
+        }
+    }
+}
+
+// MARK: - Fixture ops
+
+/// The fixture op names, each with its declared arguments (one declaration for decoder + `schema`).
+enum ControlFixtureOpKind: String, CaseIterable {
+    case flush
+    case lifecycleResume = "lifecycle.resume"
+    case libraryFailFetch = "library.failFetch"
+    case libraryAuthorization = "library.authorization"
+    case selectionSelect = "selection.select"
+    case selectionClear = "selection.clear"
+    case reset
+
+    var args: [ControlArgSpec] {
+        switch self {
+        case .flush, .lifecycleResume, .selectionClear: []
+        case .libraryFailFetch: [.opt("kind", .fetchFailure)]
+        case .libraryAuthorization: [.req("status", .authorization)]
+        case .selectionSelect: [.req("photos", .assetAliases)]
+        case .reset: [.req("fixture", .fixture)]
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .flush: "persist the debounced picks + day marks now (both stores' flushNow), as backgrounding does"
+        case .lifecycleResume: "the app becoming active: re-read photo authorization"
+        case .libraryFailFetch: "make the fake's fetches fail (or recover with null / no kind)"
+        case .libraryAuthorization: "what the fake reports from now on (then lifecycle.resume / auth.request)"
+        case .selectionSelect: "pick these photos of the open review directly (no single control does this)"
+        case .selectionClear: "unpick everything in the open album (no control does this)"
+        case .reset: "refused here — a reset is a relaunch: Scripts/poimi.sh reset <fixture>"
+        }
+    }
+}
+
+/// Test levers, not user actions (`fixture` command). `reset` is a RELAUNCH (`poimi.sh reset`), so the
+/// app refuses it in place — the container and library are built once per launch.
+enum ControlFixtureOp: Equatable {
+    /// Persist both stores' debounced state now (`flushNow()`), as a scene-phase change would.
+    case flush
+    /// The app becoming active again: re-read authorization (the Settings round-trip, D6).
+    case lifecycleResume
+    /// Make the fake library's fetches fail (`fetchFailed`), or succeed again (`null`).
+    case libraryFailFetch(failing: Bool)
+    /// What the fake library reports from now on (follow with `lifecycle.resume` or `auth.request`).
+    case libraryAuthorization(LibraryAuthorization)
+    /// Pick photos of the open review directly.
+    case selectionSelect(photos: [String])
+    /// Unpick everything in the open album.
+    case selectionClear
+    /// Refused in place: a reset is a relaunch.
+    case reset(fixture: String)
+}
+
+extension ControlFixtureOp: Decodable {
+    init(from decoder: any Decoder) throws {
+        let keys = try decoder.container(keyedBy: ControlKey.self)
+        let name = try keys.required(String.self, "op")
+        guard let kind = ControlFixtureOpKind(rawValue: name) else {
+            let known = ControlFixtureOpKind.allCases.map(\.rawValue).joined(separator: ", ")
+            throw ControlRequestError.bad("unknown fixture op '\(name)'; known: \(known)")
+        }
+        try keys.declared(kind.args, extra: ["op"], in: name)
+        switch kind {
+        case .flush: self = .flush
+        case .lifecycleResume: self = .lifecycleResume
+        case .libraryFailFetch:
+            switch try keys.optional(String.self, "kind") {
+            case nil: self = .libraryFailFetch(failing: false)
+            case "fetchFailed": self = .libraryFailFetch(failing: true)
+            case let other?:
+                throw ControlRequestError.bad("library.failFetch: kind must be fetchFailed or null, got '\(other)'")
+            }
+        case .libraryAuthorization:
+            let status = try keys.required(String.self, "status")
+            guard let value = LibraryAuthorization.allControlCases.first(where: {
+                ControlSnapshot.authorization($0) == status
+            }) else {
+                throw ControlRequestError.bad("library.authorization: unknown status '\(status)'")
+            }
+            self = .libraryAuthorization(value)
+        case .selectionSelect: self = .selectionSelect(photos: try keys.photos(name))
+        case .selectionClear: self = .selectionClear
+        case .reset: self = .reset(fixture: try keys.required(String.self, "fixture"))
+        }
+    }
+}
+
+extension LibraryAuthorization {
+    /// Every status, for decoding `library.authorization` by its snapshot name.
+    static let allControlCases: [LibraryAuthorization] = [.notDetermined, .authorized, .limited, .denied, .restricted]
+}
+
+extension KeyedDecodingContainer where Key == ControlKey {
+    /// Refuse keys outside `args` + `extra`, and a missing required argument.
+    func declared(_ args: [ControlArgSpec], extra: [String], in context: String) throws {
+        try allow(extra + args.map(\.name), in: context)
+        for arg in args where arg.required && !contains(ControlKey(arg.name)) {
+            throw ControlRequestError.bad("\(context): missing '\(arg.name)' (\(arg.type.rawValue))")
+        }
+    }
+}
+
+#endif

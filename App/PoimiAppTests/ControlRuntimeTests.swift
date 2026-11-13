@@ -45,9 +45,13 @@ struct ControlRuntimeTests {
         #expect(harness.sink.writes.map(\.file) == [.detail, .state])
         #expect(harness.state("nav", "screen") == .string("settings"))
         #expect(harness.state("app", "launchError") == .null)
-        #expect(harness.state("idle") == .bool(true))
         #expect(harness.state("rev") == .int(1))
         #expect(harness.state("run") == .string("r-test"))
+        // The overview under the settings screen runs its own scan (its task is keyed on the scan inputs):
+        // idle once that settles.
+        await harness.runtime.progress.awaitSettled()
+        await harness.settle()
+        #expect(harness.state("idle") == .bool(true))
     }
 
     @Test("a refused launch runs isolated, seeds nothing, and writes its launchError")

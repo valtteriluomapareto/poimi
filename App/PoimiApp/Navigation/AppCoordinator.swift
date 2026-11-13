@@ -136,13 +136,9 @@ final class AppCoordinator {
         viewerReturnTick &+= 1   // signal the grid to restore its position to `lastViewedID` (#126)
     }
 
-    /// Push the export / completion step.
-    func openExport(_ projectID: UUID) {
-        path.append(.export(projectID))
-    }
-
-    /// The forward path out of review (#187): from the viewer's end-of-set card or the fully-reviewed
-    /// grid. Dismisses the viewer sheet FIRST so export isn't pushed under a mounted sheet, then pushes
+    /// THE way to the export / completion step (#187, #298): the Overview's "Save to Photos", the
+    /// fully-reviewed grid and the viewer's end-of-set card all call it (and so does the control plane).
+    /// Dismisses the viewer sheet FIRST so export isn't pushed under a mounted sheet, then pushes
     /// export for the active album. One transition, so the two affordances share it (and it's testable
     /// as a single call). No-op if there's no active album.
     func finishToExport() {

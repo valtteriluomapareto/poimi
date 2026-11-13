@@ -12,6 +12,14 @@
 		000000004000000000000095 /* AlbumActionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000094 /* AlbumActionsTests.swift */; };
 		000000004000000000000093 /* AlbumSessionExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000092 /* AlbumSessionExportTests.swift */; };
 		00000000100000000000B108 /* ControlStateWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A108 /* ControlStateWriter.swift */; };
+		00000000100000000000B109 /* ControlRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A109 /* ControlRequest.swift */; };
+		00000000100000000000B10A /* ControlSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A10A /* ControlSchema.swift */; };
+		00000000100000000000B10B /* ControlWait.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A10B /* ControlWait.swift */; };
+		00000000100000000000B10C /* ControlHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A10C /* ControlHost.swift */; };
+		00000000100000000000B10D /* ControlMailbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A10D /* ControlMailbox.swift */; };
+		00000000100000000000B10E /* ControlAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A10E /* ControlAction.swift */; };
+		000000004000000000000097 /* ControlHostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000096 /* ControlHostTests.swift */; };
+		000000004000000000000099 /* ControlMachineryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000004000000000000098 /* ControlMachineryTests.swift */; };
 		00000000100000000000B107 /* ControlEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000100000000000A107 /* ControlEnvironment.swift */; };
 		0000000010000000000000B2 /* AppGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000010000000000000B1 /* AppGraph.swift */; };
 		000000001000000000000010 /* PoimiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000001000000000000001 /* PoimiApp.swift */; };
@@ -142,6 +150,14 @@
 		000000004000000000000094 /* AlbumActionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumActionsTests.swift; sourceTree = "<group>"; };
 		000000004000000000000092 /* AlbumSessionExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumSessionExportTests.swift; sourceTree = "<group>"; };
 		00000000100000000000A108 /* ControlStateWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlStateWriter.swift; sourceTree = "<group>"; };
+		00000000100000000000A109 /* ControlRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlRequest.swift; sourceTree = "<group>"; };
+		00000000100000000000A10A /* ControlSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlSchema.swift; sourceTree = "<group>"; };
+		00000000100000000000A10B /* ControlWait.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlWait.swift; sourceTree = "<group>"; };
+		00000000100000000000A10C /* ControlHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlHost.swift; sourceTree = "<group>"; };
+		00000000100000000000A10D /* ControlMailbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlMailbox.swift; sourceTree = "<group>"; };
+		00000000100000000000A10E /* ControlAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlAction.swift; sourceTree = "<group>"; };
+		000000004000000000000096 /* ControlHostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlHostTests.swift; sourceTree = "<group>"; };
+		000000004000000000000098 /* ControlMachineryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlMachineryTests.swift; sourceTree = "<group>"; };
 		00000000100000000000A107 /* ControlEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlEnvironment.swift; sourceTree = "<group>"; };
 		0000000010000000000000B1 /* AppGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGraph.swift; sourceTree = "<group>"; };
 		000000001000000000000001 /* PoimiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoimiApp.swift; sourceTree = "<group>"; };
@@ -369,6 +385,12 @@
 				00000000100000000000A106 /* ControlRuntime.swift */,
 				00000000100000000000A107 /* ControlEnvironment.swift */,
 				00000000100000000000A108 /* ControlStateWriter.swift */,
+				00000000100000000000A109 /* ControlRequest.swift */,
+				00000000100000000000A10A /* ControlSchema.swift */,
+				00000000100000000000A10B /* ControlWait.swift */,
+				00000000100000000000A10C /* ControlHost.swift */,
+				00000000100000000000A10D /* ControlMailbox.swift */,
+				00000000100000000000A10E /* ControlAction.swift */,
 			);
 			path = Control;
 			sourceTree = "<group>";
@@ -509,6 +531,8 @@
 				000000004000000000000081 /* WhatsNewStateTests.swift */,
 				00000000400000000000008C /* ControlPlaneTests.swift */,
 				00000000400000000000008E /* ControlRuntimeTests.swift */,
+				000000004000000000000096 /* ControlHostTests.swift */,
+				000000004000000000000098 /* ControlMachineryTests.swift */,
 				000000004000000000000090 /* AlbumSessionTests.swift */,
 				000000004000000000000094 /* AlbumActionsTests.swift */,
 				000000004000000000000092 /* AlbumSessionExportTests.swift */,
@@ -697,6 +721,12 @@
 				00000000100000000000B106 /* ControlRuntime.swift in Sources */,
 				00000000100000000000B107 /* ControlEnvironment.swift in Sources */,
 				00000000100000000000B108 /* ControlStateWriter.swift in Sources */,
+				00000000100000000000B109 /* ControlRequest.swift in Sources */,
+				00000000100000000000B10A /* ControlSchema.swift in Sources */,
+				00000000100000000000B10B /* ControlWait.swift in Sources */,
+				00000000100000000000B10C /* ControlHost.swift in Sources */,
+				00000000100000000000B10D /* ControlMailbox.swift in Sources */,
+				00000000100000000000B10E /* ControlAction.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -733,6 +763,8 @@
 				000000004000000000000082 /* WhatsNewStateTests.swift in Sources */,
 				00000000400000000000008D /* ControlPlaneTests.swift in Sources */,
 				00000000400000000000008F /* ControlRuntimeTests.swift in Sources */,
+				000000004000000000000097 /* ControlHostTests.swift in Sources */,
+				000000004000000000000099 /* ControlMachineryTests.swift in Sources */,
 				000000004000000000000091 /* AlbumSessionTests.swift in Sources */,
 				000000004000000000000095 /* AlbumActionsTests.swift in Sources */,
 				000000004000000000000093 /* AlbumSessionExportTests.swift in Sources */,

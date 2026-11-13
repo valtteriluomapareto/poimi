@@ -6,7 +6,7 @@
 //  (Scripts/check-fake-release-isolation.sh) checks this file — not just "a `#if DEBUG` somewhere"
 //  (D30). The composition root only calls `ControlLaunch.bootGraph()`.
 //
-//      -PoimiControl -PoimiFixture <name> [-PoimiRoute <route>] [-PoimiViewer <asset alias>]
+//      -PoimiControl -PoimiFixture <name> [-PoimiRoute <route>] [-PoimiViewer <asset alias>] [-PoimiHeadless]
 //
 //  The route grammar is `ControlRoute.parse` (its error text is the usage); fixtures are
 //  `ControlFixture`. Albums and assets are the snapshot's aliases, never real ids. User-facing docs:
@@ -23,6 +23,9 @@ struct ControlLaunch: Equatable {
     static let fixtureFlag = "-PoimiFixture"
     static let routeFlag = "-PoimiRoute"
     static let viewerFlag = "-PoimiViewer"
+    /// Run the graph, album session and control host behind a static view instead of `AppRootView`
+    /// (#298) — no screen is mounted, so everything the run does goes through the stores.
+    static let headlessFlag = "-PoimiHeadless"
     /// The screenshot harness flag — refused alongside `-PoimiControl` (two hosts in one launch would
     /// make it ambiguous which state you're looking at).
     static let screenFlag = "-PoimiScreen"
@@ -31,6 +34,8 @@ struct ControlLaunch: Equatable {
     let route: ControlRoute?
     /// An asset alias (`a-0012`) to open in the photo viewer once the review scan is ready.
     let viewer: String?
+    /// No UI: a static `ControlHeadlessView` instead of `AppRootView` (#298).
+    var headless = false
 
     /// The outcome of reading the launch arguments.
     enum Parsed: Equatable {
@@ -51,10 +56,10 @@ struct ControlLaunch: Equatable {
 
     /// Parse `arguments` (pure, so tests drive it directly).
     static func parse(_ arguments: [String]) -> Parsed {
-        let controlFlags = [controlFlag, fixtureFlag, routeFlag, viewerFlag]
+        let controlFlags = [controlFlag, fixtureFlag, routeFlag, viewerFlag, headlessFlag]
         guard arguments.contains(where: controlFlags.contains) else { return .off }
         guard arguments.contains(controlFlag) else {
-            return .invalid("\(fixtureFlag), \(routeFlag) and \(viewerFlag) need \(controlFlag)")
+            return .invalid("\(fixtureFlag), \(routeFlag), \(viewerFlag) and \(headlessFlag) need \(controlFlag)")
         }
         if arguments.contains(screenFlag) {
             return .invalid("\(controlFlag) refuses \(screenFlag) in the same launch")
@@ -80,7 +85,8 @@ struct ControlLaunch: Equatable {
                     return .invalid("\(viewerFlag) needs a review route (\(routeFlag) review:<album>[:<day>])")
                 }
             }
-            return .on(ControlLaunch(fixture: fixture, route: route, viewer: viewer))
+            return .on(ControlLaunch(fixture: fixture, route: route, viewer: viewer,
+                                     headless: arguments.contains(headlessFlag)))
         } catch {
             return .invalid(error.message)
         }
@@ -121,10 +127,13 @@ enum ControlRoute: Equatable {
         }
     }
 
+    /// The route grammar (the usage text and `schema` print it).
+    static let grammar = ["overview:<album>", "review:<album>[:<yyyy-mm-dd>]", "export:<album>",
+                          "settings:<album>", "appsettings"]
+
     static func parse(_ raw: String) throws(ControlLaunchError) -> ControlRoute {
         let parts = raw.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
-        let usage = "routes: overview:<album> | review:<album>[:<yyyy-mm-dd>] | export:<album> | "
-            + "settings:<album> | appsettings"
+        let usage = "routes: " + grammar.joined(separator: " | ")
         guard let kind = parts.first else { throw ControlLaunchError("empty route; \(usage)") }
         if kind == "appsettings" {
             guard parts.count == 1 else { throw ControlLaunchError("appsettings takes no album; \(usage)") }
@@ -173,6 +182,17 @@ extension ControlLaunch {
     /// Why a control launch was refused (shown in place of the UI), or `nil`.
     @MainActor
     static var refusal: String? { ControlEnvironment.current?.refusal }
+
+    /// Whether this process is a control launch (valid or refused).
+    @MainActor
+    static var isActive: Bool { ControlEnvironment.current != nil }
+
+    /// The run id of a headless control launch (shown by `ControlHeadlessView`), or `nil` for any other.
+    @MainActor
+    static var headlessRun: String? {
+        guard let runtime = ControlEnvironment.current, runtime.isHeadless else { return nil }
+        return runtime.run
+    }
 }
 
 #endif

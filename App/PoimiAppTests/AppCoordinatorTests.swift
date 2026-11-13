@@ -61,9 +61,20 @@ struct AppCoordinatorTests {
         coord.openProject(id)
         coord.openReview(id, day: .undated)
         coord.openPhoto("asset/1")
-        coord.openExport(id)
-        #expect(coord.path == [.albumOverview(id), .review(id, .undated), .export(id)])   // photo NOT in the path
-        #expect(coord.presentedPhotoID == "asset/1")                                       // it's a cover
+        #expect(coord.path == [.albumOverview(id), .review(id, .undated)])   // photo NOT in the path
+        #expect(coord.presentedPhotoID == "asset/1")                          // it's a cover
+        coord.finishToExport()
+        #expect(coord.path == [.albumOverview(id), .review(id, .undated), .export(id)])
+    }
+
+    @Test("the Overview's Save to Photos is the guarded entry: a double tap pushes export once (#298)")
+    func overviewExportDoubleTapGuarded() {
+        let coord = coordinator(.authorized)
+        let id = UUID()
+        coord.openProject(id)
+        coord.finishToExport()   // the Overview's button
+        coord.finishToExport()   // a second tap before the push animates
+        #expect(coord.path == [.albumOverview(id), .export(id)])
     }
 
     @Test("opening a project resets a deeper path — switching albums starts fresh")

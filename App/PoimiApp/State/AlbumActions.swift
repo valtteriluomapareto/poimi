@@ -3,7 +3,7 @@
 //  PoimiApp — the album-library flows, sequenced once (#297, control plane slice B;
 //  docs/plans/control-plane.md §4 B).
 //
-//  Open / create / delete / reset / edit used to be sequenced in the views, and delete + reset had two
+//  Open / create / duplicate / delete / reset / edit used to be sequenced in the views, and delete + reset had two
 //  different deactivate → mutate → reactivate orderings (`AlbumsView` vs `AlbumSettingsView`). This
 //  façade carries ONE ordering for each, and every caller — the album list, the album settings, the new
 //  album sheet, and (slice C) the control plane — goes through it. It holds no state of its own; each
@@ -96,10 +96,58 @@ final class AlbumActions {
         done.markAllUnreviewed(project, in: projects)
     }
 
+    /// Copy an album's configuration (none of its progress) — the album list's "Duplicate".
+    @discardableResult
+    func duplicate(_ project: CurationProject) -> CurationProject {
+        projects.duplicate(project)
+    }
+
+    /// Apply `edits` in place, with the rules the settings controls carry: a new start that reaches or
+    /// passes the end collapses the end to a single day at that start (`NewAlbumDraft.nonInvertedEnd`,
+    /// #259), the media lens is written through its single writer (#273), and a new target re-syncs the
+    /// live tally. EVERY settings control writes through here. Not durable on its own — the settings
+    /// screen commits on leave (`applyEdits`); `update` does both at once.
+    func stage(_ edits: AlbumEdits, to project: CurationProject, calendar: Calendar) {
+        guard !project.isGone else { return }   // deleted under the settings screen (iPad sidebar)
+        if let title = edits.title { project.title = title }
+        if let start = edits.rangeStart {
+            project.rangeStart = start
+            project.rangeEnd = NewAlbumDraft.nonInvertedEnd(start: start, end: project.rangeEnd, calendar: calendar)
+        }
+        if let end = edits.rangeEnd { project.rangeEnd = end }
+        if let target = edits.targetCount {
+            project.targetCount = target
+            selection.retarget(project)
+        }
+        if let media = edits.media { project.media = media }
+        if let excludeScreenshots = edits.excludeScreenshots { project.excludeScreenshots = excludeScreenshots }
+        if let locationEnabled = edits.locationEnabled { project.locationEnabled = locationEnabled }
+        if let excludedAlbumIDs = edits.excludedAlbumIDs { project.excludedAlbumIDs = excludedAlbumIDs }
+        if let targetAlbumID = edits.targetAlbumID { project.targetAlbumID = targetAlbumID }
+    }
+
+    /// Stage `edits` and commit them at once (what leaving the settings screen after those edits does).
+    /// Refused (`false`, nothing applied) when the result would be an empty or inverted period — the
+    /// settings pickers can't produce one.
+    @discardableResult
+    func update(_ project: CurationProject, with edits: AlbumEdits, calendar: Calendar) -> Bool {
+        let start = edits.rangeStart ?? project.rangeStart
+        let end = edits.rangeEnd
+            ?? NewAlbumDraft.nonInvertedEnd(start: start, end: project.rangeEnd, calendar: calendar)
+        guard end > start else { return false }
+        let titleOnOpen = project.title
+        stage(edits, to: project, calendar: calendar)
+        applyEdits(to: project, titleOnOpen: titleOnOpen)
+        return true
+    }
+
     /// Commit the settings screen's in-place edits (its controls bind straight to the model): a blank
     /// name falls back to the name it had on open (or a placeholder), the edit is saved durably, and the
     /// live tally picks up a changed target.
     func applyEdits(to project: CurationProject, titleOnOpen: String) {
+        // The settings screen commits on leave — which is also when its album was just deleted (from
+        // the screen itself, or the iPad sidebar): nothing to commit then, and the model would trap.
+        guard !project.isGone else { return }
         if project.title.trimmingCharacters(in: .whitespaces).isEmpty {
             project.title = titleOnOpen.trimmingCharacters(in: .whitespaces).isEmpty
                 ? String(localized: "Untitled album",
@@ -109,4 +157,21 @@ final class AlbumActions {
         projects.saveEdits(to: project)
         selection.retarget(project)
     }
+}
+
+/// One or more album-settings edits (`nil` = unchanged). `rangeEnd` is end-exclusive, like the model.
+struct AlbumEdits: Equatable {
+    var title: String?
+    var rangeStart: Date?
+    var rangeEnd: Date?
+    var targetCount: Int?
+    var media: MediaSelection?
+    var excludeScreenshots: Bool?
+    var locationEnabled: Bool?
+    /// The Photos albums excluded from the source (the settings exclude-picker).
+    var excludedAlbumIDs: [String]?
+    /// The export destination (`.some(nil)` = a new Photos album; `nil` = unchanged).
+    var targetAlbumID: String??
+
+    var isEmpty: Bool { self == AlbumEdits() }
 }

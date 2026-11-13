@@ -3,7 +3,7 @@
 //  PoimiApp — album export + completion (issue #39, D19/D31/D34; design 2DN + the export-state mocks).
 //
 //  The terminal step of a curation: write the picked photos into a native Photos album, then celebrate.
-//  Reached from the Overview's "Save to Photos" (`coordinator.openExport`) or the finished review's
+//  Reached from the Overview's "Save to Photos" (`coordinator.finishToExport`) or the finished review's
 //  forward path (`finishToExport`). `ExportStore` — owned by the album session (#297), which runs it once
 //  per visit — does the create-or-find + dupe-guarded add through the library's write seam; on
 //  success it stamps the project's `targetAlbumID` (the created album) + `markedDoneAt` (→ status .done)
@@ -123,6 +123,17 @@ struct ExportView: View {
     @State private var spinnerVisible = false
 
     var body: some View {
+        // The album can be deleted while this screen is still on its way out (the iPad sidebar's Delete
+        // pops the detail in the same turn the model goes): a deleted model's attributes trap, so the
+        // outgoing screen draws nothing rather than reading it (#298 review).
+        if project.isGone {
+            Color.clear
+        } else {
+            screen
+        }
+    }
+
+    private var screen: some View {
         content
             // Terminal, full-bleed flow: the on-screen actions are the only way out (no nav chrome, no
             // system back mid-write — the working state shouldn't be interruptible into a half state).
@@ -133,7 +144,7 @@ struct ExportView: View {
             // The session owns the export (#297) and runs it only from `.idle`, so a re-appearing screen
             // (an iPad size-class flip rebuilds the tree) never exports twice. Re-runs (Try again /
             // Create new) are driven by the buttons.
-            .task { await session.startExport(project) }
+            .task { await session.appear(.export, project) }
     }
 
     @ViewBuilder

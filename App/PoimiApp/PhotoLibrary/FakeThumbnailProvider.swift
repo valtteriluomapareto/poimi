@@ -17,18 +17,40 @@
 //
 
 #if DEBUG
+import Observation
 import UIKit
 
 actor FakeThumbnailProvider: ThumbnailProviding {
-    // Grid cell: fill the (square) cell — crop to cover.
-    func thumbnail(for assetID: String, targetSize: CGSize) async -> UIImage? {
-        Self.image(for: assetID, size: targetSize, fill: true)
+    /// Counts loads in flight, when a control run installs one (#298) — so `idle` can wait for the
+    /// grid's images instead of a screenshot guessing. `nil` everywhere else (no main-actor hops).
+    private let loads: ThumbnailLoadCounter?
+
+    init(loads: ThumbnailLoadCounter? = nil) {
+        self.loads = loads
+    }
+
+    // Grid cell: fill the (square) cell — crop to cover. `nonisolated` so the count brackets the whole
+    // request, including the wait for the actor; the drawing itself stays actor-isolated (`render`).
+    nonisolated func thumbnail(for assetID: String, targetSize: CGSize) async -> UIImage? {
+        await counted { await self.render(assetID, size: targetSize, fill: true) }
     }
 
     // Full-screen viewer: natural aspect (fit, not fill) so the whole photo shows (letterboxed by the
     // viewer) — never cropped. Same id→photo mapping as the thumbnail, so the two match.
-    func fullImage(for assetID: String, targetSize: CGSize) async -> UIImage? {
-        Self.image(for: assetID, size: targetSize, fill: false)
+    nonisolated func fullImage(for assetID: String, targetSize: CGSize) async -> UIImage? {
+        await counted { await self.render(assetID, size: targetSize, fill: false) }
+    }
+
+    private func render(_ assetID: String, size: CGSize, fill: Bool) -> UIImage? {
+        Self.image(for: assetID, size: size, fill: fill)
+    }
+
+    private nonisolated func counted(_ load: () async -> UIImage?) async -> UIImage? {
+        guard let loads else { return await load() }
+        await loads.begin()
+        let image = await load()
+        await loads.end()
+        return image
     }
 
     // No synchronous cache for the fake: its images are recomputed/redrawn deterministically, so it
@@ -164,4 +186,17 @@ actor FakeThumbnailProvider: ThumbnailProviding {
         return hash
     }
 }
+
+/// The fake's loads in flight — main-actor `@Observable`, so the control plane's snapshot reads it like
+/// any other store state (`pending.thumbnails`; `idle` waits for 0). Actor state reached through an
+/// explicit counter (docs/plans/control-plane.md §5).
+@MainActor
+@Observable
+final class ThumbnailLoadCounter {
+    private(set) var inFlight = 0
+
+    func begin() { inFlight += 1 }
+    func end() { inFlight = max(0, inFlight - 1) }
+}
+
 #endif

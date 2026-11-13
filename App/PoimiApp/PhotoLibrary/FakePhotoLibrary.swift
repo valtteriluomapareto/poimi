@@ -28,7 +28,9 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     /// When set, `fetchAssets` throws it — so the scan-failure path (`CandidateStore.failed`) is
     /// reachable in tests/harness. Combined with a non-`.authorized` `status` it models access
     /// revoked mid-session (the `.accessLost` reason); with `.authorized`, a transient load error.
-    private let fetchError: (any Error)?
+    /// Mutable (`setFetchError`) so a running control session can make the next scan fail and recover
+    /// (the control plane's `library.failFetch` lever, #298).
+    private var fetchError: (any Error)?
     /// Albums created by `export` (in-memory) — id → (name, member ids). Models the create-or-find +
     /// dupe-guard so the export flow is deterministic for tests + screenshots (#39).
     private var exportedAlbums: [String: (name: String, ids: Set<String>)] = [:]
@@ -59,6 +61,12 @@ actor FakePhotoLibrary: PhotoLibraryProviding {
     /// granting access at the system prompt: `.notDetermined` → `.authorized`).
     func setAuthorization(_ newStatus: LibraryAuthorization) {
         status = newStatus
+    }
+
+    /// Make every later `fetchAssets` throw `error` (or succeed again with `nil`) — the scan-failure
+    /// path mid-session, without rebuilding the library.
+    func setFetchError(_ error: (any Error)?) {
+        fetchError = error
     }
 
     func fetchAssets(in interval: DateInterval) async throws -> [AssetRef] {

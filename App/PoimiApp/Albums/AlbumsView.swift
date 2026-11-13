@@ -48,7 +48,7 @@ struct AlbumsView: View {
                         .listRowBackground(rowBackground(for: project))
                         .contextMenu {
                             Button("Duplicate", systemImage: "plus.square.on.square") {
-                                store.duplicate(project)
+                                actions.duplicate(project)
                             }
                             // Reset + Delete are destructive (hand-curated picks are lost) → confirm
                             // first; "no destructive surprises" (design-language).
@@ -177,6 +177,16 @@ struct AlbumRow: View {
     let project: CurationProject
 
     var body: some View {
+        // A row can be asked to render once more for an album just deleted (the list animates it out
+        // after the stores' last flush wrote to it): a deleted model's attributes trap, so draw nothing.
+        if project.isGone {
+            EmptyView()
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
         // Decode each JSON blob ONCE per render (the "no heavy work in a body" convention): the current
         // picks, and — only for an exported album — the drift baseline. Both feed the status via the
         // pre-decoded overload so it doesn't re-decode. "N in Photos" reads the stored `exportedPhotoCount`

@@ -41,6 +41,10 @@ struct PoimiApp: App {
         WindowGroup {
             rootView
                 .environment(graph: graph)
+                // The cold-launch authorization read (D6): `.onChange(of: scenePhase)` doesn't fire for
+                // the initial `.active`, so this is the launch read; the handler below covers the resume
+                // re-read (the Settings round-trip). A control launch's runtime starts its graph itself.
+                .task { if !isControlLaunch { await graph.start() } }
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active {
                         // Durability point (D15/§12): persist the live selection as soon as we
@@ -60,14 +64,26 @@ struct PoimiApp: App {
         .modelContainer(graph.modelContainer)
     }
 
+    /// Whether the control plane runs this launch (it starts the graph from its own bootstrap).
+    private var isControlLaunch: Bool {
+        #if DEBUG
+        ControlLaunch.isActive
+        #else
+        false
+        #endif
+    }
+
     @ViewBuilder
     private var rootView: some View {
         #if DEBUG
-        // A refused control launch (malformed `-PoimiControl` flags) runs isolated and says why.
+        // A refused control launch (malformed `-PoimiControl` flags) runs isolated and says why; a
+        // headless one (`-PoimiHeadless`, #298) runs the graph + album session behind a static view.
         // Screenshot harness (#48): `-PoimiScreen <id>` boots straight to a catalog screen.
         // An unknown id fails loud (never a silent fallback that mis-captures the real root).
         if let refusal = ControlLaunch.refusal {
             ControlRefusedView(message: refusal)
+        } else if let headless = ControlLaunch.headlessRun {
+            ControlHeadlessView(run: headless)
         } else if let id = DebugLaunch.screenArgument {
             if let screen = DebugLaunch.requestedScreen {
                 DebugScreenHost(screen: screen)

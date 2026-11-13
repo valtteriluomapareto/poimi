@@ -33,10 +33,8 @@ struct AppRootView: View {
                 if sizeClass == .compact { stack } else { splitView }
             }
         }
-        // The cold-launch authorization read (D6): `.onChange(of: scenePhase)` doesn't fire for
-        // the initial `.active`, so this `.task` is the launch read; @main's scenePhase handler
-        // covers the resume re-read (the Settings round-trip).
-        .task { await coordinator.refreshAuthorization() }
+        // The cold-launch authorization read (D6) is `AppGraph.start()`, run by the host (`PoimiApp`'s
+        // root `.task`, or the control runtime) — not here, so a run without this view starts the same.
         // The photo viewer (#36) is a MODAL SHEET (a Now-Playing-style card) — it rises from the bottom
         // and you pull it down to dismiss (grabber + interactive drag, owned by the sheet). Never the
         // sideways nav-pop a path push animates. The grid stays mounted beneath, exactly where you left

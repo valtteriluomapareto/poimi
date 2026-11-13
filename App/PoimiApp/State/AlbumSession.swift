@@ -141,6 +141,37 @@ final class AlbumSession {
         export = ExportStore(library: library)
     }
 
+    // MARK: - Screens
+
+    /// The album screens that start work when they appear.
+    enum Screen: Equatable {
+        case overview
+        case review
+        case export
+
+        /// The screen a route shows, if it's one that starts work (settings screens don't).
+        init?(_ route: Route) {
+            switch route {
+            case .albumOverview: self = .overview
+            case .review: self = .review
+            case .export: self = .export
+            case .settings, .appSettings: return nil
+            }
+        }
+    }
+
+    /// What `screen` runs when it appears — its `.task`. THE one mapping from screen to session call: the
+    /// views call it, and so does the control plane's host for a run with no views (#298), so the two can't
+    /// disagree. The Overview opens without reconciling (#289), the grid reconciles, the export screen
+    /// exports (once per visit). Idempotent: a second caller joins the load / no-ops the export.
+    func appear(_ screen: Screen, _ project: CurationProject) async {
+        switch screen {
+        case .overview: await openOverview(project)
+        case .review: await openReview(project)
+        case .export: await startExport(project)
+        }
+    }
+
     // MARK: - Scan
 
     /// The scanned store for `project` — the existing one when the key is unchanged (so the Overview and
@@ -223,9 +254,13 @@ final class AlbumSession {
         reconciledStore = nil
         publishedStore = nil
         pendingReconcile = reconcile
+        // The album's fields are read NOW: it may be deleted before the load runs or while it awaits the
+        // library, and a deleted model's attributes trap (`CandidateStore.ScanInputs`).
+        let inputs = CandidateStore.ScanInputs(project)
         let task = Task { [weak self] in
-            await store.load(project)
-            guard let self, scanGeneration == generation else { return }   // superseded by a newer load
+            await store.load(inputs)
+            // Superseded by a newer load, or the album closed (deleted, switched) meanwhile: don't settle.
+            guard let self, scanGeneration == generation, !Task.isCancelled else { return }
             scanTask = nil
             scanTaskStore = nil
             let reconcileNow = pendingReconcile
@@ -326,6 +361,8 @@ final class AlbumSession {
         projectID = nil
         candidateStore = nil
         candidateStoreKey = nil
+        scanTask?.cancel()         // its settle must not run for a closed (possibly deleted) album
+        scanGeneration += 1
         scanTask = nil
         scanTaskStore = nil
         pendingReconcile = false

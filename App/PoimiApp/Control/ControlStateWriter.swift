@@ -26,6 +26,12 @@ enum ControlStateFile: Sendable, Equatable {
 @MainActor
 protocol ControlStateSink: AnyObject {
     func write(_ json: ControlJSON, to file: ControlStateFile)
+    /// Return once every write handed over so far is on disk (a reply is written only after it).
+    func drained() async
+}
+
+extension ControlStateSink {
+    func drained() async {}
 }
 
 @MainActor
@@ -92,31 +98,41 @@ final class ControlStateWriter {
 /// consuming an ordered stream — off the main actor, and never out of order.
 @MainActor
 final class ControlFileSink: ControlStateSink {
-    private struct Write: Sendable {
-        let json: ControlJSON
-        let url: URL
+    private enum Item: Sendable {
+        case write(ControlJSON, URL)
+        /// Resumed once every earlier write is done (the stream is consumed in order).
+        case barrier(CheckedContinuation<Void, Never>)
     }
 
     private let paths: ControlPaths
-    private let writes: AsyncStream<Write>.Continuation
+    private let items: AsyncStream<Item>.Continuation
 
     init(paths: ControlPaths) {
         self.paths = paths
-        let (stream, continuation) = AsyncStream.makeStream(of: Write.self)
-        writes = continuation
+        let (stream, continuation) = AsyncStream.makeStream(of: Item.self)
+        items = continuation
         Task.detached(priority: .utility) {
-            for await write in stream {
-                do {
-                    try write.json.serialized().write(to: write.url, options: .atomic)
-                } catch {
-                    Log.app.error("control: state write failed: \(String(describing: error), privacy: .public)")
+            for await item in stream {
+                switch item {
+                case .write(let json, let url):
+                    do {
+                        try json.serialized().write(to: url, options: .atomic)
+                    } catch {
+                        Log.app.error("control: state write failed: \(String(describing: error), privacy: .public)")
+                    }
+                case .barrier(let continuation):
+                    continuation.resume()
                 }
             }
         }
     }
 
     func write(_ json: ControlJSON, to file: ControlStateFile) {
-        writes.yield(Write(json: json, url: file == .state ? paths.state : paths.detail))
+        items.yield(.write(json, file == .state ? paths.state : paths.detail))
+    }
+
+    func drained() async {
+        await withCheckedContinuation { items.yield(.barrier($0)) }
     }
 }
 

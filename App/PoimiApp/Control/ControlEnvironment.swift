@@ -32,10 +32,13 @@ enum ControlEnvironment {
         NSTimeZone.default = TimeZone(identifier: "UTC")!   // before anything reads `.current`
         paths.reset()
         let fixture = parsed.launch?.fixture ?? .fresh      // a refused launch runs on `fresh`, unseeded
+        let loads = ThumbnailLoadCounter()
         let graph = makeGraph(fixture: fixture,
                               timelineCacheDirectory: paths.timelineCache,
-                              defaults: isolatedDefaults(suiteName: defaultsSuite))
-        let runtime = ControlRuntime(parsed: parsed, graph: graph, sink: ControlFileSink(paths: paths))
+                              defaults: isolatedDefaults(suiteName: defaultsSuite),
+                              thumbnailLoads: loads)
+        let runtime = ControlRuntime(parsed: parsed, graph: graph, sink: ControlFileSink(paths: paths),
+                                     thumbnailLoads: loads, mailbox: paths.output)
         current = runtime
         runtime.start()
         return runtime
@@ -51,7 +54,8 @@ enum ControlEnvironment {
     /// thumbnails + naming, an in-memory store, the long debounce and UTC. The integration tests build
     /// theirs through this too, so test and launch can't be wired differently.
     static func makeGraph(fixture: ControlFixture, timelineCacheDirectory: URL,
-                          defaults: UserDefaults) -> AppGraph {
+                          defaults: UserDefaults, thumbnailLoads: ThumbnailLoadCounter? = nil,
+                          library: (any PhotoLibraryProviding)? = nil) -> AppGraph {
         let container: ModelContainer
         do {
             container = try AppModelContainer.make(inMemory: true)
@@ -60,8 +64,8 @@ enum ControlEnvironment {
         }
         return AppGraph.make(
             container: container,
-            library: fixture.makeLibrary(),
-            thumbnails: FakeThumbnailProvider(),
+            library: library ?? fixture.makeLibrary(),   // the tests may wrap the fixture's (e.g. gated)
+            thumbnails: FakeThumbnailProvider(loads: thumbnailLoads),
             naming: FakePlaceNaming(),
             timelineCache: TimelineCache(directory: timelineCacheDirectory),
             debounce: ControlRuntime.debounce,
@@ -87,7 +91,8 @@ enum ControlEnvironment {
 struct ControlPaths: Sendable {
     /// `Application Support/control/` — the control run's timeline cache.
     let support: URL
-    /// `Documents/control/` — what the agent reads (`simctl get_app_container … data`).
+    /// `Documents/control/` — what the agent reads (`simctl get_app_container … data`), and the mailbox
+    /// (`req-<n>.json` in, `res-<n>.json` out, #298).
     let output: URL
 
     var timelineCache: URL { support.appendingPathComponent("TimelineCache", isDirectory: true) }

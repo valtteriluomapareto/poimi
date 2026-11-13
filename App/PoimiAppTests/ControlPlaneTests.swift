@@ -30,20 +30,30 @@ struct ControlHarness {
     let fixture: ControlFixture
     let runtime: ControlRuntime
     let sink = MemorySink()
+    let thumbnailLoads = ThumbnailLoadCounter()
 
-    init(_ fixture: ControlFixture, route: ControlRoute? = nil, viewer: String? = nil) {
-        self.init(fixture, parsed: .on(ControlLaunch(fixture: fixture, route: route, viewer: viewer)))
+    init(_ fixture: ControlFixture, route: ControlRoute? = nil, viewer: String? = nil, headless: Bool = false,
+         library: (any PhotoLibraryProviding)? = nil, iPad: Bool = false) {
+        self.init(fixture, parsed: .on(ControlLaunch(fixture: fixture, route: route, viewer: viewer,
+                                                     headless: headless)),
+                  library: library, iPad: iPad)
     }
 
-    init(_ fixture: ControlFixture, parsed: ControlLaunch.Parsed) {
+    /// `library` replaces the fixture's own (a test wraps it, e.g. to gate exports); the fixture still
+    /// decides the albums and aliases.
+    /// `iPad` = the split view's layout: the album list (sidebar) is always on screen.
+    init(_ fixture: ControlFixture, parsed: ControlLaunch.Parsed, library: (any PhotoLibraryProviding)? = nil,
+         iPad: Bool = false) {
         self.fixture = fixture
         let graph = ControlEnvironment.makeGraph(
             fixture: fixture,
             timelineCacheDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent("control-tests-\(UUID().uuidString)", isDirectory: true),
-            defaults: ControlEnvironment.isolatedDefaults(suiteName: "control.test.\(UUID().uuidString)"))
+            defaults: ControlEnvironment.isolatedDefaults(suiteName: "control.test.\(UUID().uuidString)"),
+            thumbnailLoads: thumbnailLoads, library: library)
         runtime = ControlRuntime(parsed: parsed, graph: graph, sink: sink, run: "r-test",
-                                 writeDelay: .milliseconds(10))
+                                 writeDelay: .milliseconds(10), thumbnailLoads: thumbnailLoads,
+                                 listAlwaysShown: iPad)
     }
 
     var graph: AppGraph { runtime.graph }
@@ -341,8 +351,9 @@ struct ControlSnapshotTests {
         try await harness.openReview()
         let snapshots = harness.serializedSnapshots()
         let state = try #require(try Self.parse(snapshots[0]) as? [String: Any])
-        #expect(Set(state.keys) == ["snapshotVersion", "run", "rev", "app", "nav", "albums", "active",
-                                    "pending", "idle"])
+        #expect(Set(state.keys) == ["snapshotVersion", "run", "rev", "settledSeq", "lastSeq", "app", "nav",
+                                    "albums", "active", "pending", "idle"])
+        #expect(state["settledSeq"] as? Int == state["lastSeq"] as? Int)
         #expect(state["snapshotVersion"] as? Int == 1)
         #expect(state["idle"] as? Bool == true)
 
@@ -350,6 +361,7 @@ struct ControlSnapshotTests {
         #expect(app["rootPhase"] as? String == "albums")
         #expect(app["fixture"] as? String == "mid-review")
         #expect(app["launchError"] is NSNull)
+        #expect(app["host"] as? String == "ui")
 
         let nav = try #require(state["nav"] as? [String: Any])
         #expect(nav["screen"] as? String == "review")
@@ -377,7 +389,7 @@ struct ControlSnapshotTests {
         #expect(pending["doneFlush"] as? Bool == false)
         #expect(pending["naming"] as? Bool == false)
         #expect(pending["export"] as? Bool == false)
-        #expect(pending["thumbnails"] is NSNull)   // still unobservable (slice C) — null, not a guess
+        #expect(pending["thumbnails"] as? Int == 0)   // the fake's loads in flight (#298)
         let export = try #require(active["export"] as? [String: Any])
         #expect(export["phase"] as? String == "idle")
         #expect(export["wasReExport"] is NSNull)
@@ -409,7 +421,7 @@ struct ControlSnapshotTests {
         #expect(harness.snapshot().content["idle"] == .bool(true))
         // The export screen, before its export ran: pending, not idle (since #297 it's observable —
         // slice A could only say `null`).
-        harness.coordinator.openExport(project.id)
+        harness.coordinator.finishToExport()
         #expect(harness.snapshot().content["idle"] == .bool(false))
         #expect(harness.snapshot().content["active"]?["export"]?["phase"] == .string("idle"))
         harness.selection.select(harness.graph.session.reviewOrderedIDs.prefix(2))   // a debounce is pending …

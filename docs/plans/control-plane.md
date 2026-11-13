@@ -243,6 +243,112 @@ timeline-cache gap.
 
 ### Slice C — Live actions and headless · ~1–1.5k LOC incl. tests
 
+**As built (#298)** — summary first; the original text follows. Revised after the three-reviewer
+review (Architect, Tester, Pragmatism), whose fixes are folded in below.
+
+- **Files.** `ControlHost` (`Control/ControlHost.swift`) is the one handler. `ControlAction.swift`
+  declares the 20 actions (`ControlActionKind`) and the fixture ops (`ControlFixtureOpKind`), each with
+  its arguments, once; the decoder and the `schema` reply both read that declaration. `ControlRequest.swift`
+  holds the envelope and predicates, `ControlSchema.swift` the declared state paths, refusals and the
+  `schema` reply, `ControlWait.swift` the predicates and the Observation-driven wait,
+  `ControlMailbox.swift` the transport. Everything is refused rather than coerced: unknown
+  keys/actions/ops/commands, wrong JSON types, `v` ≠ 1, a stale `run`, an undeclared wait path, a
+  predicate value whose type can't match its path.
+- **An action is a control a user can reach, from where it is.**
+  - Library actions need the album list on screen: the iPhone stack's root, or always the iPad
+    sidebar.
+  - `albums.delete` / `reset` also work from that album's settings screen. `albums.update` and
+    `albums.markAllUnreviewed` need that album's settings on top.
+  - `nav.openReview` and `nav.openSettings` need the album's overview on top.
+  - `selection.*` / `done.toggle` need the grid; `viewer.open` needs the grid without the viewer.
+  - `nav.openExport` = Save to Photos: the overview's button, or the fully-reviewed grid's. Both are
+    disabled with no picks.
+  - Elsewhere the outcome is `refused(notShown)`. An alias that names nothing is `unknownAlias`; an
+    unhydrated store is `invalidState`, never a silent `accepted`; a running export is `busy`; a missing
+    lever is `unavailable`. The coordinator's guards become `noop`.
+  - What no single control does is a **fixture op**, not an action: picking a photo list
+    (`selection.select`) and clearing every pick (`selection.clear`).
+  - The grid's select-all chip is `selection.toggleCluster{day}`. It goes through
+    `SelectionStore.toggleAll`, which the chip calls too: a trip cluster's photos across all its days,
+    not a day's.
+- **One mapping from screen to session call: `AlbumSession.appear(_ screen:, _ project:)`.** Overview →
+  `openOverview`, grid → `openReview`, export → `startExport`. The views' `.task`s call it, and so does
+  the host.
+  - After every action, the host runs it for **every album screen on the path** (decided at accept
+    time), not only the top one. The Overview's task is keyed on the scan inputs, so a Settings edit
+    rescans with Settings still on top, headless too.
+  - Each screen's call is skipped if, by the time it runs, that screen has left the path or its album
+    was deleted (as a view's task is cancelled). The launch route's screen tasks run the same way.
+- **One export entry point: `finishToExport()`.** The Overview's Save to Photos now calls it too, and the
+  unguarded `openExport(_:)` is gone. There is no composite `export.run`: an agent opens the album, waits
+  for idle, then sends `nav.openExport`. The `export:` launch route does the same steps (open → the
+  Overview's `appear` → `finishToExport`, refused with no picks). `export.retry{newAlbum?}` is a failed
+  export screen's "Try again" / "Create a new album instead".
+- **Façade additions.**
+  - `AlbumActions.duplicate`.
+  - `stage(_:to:calendar:)`: every settings control writes through it (title, range with its clamp,
+    target with the live retarget, media lens, screenshots, location, exclusions, destination). The
+    view's `onChange` retarget is gone.
+  - `update`: stage + commit, refused when the period would be empty.
+  - Edits to a deleted album are no-ops (`CurationProject.isGone`).
+- **Crash fixes from the review.** Both crashes also reach the shipping app; see the PR.
+  - `CandidateStore.load` copied nothing from the model and read it after its fetch `await`: deleting
+    the album mid-scan trapped. It now copies `ScanInputs` before the first suspension. `AlbumSession.load`
+    builds them synchronously, and `close()` cancels the scan task and bumps the generation.
+  - The album row, and the four album screens on their way out after a delete (the iPad sidebar pops
+    the detail in the same turn), re-rendered a deleted model. They now draw nothing when
+    `project.isGone`.
+- **`idle` excludes the debounced flushes — decided.**
+  - Under control the debounce is a day long. An `idle` that waited on flushes would stay `false` after
+    every tap, and every `shot` would turn into a hidden flush. The in-memory picks are already the truth
+    the UI shows (D15).
+  - `pending.selectionFlush|doneFlush` report the flushes; agents call `fixture flush` before checking
+    what was persisted.
+  - `idle` is "no work the app can see is in flight": every action settled (`settledSeq >= lastSeq`), no
+    scan / naming / export / fake thumbnail load (`ThumbnailLoadCounter`).
+- **Transport.**
+  - **Mailbox:** `Documents/control/req-<n>.json`; the CLI writes it under a temp name, then renames.
+    The app handles requests one at a time in ascending `n`, **except waits**, which run on their own
+    task, so an action never queues behind a wait. Each reply goes to `res-<n>.json` (atomic) only after
+    the state writer flushed and its file sink drained, so `state.json`'s `rev` ≥ the reply's.
+  - A `req-*.json` without a number gets a `badRequest` reply (id null) and is removed.
+  - The CLI allocates ids under a lock. When no reply arrives within `REPLY_TIMEOUT`, it withdraws a
+    request the app hasn't taken. There is one way to read state (`state`; no `snapshot` command).
+  - The directory is watched by a `DispatchSource` plus a 250 ms fallback poll. Error codes:
+    `badRequest`, `unsupportedVersion`, `staleRun`, `undeclaredPath`, `unmet`.
+- **`wait` has one mode: in the app.** It takes typed `PATH OP VALUE` predicates; simple slice-A
+  `.a.b == "x"` predicates still parse. `timeoutMs` is 0–30000 (0 asserts now), and an unmet wait returns
+  `[{path, op, expected, observed, present}]`. Vacuous detection stays deferred.
+- **Headless:** `-PoimiHeadless` shows `ControlHeadlessView` (static, observes nothing) instead of
+  `AppRootView`, and `state.json` gains `app.host`. `refreshAuthorization` moved into `AppGraph.start()`,
+  run from `PoimiApp`'s root `.task` (a control launch's bootstrap runs it instead).
+- **A tenth fixture, `legacy-baseline`**, for the #289 journey: the `mid-review` album with its done
+  baseline in the pre-#273 flat shape and a video on the first done day.
+- **Tests.**
+  - `ControlHostTests` journeys: the headless happy path; #59, #258 (iPhone + iPad), #285, #289;
+    delete mid-scan; a Settings edit rescanning under Settings; the chip on a trip cluster;
+    busy while queued/running; fetch failure; revoke; screen gating.
+  - The deleted-row guard.
+  - `CandidateStoreTests.deletedDuringFetch`: the app's own path, no control plane.
+  - `ControlMachineryTests`:
+    - strict decoding and fixture-op parity;
+    - every refusal observed for real;
+    - predicate typing and type mismatch;
+    - `timeoutMs` bounds and `staleRun`;
+    - schema ↔ snapshot parity, both ways;
+    - every action accepted, classified by decoded kind;
+    - seq/idle;
+    - the mailbox: ordering, waits not blocking sends, malformed names, the reply ↔ state `rev`.
+  - `AlbumActionsTests`: the `stage` rules.
+- **For slice D/E:** still view state, not actions yet:
+  - the Overview's filter;
+  - the viewer's current photo, auto-done and end-of-set card;
+  - the grid's current cluster and mark-done-and-advance.
+
+  Live `busy` needs slice E's export gate. Settings edits still commit on disappear in the UI.
+
+Original plan text:
+
 - **`ControlHost.handle(_:) async -> ControlResponse`** (`@MainActor`), one handler for every
   host. Actions are a strict `Decodable` enum, and each case is a one-line call into a store,
   the session, the façade or the coordinator:

@@ -1,102 +1,114 @@
 ---
 name: poimi-control
-description: Launch, inspect, screenshot or drive the Poimi iOS app on a simulator through its DEBUG control plane (Scripts/poimi.sh) — put it into a named fixture + route, read its state as JSON, wait on predicates, and capture a screenshot. Use whenever you need to run Poimi, see a screen, check what the app holds after a change, or verify a UI change works in the real app.
+description: Launch, inspect, drive, screenshot or run headless the Poimi iOS app on a simulator through its DEBUG control plane (Scripts/poimi.sh) — put it into a named fixture + route, send it the same actions as the user, read its state as JSON, wait on predicates, and capture a screenshot. Use whenever you need to run Poimi, see a screen, check what the app holds after a change, drive a flow (open → pick → done → export), or verify a UI change works in the real app.
 ---
 
 # Poimi control plane
 
-`Scripts/poimi.sh` runs the **real** app (`AppRootView`) on an iOS 26 simulator, already in a known
-state, on an isolated in-memory store and the deterministic fake library — never real photos. It is
-DEBUG-only (`App/PoimiApp/Control/`, decision D39, plan `docs/plans/control-plane.md`).
+`Scripts/poimi.sh` runs the **real** app on an iOS 26 simulator, already in a known state, on an
+isolated in-memory store and the deterministic fake library — never real photos. You drive it with
+**actions** — each one a control a user can reach, calling the same method that control calls — through
+a file mailbox, and read its state as JSON. It runs with its UI (`AppRootView`) or **headless** (no UI;
+the stores and album session only). DEBUG-only (`App/PoimiApp/Control/`, D39,
+`docs/plans/control-plane.md`).
 
 ## Rules
 
 - **Launch into the state, don't tap your way there.** Pick a fixture + route.
-- **Read `state.json`, not pixels, for what the app holds** (counts, statuses, route, scan phase).
-- **Taps prove wiring; a screenshot that someone looks at proves the look.** Semantic checks miss
-  layout bugs.
-- **Never add state fields or fixture knobs just to make a check pass.**
-- **`wait`, never `sleep`.** Block on predicates.
+- **Read state, not pixels, for what the app holds** (counts, statuses, route, scan phase).
+- **`accepted` ≠ finished. Follow every `send` with a `wait`.** An accepted action has only been
+  admitted; the scan / export / naming it starts runs after the reply. Wait on the state you expect,
+  on `idle == true`, or on `settledSeq >= <the reply's seq>`.
+- **`wait`, never `sleep`.**
+- **An action is only what a user could do from where the app is.** If you get `notShown`, navigate
+  to the screen that has that control (the album list, the overview, the grid, the album's settings)
+  — don't look for a way around it.
+- **Taps prove wiring; a screenshot that someone looks at proves the look.** Actions call the methods
+  the controls call, not the controls — semantic checks miss layout bugs.
+- **Never add actions, state fields or fixture knobs just to make a check pass.** If a check needs
+  something the app can't express, that's a finding: say so.
+- **The vocabulary is `Scripts/poimi.sh schema`**: every action with its arguments and where its control
+  is, the fixture ops, refusal reasons, error codes, the declared state paths and their types, fixtures
+  and routes — printed by the app from the declarations it decodes with. This file doesn't copy them.
 
 ## Commands
 
 ```sh
-Scripts/poimi.sh launch --fixture mid-review --route review:album-1
-Scripts/poimi.sh wait '.idle == true' '.active.scan.phase == "ready"' --timeout 20
-Scripts/poimi.sh state                  # whole state.json;  state '.albums'  for a jq expression
-Scripts/poimi.sh detail '.days | keys'  # state-detail.json: the active album's days → photo aliases
-Scripts/poimi.sh shot /tmp/poimi.png    # then ALWAYS open the PNG and look at it
-Scripts/poimi.sh logs --last 2m         # the app's OSLog (subsystem com.valtteriluoma.poimi)
+Scripts/poimi.sh launch --fixture one-album [--route overview:album-1] [--headless] [--ipad]
+Scripts/poimi.sh send '{"type":"nav.openAlbum","album":"album-1"}'   # → {"outcome":"accepted","seq":1}
+Scripts/poimi.sh wait 'active.scan.phase == ready' 'idle == true' --timeout 20
+Scripts/poimi.sh fixture flush                     # test levers (schema: fixtureOps)
+Scripts/poimi.sh state '.albums'                   # state.json, or a jq expression over it
+Scripts/poimi.sh detail '.days | keys'             # state-detail.json: the active album's days → photos
+Scripts/poimi.sh schema | jq '.actions[] | {type, summary}'
+Scripts/poimi.sh shot /tmp/poimi.png               # waits idle; then ALWAYS open the PNG and look
+Scripts/poimi.sh reset mid-review                  # a reset is a relaunch (same device/host, no build)
+Scripts/poimi.sh logs --last 2m                    # the app's OSLog (subsystem com.valtteriluoma.poimi)
 ```
 
-- **`launch`** builds (incremental — a no-op when nothing changed), installs only if the build
-  differs from what's on the simulator, and returns once the route (and viewer) are applied. It exits
-  1 with the reason on a bad fixture/route/viewer, or a route that can't apply (e.g. any route on
-  `fresh`/`denied`, which start before the album library). `--no-build` relaunches the last build.
-  `--ipad` uses `iPad Pro 13-inch (M5)` (the split view). Override with `SIM_NAME` / `IPAD_SIM_NAME`.
-- **`state` / `detail` / `wait` / `shot`** answer only for the current launch: they fail if the app
-  has quit, the simulator is shut down, or the state file is from another run — relaunch then.
-- **`wait`** exits 1 on timeout and prints each unmet predicate with its observed value + the last state.
-- **`shot`** waits for `.idle != false`, settles briefly, captures. **Always look at the PNG** — that
-  is the only check of the look. If a **system alert** covers the app, relaunch with `--fresh` (a
-  clean simulator boot). `launch` already does this automatically when a normal Poimi launch — e.g.
-  the `xcodebuild test` host, whose real-PhotoKit conformance test raises the Photos prompt — ran on
-  that simulator since the last control launch.
-- To tap/swipe after launching, use the **iOS Simulator MCP** on the booted device — that exercises
-  the real buttons. Then re-read `state.json`.
+A whole flow, the same with or without `--headless`:
 
-## Fixtures (`ControlFixture`)
+```sh
+P=Scripts/poimi.sh
+$P launch --fixture one-album
+$P send '{"type":"nav.openAlbum","album":"album-1"}'               && $P wait 'idle == true'
+$P send '{"type":"nav.openReview","album":"album-1"}'              && $P wait 'idle == true'
+$P send '{"type":"selection.toggleCluster","day":"2025-01-06"}'    && $P wait 'idle == true'
+$P send '{"type":"done.toggle","day":"2025-01-06"}'                && $P wait 'idle == true'
+$P fixture flush                                   # persist before checking what was SAVED
+$P send '{"type":"nav.back"}'                                      && $P wait 'idle == true'
+$P send '{"type":"nav.openExport"}'   && $P wait 'active.export.phase == done' 'idle == true'
+$P state '.albums["album-1"].status'               # "exported"
+```
 
-| name | state |
-|---|---|
-| `fresh` | photo access not determined → onboarding; no albums |
-| `denied` | access denied → recovery screen; no albums |
-| `empty-library` | authorized, empty library, `album-1` (its scan is the empty state) |
-| `one-album` | the 2025 year library (368 photos over 26 days), `album-1` untouched (target 80) |
-| `four-statuses` | `album-1` exported, `album-2` edited since export (3 to add), `album-3` in progress, `album-4` not started |
-| `mid-review` | `album-1`: 34 of 80 picked, the first 4 days done |
-| `exported` | `album-1` fully reviewed and exported, in sync with its Photos album |
-| `scale` | 10,000 photos, `album-1` with 200 picks |
-| `located` | a located 2025 library (home base + planted trips), `album-1` — trips form and get fake place names |
+- **`launch`** builds (incremental), installs only if the build differs, and returns once the route
+  (and viewer) are applied. It exits 1 with the reason on a bad fixture/route/viewer or a route that
+  can't apply. `--no-build` relaunches the last build; `--ipad` uses `iPad Pro 13-inch (M5)` (the split
+  view, where the album list stays on screen); `--headless` shows a static host view instead of the UI.
+  Override the devices with `SIM_NAME` / `IPAD_SIM_NAME`.
+- **`send ACTION`** prints the outcome and exits 1 on `refused` (unless `--allow-refused`) or a bad
+  request. `accepted` + `seq`: admitted. `refused` + `reason`: the app said no (reasons: `schema`).
+  `noop`: already so (the UI's own guards, e.g. a second `nav.openAppSettings`). After an action, the
+  app runs what the album screens on the path run when they appear (the overview's / grid's scan, the
+  export screen's export) — with or without UI.
+- **`wait PREDICATE…`** blocks **in the app** (Observation-driven, real deadline, 0–30 s). Predicates are
+  `PATH OP VALUE` (`OP`: `== != >= <=`) or `PATH exists` / `PATH !exists` (present and not null).
+  Values are typed: `10` is a number, `"10"` a string, a bare word (`ready`) a string, `true`/`null`
+  JSON. A value whose type can't match the path's (`idle != "true"`), or an undeclared path, is an
+  error at once. On timeout it prints each unmet predicate with what was observed (or `missing`). Full
+  `jq` expressions aren't predicates — use `state 'jq…'` to inspect.
+- **The mailbox is serial except for waits:** requests are handled one at a time in order, but a
+  `wait` runs alongside, so an action is never held behind a wait. If no reply comes within
+  `REPLY_TIMEOUT` (30 s; a wait gets its own timeout on top) and the app hasn't taken the request, the
+  CLI withdraws it — so a retry can't run it twice; if the app took it, the CLI says so: check `state`
+  before retrying.
+- **`state` / `detail`** read the files the app writes; every reply is written only after `state.json`
+  caught up, so right after a `send` or `wait`, `state` shows at least that reply's `rev`.
+- **`fixture OP [ARGS]`** pulls test levers, not user actions — e.g. `flush`, `lifecycle.resume`,
+  `library.failFetch '{"kind":"fetchFailed"}'`, `library.authorization '{"status":"denied"}'` (then
+  `lifecycle.resume`; on `fresh`, `authorized` then `send auth.request`), and `selection.select` /
+  `selection.clear` for selections no single control makes.
+- Every command answers only for the current launch: it fails if the app quit, the simulator shut down,
+  or the state is from another run (`staleRun`) — relaunch.
+- **`shot`** waits for `idle == true`, settles briefly, captures. **Always look at the PNG.** If a system
+  alert covers the app, relaunch with `--fresh`. Headless runs have nothing to look at.
+- To tap/swipe the real controls, use the **iOS Simulator MCP** on the booted device, then re-read state.
 
-## Routes
+## Reading state
 
-| route | lands on |
-|---|---|
-| `overview:<album>` | the album overview |
-| `review:<album>[:<yyyy-mm-dd>]` | the review grid, on that day's cluster when a day is given |
-| `export:<album>` | the export screen — which **runs the export** (against the fake), after opening the album as the Overview does (so the completion stats are real) |
-| `settings:<album>` | the album settings |
-| `appsettings` | app settings |
+Aliases, never ids: albums `album-N` (monotonic, never reused in a run), photos `a-NNNN` (by capture
+date), days `yyyy-mm-dd`. Titles only as `titleLength`. Every path and type: `schema`'s `statePaths`.
 
-`--viewer <asset alias>` (review routes only) opens the photo viewer once the scan is ready. The photo
-may be on a different day than the route's — the viewer pages the whole album; the grid underneath
-stays on the route's day.
-
-## Reading `state.json`
-
-Aliases, never ids: albums are `album-N` (monotonic, never reused in a run; `albums` is sorted by
-alias), photos are `a-NNNN` (by capture date, then seed order, undated last), days are `yyyy-mm-dd`.
-Titles appear only as `titleLength`.
-
-Key paths: `.app.rootPhase` (`onboarding|recovery|albums`), `.app.launchError`, `.nav.screen`
-(`albums|overview|review|export|settings|appSettings|onboarding|recovery`), `.nav.path`, `.nav.sheet`
-(`"viewer"` or null), `.nav.viewerPhoto`, `.albums["album-1"].status|picked|target`,
-`.active.scan.phase` (`none|idle|scanning|ready|empty|failed`), `.active.scan.clusters|trips`,
-`.active.selection.count`, `.active.done.days|clusters|of`, `.active.export.phase`
-(`idle|exporting|done|failed`) + `.wasReExport`, `.pending.selectionFlush|doneFlush|naming|export`,
-`.idle`, `.rev` (bumps when either file's content changes), `.run` (per launch).
-
-**`idle`** is `false` until the launch bootstrap finished (authorization read, route + viewer
-applied), while a review scan or its trip naming runs or is still pending for the screen on top, and
-on the export screen until the export settled (`done`/`failed`); `true` otherwise. It does **not**
-wait on debounced flushes — under control the debounce is a day long, so a pick leaves
-`.pending.selectionFlush == true` until a scene-phase change or project switch flushes it — nor on
-thumbnail loads (`.pending.thumbnails` is `null`, "not observable yet"; slice C). Don't treat a `null`
-as `false` or `true`.
+- **`idle == true` means no work the app can see is in flight**: the launch finished, every accepted
+  action settled (`settledSeq >= lastSeq`), and no scan, trip naming, export or fake thumbnail load
+  (`pending.thumbnails`) is running or pending for a screen on the path.
+- **`idle` does not wait for debounced persistence.** Under control the debounce is a day long, so a
+  pick leaves `pending.selectionFlush == true` until a flush; the in-memory picks are already what the
+  UI shows. Call `fixture flush` before checking what was *persisted* (`albums.*` of a closed album, a
+  relaunch).
 
 ## Isolation
 
 A control launch never touches the real store, `UserDefaults` (its own suite), What's New or the App
-Store review prompt (both pre-marked done), and runs in UTC. Each launch wipes and re-seeds, so a
-fixture is always its exact start state; a normal launch deletes the control state files.
+Store review prompt, and runs in UTC. Each launch wipes and re-seeds, so a fixture is always its exact
+start state; a normal launch deletes the control state files.

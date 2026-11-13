@@ -196,11 +196,11 @@ The dev screenshot harness and logging are documented in the [README](README.md)
 
 ## Control plane (agents: start here to run the app)
 
-`Scripts/poimi.sh` launches the **real** app on a simulator straight into a named fixture + route
-(isolated store, fake library; DEBUG-only, D39, [plan](docs/plans/control-plane.md)), then
-`wait`s on `jq` predicates over its redacted `state.json` and `shot`s it — **look at every PNG**:
-`Scripts/poimi.sh launch --fixture mid-review --route review:album-1`, `… wait '.idle == true'`,
-`… shot /tmp/grid.png`. Fixtures, routes, state fields and the rules: the **`poimi-control` skill**.
+`Scripts/poimi.sh` launches the **real** app on a simulator (or `--headless`) straight into a named
+fixture + route (isolated store, fake library; DEBUG-only, D39, [plan](docs/plans/control-plane.md)),
+drives it with the user's own actions (`send '{"type":"nav.openAlbum","album":"album-1"}'` — accepted
+≠ finished, so follow each with `wait 'idle == true'`), reads its redacted state, and `shot`s it —
+**look at every PNG**. The vocabulary is `poimi.sh schema`; the rules: the **`poimi-control` skill**.
 All of `App/PoimiApp/Control/` is whole-file `#if DEBUG` (guarded).
 
 ## CI gates (every PR, all green to merge)
@@ -239,7 +239,7 @@ Pages, #227).
   with the structured ID blocks (app=1, PhotoLibrary=3, tests=4, Support=5, Persistence=6,
   State=7, Navigation=8, Onboarding=9; Albums/Setup/Review/Settings use A0/B0/C0/D0 ids; 2 retired
   with the Spike; **E0 = Location** (#130); **F0 = WhatsNew** (#248); **10 = Control** (#296, ids
-  `00000000100000000000{A1,B1}nn` / group `…C101`); **next new group = 11**; the
+  `00000000100000000000{A1,B1}nn` / group `…C101`; next `…A10F`/`…B10F`); **next new group = 11**; the
   app-group `Localizable.xcstrings` resource took `…A1`/`…A2`, `Sources/AppGraph.swift` took
   `…B1`/`…B2`); `plutil -lint` after, and
   `xcodebuild -list` to confirm it still reads. Keep diffs to

@@ -62,6 +62,17 @@ struct AlbumOverviewView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        // The album can be deleted while this screen is still on its way out (the iPad sidebar's Delete
+        // pops the detail in the same turn the model goes): a deleted model's attributes trap, so the
+        // outgoing screen draws nothing rather than reading it (#298 review).
+        if project.isGone {
+            Color.clear
+        } else {
+            screen
+        }
+    }
+
+    private var screen: some View {
         content
             // No visible nav title — the big title lives in the scroll header (like the design); the
             // nav bar keeps just the back button.
@@ -93,7 +104,7 @@ struct AlbumOverviewView: View {
                     // re-export — names the boundary to the Photos app, not the in-app album. Identifier
                     // stays "exportButton" (the XCUITest contract, #43) even though the visible label changed.
                     Button(finishActionLabel(isReExport: project.targetAlbumID != nil)) {
-                        coordinator.openExport(project.id)
+                        coordinator.finishToExport()   // the one, re-entrancy-guarded export entry
                     }
                     .disabled(selection.progress.picked == 0)
                     .accessibilityIdentifier("exportButton")   // moved here from the grid (design 4AB)
@@ -115,7 +126,7 @@ struct AlbumOverviewView: View {
                 let store = session.candidateStore(for: project)
                 self.store = store
                 if store.phase == .idle { setIndex(nil) }
-                await session.openOverview(project)
+                await session.appear(.overview, project)
                 // A Settings key change cancels this task and starts a new one with a fresh store; this one
                 // resumes after the OLD load and must not overwrite the new task's (reset) index.
                 guard !Task.isCancelled, store === self.store else { return }
