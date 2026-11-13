@@ -68,8 +68,6 @@ struct ControlAssetAliases: Equatable, Sendable {
                             adding: assets.map(\.id))
     }
 
-    var count: Int { aliasByID.count }
-
     func alias(for assetID: String) -> String? { aliasByID[assetID] }
 
     func assetID(for alias: String) -> String? { idByAlias[alias] }

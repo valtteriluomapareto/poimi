@@ -513,7 +513,7 @@ struct ControlSchemaTests {
         let schema = ControlSchema.json()
         guard case .array(let actions)? = schema["actions"] else { Issue.record("no actions"); return }
         #expect(actions.compactMap { $0["type"] } == ControlActionKind.allCases.map { .string($0.rawValue) })
-        #expect(actions.first?["args"]?["album"] == .string(ControlArgType.albumAlias.rawValue))
+        #expect(actions.first?["args"]?["album"] == .string(ControlArgType.albumAlias.text))
         guard case .object(let refusals)? = schema["refusals"] else { Issue.record("no refusals"); return }
         #expect(refusals.map(\.key) == ControlRefusal.allCases.map(\.rawValue))
         guard case .object(let paths)? = schema["statePaths"] else { Issue.record("no paths"); return }
@@ -548,9 +548,10 @@ struct ControlSchemaTests {
 @Suite("Control plane: file mailbox (#298)")
 struct ControlMailboxTests {
 
-    private func directory() throws -> URL {
+    /// A fresh mailbox directory; `create: false` leaves making it to `ControlMailbox.start()`.
+    private func directory(create: Bool = true) throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("mailbox-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        if create { try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true) }
         return url
     }
 
@@ -608,13 +609,14 @@ struct ControlMailboxTests {
         #expect(mailbox.pendingRequests().isEmpty)
     }
 
-    @Test("a request that arrives after start is picked up (directory source or the fallback poll)")
+    @Test("start() makes its directory; a request that arrives after start is picked up")
     func picksUpLaterRequests() async throws {
         let harness = await ControlHarness.booted(.oneAlbum)
-        let directory = try directory()
+        let directory = try directory(create: false)
         let mailbox = ControlMailbox(directory: directory, host: harness.host, pollInterval: .milliseconds(20))
         mailbox.start()
         defer { mailbox.stop() }
+        #expect(FileManager.default.fileExists(atPath: directory.path))   // start() makes its directory
         await mailbox.awaitDrain()
         try write(#""cmd":"schema""#, id: 1, to: directory)
         let reply = directory.appendingPathComponent("res-1.json")

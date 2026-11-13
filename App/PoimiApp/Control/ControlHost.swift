@@ -362,7 +362,7 @@ final class ControlHost {
             return accept()
 
         case .doneToggle(let day):
-            guard done.isActive else { throw refuse(.invalidState, "no album is open (the done store is inactive)") }
+            try requireDoneActive()
             try requireGrid()
             done.toggle(try cluster(day))
             return accept()
@@ -409,15 +409,11 @@ extension ControlHost {
             await graph.coordinator.refreshAuthorization()
             return accept()
         case .libraryFailFetch(let failing):
-            guard let fake = graph.photoLibrary as? FakePhotoLibrary else {
-                return .refused(.unavailable, "not the fake library")
-            }
+            guard let fake = fakeLibrary else { return Self.notTheFake }
             await fake.setFetchError(failing ? FakePhotoLibrary.FakeError.fetchFailed : nil)
             return accept()
         case .libraryAuthorization(let status):
-            guard let fake = graph.photoLibrary as? FakePhotoLibrary else {
-                return .refused(.unavailable, "not the fake library")
-            }
+            guard let fake = fakeLibrary else { return Self.notTheFake }
             await fake.setAuthorization(status)
             return accept()
         case .selectionSelect(let aliases):
@@ -435,9 +431,7 @@ extension ControlHost {
                 return .refused(error.reason, error.message)
             }
         case .selectionClear:
-            guard selection.isActive else {
-                return .refused(.invalidState, "no album is open (the selection store is inactive)")
-            }
+            do throws(Refused) { try requireSelectionActive() } catch { return .refused(error.reason, error.message) }
             selection.clear()
             return accept()
         case .library(let lever):
@@ -446,6 +440,9 @@ extension ControlHost {
             return .refused(.unavailable, "a reset is a relaunch: Scripts/poimi.sh reset \(name)")
         }
     }
+
+    private var fakeLibrary: FakePhotoLibrary? { graph.photoLibrary as? FakePhotoLibrary }
+    private static let notTheFake = ControlOutcome.refused(.unavailable, "not the fake library")
 
     /// The fake library's levers (#300): the export gate, and new photos taken mid-session.
     private func perform(_ lever: ControlLibraryLever) async -> ControlOutcome {
@@ -463,9 +460,7 @@ extension ControlHost {
             exportGate.fail(error)
             return accept()
         case .addPhotos(let day, let count):
-            guard let fake = graph.photoLibrary as? FakePhotoLibrary else {
-                return .refused(.unavailable, "not the fake library")
-            }
+            guard let fake = fakeLibrary else { return Self.notTheFake }
             guard let start = day.anchorDate(in: ControlFixture.utc).map(ControlFixture.utc.startOfDay(for:)) else {
                 return .refused(.invalidState, "not a calendar day")
             }
@@ -546,7 +541,7 @@ extension ControlHost {
             return accept()
 
         case .reviewMarkDoneAndAdvance:
-            guard done.isActive else { throw refuse(.invalidState, "no album is open (the done store is inactive)") }
+            try requireDoneActive()
             try requireGrid()
             guard let current = session.currentReviewCluster else {
                 throw refuse(.invalidState, "the grid has no current cluster yet")
@@ -788,6 +783,10 @@ extension ControlHost {
         }
     }
 
+    fileprivate func requireDoneActive() throws(Refused) {
+        guard done.isActive else { throw refuse(.invalidState, "no album is open (the done store is inactive)") }
+    }
+
     fileprivate func isReview(_ route: Route) -> Bool {
         if case .review = route { return true }
         return false
@@ -839,8 +838,6 @@ struct ControlResponse {
         if case .success = result { return true }
         return false
     }
-
-    var data: ControlJSON? { try? result.get() }
 
     var error: ControlRequestError? {
         if case .failure(let error) = result { return error }

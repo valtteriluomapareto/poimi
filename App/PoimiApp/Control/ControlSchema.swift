@@ -113,7 +113,7 @@ enum ControlSchema {
     }
 
     private static func args(_ specs: [ControlArgSpec]) -> ControlJSON {
-        .object(pairs: specs.map { ($0.name, .string($0.type.rawValue + ($0.required ? "" : " (optional)"))) })
+        .object(pairs: specs.map { ($0.name, .string($0.type.text + ($0.required ? "" : " (optional)"))) })
     }
 
     /// The `schema` reply.

@@ -165,11 +165,14 @@ A slimming pass (2026-11-13) kept both, because removing either would weaken the
 
 - **The schema layer stays.** `wait` uses the declared paths to fail a typo at once instead of after
   the timeout. `poimi.sh schema` is how an agent discovers actions without the skill copying tables
-  that would rot. The decoder and `schema` read the same declarations, so there's one list, not two.
+  that would rot. The decoder and `schema` read the same declarations, so there's one list, not two —
+  including the closed value sets (filters, modals, directions, failure kinds), which `schema` and the
+  decoder's errors now spell out from the lists the decoder accepts.
 - **Most machinery tests are distinct cases or already table-driven.** The pass removed dead code,
   turned the predicate-operator checks into one table, moved the scattered review-fix tests into the
-  suites they belong to, and shared the mailbox test helpers. No check was dropped. A review had
-  estimated 400–500 lines could go; without dropping checks, the saving is far smaller.
+  suites they belong to, shared the mailbox test helpers, and added a booted-harness factory used at 53
+  test sites. No check was dropped. A review had estimated 400–500 lines could go; without dropping
+  checks, the net saving is about 30 lines.
 
 Deliberately skipped: a fake clock (an explicit `flush` and a long debounce instead), network-stage
 gates (there's no backend), run generations and kill fences (a `run` id is enough), a crash-point sweep

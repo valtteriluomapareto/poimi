@@ -14,22 +14,33 @@ import Foundation
 import Curation
 
 /// An argument's declared JSON shape — read by the decoder and printed by `schema`.
-enum ControlArgType: String {
-    case albumAlias = "album alias (album-N)"
-    case assetAlias = "photo alias (a-NNNN)"
-    case assetAliases = "[photo alias]"
-    case day = "day (yyyy-mm-dd)"
-    case int
-    case bool
-    case string
-    case media = "photosOnly | photosAndVideos | videosOnly"
-    case fetchFailure = "fetchFailed | null"
-    case exportFailure = "albumMissing | writeFailed | noAssetsResolved | null"
-    case authorization = "notDetermined | authorized | limited | denied | restricted"
-    case fixture = "fixture name"
-    case filter = "toReview | done | all"
-    case direction = "next | previous"
-    case modal = "newAlbum | whatsNew | confirmDelete | confirmReset | confirmUnreview"
+enum ControlArgType {
+    case albumAlias, assetAlias, assetAliases, day, int, bool, string, fixture
+    case media, fetchFailure, exportFailure, authorization, filter, direction, modal
+
+    /// How `schema` and the decoder's errors name it. A closed set is spelled out FROM the list the decoder
+    /// accepts, so adding a filter, modal or failure can't leave `schema` describing the old set.
+    var text: String {
+        switch self {
+        case .albumAlias: "album alias (album-N)"
+        case .assetAlias: "photo alias (a-NNNN)"
+        case .assetAliases: "[photo alias]"
+        case .day: "day (yyyy-mm-dd)"
+        case .int: "int"
+        case .bool: "bool"
+        case .string: "string"
+        case .fixture: "fixture name"
+        case .media: Self.oneOf(MediaSelection.allCases.map(\.rawValue))
+        case .fetchFailure: Self.oneOf([ControlFixtureOp.fetchFailure, "null"])
+        case .exportFailure: Self.oneOf(ExportError.controlNames.map(\.name) + ["null"])
+        case .authorization: Self.oneOf(LibraryAuthorization.allControlCases.map(ControlSnapshot.authorization))
+        case .filter: Self.oneOf(ReviewFilter.controlNames.map(\.name))
+        case .direction: Self.oneOf(ControlPageTarget.directions.map(\.name))
+        case .modal: Self.oneOf(ControlModal.allCases.map(\.rawValue))
+        }
+    }
+
+    private static func oneOf(_ names: [String]) -> String { names.joined(separator: " | ") }
 }
 
 /// The Overview filter's lenses by name (`review.setFilter`, `active.overview.filter`).
@@ -86,6 +97,9 @@ enum ControlPageTarget: Equatable {
     case next
     case previous
     case photo(String)
+
+    /// The steps by name (`viewer.page{direction}`).
+    static let directions: [(name: String, target: ControlPageTarget)] = [("next", .next), ("previous", .previous)]
 }
 
 struct ControlArgSpec {
@@ -355,7 +369,7 @@ extension ControlAction: Decodable {
         case .reviewSetFilter:
             let raw = try keys.required(String.self, "filter")
             guard let filter = ReviewFilter(controlName: raw) else {
-                throw ControlRequestError.bad("'filter' must be \(ControlArgType.filter.rawValue), got '\(raw)'")
+                throw ControlRequestError.bad("'filter' must be \(ControlArgType.filter.text), got '\(raw)'")
             }
             return .reviewSetFilter(filter)
         case .reviewGoTo: return .reviewGoTo(day: try keys.day("day")!)
@@ -367,7 +381,7 @@ extension ControlAction: Decodable {
         case .uiPresent:
             let raw = try keys.required(String.self, "modal")
             guard let modal = ControlModal(rawValue: raw) else {
-                throw ControlRequestError.bad("'modal' must be \(ControlArgType.modal.rawValue), got '\(raw)'")
+                throw ControlRequestError.bad("'modal' must be \(ControlArgType.modal.text), got '\(raw)'")
             }
             let album = keys.contains(ControlKey("album")) ? try keys.album() : nil
             guard (modal.confirmation != nil) == (album != nil) else {
@@ -387,15 +401,16 @@ extension KeyedDecodingContainer where Key == ControlKey {
         let direction = try optional(String.self, "direction")
         let photo = try optional(String.self, "photo")
         switch (direction, photo) {
-        case ("next"?, nil): return .next
-        case ("previous"?, nil): return .previous
+        case (let name?, nil):
+            guard let step = ControlPageTarget.directions.first(where: { $0.name == name })?.target else {
+                throw ControlRequestError.bad("'direction' must be \(ControlArgType.direction.text), got '\(name)'")
+            }
+            return step
         case (nil, let alias?):
             guard ControlAssetAliases.isAlias(alias) else {
                 throw ControlRequestError.bad("'photo' must be a photo alias like a-0001, got '\(alias)'")
             }
             return .photo(alias)
-        case (let other?, nil):
-            throw ControlRequestError.bad("'direction' must be \(ControlArgType.direction.rawValue), got '\(other)'")
         default:
             throw ControlRequestError.bad("viewer.page: give exactly one of 'direction' or 'photo'")
         }
@@ -455,6 +470,9 @@ enum ControlFixtureOpKind: String, CaseIterable {
 /// Test levers, not user actions (`fixture` command). `reset` is a RELAUNCH (`poimi.sh reset`), so the
 /// app refuses it in place — the container and library are built once per launch.
 enum ControlFixtureOp: Equatable {
+    /// `library.failFetch`'s one failure kind, by name.
+    static let fetchFailure = "fetchFailed"
+
     /// Persist both stores' debounced state now (`flushNow()`), as a scene-phase change would.
     case flush
     /// The app becoming active again: re-read authorization (the Settings round-trip, D6).
@@ -500,9 +518,10 @@ extension ControlFixtureOp: Decodable {
         case .libraryFailFetch:
             switch try keys.optional(String.self, "kind") {
             case nil: self = .libraryFailFetch(failing: false)
-            case "fetchFailed": self = .libraryFailFetch(failing: true)
+            case Self.fetchFailure?: self = .libraryFailFetch(failing: true)
             case let other?:
-                throw ControlRequestError.bad("library.failFetch: kind must be fetchFailed or null, got '\(other)'")
+                throw ControlRequestError.bad(
+                    "library.failFetch: kind must be \(ControlArgType.fetchFailure.text), got '\(other)'")
             }
         case .libraryAuthorization:
             let status = try keys.required(String.self, "status")
@@ -528,13 +547,10 @@ extension ControlFixtureOp: Decodable {
 extension KeyedDecodingContainer where Key == ControlKey {
     /// `library.failExport`'s `error` (absent / null clears it).
     func exportFailure() throws -> ExportError? {
-        let failures: [String: ExportError] = [
-            "albumMissing": .albumMissing, "writeFailed": .writeFailed, "noAssetsResolved": .noAssetsResolved
-        ]
         guard let raw = try optional(String.self, "error") else { return nil }
-        guard let error = failures[raw] else {
+        guard let error = ExportError.controlNames.first(where: { $0.name == raw })?.error else {
             throw ControlRequestError.bad("library.failExport: error must be "
-                + "\(ControlArgType.exportFailure.rawValue), got '\(raw)'")
+                + "\(ControlArgType.exportFailure.text), got '\(raw)'")
         }
         return error
     }
@@ -552,6 +568,13 @@ extension KeyedDecodingContainer where Key == ControlKey {
     }
 }
 
+extension ExportError {
+    /// The failures `library.failExport` can inject, by name.
+    static let controlNames: [(name: String, error: ExportError)] = [
+        ("albumMissing", .albumMissing), ("writeFailed", .writeFailed), ("noAssetsResolved", .noAssetsResolved)
+    ]
+}
+
 extension LibraryAuthorization {
     /// Every status, for decoding `library.authorization` by its snapshot name.
     static let allControlCases: [LibraryAuthorization] = [.notDetermined, .authorized, .limited, .denied, .restricted]
@@ -562,7 +585,7 @@ extension KeyedDecodingContainer where Key == ControlKey {
     func declared(_ args: [ControlArgSpec], extra: [String], in context: String) throws {
         try allow(extra + args.map(\.name), in: context)
         for arg in args where arg.required && !contains(ControlKey(arg.name)) {
-            throw ControlRequestError.bad("\(context): missing '\(arg.name)' (\(arg.type.rawValue))")
+            throw ControlRequestError.bad("\(context): missing '\(arg.name)' (\(arg.type.text))")
         }
     }
 }

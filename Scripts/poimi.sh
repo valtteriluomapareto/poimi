@@ -48,7 +48,7 @@ REPLY_TIMEOUT="${REPLY_TIMEOUT:-30}"
 die() { echo "poimi: $*" >&2; exit 1; }
 log() { printf '\033[1;34m▸\033[0m %s\n' "$*" >&2; }
 
-usage() { sed -n '3,28p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { awk 'NR > 2 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "$0"; }
 
 require_jq() {
     command -v jq >/dev/null 2>&1 \
@@ -330,11 +330,16 @@ cmd_send() {
     done
     [ -n "${action}" ] || die "send: give an action, e.g. '{\"type\":\"nav.openAlbum\",\"album\":\"album-1\"}'"
     printf '%s' "${action}" | jq -e 'type == "object"' >/dev/null 2>&1 || die "send: the action must be a JSON object"
+    request_outcome "$(jq -cn --argjson action "${action}" '{cmd: "send", action: $action}')" "${allow_refused}"
+}
+
+# Send REQUEST, print the reply's data; exit 1 on an error, or on a refusal unless ALLOW_REFUSED is 1.
+request_outcome() {
     local reply data
-    reply="$(mailbox "$(jq -cn --argjson action "${action}" '{cmd: "send", action: $action}')")" || exit 1
+    reply="$(mailbox "$1")" || exit 1
     data="$(reply_data "${reply}")" || exit 1
     printf '%s\n' "${data}"
-    if [ "$(printf '%s' "${data}" | jq -r '.outcome')" = "refused" ] && [ "${allow_refused}" = "0" ]; then
+    if [ "$(printf '%s' "${data}" | jq -r '.outcome')" = "refused" ] && [ "${2:-0}" = "0" ]; then
         exit 1
     fi
 }
@@ -344,12 +349,7 @@ cmd_fixture() {
     local op="${1:?fixture needs an op (see 'Scripts/poimi.sh schema')}" args="${2:-}"
     [ -n "${args}" ] || args='{}'
     printf '%s' "${args}" | jq -e 'type == "object"' >/dev/null 2>&1 || die "fixture: args must be a JSON object"
-    local reply data
-    reply="$(mailbox "$(jq -cn --arg op "${op}" --argjson args "${args}" '{cmd: "fixture", fixture: ({op: $op} + $args)}')")" \
-        || exit 1
-    data="$(reply_data "${reply}")" || exit 1
-    printf '%s\n' "${data}"
-    [ "$(printf '%s' "${data}" | jq -r '.outcome')" != "refused" ] || exit 1
+    request_outcome "$(jq -cn --arg op "${op}" --argjson args "${args}" '{cmd: "fixture", fixture: ({op: $op} + $args)}')"
 }
 
 cmd_schema() {
@@ -358,8 +358,6 @@ cmd_schema() {
     reply="$(mailbox '{"cmd":"schema"}')" || exit 1
     reply_data "${reply}" | jq .
 }
-
-
 
 # --- state / detail --------------------------------------------------------------------------
 

@@ -150,28 +150,18 @@ struct ControlRuntimeTests {
         return harness
     }
 
-    @Test("one toggle → one write pair, one rev")
-    func oneToggleOneWrite() async throws {
+    /// One toggle, or a burst of five, is one write pair and one rev (the burst coalesces).
+    @Test("toggles → one write pair, one rev; a burst coalesces", arguments: [(1, 35), (5, 39)])
+    func togglesWriteOnce(_ toggles: Int, _ count: Int) async throws {
         let harness = try await scannedMidReview()
         let writes = harness.sink.writes.count, rev = harness.runtime.writer.rev
-        let unpicked = try #require(ControlFixture.yearDatedIDs.first { !harness.selection.contains($0) })
-        harness.selection.toggle(unpicked)
-        await harness.settle()
-        #expect(harness.sink.writes.count == writes + 2)
-        #expect(harness.runtime.writer.rev == rev + 1)
-        #expect(harness.state("active", "selection", "count") == .int(35))
-    }
-
-    @Test("a burst of changes coalesces into one write pair")
-    func burstCoalesces() async throws {
-        let harness = try await scannedMidReview()
-        let writes = harness.sink.writes.count, rev = harness.runtime.writer.rev
-        let unpicked = ControlFixture.yearDatedIDs.filter { !harness.selection.contains($0) }.prefix(5)
+        let unpicked = ControlFixture.yearDatedIDs.filter { !harness.selection.contains($0) }.prefix(toggles)
+        try #require(unpicked.count == toggles)
         for id in unpicked { harness.selection.toggle(id) }
         await harness.settle()
         #expect(harness.sink.writes.count == writes + 2)
         #expect(harness.runtime.writer.rev == rev + 1)
-        #expect(harness.state("active", "selection", "count") == .int(39))
+        #expect(harness.state("active", "selection", "count") == .int(count))
     }
 
     @Test("every revision writes detail before state, both stamped with the same rev")
