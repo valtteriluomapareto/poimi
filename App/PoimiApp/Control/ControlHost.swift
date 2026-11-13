@@ -188,8 +188,6 @@ final class ControlHost {
         return .success(.object(("met", .bool(true)), ("waitedMs", .int(waitedMs))))
     }
 
-    var currentRun: String { run }
-
     // MARK: - Actions
 
     func perform(_ action: ControlAction) -> ControlOutcome {

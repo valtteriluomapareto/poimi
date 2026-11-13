@@ -161,6 +161,16 @@ The first estimate was ~2.5–3.5k LOC through slice C. Measured over the whole 
 That's about twice the estimate. The overrun is mostly in two places: the strict decoding and schema
 layer, and the machinery tests.
 
+A slimming pass (2026-11-13) kept both, because removing either would weaken the tool:
+
+- **The schema layer stays.** `wait` uses the declared paths to fail a typo at once instead of after
+  the timeout. `poimi.sh schema` is how an agent discovers actions without the skill copying tables
+  that would rot. The decoder and `schema` read the same declarations, so there's one list, not two.
+- **Most machinery tests are distinct journeys or already table-driven.** The pass removed dead code,
+  turned the predicate-operator checks into one table, moved the scattered review-fix tests into the
+  suites they belong to, and shared the mailbox test helpers. No check was dropped. The saving is small,
+  well short of the 400–500 lines first guessed.
+
 Deliberately skipped: a fake clock (an explicit `flush` and a long debounce instead), network-stage
 gates (there's no backend), run generations and kill fences (a `run` id is enough), a crash-point sweep
 (only the D15 window is at risk, and it's accepted), provenance digests, and a call-coverage scanner.

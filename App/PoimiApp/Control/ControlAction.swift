@@ -32,7 +32,7 @@ enum ControlArgType: String {
     case modal = "newAlbum | whatsNew | confirmDelete | confirmReset | confirmUnreview"
 }
 
-/// The Overview filter's lenses by name (`review.setFilter`, `-PoimiFilter`, `active.overview.filter`).
+/// The Overview filter's lenses by name (`review.setFilter`, `active.overview.filter`).
 extension ReviewFilter {
     static let controlNames: [(name: String, filter: ReviewFilter)] = [
         ("toReview", .toReview), ("done", .done), ("all", .all)
